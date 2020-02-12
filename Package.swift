@@ -6,23 +6,29 @@ import PackageDescription
 let package = Package(
     name: "Base",
     products: [
-        // Products define the executables and libraries produced by a package, and make them visible to other packages.
-        .library(
-            name: "Base",
-            targets: ["Base"]),
+        .library(name: "Base", targets: [
+            "Base", "Algorithms", "Concurrency", //"FileSystem"
+        ]),
+        
+        .library(name: "TestUtilities", targets: ["TestUtilities"]),
+        
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         // .package(url: /* package url */, from: "1.0.0"),
     ],
     targets: [
-        // Targets are the basic building blocks of a package. A target can define a module or a test suite.
-        // Targets can depend on other targets in this package, and on products in packages which this package depends on.
-        .target(
-            name: "Base",
-            dependencies: []),
-        .testTarget(
-            name: "BaseTests",
-            dependencies: ["Base"]),
+        .target(name: "Base"),
+        .testTarget(name: "BaseTests", dependencies: ["Base"]),
+        
+        .target(name: "Algorithms"),
+        .testTarget(name: "AlgorithmsTests", dependencies: ["Algorithms", "TestUtilities"]),
+        
+        .target(name: "Concurrency"),
+        .testTarget(name: "ConcurrencyTests", dependencies: ["Concurrency"]),
+        
+        .target(name: "TestUtilities"),
+//        .target(name: "FileSystem"),
+//        .testTarget(name: "FileSystemTests", dependencies: ["FileSystem"]),
     ]
 )
