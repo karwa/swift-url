@@ -28,6 +28,8 @@ let package = Package(
         .testTarget(name: "ConcurrencyTests", dependencies: ["Concurrency"]),
         
         .target(name: "TestUtilities"),
+        .testTarget(name: "TestUtilitiesTests", dependencies: ["TestUtilities"]),
+        
 //        .target(name: "FileSystem"),
 //        .testTarget(name: "FileSystemTests", dependencies: ["FileSystem"]),
     ]

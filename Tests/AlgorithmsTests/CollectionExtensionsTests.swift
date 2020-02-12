@@ -101,14 +101,4 @@ extension AlgorithmsTestCase {
         XCTAssertNil(splitValues.index(splitValues.endIndex, offsetBy: -1, limitedBy: splitValues.startIndex))
         for _ in splitValues { XCTFail("Cannot iterate an empty collection") }
     }
-    
-    public func testMisx() {
-        CollectionSemanticsTester.test([Int]())
-        CollectionSemanticsTester.test([1, 3])
-        CollectionSemanticsTester.test(EmptyCollection<String>())
-        CollectionSemanticsTester.test(CollectionOfOne(3.141))
-        CollectionSemanticsTester.test("Hi, everybody! 🧐")
-        CollectionSemanticsTester.test(0..<13)
-        CollectionSemanticsTester.test(["hi": 3, "you": 42, "somebody": -99])
-    }
 }
