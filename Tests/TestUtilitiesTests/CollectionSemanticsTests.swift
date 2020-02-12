@@ -18,6 +18,7 @@ extension CollectionSemanticsTests {
         CollectionSemanticsTester.test(CollectionOfOne(3.141))
         CollectionSemanticsTester.test(0 ..< 1)
         CollectionSemanticsTester.test(-1 ..< 0)
+        CollectionSemanticsTester.test(Int.max.words)
         CollectionSemanticsTester.test(Int.max - 1 ..< Int.max)
         CollectionSemanticsTester.test(Int.min ..< Int.min + 1)
     }
@@ -32,5 +33,6 @@ extension CollectionSemanticsTests {
         CollectionSemanticsTester.test(dictionary.keys.joined() as FlattenSequence)
         CollectionSemanticsTester.test(dictionary.values)
         CollectionSemanticsTester.test(Set(dictionary.keys.joined()))
+        CollectionSemanticsTester.test((0..<20).reversed() as ReversedCollection)
     }
 }
