@@ -1,6 +1,16 @@
 import XCTest
 @testable import URL
 
+import Glibc
+func parse_libc(_ input: String) {
+    var result = in6_addr()
+    guard inet_pton(AF_INET6, input, &result) != 0 else { fatalError("Invalid address") }
+    withUnsafeBytes(of: &result) { ptr in
+        let u16 = ptr.bindMemory(to: UInt16.self)
+        print(u16.map { $0 }) 
+    }
+}
+
 final class HostParsing_IPv6: XCTestCase {
 
      func testCanonical() {
@@ -14,6 +24,8 @@ final class HostParsing_IPv6: XCTestCase {
         }
         XCTAssertNotEqual(addr, IPAddress.V6())
         XCTAssertEqual(addr, IPAddress.V6(8193, 3512, 34211, 0, 0, 35374, 880, 29492))
+
+        parse_libc("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
      }
 
      func testTeredo() {
@@ -50,6 +62,8 @@ final class HostParsing_IPv6: XCTestCase {
             return
         }
         XCTAssertEqual(addr, IPAddress.V6(0, 0, 0, 0, 0, 65535, 49320, 1))
+
+        parse_libc("::ffff:192.168.0.1")
     }
 
     func testEmptyCompressed() {

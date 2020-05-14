@@ -1,8 +1,8 @@
 
 // TODO:
 // - Parser:
-//   - Clean up IPv6 parser
-//   - Clean up tests
+//   - Standardise on host/network byte order
+//   - Clean up tests, test against libc for IPv6 addresses
 //   - Clean up validation messages
 
 public enum IPAddress {}
@@ -81,6 +81,7 @@ extension IPAddress.V6 {
             var compress      = -1 // We treat -1 as "null".
             var idx           = input.startIndex
 
+            // Handle leading compressed pieces ('::').
             if input[idx] == ASCII.colon {
                 idx = input.index(after: idx)
                 guard idx != input.endIndex, input[idx] == ASCII.colon else {
@@ -91,24 +92,25 @@ extension IPAddress.V6 {
                 compress     = pieceIndex
             } 
 
-            parseloop: while idx != input.endIndex {
+            parseloop: 
+            while idx != input.endIndex {
                 guard pieceIndex != 8 else {
-                    return .validationFailure("Too many segments in address")
+                    return .validationFailure("Too many pieces in address")
                 }
+                // If the piece starts with a ':', it must be a compressed group of pieces.
                 guard input[idx] != ASCII.colon else {
-                    if compress != -1 {
-                        return .validationFailure("Empty segment or more than one compressed segment")
-                    } else {
-                        idx          = input.index(after: idx)
-                        pieceIndex &+= 1
-                        compress     = pieceIndex
-                        continue parseloop
+                    guard compress == -1 else {
+                        return .validationFailure("Multiple compressed pieces in address")
                     }
+                    idx          = input.index(after: idx)
+                    pieceIndex &+= 1
+                    compress     = pieceIndex
+                    continue parseloop
                 }
-                let segmentStartIndex = idx //< For faster rewinding in case of an IPv4 address, since `String.Index` is slow.
-                var value: UInt16 = 0
-                var length: UInt8 = 0
-
+                // Parse the piece's numeric value.
+                let pieceStartIndex = idx
+                var value: UInt16   = 0
+                var length: UInt8   = 0            
                 while length < 4, idx != input.endIndex, let asciiChar = ASCII(input[idx]) {
                     let numberValue = ASCII.parseHexDigit(ascii: asciiChar)
                     guard numberValue != ASCII.parse_NotFound else { break }
@@ -122,66 +124,38 @@ extension IPAddress.V6 {
                     pieceIndex &+= 1
                     break parseloop
                 }
-
-                switch input[idx] {
-                case ASCII.colon:
+                // Parse characters after the numeric value.
+                // - ':' signifies the end of the piece.
+                // - '.' signifies that we should re-parse the piece as an IPv4 address.
+                guard _slowPath(input[idx] != ASCII.colon) else {
+                    addressBuffer[pieceIndex] = value
+                    pieceIndex &+= 1
                     idx = input.index(after: idx)
                     guard idx != input.endIndex else {
                         return .validationFailure("Unexpected lone ':' at end of address")
                     }
-                case ASCII.period:
+                    continue parseloop
+                }
+                guard _slowPath(input[idx] != ASCII.period) else {
                     guard length != 0 else {
                         return .validationFailure("Unexpected '.' in address segment")
                     }
-                    idx = segmentStartIndex
                     guard !(pieceIndex > 6) else {
                         return .validationFailure("Invalid position for IPv4 address segment")
                     }
-                    var numbersSeen = 0
-                    while idx != input.endIndex {
-                        var ipv4Piece = -1 // We treat -1 as "null".
-                        if numbersSeen > 0 {
-                            guard input[idx] == ASCII.period, numbersSeen < 4 else {
-                                return .validationFailure("Invalid IPv4 address segment. Unexpected character")
-                            }
-                            idx = input.index(after: idx)
-                        }
-                        guard idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) else {
-                            return .validationFailure("Invalid IPv4 address segment. Unexpected character")
-                        }
-                        while idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) {
-                            let digit = ASCII.parseDecimalDigit(ascii: asciiChar)
-                            assert(digit != 99) // We already checked it was a digit.
-                            switch ipv4Piece {
-                            case -1: 
-                                ipv4Piece = Int(digit)
-                            case 0:
-                                return .validationFailure("Invalid IPv4 address segment. Unexpected leading '0' in IPv4 address")
-                            default: 
-                                ipv4Piece *= 10
-                                ipv4Piece += Int(digit)
-                            }
-                            guard ipv4Piece < 256 else {
-                                return .validationFailure("Invalid IPv4 address segment. Sub-segment is greater than 255")
-                            }
-                            idx = input.index(after: idx)
-                        }
-                        addressBuffer[pieceIndex] &<<= 8
-                        addressBuffer[pieceIndex] &+= UInt16(ipv4Piece)
-                        numbersSeen &+= 1
-                        if numbersSeen == 2 || numbersSeen == 4 {
-                            pieceIndex &+= 1
-                        } 
+
+                    switch parseIPv4_simple(from: UnsafeBufferPointer(rebasing: input[pieceStartIndex...])) {
+                    case .success(let value):
+                        addressBuffer[pieceIndex]      = UInt16(truncatingIfNeeded: value >> 16)
+                        addressBuffer[pieceIndex &+ 1] = UInt16(truncatingIfNeeded: value)
+                    case .validationFailure(let msg):
+                        return .validationFailure(msg)
                     }
-                    guard numbersSeen == 4 else {
-                        return .validationFailure("Invalid IPv4 address segment.")
-                    }
+                    pieceIndex &+= 2
+
                     break parseloop
-                default:
-                    return .validationFailure("Unexpected character after address segment")
                 }
-                addressBuffer[pieceIndex] = value
-                pieceIndex &+= 1
+                return .validationFailure("Unexpected character after address segment")
             }
 
             if compress != -1 {
@@ -203,10 +177,62 @@ extension IPAddress.V6 {
             }
             // Parsing successful.
             return .success(IPAddress.V6(rawAddress: 
-                UnsafeRawPointer(addressBuffer.baseAddress!).load(fromByteOffset: 0, as: IPAddress.V6.RawAddress.self)
+                UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
+                  .load(fromByteOffset: 0, as: IPAddress.V6.RawAddress.self)
             ))
         }
     }
+}
+
+enum SimpleIPv4ParseResult {
+    case success(UInt32)
+    case validationFailure(StaticString)
+}
+
+func parseIPv4_simple(from input: UnsafeBufferPointer<UInt8>) -> SimpleIPv4ParseResult {
+
+    var idx = input.startIndex
+
+    var result: UInt32 = 0
+
+    var numbersSeen = 0
+    while idx != input.endIndex {
+        var ipv4Piece = -1 // We treat -1 as "null".
+        if numbersSeen > 0 {
+            guard input[idx] == ASCII.period, numbersSeen < 4 else {
+                return .validationFailure("Invalid IPv4 address segment. Unexpected character")
+            }
+            idx = input.index(after: idx)
+        }
+        guard idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) else {
+            return .validationFailure("Invalid IPv4 address segment. Unexpected character")
+        }
+        while idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) {
+            let digit = ASCII.parseDecimalDigit(ascii: asciiChar)
+            assert(digit != 99) // We already checked it was a digit.
+            switch ipv4Piece {
+            case -1: 
+                ipv4Piece = Int(digit)
+            case 0:
+                return .validationFailure("Invalid IPv4 address segment. Unexpected leading '0' in IPv4 address")
+            default: 
+                ipv4Piece *= 10
+                ipv4Piece += Int(digit)
+            }
+            guard ipv4Piece < 256 else {
+                return .validationFailure("Invalid IPv4 address segment. Sub-segment is greater than 255")
+            }
+            idx = input.index(after: idx)
+        }
+        result &<<= 8
+        result &+= UInt32(ipv4Piece)
+        numbersSeen &+= 1
+    }
+    guard numbersSeen == 4 else {
+        return .validationFailure("Invalid IPv4 address segment.")
+    }
+
+    return .success(result)
 }
 
 extension IPAddress.V6 {
