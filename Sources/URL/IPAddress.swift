@@ -1,9 +1,11 @@
 
 // TODO:
 // - Parser:
-//   - Standardise on host/network byte order
+//   - Replace StaticString in ParseResult with an error enum or struct.
+//   - Check use of masking shifts
 //   - Clean up tests, test against libc for IPv6 addresses
 //   - Clean up validation messages
+//   - Test on s390x (big-endian system)
 
 public enum IPAddress {}
 
@@ -15,24 +17,52 @@ extension IPAddress {
     /// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
     ///
     public struct V6 {
-        public typealias RawAddress = (UInt16,UInt16,UInt16,UInt16,UInt16,UInt16,UInt16,UInt16) 
+        public typealias AddressType = (UInt16,UInt16,UInt16,UInt16,UInt16,UInt16,UInt16,UInt16) 
         
-        public var rawAddress: RawAddress
+        // Host byte order.
 
+        /// The raw address (i.e. in host byte order).
+        ///
+        public var rawAddress: AddressType
+
+        /// Creates a value with the given raw address.
+        ///
+        /// - parameters:
+        ///     - rawAddress:   The address value in host byte order.
+        ///
         @inlinable
-        public init(rawAddress: RawAddress = (0, 0, 0, 0, 0, 0, 0, 0)) {
+        public init(rawAddress: AddressType = (0, 0, 0, 0, 0, 0, 0, 0)) {
             self.rawAddress = rawAddress
         }
-    }
-}
 
-extension IPAddress.V6 {
+        // Network byte order.
 
-    @inlinable
-    public init(
-        _ a0: UInt16, _ a1: UInt16, _ a2: UInt16, _ a3: UInt16, 
-        _ a4: UInt16, _ a5: UInt16, _ a6: UInt16, _ a7: UInt16) {
-            self.init(rawAddress: (a0, a1, a2, a3, a4, a5, a6, a7))
+        /// The network address (i.e. in network byte order).
+        /// 
+        public var networkAddress: AddressType {
+            return (
+                rawAddress.0.bigEndian, rawAddress.1.bigEndian,
+                rawAddress.2.bigEndian, rawAddress.3.bigEndian,
+                rawAddress.4.bigEndian, rawAddress.5.bigEndian,
+                rawAddress.6.bigEndian, rawAddress.7.bigEndian
+            )
+        }
+
+        /// Creates a value with the given network address.
+        ///
+        /// - parameters:
+        ///     - networkAddress:   The address value in network byte order.
+        ///
+        @inlinable
+        public init(networkAddress: AddressType) {
+            self.init(rawAddress: (
+                networkAddress.0.bigEndian, networkAddress.1.bigEndian,
+                networkAddress.2.bigEndian, networkAddress.3.bigEndian,
+                networkAddress.4.bigEndian, networkAddress.5.bigEndian,
+                networkAddress.6.bigEndian, networkAddress.7.bigEndian
+            ))
+        }
+
     }
 }
 
@@ -74,7 +104,7 @@ extension IPAddress.V6 {
     public static func parse(_ input: UnsafeBufferPointer<UInt8>) -> ParseResult {
         guard input.isEmpty == false else { return .validationFailure("Empty input") }
 
-        var result: IPAddress.V6.RawAddress = (0, 0, 0, 0, 0, 0, 0, 0)
+        var result: IPAddress.V6.AddressType = (0, 0, 0, 0, 0, 0, 0, 0)
         return withUnsafeMutableBytes(of: &result) { tuplePointer -> ParseResult in
             let addressBuffer = tuplePointer.bindMemory(to: UInt16.self)
             var pieceIndex    = 0
@@ -144,10 +174,10 @@ extension IPAddress.V6 {
                         return .validationFailure("Invalid position for IPv4 address segment")
                     }
 
-                    switch parseIPv4_simple(from: UnsafeBufferPointer(rebasing: input[pieceStartIndex...])) {
+                    switch IPAddress.V4.parse_simple(UnsafeBufferPointer(rebasing: input[pieceStartIndex...])) {
                     case .success(let value):
-                        addressBuffer[pieceIndex]      = UInt16(truncatingIfNeeded: value >> 16)
-                        addressBuffer[pieceIndex &+ 1] = UInt16(truncatingIfNeeded: value)
+                        addressBuffer[pieceIndex]      = UInt16(truncatingIfNeeded: value.rawAddress >> 16)
+                        addressBuffer[pieceIndex &+ 1] = UInt16(truncatingIfNeeded: value.rawAddress)
                     case .validationFailure(let msg):
                         return .validationFailure(msg)
                     }
@@ -175,80 +205,26 @@ extension IPAddress.V6 {
                     return .validationFailure("Not enough segments in address")
                 }
             }
+
             // Parsing successful.
             return .success(IPAddress.V6(rawAddress: 
                 UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
-                  .load(fromByteOffset: 0, as: IPAddress.V6.RawAddress.self)
+                  .load(fromByteOffset: 0, as: IPAddress.V6.AddressType.self)
             ))
         }
     }
 }
 
-enum SimpleIPv4ParseResult {
-    case success(UInt32)
-    case validationFailure(StaticString)
-}
-
-func parseIPv4_simple(from input: UnsafeBufferPointer<UInt8>) -> SimpleIPv4ParseResult {
-
-    var idx = input.startIndex
-
-    var result: UInt32 = 0
-
-    var numbersSeen = 0
-    while idx != input.endIndex {
-        var ipv4Piece = -1 // We treat -1 as "null".
-        if numbersSeen > 0 {
-            guard input[idx] == ASCII.period, numbersSeen < 4 else {
-                return .validationFailure("Invalid IPv4 address segment. Unexpected character")
-            }
-            idx = input.index(after: idx)
-        }
-        guard idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) else {
-            return .validationFailure("Invalid IPv4 address segment. Unexpected character")
-        }
-        while idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) {
-            let digit = ASCII.parseDecimalDigit(ascii: asciiChar)
-            assert(digit != 99) // We already checked it was a digit.
-            switch ipv4Piece {
-            case -1: 
-                ipv4Piece = Int(digit)
-            case 0:
-                return .validationFailure("Invalid IPv4 address segment. Unexpected leading '0' in IPv4 address")
-            default: 
-                ipv4Piece *= 10
-                ipv4Piece += Int(digit)
-            }
-            guard ipv4Piece < 256 else {
-                return .validationFailure("Invalid IPv4 address segment. Sub-segment is greater than 255")
-            }
-            idx = input.index(after: idx)
-        }
-        result &<<= 8
-        result &+= UInt32(ipv4Piece)
-        numbersSeen &+= 1
-    }
-    guard numbersSeen == 4 else {
-        return .validationFailure("Invalid IPv4 address segment.")
-    }
-
-    return .success(result)
-}
-
 extension IPAddress.V6 {
     
-    @inlinable public static func parse(_ input: Substring) -> ParseResult {
-        var copy = input
-        return copy.withUTF8 { parse($0) }
+    @inlinable public static func parse<S>(_ input: S) -> ParseResult where S: StringProtocol {
+        return input._withUTF8 { parse($0) }
     }
 
-    @inlinable public init?(_ input: Substring) {
+    @inlinable public init?<S>(_ input: S) where S: StringProtocol {
         guard case .success(let parsed) = Self.parse(input) else { return nil }
         self = parsed 
     }
-
-    @inlinable public static func parse(_ input: String) -> ParseResult { return parse(input[...]) }
-    @inlinable public init?(_ input: String) { self.init(input[...]) }
 }
 
 // MARK: - IPv4
@@ -259,13 +235,39 @@ extension IPAddress {
     /// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.
     ///
     public struct V4 {
-        public typealias RawAddress = UInt32 
-        
-        public var rawAddress: RawAddress
 
+        // Host byte order.
+
+        /// The raw address (i.e. in host byte order).
+        ///
+        public var rawAddress: UInt32
+
+        /// Creates a value with the given raw address.
+        ///
+        /// - parameters:
+        ///     - rawAddress:   The address value in host byte order.
+        ///
         @inlinable
-        public init(rawAddress: RawAddress = 0) {
+        public init(rawAddress: UInt32) {
             self.rawAddress = rawAddress
+        }
+
+        // Network byte order.
+
+        /// The network address (i.e. in network byte order).
+        /// 
+        public var networkAddress: UInt32 {
+            return rawAddress.bigEndian
+        }
+
+        /// Creates a value with the given network address.
+        ///
+        /// - parameters:
+        ///     - networkAddress:   The address value in network byte order.
+        ///
+        @inlinable
+        public init(networkAddress: UInt32) {
+            self.init(rawAddress: networkAddress.bigEndian)
         }
     }
 }
@@ -384,24 +386,87 @@ extension IPAddress.V4 {
                 fatalError("Internal error. pieceIndex has unexpected value.")
             }
             // Parsing successful.
-            rawAddress = rawAddress.bigEndian
             return .success(IPAddress.V4(rawAddress: rawAddress))
         }
     }
+
+    /// Parses an IPv4 address from a UTF-8 string.
+    /// 
+    /// This simplified parser accepts only the 4-piece decimal notation (a.b.c.d).
+    ///
+    /// - parameters:
+    ///     - input: A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    /// - returns:
+    ///     A result object containing either the successfully-parsed address, or a failure message.
+    ///
+    public static func parse_simple(_ input: UnsafeBufferPointer<UInt8>) -> IPAddress.V4.ParseResult {
+
+        var result      = UInt32(0)
+        var idx         = input.startIndex
+        var numbersSeen = 0
+        while idx != input.endIndex {
+            var ipv4Piece = -1 // We treat -1 as "null".
+            if numbersSeen > 0 {
+                guard input[idx] == ASCII.period, numbersSeen < 4 else {
+                    return .validationFailure("Invalid IPv4 address segment. Unexpected character")
+                }
+                idx = input.index(after: idx)
+            }
+            guard idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) else {
+                return .validationFailure("Invalid IPv4 address segment. Unexpected character")
+            }
+            while idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) {
+                let digit = ASCII.parseDecimalDigit(ascii: asciiChar)
+                assert(digit != 99) // We already checked it was a digit.
+                switch ipv4Piece {
+                case -1: 
+                    ipv4Piece = Int(digit)
+                case 0:
+                    return .validationFailure("Invalid IPv4 address segment. Unexpected leading '0' in IPv4 address")
+                default: 
+                    ipv4Piece *= 10
+                    ipv4Piece += Int(digit)
+                }
+                guard ipv4Piece < 256 else {
+                    return .validationFailure("Invalid IPv4 address segment. Sub-segment is greater than 255")
+                }
+                idx = input.index(after: idx)
+            }
+            result &<<= 8
+            result &+= UInt32(ipv4Piece)
+            numbersSeen &+= 1
+        }
+        guard numbersSeen == 4 else {
+            return .validationFailure("Invalid IPv4 address segment.")
+        }
+        return .success(IPAddress.V4(rawAddress: result))
+    }
 }
+
 
 extension IPAddress.V4 {
 
-    @inlinable public static func parse(_ input: Substring) -> ParseResult {
-        var copy = input
-        return copy.withUTF8 { parse($0) }
+    @inlinable public static func parse<S>(_ input: S) -> ParseResult where S: StringProtocol {
+        return input._withUTF8 { parse($0) }
     }
 
-    @inlinable public init?(_ input: Substring) {
+    @inlinable public init?<S>(_ input: S) where S: StringProtocol {
         guard case .success(let parsed) = Self.parse(input) else { return nil }
         self = parsed 
     }
+}
 
-    @inlinable public static func parse(_ input: String) -> ParseResult { return parse(input[...]) }
-    @inlinable public init?(_ input: String) { self.init(input[...]) }
+// MARK: - String utilities.
+
+extension StringProtocol {
+
+    @inlinable 
+    func _withUTF8<T>(_ body: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
+        if var string = self as? String {
+            return try string.withUTF8(body)
+        } else {
+            var substring = self as! Substring
+            return try substring.withUTF8(body)
+        }
+    }
 }

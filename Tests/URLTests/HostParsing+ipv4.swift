@@ -1,22 +1,28 @@
 import XCTest
 @testable import URL
 
+#if canImport(Glibc)
 import Glibc
-
-func libc_parse(_ straddr: String) -> UInt32? {
-    var addr = in_addr()
-    guard inet_aton(straddr, &addr) != 0 else { return nil }
-    return addr.s_addr
-}
+#elseif canImport(Darwin)
+import Darwin
+#else
+#error("Unknown libc variant")
+#endif
 
 final class HostParsing_IPv4: XCTestCase {
+
+    fileprivate func parse_aton(_ straddr: String) -> UInt32? {
+        var addr = in_addr()
+        guard inet_aton(straddr, &addr) != 0 else { return nil }
+        return addr.s_addr
+    }
 
     func testBasic() {
         // 192.255.2.5 
         //  = (192 * 256^3) + (255 * 256^2) + (2 * 256) + (5 * 1)
         //  = 3221225472 + 16711680 + 512 + 5 
         //  = 3237937669
-        let expectedRawAddress = (3237937669 as UInt32).bigEndian
+        let expectedRawAddress: UInt32 = 3237937669
 
         let strings = [
             "3237937669",     // 1 component, decimal. 
@@ -29,19 +35,20 @@ final class HostParsing_IPv4: XCTestCase {
                 XCTFail("Failed to parse valid address: \(string)")
                 continue
             }
-            // Check that libc gets the same result.
-            XCTAssertEqual(addr.rawAddress, libc_parse(string), "Mismatch detected for address: \(string)")
             // Check that the result is the expected value.
             XCTAssertEqual(addr.rawAddress, expectedRawAddress, "Unexpected result for address: \(string)")
+            // Check that libc gets the same result.
+            XCTAssertEqual(addr.networkAddress, parse_aton(string), "Mismatch detected for address: \(string)")
         }
     }
 
     func testTrailingDots() {
-        let expectedRawAddress = (2071690107 as UInt32).bigEndian
+        let expectedRawAddress: UInt32 = 2071690107
 
         // Zero trailing dots are allowed (obviously).
         if let addr = IPAddress.V4("123.123.123.123") {
             XCTAssertEqual(addr.rawAddress, expectedRawAddress)
+            XCTAssertEqual(addr.networkAddress, parse_aton("123.123.123.123"))
         } else {
             XCTFail("Failed to parse valid address")
         }
@@ -63,15 +70,15 @@ final class HostParsing_IPv4: XCTestCase {
 
     func testTrailingZeroes() {
         if let addr = IPAddress.V4("234") {
-            XCTAssertEqual(addr.rawAddress, libc_parse("234"))
-            XCTAssertEqual(addr.rawAddress, (234 as UInt32).bigEndian)
+            XCTAssertEqual(addr.networkAddress, parse_aton("234"))
+            XCTAssertEqual(addr.rawAddress, 234)
         } else {
             XCTFail("Failed to parse valid address")
         }
         
         if let addr = IPAddress.V4("234.0") {
-            XCTAssertEqual(addr.rawAddress, libc_parse("234.0"))
-            XCTAssertEqual(addr.rawAddress, (3925868544 as UInt32).bigEndian)
+            XCTAssertEqual(addr.networkAddress, parse_aton("234.0"))
+            XCTAssertEqual(addr.rawAddress, 3925868544)
         } else { 
             XCTFail("Failed to parse valid address")
         }
@@ -87,7 +94,7 @@ final class HostParsing_IPv4: XCTestCase {
                 XCTFail("Failed to parse valid address")
                 continue
             }
-            let expectedRawAddress = (3925868553 as UInt32).bigEndian // 150995178
+            let expectedRawAddress: UInt32 = 3925868553
             // inet_aton doesn't accept trailing dots, but the WHATWG URL spec does.
             let libcString: String
             if string.hasSuffix(".") {
@@ -95,7 +102,7 @@ final class HostParsing_IPv4: XCTestCase {
             } else {
                 libcString = string
             }
-            XCTAssertEqual(libc_parse(libcString), addr.rawAddress)
+            XCTAssertEqual(addr.networkAddress, parse_aton(libcString))
             XCTAssertEqual(addr.rawAddress, expectedRawAddress)
         }
 
@@ -112,7 +119,7 @@ final class HostParsing_IPv4: XCTestCase {
                 XCTFail("Failed to parse valid address")
                 continue
             }
-            let expectedRawAddress = (3926458368 as UInt32).bigEndian // 2538
+            let expectedRawAddress: UInt32 = 3926458368
             // inet_aton doesn't accept trailing dots, but the WHATWG URL spec does.
             let libcString: String
             if string.hasSuffix(".") {
@@ -120,7 +127,7 @@ final class HostParsing_IPv4: XCTestCase {
             } else {
                 libcString = string
             }
-            XCTAssertEqual(libc_parse(libcString), addr.rawAddress)
+            XCTAssertEqual(addr.networkAddress, parse_aton(libcString))
             XCTAssertEqual(addr.rawAddress, expectedRawAddress)
         }
 
@@ -134,7 +141,7 @@ final class HostParsing_IPv4: XCTestCase {
         for string in invalid_trailingZeroes {
             XCTAssertNil(IPAddress.V4(string[...]), "Invalid address should have been rejected: \(string)")
             // Sanity check.
-            XCTAssertNil(libc_parse(string), "libc unexpectedly considers this address valid: \(string)")
+            XCTAssertNil(parse_aton(string), "libc unexpectedly considers this address valid: \(string)")
         }
     }
 
