@@ -80,8 +80,8 @@ enum PercentEscaping {
     /// Note: Requires that output.count >= 3.
     private static func _escape(byte: UInt8, into output: UnsafeMutableBufferPointer<UInt8>) {
         output[0] = ASCII.percentSign.codePoint
-        output[1] = ASCII.getHexDigit(byte >> 4).codePoint
-        output[2] = ASCII.getHexDigit(byte).codePoint
+        output[1] = ASCII.getHexDigit_upper(byte >> 4).codePoint
+        output[2] = ASCII.getHexDigit_upper(byte).codePoint
     }
 
     // static func unescape(utf8 escapedString: String) -> String? {

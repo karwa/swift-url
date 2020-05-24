@@ -39,6 +39,8 @@ final class HostParsing_IPv4: XCTestCase {
             XCTAssertEqual(addr.rawAddress, expectedRawAddress, "Unexpected result for address: \(string)")
             // Check that libc gets the same result.
             XCTAssertEqual(addr.networkAddress, parse_aton(string), "Mismatch detected for address: \(string)")
+            // Check the serialised value.
+            XCTAssertEqual(addr.description, "192.255.2.5")
         }
     }
 
@@ -49,12 +51,14 @@ final class HostParsing_IPv4: XCTestCase {
         if let addr = IPAddress.V4("123.123.123.123") {
             XCTAssertEqual(addr.rawAddress, expectedRawAddress)
             XCTAssertEqual(addr.networkAddress, parse_aton("123.123.123.123"))
+            XCTAssertEqual(addr.description, "123.123.123.123")
         } else {
             XCTFail("Failed to parse valid address")
         }
         // One trailing dot is allowed.
         if let addr = IPAddress.V4("123.123.123.123.") {
             XCTAssertEqual(addr.rawAddress, expectedRawAddress)
+            XCTAssertEqual(addr.description, "123.123.123.123")
         } else {
             XCTFail("Failed to parse valid address")
         }
@@ -72,6 +76,7 @@ final class HostParsing_IPv4: XCTestCase {
         if let addr = IPAddress.V4("234") {
             XCTAssertEqual(addr.networkAddress, parse_aton("234"))
             XCTAssertEqual(addr.rawAddress, 234)
+            XCTAssertEqual(addr.description, "0.0.0.234")
         } else {
             XCTFail("Failed to parse valid address")
         }
@@ -79,6 +84,7 @@ final class HostParsing_IPv4: XCTestCase {
         if let addr = IPAddress.V4("234.0") {
             XCTAssertEqual(addr.networkAddress, parse_aton("234.0"))
             XCTAssertEqual(addr.rawAddress, 3925868544)
+            XCTAssertEqual(addr.description, "234.0.0.0")
         } else { 
             XCTFail("Failed to parse valid address")
         }
@@ -104,6 +110,7 @@ final class HostParsing_IPv4: XCTestCase {
             }
             XCTAssertEqual(addr.networkAddress, parse_aton(libcString))
             XCTAssertEqual(addr.rawAddress, expectedRawAddress)
+            XCTAssertEqual(addr.description, "234.0.0.9")
         }
 
         // Next, test that we parse the correct value with any valid number of trailing zeroes.
@@ -129,6 +136,7 @@ final class HostParsing_IPv4: XCTestCase {
             }
             XCTAssertEqual(addr.networkAddress, parse_aton(libcString))
             XCTAssertEqual(addr.rawAddress, expectedRawAddress)
+            XCTAssertEqual(addr.description, "234.9.0.0")
         }
 
         // Lastly, test that we reject an invalid number of trailing zeroes. 
@@ -165,6 +173,27 @@ final class HostParsing_IPv4: XCTestCase {
         if let _ = IPAddress.V4("192.0xF") {} else { XCTFail("Failed to parse valid address") }
         if let _ = IPAddress.V4("192.F")           { XCTFail("Expected fail") }
         if let _ = IPAddress.V4("192.0F")          { XCTFail("Expected fail") }
+    }
+
+    func testSerialisation() {
+        if let addr = IPAddress.V4("250.0.102.02") {
+            XCTAssertEqual(addr.description, "250.0.102.2")
+        } else {
+            XCTFail("Failed to parse valid address")
+        }
+    }
+
+    // TODO: Move this to an ASCII tests file.
+    func testASCIIDecimalPrinting() {
+        var buf: [UInt8] = [0, 0, 0, 0]
+        buf.withUnsafeMutableBufferPointer { buffer in 
+            for num in (UInt8.min)...(UInt8.max) {
+                let bufferContentsEnd = ASCII.insertDecimalString(for: num, into: buffer)
+                let asciiContents = Array(buffer[..<bufferContentsEnd])
+                let stdlibString  = Array(String(num, radix: 10).utf8)
+                XCTAssertEqual(stdlibString, asciiContents)
+            }
+        }
     }
 }
 

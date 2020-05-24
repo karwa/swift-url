@@ -135,3 +135,32 @@ extension AlgorithmsTestCase {
         XCTAssertEqual(results_0, [11, 15, 20, 21])
     }
 }
+
+// Collection+longestRange
+
+extension AlgorithmsTestCase {
+
+    func testCollectionLongestSubrange() {
+
+        let range_basic = [1, 2, 4, 3, 2, 2, 2, 4, 5, 2, 2, 2, 2, 6, 7, 8]
+        let range_basic_result = range_basic.longestSubrange { $0 == 2 }
+        XCTAssertEqual(range_basic_result.subrange, 9..<13)
+        XCTAssertEqual(range_basic_result.length, 4)
+        XCTAssertEqual(range_basic_result.length, range_basic_result.subrange.count)
+
+        let range_empty_result = range_basic.longestSubrange { $0 == 10 }
+        XCTAssertEqual(range_empty_result.subrange, 0..<0)
+        XCTAssertEqual(range_empty_result.length, 0)
+        XCTAssertEqual(range_empty_result.length, range_empty_result.subrange.count)
+
+        let range_single_end_result = range_basic.longestSubrange { $0 == 8 }
+        XCTAssertEqual(range_single_end_result.subrange, 15..<16)
+        XCTAssertEqual(range_single_end_result.length, 1)
+        XCTAssertEqual(range_single_end_result.length, range_single_end_result.subrange.count)
+
+        let range_tie_result = range_basic.longestSubrange { $0 == 4 }
+        XCTAssertEqual(range_tie_result.subrange, 2..<3)
+        XCTAssertEqual(range_tie_result.length, 1)
+        XCTAssertEqual(range_tie_result.length, range_tie_result.subrange.count)
+    }
+}

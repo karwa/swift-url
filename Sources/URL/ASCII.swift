@@ -282,7 +282,9 @@ extension ClosedRange where Bound == ASCII {
     }
 }
 
-// Parsing.
+// Parsing/Printing utilities.
+
+// TODO: Clean these up.
 
 private let DC: UInt8 = 99
 private let _parseHex_table: [UInt8] = [
@@ -305,12 +307,26 @@ private let _parseHex_table: [UInt8] = [
 
 extension ASCII {
     
-    /// Returns the ASCII value corresponding to the low nibble of `number`,  in hex.
-    static func getHexDigit(_ number: UInt8) -> ASCII {
+    /// Returns the ASCII character corresponding to the low nibble of `number`, in hex.
+    static func getHexDigit_upper(_ number: UInt8) -> ASCII {
         let table: StaticString = "0123456789ABCDEF"
         return table.withUTF8Buffer { table in
             ASCII(_unchecked: table[Int(number & 0x0F)])
         }
+    }
+
+    static func getHexDigit_lower(_ number: UInt8) -> ASCII {
+        let table: StaticString = "0123456789abcdef"
+        return table.withUTF8Buffer { table in
+            ASCII(_unchecked: table[Int(number & 0x0F)])
+        }
+    }
+
+    /// Returns the ASCII character corresponding to the value of `number`.
+    /// If `number` is >= 10, returns `ASCII.null`.
+    ///
+    static func getDecimalDigit(_ number: UInt8) -> ASCII {
+        return number < 10 ? getHexDigit_upper(number) : .null
     }
 
     static var parse_NotFound: UInt8 { DC } 
@@ -325,5 +341,60 @@ extension ASCII {
         let hexValue = parseHexDigit(ascii: ascii)
         // Yes, there's a branch, but I didn't fancy a second lookup table.
         return hexValue < 10 ? hexValue : DC
+    }
+}
+
+extension ASCII {
+
+    /// Prints the decimal representation of `number` in to `stringBuffer`.
+    /// `stringBuffer` requires at least 3 bytes worth of space.
+    ///
+    /// - returns:  The index one-past-the-end of the resulting text.
+    ///
+    static func insertDecimalString(for number: UInt8, into stringBuffer: UnsafeMutableBufferPointer<UInt8>) -> Int {
+        var idx = stringBuffer.startIndex
+        guard _fastPath(stringBuffer.count >= 3) else { return idx }
+        
+        guard number != 0 else { 
+            stringBuffer[idx] = ASCII.n0.codePoint
+            idx &+= 1
+            return idx
+        }
+        var number     = number
+        let pieceStart = idx
+        while number != 0 {
+            let digit: UInt8
+            (number, digit) = number.quotientAndRemainder(dividingBy: 10)
+            stringBuffer[idx] = ASCII.getDecimalDigit(UInt8(truncatingIfNeeded: digit)).codePoint
+            idx &+= 1
+        }
+        stringBuffer[pieceStart..<idx].reverse()
+        return idx
+    }
+
+    /// Prints the decimal representation of `number` in to `stringBuffer`.
+    /// `stringBuffer` requires at least `B.bitWidth / 4` bytes of space.
+    ///
+    /// - returns:  The index one-past-the-end of the resulting text.
+    ///
+    static func insertHexString<B>(for number: B, into stringBuffer: UnsafeMutableBufferPointer<UInt8>) -> Int where B: BinaryInteger {
+        var idx = stringBuffer.startIndex
+        assert(stringBuffer.count >= number.bitWidth / 4)
+        
+        guard number != 0 else { 
+            stringBuffer[idx] = ASCII.n0.codePoint
+            idx &+= 1
+            return idx
+        }
+        var number     = number
+        let pieceStart = idx
+        while number != 0 {
+            let digit: B
+            (number, digit) = number.quotientAndRemainder(dividingBy: 16)
+            stringBuffer[idx] = ASCII.getHexDigit_lower(UInt8(truncatingIfNeeded: digit)).codePoint
+            idx &+= 1
+        }
+        stringBuffer[Range(uncheckedBounds: (pieceStart, idx))].reverse()
+        return idx
     }
 }
