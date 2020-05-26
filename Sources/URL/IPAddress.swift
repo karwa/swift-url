@@ -654,7 +654,7 @@ extension StringProtocol {
 
 #if swift(<5.3)
 extension String {
-    public init(
+    init(
         unsafeUninitializedCapacity capacity: Int,
         initializingUTF8With initializer: (_ buffer: UnsafeMutableBufferPointer<UInt8>) throws -> Int) rethrows {
             let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: capacity)
