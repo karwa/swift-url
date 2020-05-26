@@ -9,16 +9,16 @@ public struct XURL {
 
 extension XURL {
 
-    public struct Components {
-        struct Authority {
+    public struct Components: Equatable {
+        struct Authority: Equatable {
             var username: String?
             var password: String?
-            var host: XURL.Host? // TODO
+            var host: XURL.Host?
             var port: Int?
         }
 
         var scheme: String?
-        var authority = Authority() // userinfo, host, port
+        var authority = Authority()
         var path: [String] = []
         var query: String?
         var fragment: String?
