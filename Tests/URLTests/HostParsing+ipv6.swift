@@ -83,7 +83,7 @@ final class HostParsing_IPv6: XCTestCase {
     }
 
     func testInvalid() {
-        let invalidAddresses: [(String, IPAddress.V6.ParseResult.Error)] = [
+        let invalidAddresses: [(String, IPAddress.V6.ParseError)] = [
             // - Invalid piece.
             ("12345::", .unexpectedCharacter),
             ("FG::",    .unexpectedCharacter),
@@ -118,7 +118,7 @@ final class HostParsing_IPv6: XCTestCase {
             switch result {
             case .success(let addr):
                 XCTFail("Invalid address '\(string)' was parsed as '\(addr.rawAddress)' (raw)")
-            case .validationFailure(let error):
+            case .failure(let error):
                 XCTAssertEqual(error, expectedError, "Unexpected error for invalid address '\(string)'")
             }
             if let cAddr = parse_pton(string) {
