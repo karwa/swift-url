@@ -1,5 +1,5 @@
 import XCTest
-import TestUtilities
+import Checkit
 @testable import Algorithms
 
 class AlgorithmsTestCase: XCTestCase {}
@@ -22,7 +22,7 @@ extension AlgorithmsTestCase {
         }
         
         // Check semantics.
-        CollectionSemanticsTester.test(splits)
+        CollectionChecker.check(splits)
     }
     
     public func testCollectionSplitExact_eager() {
@@ -64,7 +64,7 @@ extension AlgorithmsTestCase {
         }
         
         // Check semantics.
-        CollectionSemanticsTester.test(lines)
+        CollectionChecker.check(lines)
     }
     
     public func testCollectionSplitRemainder_eager() {

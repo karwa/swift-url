@@ -2,6 +2,15 @@
   "object": {
     "pins": [
       {
+        "package": "Checkit",
+        "repositoryURL": "https://github.com/karwa/swift-checkit.git",
+        "state": {
+          "branch": "master",
+          "revision": "d6a3380bb939df0fddbaee1f7f32dc1b50d518c8",
+          "version": null
+        }
+      },
+      {
         "package": "swift-se0270-range-set",
         "repositoryURL": "https://github.com/apple/swift-se0270-range-set",
         "state": {
