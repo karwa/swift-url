@@ -56,7 +56,10 @@ final class URLTests: XCTestCase {
          "file:///C|/demo",
          "http://www.test.com/../athing/anotherthing/.././something/",
          "https://[::ffff:192.168.0.1]/aThing",
-         "https://192.168.0.1/aThing"]
+         "https://192.168.0.1/aThing",
+         "ftp://Ë/somePath",
+         "tp://Ë/somePath",
+         ]
         print("===================")
         for t in tests {
             let results = XURL.Parser.parse(t)

@@ -472,7 +472,8 @@ extension XURL.Parser {
                 }
 
             case .host:
-                guard !(stateOverride != nil && url.scheme == SpecialScheme.file.rawValue) else {
+                let urlSchemeIfSpecial = url.scheme.flatMap { SpecialScheme(rawValue: $0) }
+                guard !(stateOverride != nil && urlSchemeIfSpecial == .file) else {
                     state = .fileHost
                     continue // Do not increment index.
                 }
@@ -484,7 +485,7 @@ extension XURL.Parser {
                         validationFailure("Expected host before :")
                         return nil
                     }
-                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: !url.isSpecial) else {
+                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSchemeIfSpecial == nil) else {
                         validationFailure("Failed to parse host")
                         return nil 
                     }
@@ -494,9 +495,9 @@ extension XURL.Parser {
                     guard stateOverride != .host else { break inputLoop }
                 case ASCII.forwardSlash, ASCII.questionMark, ASCII.numberSign: // and endIndex.
                     fallthrough
-                case ASCII.backslash where url.isSpecial:
+                case ASCII.backslash where urlSchemeIfSpecial != nil:
                     if buffer.isEmpty {
-                        if url.isSpecial {
+                        if urlSchemeIfSpecial != nil {
                             validationFailure("Expected host")
                             return nil
                         } else if stateOverride != nil, 
@@ -505,7 +506,7 @@ extension XURL.Parser {
                             return nil
                         }
                     }
-                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: false) else {
+                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSchemeIfSpecial == nil) else {
                         validationFailure("Failed to parse host")
                         return nil
                     }
