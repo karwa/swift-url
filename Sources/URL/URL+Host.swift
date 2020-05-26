@@ -53,7 +53,7 @@ extension XURL.Host {
             return
         }
 
-        return nil
+        self = .domain(input)
     }
 
     static func parseOpaqueHost(from input: Substring) -> String? {
