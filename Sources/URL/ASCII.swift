@@ -1,5 +1,5 @@
 public struct ASCII {
-    public var codePoint: UInt8
+    public let codePoint: UInt8
 }
 
 // Initialisation.
@@ -19,6 +19,11 @@ extension ASCII {
     @inlinable public init?(_ c: Character) {
         guard let asciiVal = c.asciiValue else { return nil }
         self.init(_unchecked: asciiVal)
+    }
+
+    @inlinable public init?(_ s: UnicodeScalar) {
+        guard s.value & 0xFFFFFF80 == 0 else { return nil }
+        self.init(_unchecked: UInt8(s.value))
     }
 }
 
@@ -226,6 +231,13 @@ extension ASCII {
         public var uppercaseAlpha   : Range<ASCII> { ASCII(_unchecked: 0x41)..<ASCII(_unchecked: 0x5B) }
         public var lowercaseAlpha   : Range<ASCII> { ASCII(_unchecked: 0x61)..<ASCII(_unchecked: 0x7B) }
 
+        public func isAlpha(_ char: ASCII) -> Bool {
+            uppercaseAlpha.contains(char) || lowercaseAlpha.contains(char) 
+        }
+        public func isAlphaNumeric(_ char: ASCII) -> Bool {
+            isAlpha(char) || digits.contains(char)
+        }
+
         public func isAlpha(_ char: Character) -> Bool {
             uppercaseAlpha.contains(char) || lowercaseAlpha.contains(char) 
         }
@@ -235,6 +247,13 @@ extension ASCII {
     }
 
     public static var ranges: Ranges { Ranges() }
+}
+
+extension ASCII {
+
+    public var unicodeScalar: UnicodeScalar {
+        return UnicodeScalar(codePoint)
+    }
 }
 
 extension ASCII {

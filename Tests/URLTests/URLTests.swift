@@ -43,8 +43,8 @@ final class URLTests: XCTestCase {
    func testBasic() {
 
        func opaque(_ str: String) -> XURL.Host {
-           return .opaque(str)
-           //return .opaque(OpaqueHost(unchecked: str))
+        //    return .opaque(str)
+           return .opaque(OpaqueHost(unchecked: str))
        }
        let testData: [(String, XURL.Components)] = [
 
@@ -105,36 +105,70 @@ final class URLTests: XCTestCase {
 
         // ==== Everything below is XFAIL while host parsing is still being implemented ==== //
 
+        // Non-ASCII opaque host.
+        ("tp://www.bücher.de", XURL.Components(
+            scheme: "tp",
+            authority: .init(username: nil, password: nil, host: opaque("www.b%C3%BCcher.de"), port: nil),
+            path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)
+        ),
+
+        // Emoji opaque host.
+        ("tp://👩‍👩‍👦‍👦️/family", XURL.Components(
+            scheme: "tp",
+            authority: .init(username: nil, password: nil, host: opaque("%F0%9F%91%A9%E2%80%8D%F0%9F%91%A9%E2%80%8D%F0%9F%91%A6%E2%80%8D%F0%9F%91%A6%EF%B8%8F"), port: nil),
+            path: ["family"], query: nil, fragment: nil, cannotBeABaseURL: false)
+        ),
+
         //Non-ASCII domain.
         // ("http://www.bücher.de", XURL.Components(
         //     scheme: "http",
         //     authority: .init(username: nil, password: nil, host: .domain("www.xn--bcher-kva.de"), port: nil),
         //     path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)
         // ),
-
-        // Non-ASCII opaque host.
-        // ("tp://www.bücher.de", XURL.Components(
-        //     scheme: "tp",
-        //     authority: .init(username: nil, password: nil, host: opaque("www.b%C3%BCcher.de"), port: nil),
-        //     path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)
-        // ),
-
-        // Emoji opaque host.
-        // ("tp://👩‍👩‍👦‍👦️/family", XURL.Components(
-        //     scheme: "tp",
-        //     authority: .init(username: nil, password: nil, host: opaque("%F0%9F%91%A9%E2%80%8D%F0%9F%91%A9%E2%80%8D%F0%9F%91%A6%E2%80%8D%F0%9F%91%A6%EF%B8%8F"), port: nil),
-        //     path: ["family"], query: nil, fragment: nil, cannotBeABaseURL: false)
-        // ),
-
        ]
 
-       //print("===================")
+       print("===================")
        for (input, expectedComponents) in testData {
             let results = XURL.Parser.parse(input)
             XCTAssertEqual(results, expectedComponents, "Failed to correctly parse \(input)")
-            // debugPrint(input, results)
+            debugPrint(input, results)
         }
-        //print("===================")
+        print("===================")
+   }
+
+   func testutf8() {
+
+       for x in UInt8.min ... UInt8.max {
+           let scalar = UnicodeScalar(x)
+           print("\(x)", "Character: \(scalar).")
+           
+           let result = hasNonURLCodePoints(scalar.utf8)
+           print("\(x)", "    Is Non-URL code point? \(result)")
+       }
+
+    //     var invalid: [UInt8] = [0xEF, 0xBF, 0xBE] //[0xF4, 0x8F, 0xBF, 0xBF]
+    //    for x: UInt8 in 0xA0 ... 0xAF {
+    //     //    invalid[2] = x
+
+    //        var iter = invalid.makeIterator()
+    //        let result = hasNonURLCodePoints2(&iter)
+    //        print("Is Non-URL code point? \(result)")
+
+    //        iter = invalid.makeIterator()
+
+    //         var utf8Decoder = UTF8()
+    //         Decode: while true {
+    //         switch utf8Decoder.decode(&iter) {
+    //         case .scalarValue(let v): 
+    //             print("\(x)", "**** Decoded invalid sequence as: \(v) (value: \(v.value). isNonChar? \(v.properties.isNoncharacterCodePoint))")
+    //         case .error:
+    //             print("\(x)", "**** Decoder returned ERROR")
+    //         case .emptyInput:
+    //             print("\(x)", "**** Decoder returned EMPTY_INPUT") 
+    //             break Decode
+    //         }
+    //    }       
+    // }
    }
 }
 
