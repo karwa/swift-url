@@ -99,8 +99,7 @@ extension OpaqueHost {
             }
         }
 
-        // TODO: We need to exclude '%' from this check.
-        guard hasNonURLCodePoints(input) == false else {
+        guard hasNonURLCodePoints(input, allowPercentSign: true) == false else {
             return .failure(.containsNonURLCodePoint)
         }
 
@@ -124,7 +123,8 @@ extension OpaqueHost {
 /// Detects non-URL code points in the given sequence. The sequence is assumed to contain valid UTF8 text.
 ///
 /// - parameters:
-///     - input:    A sequence of valid UTF8-encoded text.
+///     - input:            A sequence of valid UTF8-encoded text.
+///     - allowPercentSign: If `true`, the ASCII percent sign (U+0025) is considered an allowed code-point. 
 /// - returns:      `true` if the sequence contains code-points which are not URL code-points, otherwise `false`.
 ///
 /// From the [spec](https://url.spec.whatwg.org/#url-code-points):
@@ -135,7 +135,7 @@ extension OpaqueHost {
 /// U+003D (=), U+003F (?), U+0040 (@), U+005F (_), U+007E (~), 
 /// and code points in the range U+00A0 to U+10FFFD, inclusive, excluding surrogates and noncharacters.
 ///
-func hasNonURLCodePoints<S>(_ input: S) -> Bool where S: Sequence, S.Element == UInt8 {
+func hasNonURLCodePoints<S>(_ input: S, allowPercentSign: Bool = false) -> Bool where S: Sequence, S.Element == UInt8 {
 
     // Rather than using UTF8.decode to parse the actual scalar value, we can detect
     // the handful of disallowed code-points in their raw, encoded form.
@@ -164,6 +164,9 @@ func hasNonURLCodePoints<S>(_ input: S) -> Bool where S: Sequence, S.Element == 
         switch (~byte1).leadingZeroBitCount { // a.k.a leadingNonZeroBitCount.
         case 0:
             // ASCII.
+            if byte1 == 0x25, allowPercentSign { 
+                continue
+            }
             let low:  UInt64 = 0b1010_1111_1111_1111_1111_1111_1101_0010____0000_0000_0000_0000_0000_0000_0000_0000
             let high: UInt64 = 0b0100_0111_1111_1111_1111_1111_1111_1110____1000_0111_1111_1111_1111_1111_1111_1111
             let (lowHigh, index) = byte1.quotientAndRemainder(dividingBy: 64)
