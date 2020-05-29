@@ -51,8 +51,8 @@ extension XURL.Host {
             case .expectedClosingSquareBracket:
                 return "Invalid IPv6 Address - expected closing ']'"
             default:
-                assert(false, "Unknown error code: \(errorCode)")
-                return "Unknown error code"
+                assert(false, "Unrecognised error code: \(errorCode)")
+                return "Internal Error: Unrecognised error code"
             }
         }
     }
@@ -83,12 +83,21 @@ extension XURL.Host {
             }
         }
 
-        // TODO: domain-to-ascii
+        // TODO:
+        //
+        // 5. Let domain be the result of running 'UTF-8 decode without BOM' on the string percent decoding of input.
+        //    Note: Alternatively 'UTF-8 decode without BOM or fail' can be used, coupled with an early return for failure,
+        //          as domain to ASCII fails on U+FFFD REPLACEMENT CHARACTER.
+        //
+        // 6. Let asciiDomain be the result of running domain to ASCII on domain.
+        //
+        // 7. If asciiDomain is failure, validation error, return failure.
+        //
+        // 8. If asciiDomain contains a forbidden host code point, validation error, return failure.
 
         if case .success(let address) = IPAddress.V4.parse(input) {
             return .success(.ipv4Address(address))
         }
-
         return .success(.domain(String(decoding: input, as: UTF8.self)))
     }
 }

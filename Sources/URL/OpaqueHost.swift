@@ -28,7 +28,8 @@ extension OpaqueHost {
             case .containsNonURLCodePoint:
                 return "String contains a non URL code point"
             default:
-                fatalError("Unrecognised error code")
+                assert(false, "Unrecognised error code: \(errorCode)")
+                return "Internal Error: Unrecognised error code"
             }
         }
     }

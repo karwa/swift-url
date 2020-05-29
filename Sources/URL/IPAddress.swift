@@ -134,7 +134,8 @@ extension IPAddress.V6 {
                 let wrappedError = IPAddress.V4.ParseError(unpacking: context)
                 return "Invalid IPv4 address: \(wrappedError)"
             default:
-                fatalError("Unrecognised error code")
+                assert(false, "Unrecognised error code: \(errorCode). Context: \(context)")
+                return "Internal Error: Unrecognised error code"
             }
         }
     }
@@ -425,7 +426,8 @@ extension IPAddress.V4 {
             case .notEnoughPieces:
                 return "Incorrect number of pieces in address"
             default:
-                fatalError("Unrecognised error code")
+                assert(false, "Unrecognised error code: \(errorCode)")
+                return "Internal Error: Unrecognised error code"
             }
         }
     }
