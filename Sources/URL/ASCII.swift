@@ -54,6 +54,20 @@ extension ASCII {
         value == pattern.codePoint
     }
 
+    // UInt8?.
+    @inlinable public static func == (lhs: UInt8?, rhs: ASCII) -> Bool {
+        lhs == rhs.codePoint
+    }
+    @inlinable public static func != (lhs: UInt8?, rhs: ASCII) -> Bool {
+        !(lhs == rhs)
+    }
+    @inlinable public static func ~= (pattern: UInt8?, value: ASCII) -> Bool {
+        pattern == value.codePoint
+    }
+    @inlinable public static func ~= (pattern: ASCII, value: UInt8?) -> Bool {
+        value == pattern.codePoint
+    }
+
     // Character.
     @inlinable public static func == (lhs: Character, rhs: ASCII) -> Bool {
         lhs.asciiValue.map { $0 == rhs } ?? false
