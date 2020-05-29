@@ -42,10 +42,6 @@ final class URLTests: XCTestCase {
 
    func testBasic() {
 
-       func opaque(_ str: String) -> XURL.Host {
-        //    return .opaque(str)
-           return .opaque(OpaqueHost(unchecked: str))
-       }
        let testData: [(String, XURL.Components)] = [
 
         // Leading, trailing whitespace.
@@ -103,21 +99,21 @@ final class URLTests: XCTestCase {
             path: ["aThing"], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
-        // ==== Everything below is XFAIL while host parsing is still being implemented ==== //
-
         // Non-ASCII opaque host.
         ("tp://www.bücher.de", XURL.Components(
             scheme: "tp",
-            authority: .init(username: nil, password: nil, host: opaque("www.b%C3%BCcher.de"), port: nil),
+            authority: .init(username: nil, password: nil, host: .opaque(OpaqueHost("www.b%C3%BCcher.de")!), port: nil),
             path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
         // Emoji opaque host.
         ("tp://👩‍👩‍👦‍👦️/family", XURL.Components(
             scheme: "tp",
-            authority: .init(username: nil, password: nil, host: opaque("%F0%9F%91%A9%E2%80%8D%F0%9F%91%A9%E2%80%8D%F0%9F%91%A6%E2%80%8D%F0%9F%91%A6%EF%B8%8F"), port: nil),
+            authority: .init(username: nil, password: nil, host: .opaque(OpaqueHost("%F0%9F%91%A9%E2%80%8D%F0%9F%91%A9%E2%80%8D%F0%9F%91%A6%E2%80%8D%F0%9F%91%A6%EF%B8%8F")!), port: nil),
             path: ["family"], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
+
+        // ==== Everything below is XFAIL while host parsing is still being implemented ==== //
 
         //Non-ASCII domain.
         // ("http://www.bücher.de", XURL.Components(
@@ -144,6 +140,7 @@ final class URLTests: XCTestCase {
            
            let result = hasNonURLCodePoints(scalar.utf8)
            print("\(x)", "    Is Non-URL code point? \(result)")
+           print("\(x)", "    Is forbidden host code point? \(ASCII(x)?.isForbiddenHostCodePoint ?? true)")
        }
 
     //     var invalid: [UInt8] = [0xEF, 0xBF, 0xBE] //[0xF4, 0x8F, 0xBF, 0xBF]

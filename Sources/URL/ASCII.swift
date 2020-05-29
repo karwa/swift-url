@@ -238,6 +238,10 @@ extension ASCII {
             isAlpha(char) || digits.contains(char)
         }
 
+        public func isHexDigit(_ char: ASCII) -> Bool {
+            ASCII.parseHexDigit(ascii: char) != ASCII.parse_NotFound
+        }
+
         public func isAlpha(_ char: Character) -> Bool {
             uppercaseAlpha.contains(char) || lowercaseAlpha.contains(char) 
         }

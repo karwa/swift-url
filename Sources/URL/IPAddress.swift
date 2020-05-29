@@ -636,31 +636,3 @@ extension IPAddress.V4: CustomStringConvertible {
         }
     }
 }
-
-// MARK: - String utilities.
-
-extension StringProtocol {
-
-    @inlinable 
-    func _withUTF8<T>(_ body: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
-        if var string = self as? String {
-            return try string.withUTF8(body)
-        } else {
-            var substring = self as! Substring
-            return try substring.withUTF8(body)
-        }
-    }
-}
-
-#if swift(<5.3)
-extension String {
-    init(
-        unsafeUninitializedCapacity capacity: Int,
-        initializingUTF8With initializer: (_ buffer: UnsafeMutableBufferPointer<UInt8>) throws -> Int) rethrows {
-            let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: capacity)
-            defer { buffer.deallocate() }
-            let count = try initializer(buffer) 
-            self = String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
-    }
-}
-#endif

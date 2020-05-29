@@ -445,12 +445,8 @@ extension XURL.Parser {
                     // Parse username and password out of "buffer"
                     let passwordTokenIndex = buffer.firstIndex(where: { $0 == ASCII.colon })
                     let passwordStartIndex = passwordTokenIndex.flatMap { buffer.index(after: $0) }
-                    let parsedUsername = PercentEscaping.escape(
-                        utf8: buffer[..<(passwordTokenIndex ?? buffer.endIndex)],
-                        where: url_escape_userInfo)
-                    let parsedPassword = PercentEscaping.escape(
-                        utf8: buffer[(passwordStartIndex ?? buffer.endIndex)...],
-                        where: url_escape_userInfo)
+                    let parsedUsername = buffer[..<(passwordTokenIndex ?? buffer.endIndex)].percentEscaped(where: url_escape_userInfo)
+                    let parsedPassword = buffer[(passwordStartIndex ?? buffer.endIndex)...].percentEscaped(where: url_escape_userInfo)
                     url.authority.username = parsedUsername
                     url.authority.password = parsedPassword
                     if url.authority.username?.isEmpty == true { url.authority.username = nil }
@@ -743,7 +739,7 @@ extension XURL.Parser {
                             validationFailure("Invalid % in URL")
                         }
                     }
-                    buffer.append(PercentEscaping.escape(utf8: c, where: url_escape_path))
+                    buffer.append(c.percentEscaped(where: url_escape_path))
                 }
 
             case .cannotBeABaseURLPath:
