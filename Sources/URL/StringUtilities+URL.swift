@@ -22,10 +22,6 @@ func hasNonURLCodePoints<S>(_ input: S, allowPercentSign: Bool = false) -> Bool 
     // the handful of disallowed code-points in their raw, encoded form.
     //
     // - ASCII values need to be checked, but don't need any fancy decoding.
-    // - Surrogates (0xD800 ... 0xDFFF) are not valid in UTF8 anyway.
-    //      If we wanted to, we could detect the bit-pattern 11101011_101?????_10??????.
-    //
-    // Leaving only code-points in the range 0x80 ..< 0xA0 and non-characters to detect.
     // - (0x80 ..< 0xA0) are the patterns 0xC28? and 0xC29? when encoded, so just 1.5 bytes to match.
     // - Non-characters have a relatively simple pattern when encoded:
     //     > A noncharacter is a code point that is in the range U+FDD0 to U+FDEF, inclusive,
@@ -39,6 +35,10 @@ func hasNonURLCodePoints<S>(_ input: S, allowPercentSign: Bool = false) -> Bool 
     //    - 0xFFFE, 0xFFFF     => 0xEFBFB(E/F) in UTF8            (11101111_10111111_1011111?)
     //    - 0x??FFFE, 0x??FFFF => 0xF??FBFB(E/F) in UTF8 (11110???_10??1111_10111111_1011111?)
     //      (even though there are 2 hex characters, the prefix is only 5 bits because the max code-point is 10FFFF).
+    //
+    // - Surrogates (0xD800 ... 0xDFFF) are not valid in UTF8 anyway, but they're easy to check for, so why not? 
+    //   Better than having them slip through, get percent-escaped or something and encoded in the resulting String.
+    //   They match the bit-pattern 11101011_101?????_10??????.
 
     var input = input.makeIterator()
     while let byte1 = input.next() {
@@ -65,7 +65,7 @@ func hasNonURLCodePoints<S>(_ input: S, allowPercentSign: Bool = false) -> Bool 
                 return true // Invalid UTF8.
             }
             let encodedScalar = UInt32(byte1) << 8 | UInt32(byte2)
-            // Reject 0x80-0x8F (encoded: 0xC28?), 0x90-0x9F (encoded: 0xC29?)
+            // Reject 0x80-0x8F, 0x90-0x9F (non-characters)
             let masked = encodedScalar & 0b11111111_11110000
             if masked == 0b11000010_10000000 || masked == 0b11000010_10010000 {
                 return true
@@ -76,13 +76,18 @@ func hasNonURLCodePoints<S>(_ input: S, allowPercentSign: Bool = false) -> Bool 
                 return true // Invalid UTF8.
             }
             let encodedScalar = UInt32(byte1) << 16 | UInt32(byte2) << 8 | UInt32(byte3)
-            // Reject 0xFDD0-0xFDEF.
+            // Reject 0xFDD0-0xFDEF (non-characters).
             let masked = encodedScalar & 0b11111111_11111111_11110000 
             if masked == 0b11101111_10110111_10010000 || masked == 0b11101111_10110111_10100000 {
                 return true
             }
-            // Reject 0xFFFE, 0xFFFF.
+            // Reject 0xFFFE, 0xFFFF (non-characters).
             if encodedScalar & 0b11111111_11111111_11111110 == 0b11101111_10111111_10111110 {
+                return true
+            }
+            // Reject 0xD800-0xD8FF (surrogates).
+            // These shouldn't appear in any valid UTF8 sequence anyway.
+            if encodedScalar & 0b11111111_11100000_11000000 == 0b11101011_10100000_10000000 {
                 return true
             }
         case 4:
@@ -91,7 +96,7 @@ func hasNonURLCodePoints<S>(_ input: S, allowPercentSign: Bool = false) -> Bool 
                 return true // Invalid UTF8.
             }
             let encodedScalar = UInt32(byte1) << 24 | UInt32(byte2) << 16 | UInt32(byte3) << 8 | UInt32(byte4)
-            // Reject 0x??FFFE, 0x??FFFF.
+            // Reject 0x??FFFE, 0x??FFFF (non-characters).
             if encodedScalar & 0b11111000_11001111_11111111_11111110 == 0b11110000_10001111_10111111_10111110 {
                 return true
             }            
