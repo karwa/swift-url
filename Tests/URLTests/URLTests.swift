@@ -62,9 +62,9 @@ final class URLTests: XCTestCase {
         ),
 
         // Spaces in credentials.
-        ("ftp://myUsername:sec ret ))@ftp.someServer.de:21/file/thing/book.txt", XURL.Components(
+        ("ftp://%100myUsername:sec ret ))@ftp.someServer.de:21/file/thing/book.txt", XURL.Components(
             scheme: "ftp",
-            authority: .init(username: "myUsername", password: "sec%20ret%20))", host: .domain("ftp.someServer.de"), port: nil),
+            authority: .init(username: "%100myUsername", password: "sec%20ret%20))", host: .domain("ftp.someServer.de"), port: nil),
             path: ["file", "thing", "book.txt"], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
@@ -132,16 +132,65 @@ final class URLTests: XCTestCase {
         print("===================")
    }
 
+   func testInvalidIPv4() {
+        let testData: [(String, XURL.Components?)] = [
+            ("https://0x3h", XURL.Components(
+                scheme: "https",
+                authority: .init(username: nil, password: nil, host: .domain("0x3h"), port: nil),
+                path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)),
+            ("https://234.266.2", nil),
+        ]
+
+        for (input, expectedComponents) in testData {
+            let results = XURL.Parser.parse(input)
+            XCTAssertEqual(results, expectedComponents, "Failed to correctly parse \(input)")
+        }
+   }
+
+   func testPercentEscaping() {
+       let testStrings: [String] = [
+         "hello, world", // ASCII
+         "👩‍👩‍👦‍👦️", // Long unicode
+         "%🐶️",   // Leading percent
+         "%z🐶️",  // Leading percent + one nonhex
+         "%3🐶️",  // Leading percent + one hex
+         "%3z🐶️", // Leading percent + one hex + one nonhex
+         "🐶️%",   // Trailing percent
+         "🐶️%z",  // Trailing percent + one nonhex
+         "🐶️%3",  // Trailing percent + one hex
+         "🐶️%3z", // Trailing percent + one hex + one nonhex
+         "%100"
+       ]
+       for string in testStrings {
+           let escaped = string.percentEscaped(where: { _ in false })
+           let decoded = escaped.removingPercentEscaping() //PercentEscaping.decodeString(utf8: escaped.utf8)
+           XCTAssertEqual(Array(string.utf8), Array(decoded.utf8))
+            print("--------------")
+            print("original: '\(string)'\t\tUTF8: \(Array(string.utf8))")
+            print("decoded : '\(decoded)'\t\tUTF8: \(Array(decoded.utf8))")
+            print("escaped:  '\(escaped)'\t\tUTF8: \(Array(escaped.utf8))")
+        }
+   }
+
    func testutf8() {
 
-       for x in UInt8.min ... UInt8.max {
-           let scalar = UnicodeScalar(x)
-           print("\(x)", "Character: \(scalar).")
+
+       let original = ""
+       let encoded = "%F0%9F%91%A9%E2%80%8D%F0%9F%91%A9%E2%80%8D%F0%9F%91%A6%E2%80%8D%F0%9F%91%A6%EF%B8%8F"
+       let decoded = encoded.removingPercentEscaping() //PercentEscaping.decodeString(utf8: encoded.utf8)
+        print("original: '\(original)'\t\tUTF8: \(Array(original.utf8))")
+        print("decoded : '\(decoded)'\t\tUTF8: \(Array(decoded.utf8))")
+    //    for x in UInt8.min ... UInt8.max {
+    //        let scalar = UnicodeScalar(x)
+    //        print("\(x)", "Character: \(scalar).")
            
-           let result = hasNonURLCodePoints(scalar.utf8)
-           print("\(x)", "    Is Non-URL code point? \(result)")
-           print("\(x)", "    Is forbidden host code point? \(ASCII(x)?.isForbiddenHostCodePoint ?? true)")
-       }
+    //        let result = hasNonURLCodePoints(scalar.utf8)
+    //        print("\(x)", "    Is Non-URL code point? \(result)")
+    //        print("\(x)", "    Is forbidden host code point? \(ASCII(x)?.isForbiddenHostCodePoint ?? true)")
+    //    }
+
+
+
 
     //     var invalid: [UInt8] = [0xEF, 0xBF, 0xBE] //[0xF4, 0x8F, 0xBF, 0xBF]
     //    for x: UInt8 in 0xA0 ... 0xAF {

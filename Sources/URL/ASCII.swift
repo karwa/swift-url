@@ -245,15 +245,12 @@ extension ASCII {
         public var uppercaseAlpha   : Range<ASCII> { ASCII(_unchecked: 0x41)..<ASCII(_unchecked: 0x5B) }
         public var lowercaseAlpha   : Range<ASCII> { ASCII(_unchecked: 0x61)..<ASCII(_unchecked: 0x7B) }
 
+        // FIXME: These should be instance members.
         public func isAlpha(_ char: ASCII) -> Bool {
             uppercaseAlpha.contains(char) || lowercaseAlpha.contains(char) 
         }
         public func isAlphaNumeric(_ char: ASCII) -> Bool {
             isAlpha(char) || digits.contains(char)
-        }
-
-        public func isHexDigit(_ char: ASCII) -> Bool {
-            ASCII.parseHexDigit(ascii: char) != ASCII.parse_NotFound
         }
 
         public func isAlpha(_ char: Character) -> Bool {
@@ -378,6 +375,12 @@ extension ASCII {
         let hexValue = parseHexDigit(ascii: ascii)
         // Yes, there's a branch, but I didn't fancy a second lookup table.
         return hexValue < 10 ? hexValue : DC
+    }
+}
+
+extension ASCII {
+    public var isHexDigit: Bool {
+        ASCII.parseHexDigit(ascii: self) != ASCII.parse_NotFound
     }
 }
 

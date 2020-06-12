@@ -323,6 +323,20 @@ extension IPAddress.V6: CustomStringConvertible {
     }
 }
 
+extension IPAddress.V6: Codable {
+
+    public init(from decoder: Decoder) throws {
+       let container = try decoder.singleValueContainer()
+       let string = try container.decode(String.self)
+       self = try Self.parse(string).get()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(self.description)
+    }
+}
+
 // MARK: - IPv4
 
 extension IPAddress {
@@ -402,6 +416,17 @@ extension IPAddress.V4 {
         // -
         internal static var tooManyPieces:   Self { Self(errorCode: 8) }
         internal static var notEnoughPieces: Self { Self(errorCode: 10) }
+
+        /// If `true`, this error relates to a parsing failure (e.g. an invalid character).
+        //  Otherwise, it indicates that the 
+        internal var isFormattingError: Bool {
+            switch self {
+            case .pieceOverflows, .addressOverflows:
+                return false
+            default:
+                return true
+            }
+        }
         
         public var description: String {
             switch self {
@@ -449,6 +474,10 @@ extension IPAddress.V4 {
         // This algorithm isn't from the WHATWG spec, but supports all the required shorthands.
         // Translated and adapted to Swift (with some modifications) from:
         // https://android.googlesource.com/platform/bionic/+/froyo/libc/inet/inet_aton.c
+
+        // Note the "returning input" from the WHATWG parser is equivalent to returning a ParseError
+        // where `isFormattingError` is `true`, and "returning failure" from the WHATWG parser is
+        // equivalent to returning a ParseError where `isFormattingError` is `false`.
         
         var __pieces: (UInt32, UInt32, UInt32, UInt32) = (0, 0, 0, 0)
         return withUnsafeMutableBytes(of: &__pieces) { rawPtr -> Result<Self, ParseError> in
@@ -494,7 +523,7 @@ extension IPAddress.V4 {
                 }
                 // Set value for piece.
                 guard pieceIndex < 3 else {
-                    return .failure(.tooManyPieces) 
+                    return .failure(.tooManyPieces)
                 }
                 pieceIndex &+= 1
                 pieces[pieceIndex] = value
@@ -636,5 +665,19 @@ extension IPAddress.V4: CustomStringConvertible {
                 return stringBufferIdx
             }
         }
+    }
+}
+
+extension IPAddress.V4: Codable {
+
+    public init(from decoder: Decoder) throws {
+       let container = try decoder.singleValueContainer()
+       let string = try container.decode(String.self)
+       self = try Self.parse(string).get()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(self.description)
     }
 }

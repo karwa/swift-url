@@ -1,5 +1,5 @@
 
-public struct OpaqueHost: Equatable, Hashable {
+public struct OpaqueHost: Equatable, Hashable, Codable {
     public let hostname: String
 
     private init(unchecked hostname: String) {
@@ -43,13 +43,11 @@ extension OpaqueHost {
                 continue // Non-ASCII codepoints checked below.
             }
             if asciiChar == .percentSign {
-                guard let percentEncodedByte1 = iter.next(),
-                      ASCII(percentEncodedByte1).map({ ASCII.ranges.isHexDigit($0) }) == true else {
-                          return .failure(.invalidPercentEscaping)
+                guard let percentEncodedByte1 = iter.next(), ASCII(percentEncodedByte1)?.isHexDigit == true else {
+                    return .failure(.invalidPercentEscaping)
                 }
-                guard let percentEncodedByte2 = iter.next(),
-                      ASCII(percentEncodedByte2).map({ ASCII.ranges.isHexDigit($0) }) == true else {
-                          return .failure(.invalidPercentEscaping)
+                guard let percentEncodedByte2 = iter.next(), ASCII(percentEncodedByte2)?.isHexDigit == true else {
+                    return .failure(.invalidPercentEscaping)
                 }
             } else if asciiChar.isForbiddenHostCodePoint {
                 return .failure(.containsForbiddenHostCodePoint)

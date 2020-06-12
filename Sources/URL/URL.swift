@@ -9,20 +9,20 @@ public struct XURL {
 
 extension XURL {
 
-    public struct Components: Equatable {
-        struct Authority: Equatable {
-            var username: String?
-            var password: String?
-            var host: XURL.Host?
-            var port: Int?
+    public struct Components: Equatable, Hashable, Codable {
+        public struct Authority: Equatable, Hashable, Codable {
+            public var username: String?
+            public var password: String?
+            public var host: XURL.Host?
+            public var port: Int?
         }
 
-        var scheme: String?
-        var authority = Authority()
-        var path: [String] = []
-        var query: String?
-        var fragment: String?
-        var cannotBeABaseURL = false
+        public var scheme: String?
+        public var authority = Authority()
+        public var path: [String] = []
+        public var query: String?
+        public var fragment: String?
+        public var cannotBeABaseURL = false
 
         var isSpecial: Bool {
             scheme.flatMap { XURL.Parser.SpecialScheme(rawValue: $0) } != nil
@@ -90,6 +90,7 @@ extension StringProtocol {
         return true 
     }
 
+    // FIXME: double-check this.
     var isWindowsDriveLetter: Bool {
         isNormalisedWindowsDriveLetter || self.dropFirst().first == ASCII.verticalBar
     }
@@ -198,6 +199,8 @@ extension XURL.Parser {
         parse(input, base: nil, url: nil, stateOverride: nil)
     }
 
+    // TODO: Collect validation failure messages in to an Array (or some other collection), instead of printing them.
+
     static func parse(_ input: String, base: XURL.Components?, url: XURL.Components?, stateOverride: State?) -> XURL.Components? {
         guard !input.isEmpty else { return nil }
 
@@ -223,10 +226,6 @@ extension XURL.Parser {
         var buffer = ""
         var flag_at = false // @flag in spec.
         var flag_squareBracket = false // [] flag in spec.
-
-        func __UNIMPLEMENTED() {
-            print("Unhandled state - \(state)\nInput: \(input)\nRemaining: \(input[idx...])\nParsed: \(url)\n")
-        }
 
         inputLoop: while true {
             stateMachine: switch state {

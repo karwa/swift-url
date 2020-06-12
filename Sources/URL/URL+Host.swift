@@ -95,9 +95,15 @@ extension XURL.Host {
         //
         // 8. If asciiDomain contains a forbidden host code point, validation error, return failure.
 
-        if case .success(let address) = IPAddress.V4.parse(input) {
+        switch IPAddress.V4.parse(input) {
+        case .success(let address):
             return .success(.ipv4Address(address))
+        case .failure(let err) where err.isFormattingError == false:
+            return .failure(.ipv4AddressError(err))
+        default:
+            break
         }
+        
         return .success(.domain(String(decoding: input, as: UTF8.self)))
     }
 }
@@ -129,5 +135,64 @@ extension XURL.Host: CustomStringConvertible {
         case .empty:
             return ""
         }
+    }
+}
+
+extension XURL.Host: Codable {
+    
+    enum Kind: String, Codable {
+        case domain
+        case ipv4Address
+        case ipv6Address
+        case opaque
+        case empty
+    }
+    
+    var kind: Kind {
+       switch self {
+        case .empty:        return .empty
+        case .ipv4Address:  return .ipv4Address
+        case .ipv6Address:  return .ipv6Address
+        case .opaque:       return .opaque
+        case .domain:       return .domain
+       }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case kind  = "kind"
+        case value = "value"
+    } 
+    public init(from decoder: Decoder) throws {
+       let container = try decoder.container(keyedBy: CodingKeys.self)
+       let kind      = try container.decode(Kind.self, forKey: .kind)
+       switch kind {
+        case .empty: 
+           self = .empty
+        case .ipv4Address:
+            self = .ipv4Address(try container.decode(IPAddress.V4.self, forKey: .value))
+        case .ipv6Address:
+            self = .ipv6Address(try container.decode(IPAddress.V6.self, forKey: .value))
+        case .opaque:
+            self = .opaque(try container.decode(OpaqueHost.self, forKey: .value))
+        case .domain:
+            self = .domain(try container.decode(String.self, forKey: .value))
+       }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+       var container = encoder.container(keyedBy: CodingKeys.self)
+       try container.encode(kind, forKey: .kind)
+       switch self {
+        case .empty: 
+            break
+        case .ipv4Address(let addr):
+            try container.encode(addr, forKey: .value)
+        case .ipv6Address(let addr):
+            try container.encode(addr, forKey: .value)
+        case .opaque(let host):
+            try container.encode(host, forKey: .value)
+        case .domain(let host):
+            try container.encode(host, forKey: .value)
+       }
     }
 }
