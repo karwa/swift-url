@@ -464,8 +464,15 @@ extension XURL.Parser {
         }
     }
 
-    public static func parse(_ input: String) -> XURL.Components? {
-        parse(input, base: nil, url: nil, stateOverride: nil)
+    public static func parse(_ input: String, base: String? = nil) -> XURL.Components? {
+        if let baseString = base {
+            if let baseComponents = parse(baseString, base: nil) {
+                return parse(input, base: baseComponents, url: nil, stateOverride: nil)
+            } else {
+                return nil
+            }
+        }
+        return parse(input, base: nil, url: nil, stateOverride: nil)
     }
 
     // TODO: Collect validation failure messages in to an Array (or some other collection), instead of printing them.
@@ -878,10 +885,10 @@ extension XURL.Parser {
                         validationFailure(.unexpectedWindowsDriveLetter)
                         url.host = nil
                         url.path = []
-                        state    = .path
                     } else {
                         shortenURLPath(&url.path, isFileScheme: true)
                     }
+                    state = .path
                     continue // Do not increment index.
                 }
 
