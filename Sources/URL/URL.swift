@@ -10,26 +10,82 @@ public struct XURL {
 extension XURL {
 
     public struct Components: Equatable, Hashable, Codable {
-        public struct Authority: Equatable, Hashable, Codable {
-            public var username: String?
-            public var password: String?
-            public var host: XURL.Host?
-            public var port: Int?
-        }
 
-        public var scheme: String?
-        public var authority = Authority()
+        /// A URL’s scheme is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing. It is initially the empty string.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+        ///
+        public var scheme: String = ""
+        
+        /// A URL’s username is an ASCII string identifying a username. It is initially the empty string.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+        ///
+        public var username: String = ""
+      
+        /// A URL’s password is an ASCII string identifying a password. It is initially the empty string.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+        ///
+        public var password: String = ""
+                
+      	/// A URL’s host is null or a host. It is initially null.
+        ///
+        /// A host is a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+        /// Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+        /// https://url.spec.whatwg.org/#host-representation as of 14.06.2020
+        ///
+        public var host: XURL.Host?
+
+        /// A URL’s port is either null or a 16-bit unsigned integer that identifies a networking port. It is initially null.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+		///
+        public var port: UInt16?
+
+        /// A URL’s path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form. It is initially empty.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+        ///
         public var path: [String] = []
+        
+        /// A URL’s query is either null or an ASCII string. It is initially null.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+        ///
         public var query: String?
+        
+        /// A URL’s fragment is either null or an ASCII string that can be used for further processing on the resource the URL’s other components identify. It is initially null.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+        ///
         public var fragment: String?
+        
+        /// A URL also has an associated cannot-be-a-base-URL flag. It is initially unset.
+        ///
+        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+        ///
         public var cannotBeABaseURL = false
 
+        // TODO:
+        // URL also has an associated blob URL entry that is either null or a blob URL entry. It is initially null.
+        
         var isSpecial: Bool {
-            scheme.flatMap { XURL.Parser.SpecialScheme(rawValue: $0) } != nil
+            XURL.Parser.SpecialScheme(rawValue: scheme) != nil
         }
 
         var hasCredentials: Bool {
-            authority.username != nil || authority.password != nil
+            !username.isEmpty || !password.isEmpty
+        }
+
+        /// Copies the username, password, host and port fields from other.
+        mutating func copyAuthority(from other: Self) {
+            self.username = other.username
+            self.password = other.password
+            self.host     = other.host
+            self.port     = other.port
         }
     }
 }
@@ -38,8 +94,11 @@ extension XURL.Components: CustomDebugStringConvertible {
 
     public var debugDescription: String {
         return """
-        Scheme:\t\(scheme ?? "<nil>")
-        Authority:\t\(authority)
+        Scheme:\t\(scheme)
+        Username:\t\(username)
+        Password:\t\(password)
+        Host:\t\(host?.description ?? "<nil>")
+        Port:\t\(port?.description ?? "<nil>")
         Path:\t\(path)
         Query:\t\(query ?? "<nil>")
         Fragment:\t\(fragment ?? "<nil>")
@@ -82,30 +141,45 @@ extension Character {
 
 extension StringProtocol {
 
-    var isNormalisedWindowsDriveLetter: Bool {
+    /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
+	///
+    /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
+    ///
+    var isWindowsDriveLetter: Bool {
         var it = makeIterator()
         guard let first = it.next(), ASCII.ranges.isAlpha(first) else { return false }
-        guard let second = it.next(), second == ASCII.colon else { return false } 
+        guard let second = it.next(), (second == ASCII.colon || second == ASCII.verticalBar) else { return false }
         guard it.next() == nil else { return false }
-        return true 
+        return true
+    }
+    
+    /// A normalized Windows drive letter is a Windows drive letter of which the second code point is U+003A (:).
+    ///
+    /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
+    ///
+    var isNormalisedWindowsDriveLetter: Bool {
+        isWindowsDriveLetter && self.dropFirst().first == ASCII.colon
     }
 
-    // FIXME: double-check this.
-    var isWindowsDriveLetter: Bool {
-        isNormalisedWindowsDriveLetter || self.dropFirst().first == ASCII.verticalBar
-    }
-
+	/// A string starts with a Windows drive letter if all of the following are true:
+	///
+    /// - its length is greater than or equal to 2
+    /// - its first two code points are a Windows drive letter
+    /// - its length is 2 or its third code point is U+002F (/), U+005C (\), U+003F (?), or U+0023 (#).
+    ///
+    /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
+    ///
     func hasWindowsDriveLetterPrefix() -> Bool {
         var it = makeIterator()
         guard let first = it.next(), ASCII.ranges.isAlpha(first) else { return false }
-        guard let second = it.next(), second == ASCII.colon || second == ASCII.verticalBar else { return false } 
-        if let third = it.next() {
-            guard third == ASCII.forwardSlash || third == ASCII.backslash ||
-                third == ASCII.questionMark || third == ASCII.numberSign else {
-                    return false
-            }
+        guard let second = it.next(), (second == ASCII.colon || second == ASCII.verticalBar) else { return false }
+        guard let third = it.next() else { return true }
+        switch third {
+        case ASCII.forwardSlash, ASCII.backslash, ASCII.questionMark, ASCII.numberSign:
+            return true
+        default:
+            return false
         }
-        return true 
     }
 
     /// Returns true if the next contents of `iterator` are either the ASCII period, %2e, or %2E.
@@ -140,6 +214,7 @@ func shortenURLPath(_ path: inout [String], isFileScheme: Bool) {
     path.removeLast()
 }
 
+public var __BREAKPOINT__: ()->Void = {}
 
 
 extension XURL {
@@ -160,7 +235,7 @@ extension XURL.Parser {
         case ws = "ws"
         case wss = "wss"
 
-        var defaultPort: Int? {
+        var defaultPort: UInt16? {
             switch self {
             case .ftp:   return 21
             case .file:  return nil
@@ -202,12 +277,10 @@ extension XURL.Parser {
     // TODO: Collect validation failure messages in to an Array (or some other collection), instead of printing them.
 
     static func parse(_ input: String, base: XURL.Components?, url: XURL.Components?, stateOverride: State?) -> XURL.Components? {
-        guard !input.isEmpty else { return nil }
 
         func validationFailure(_ msg: String) {
             print("Validation failure - \(msg).")
         }
-
         var input = input[...]
 
         // 1. Trim leading/trailing C0 control characters and spaces.
@@ -217,6 +290,8 @@ extension XURL.Parser {
         let invalidRanges = input.subranges { $0.isASCIINewlineOrTab }
         if !invalidRanges.isEmpty { validationFailure("Input contains newline or tab characters") }
         input.removeSubranges(invalidRanges)
+
+        guard !input.isEmpty else { return nil }
 
         // 3. Begin state machine.
         var state = stateOverride ?? .schemeStart
@@ -229,11 +304,32 @@ extension XURL.Parser {
 
         inputLoop: while true {
             stateMachine: switch state {
+            // Within this switch statement:
+            // - inputLoop runs the switch, then advances `idx`, if `idx != input.endIndex`.
+            // - stateMachine switches on `state`. It *will* see `idx == endIndex`,
+            //   which turns out to be important in some of the parsing logic.
+            //
+            // In plain English:
+            // - `break stateMachine` means "we're done processing this character, exit the switch and let inputLoop advance to the character"
+            // - `break inputLoop`    means "we're done processing 'input', return whatever we have (not a failure)".
+            //                        typically comes up with `stateOverride`.
+            // - `return nil`         means failure.
+            // - `continue`           means "loop over inputLoop again, from the beginning (**without** first advancing the character)"
+                
+            // There are also notes about how non-ASCII characters are treated.
+            // The idea is to eventually move to parsing input as an UnsafeBufferPointer<UInt8>, because iterating Strings is slooooow,
+            // and almost all of this logic just checks for patterns of ASCII characters. Hopefully we can isolate any pieces that need
+            // to be unicode-aware.
 
             case .schemeStart:
-                // TODO: Handle endIndex/EOF.
-                let c = input[idx]
-                guard ASCII.ranges.isAlpha(c) else {
+                // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
+                // `c` is only used if it is known to be within an allowed ASCII range.
+                let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
+                switch c {
+                case _ where ASCII.ranges.isAlpha(c):
+                    buffer.append(Character(c).lowercased())
+                    state = .scheme
+                default:
                     guard stateOverride == nil else {
                         validationFailure("Scheme starts with invalid character")
                         return nil
@@ -241,23 +337,20 @@ extension XURL.Parser {
                     state = .noScheme
                     continue // Do not increment index.
                 }
-                buffer.append(c.lowercased())
-                state = .scheme 
-
+                 
             case .scheme:
-                // TODO: Handle endIndex/EOF.
-                let c = input[idx]
-                let isAllowedNonAlphaNumeric = c.asciiValue.map { 
-                    $0 == ASCII.plus || $0 == ASCII.minus || $0 == ASCII.period 
-                    } ?? false
-
-                guard !(ASCII.ranges.isAlphaNumeric(c) || isAllowedNonAlphaNumeric) else {
-                    buffer.append(c.lowercased())
+                // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
+                // `c` is only used if it is known to be within an allowed ASCII range.
+                let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
+                switch c {
+                case _ where ASCII.ranges.isAlphaNumeric(c), .plus, .minus, .period:
+                    buffer.append(Character(c).lowercased())
                     break stateMachine
-                }
-                guard c == ASCII.colon else {
+                case .colon:
+                    break // Handled below.
+                default:
                     guard stateOverride == nil else {
-                        print("Validation failure - invalid scheme")
+                        validationFailure("invalid scheme")
                         return nil
                     }
                     buffer = ""
@@ -265,32 +358,33 @@ extension XURL.Parser {
                     idx    = input.startIndex
                     continue // Do not increment index.
                 }
+                assert(c == .colon)
                 let bufferSpecialScheme = SpecialScheme(rawValue: buffer)
                 if stateOverride != nil {
-                    let urlSpecialScheme = url.scheme.flatMap { SpecialScheme(rawValue: $0) }
+                    let urlSpecialScheme = SpecialScheme(rawValue: url.scheme)
                     if (urlSpecialScheme == nil) != (bufferSpecialScheme == nil) { 
                         break inputLoop
                     }
-                    if bufferSpecialScheme == .file && (url.hasCredentials || url.authority.port != nil) {
+                    if bufferSpecialScheme == .file && (url.hasCredentials || url.port != nil) {
                         break inputLoop
                     }
-                    if urlSpecialScheme == .file && (url.authority.host?.isEmpty ?? true) {
+                    if urlSpecialScheme == .file && (url.host?.isEmpty ?? true) {
                         break inputLoop
                     }
                 }
-
                 url.scheme = buffer
                 buffer = ""
-
                 if stateOverride != nil {
-                    if url.authority.port == bufferSpecialScheme?.defaultPort { url.authority.port = nil }
+                    if url.port == bufferSpecialScheme?.defaultPort {
+                        url.port = nil
+                    }
                     break inputLoop
                 }
                 switch bufferSpecialScheme {
                 case .file:
                     state = .file
                     if !input[idx...].hasPrefix("//") { // FIXME: ASCII check.
-                        print("Validation error - file URL should start with file://")
+                        validationFailure("file URL should start with file://")
                     }
                 case .some(_):
                     if base?.scheme == url.scheme {
@@ -300,19 +394,20 @@ extension XURL.Parser {
                     }
                 case .none:
                     let nextIdx = input.index(after: idx)
-                    if nextIdx != input.endIndex, input[nextIdx] == ASCII.forwardSlash {
+                    if nextIdx != input.endIndex, ASCII(input[nextIdx]) == .forwardSlash {
                         state = .pathOrAuthority
                         idx   = nextIdx
                     } else {
-                        // TODO: Spec says to append an empty string to url's path -- why?
+                        // TODO: Spec literally says "append an empty string to url’s path" -- but why?
                         url.cannotBeABaseURL = true
                         state = .cannotBeABaseURLPath
                     }
                 }
 
             case .noScheme:
-                // TODO: Handle endIndex/EOF.
-                let c = input[idx]
+                // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
+                // `c` is only checked against known ASCII values and never copied to the result.
+                let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 guard let base = base else {
                     validationFailure("input does not have a scheme, but no base given")
                     return nil
@@ -346,7 +441,7 @@ extension XURL.Parser {
                 idx   = input.index(after: idx)
 
             case .pathOrAuthority:
-                guard idx != input.endIndex, input[idx] == ASCII.forwardSlash else {
+                guard idx != input.endIndex, ASCII(input[idx]) == .forwardSlash else {
                     state = .path
                     continue // Do not increment index.
                 }
@@ -354,62 +449,68 @@ extension XURL.Parser {
 
             case .relative:
                 guard let base = base else {
-                    // FIXME: I think this is correct. The spec doesn't say what happens if base is nil.
+                    // Note: The spec doesn't say what happens here if base is nil.
                     validationFailure("input is a relative URL; a base URL is required")
                     return nil
                 }
                 url.scheme = base.scheme
                 guard idx != input.endIndex else {
-                    url.authority = base.authority
-                    url.path      = base.path
-                    url.query     = base.query
+                    url.copyAuthority(from: base)
+                    url.path     = base.path
+                    url.query    = base.query
                     break stateMachine
                 }
-                switch input[idx] {
-                case ASCII.backslash where url.isSpecial:
+                // Erase non-ASCII characters to `ASCII.null`.
+                // `c` is only checked against known ASCII values and never copied to the result.
+                let c: ASCII = ASCII(input[idx]) ?? .null
+                switch c {
+                case .backslash where url.isSpecial:
                     validationFailure("Unexpected backslash in relative URL")
-                    fallthrough
-                case ASCII.forwardSlash:
                     state = .relativeSlash
-                case ASCII.questionMark:
-                    url.authority = base.authority
+                case .forwardSlash:
+                    state = .relativeSlash
+                case .questionMark:
+                    url.copyAuthority(from: base)
                     url.path      = base.path
                     url.query     = ""
                     state         = .query
-                case ASCII.numberSign:
-                    url.authority = base.authority
+                case .numberSign:
+                    url.copyAuthority(from: base)
                     url.path      = base.path
                     url.query     = base.query
                     url.fragment  = ""
                     state         = .fragment
                 default:
-                    url.authority = base.authority
+                    url.copyAuthority(from: base)
                     url.path      = base.path
                     url.path.removeLast()
+                    url.query     = nil
                     state         = .path
                     continue // Do not increment index.
                 }
 
             case .relativeSlash:
-                // Treat endIndex like any non-slash character.
-                let c = (idx == input.endIndex) ? Character(ASCII.a) : input[idx]
+                // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
+                // `c` is only checked against known ASCII values and never copied to the result.
+                let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 let urlIsSpecial = url.isSpecial
                 switch c {
-                case ASCII.backslash where urlIsSpecial:
-                    validationFailure("Unexpected relative backslash")
-                    fallthrough
-                case ASCII.forwardSlash:
+                case .forwardSlash:
                     if urlIsSpecial {
                         state = .specialAuthorityIgnoreSlashes
                     } else {
                         state = .authority
                     }
+                case .backslash where urlIsSpecial:
+                    validationFailure("Unexpected relative backslash")
+                    state = .specialAuthorityIgnoreSlashes
                 default:
+                    // Note: The spec doesn't say what happens here if base is nil.
                     guard let base = base else {
                         validationFailure("Expected base URL for relative slash state")
                         return nil
                     }
-                    url.authority = base.authority
+                    url.copyAuthority(from: base)
                     state = .path
                     continue // Do not increment index.
                 }
@@ -423,19 +524,22 @@ extension XURL.Parser {
                 idx = input.index(after: idx)
 
             case .specialAuthorityIgnoreSlashes:
-                // Treat endIndex like any non-slash character.
-                let c = (idx == input.endIndex) ? Character(ASCII.a) : input[idx]
-                guard c == ASCII.forwardSlash || c == ASCII.backslash else {
+                // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
+                // `c` is only checked against known ASCII values and never copied to the result.
+                let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
+                guard c == .forwardSlash || c == .backslash else {
                     state = .authority
                     continue // Do not increment index.
                 }
                 validationFailure("Too many slashes between scheme and authority - will be ignored")
 
             case .authority:
-                // Treat endIndex like a "/" as they are handled the same. 
-                let c = (idx == input.endIndex) ? Character(ASCII.forwardSlash) : input[idx]
+                // Erase 'endIndex' to `ASCII.forwardSlash`, as they are handled the same,
+                // and `c` is not copied to the result in that case.
+                // Note [unicode]: Do not erase non-ASCII characters. They are copied to `buffer`.
+                let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
-                case ASCII.commercialAt:
+                case .commercialAt?:
                     validationFailure("It is unwise to include credentials in URLs")
                     if flag_at {
                         buffer.insert(contentsOf: "%40", at: buffer.startIndex)
@@ -444,16 +548,16 @@ extension XURL.Parser {
                     // Parse username and password out of "buffer"
                     let passwordTokenIndex = buffer.firstIndex(where: { $0 == ASCII.colon })
                     let passwordStartIndex = passwordTokenIndex.flatMap { buffer.index(after: $0) }
-                    let parsedUsername = buffer[..<(passwordTokenIndex ?? buffer.endIndex)].percentEscaped(where: url_escape_userInfo)
-                    let parsedPassword = buffer[(passwordStartIndex ?? buffer.endIndex)...].percentEscaped(where: url_escape_userInfo)
-                    url.authority.username = parsedUsername
-                    url.authority.password = parsedPassword
-                    if url.authority.username?.isEmpty == true { url.authority.username = nil }
-                    if url.authority.password?.isEmpty == true { url.authority.password = nil }
+                    let parsedUsername = buffer[..<(passwordTokenIndex ?? buffer.endIndex)]
+                        .percentEscaped(where: url_escape_userInfo)
+                    let parsedPassword = buffer[(passwordStartIndex ?? buffer.endIndex)...]
+                        .percentEscaped(where: url_escape_userInfo)
+                    url.username.append(parsedUsername)
+                    url.password.append(parsedPassword)
                     buffer = ""
-                case ASCII.forwardSlash, ASCII.questionMark, ASCII.numberSign: // or endIndex.
+                case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?: // or endIndex.
                     fallthrough
-                case ASCII.backslash where url.isSpecial:
+                case ASCII.backslash? where url.isSpecial:
                     if flag_at, buffer.isEmpty {
                         validationFailure("Expected host after @")
                         return nil
@@ -463,341 +567,383 @@ extension XURL.Parser {
                     state  = .host
                     continue // Do not increment index.
                 default:
-                    buffer.append(c)
+                    buffer.append(input[idx])
                 }
 
             case .host:
-                let urlSchemeIfSpecial = url.scheme.flatMap { SpecialScheme(rawValue: $0) }
-                guard !(stateOverride != nil && urlSchemeIfSpecial == .file) else {
+                let urlSpecialScheme = SpecialScheme(rawValue: url.scheme)
+                guard !(stateOverride != nil && urlSpecialScheme == .file) else {
                     state = .fileHost
                     continue // Do not increment index.
                 }
-                // Treat endIndex like a "/" as they are handled the same. 
-                let c = (idx == input.endIndex) ? Character(ASCII.forwardSlash) : input[idx]
+                // Erase 'endIndex' to `ASCII.forwardSlash`, as they are handled the same,
+                // and `c` is not copied to the result in that case.
+                // Note [unicode]: Do not erase non-ASCII characters. They are copied to `buffer`.
+                let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
-                case ASCII.colon where flag_squareBracket == false:
+                case .colon? where flag_squareBracket == false:
                     guard buffer.isEmpty == false else {
                         validationFailure("Expected host before :")
                         return nil
                     }
-                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSchemeIfSpecial == nil) else {
+                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSpecialScheme == nil) else {
                         validationFailure("Failed to parse host")
                         return nil 
                     }
-                    url.authority.host = parsedHost
+                    url.host = parsedHost
                     buffer = ""
                     state  = .port
-                    guard stateOverride != .host else { break inputLoop }
-                case ASCII.forwardSlash, ASCII.questionMark, ASCII.numberSign: // and endIndex.
+                    if stateOverride == .host { break inputLoop }
+                case .forwardSlash?, .questionMark?, .numberSign?: // or endIndex.
                     fallthrough
-                case ASCII.backslash where urlSchemeIfSpecial != nil:
+                case .backslash? where urlSpecialScheme != nil:
                     if buffer.isEmpty {
-                        if urlSchemeIfSpecial != nil {
+                        if urlSpecialScheme != nil {
                             validationFailure("Expected host")
                             return nil
-                        } else if stateOverride != nil, 
-                            url.authority.username != nil || url.authority.password != nil, url.authority.port != nil {
+                        } else if stateOverride != nil, (url.hasCredentials || url.port != nil) {
                             validationFailure("Failed to set empty host - given components include other details")
-                            return nil
+                            break inputLoop
                         }
                     }
-                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSchemeIfSpecial == nil) else {
+                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSpecialScheme == nil) else {
                         validationFailure("Failed to parse host")
                         return nil
                     }
-                    url.authority.host = parsedHost
+                    url.host = parsedHost
                     buffer = ""
                     state  = .pathStart
-                    guard stateOverride == nil else { break inputLoop }
+                    if stateOverride != nil { break inputLoop }
                     continue // Do not increment index.
-                case ASCII.leftSquareBracket:
+                case .leftSquareBracket?:
                     flag_squareBracket = true
-                    buffer.append(c)
-                case ASCII.rightSquareBracket:
+                    buffer.append(Character(ASCII.leftSquareBracket))
+                case .rightSquareBracket?:
                     flag_squareBracket = false
-                    buffer.append(c)
+                    buffer.append(Character(ASCII.rightSquareBracket))
                 default:
-                    buffer.append(c)
+                    buffer.append(input[idx])
                 }
 
             case .port:
-                // Treat endIndex like a "/" as they are handled the same. 
-                let c = (idx == input.endIndex) ? Character(ASCII.forwardSlash) : input[idx]
+                // Erase 'endIndex' to `ASCII.forwardSlash` as it is handled the same and not copied to output.
+                // Erase non-ASCII characters to `ASCII.null` as this state checks for specific ASCII characters/EOF.
+                // `c` is only copied if it is known to be within an allowed ASCII range.
+                let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? ASCII.null : ASCII.forwardSlash
                 switch c {
                 case _ where ASCII.ranges.digits.contains(c):
-                    buffer.append(c)
-                case ASCII.forwardSlash, ASCII.questionMark, ASCII.numberSign: // and endIndex.
+                    buffer.append(Character(c))
+                case .forwardSlash, .questionMark, .numberSign: // or endIndex.
                     fallthrough
-                case ASCII.backslash where url.isSpecial:
+                case .backslash where url.isSpecial:
                     fallthrough
                 case _ where stateOverride != nil:
-                    guard !buffer.isEmpty, let parsedInteger = Int(buffer), parsedInteger < UInt16.max else {
-                        validationFailure("Invalid value for port: \(buffer)")
-                        return nil
+                    if buffer.isEmpty == false {
+                        guard let parsedInteger = UInt16(buffer) else {
+                            validationFailure("Invalid value for port")
+                            return nil
+                        }
+                        url.port = (parsedInteger == SpecialScheme(rawValue: url.scheme)?.defaultPort) ? nil : parsedInteger
+                        buffer   = ""
+                        state    = .pathStart
                     }
-                    if parsedInteger == url.scheme.flatMap({ SpecialScheme(rawValue: $0) })?.defaultPort {
-                        url.authority.port = nil
-                    } else {
-                        url.authority.port = parsedInteger
-                    }
-                    buffer = ""
-                    state  = .pathStart
-                    guard stateOverride == nil else { break inputLoop }
+                    if stateOverride != nil { break inputLoop }
                     continue // Do not increment index.
                 default:
-                    validationFailure("Invalid character in port: \(c)")
+                    validationFailure("Invalid character in port")
                     return nil
                 }
 
             case .file:
                 url.scheme = SpecialScheme.file.rawValue
-                if idx != input.endIndex, (input[idx] == ASCII.forwardSlash || input[idx] == ASCII.backslash) {
-                    if input[idx] == ASCII.backslash {
+                if idx != input.endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
+                    if c == .backslash {
                         validationFailure("Unexpected backslash in file URL")
                     }
                     state = .fileSlash
-                    break
+                    break stateMachine
                 }
-                if let base = base, base.scheme == SpecialScheme.file.rawValue {
-                    guard idx != input.endIndex else {
-                        url.authority.host = base.authority.host
-                        url.path  = base.path
-                        url.query = base.query
-                        break
-                    }
-                    let c = input[idx]
-                    switch c {
-                    case ASCII.questionMark:
-                        url.authority.host = base.authority.host
-                        url.path  = base.path
-                        url.query = ""
-                        state     = .query
-
-                    case ASCII.numberSign:
-                        url.authority.host = base.authority.host
-                        url.path     = base.path
-                        url.query    = base.query
-                        url.fragment = ""
-                        state        = .fragment
-
-                    default:
-                        guard input[idx...].hasWindowsDriveLetterPrefix() == false else {
-                            validationFailure("Unexpected windows drive letter")
-                            state = .path
-                            continue // Do not increment index.
-                        }
-                        url.authority.host = base.authority.host
-                        url.path = base.path
+                guard let base = base, base.scheme == SpecialScheme.file.rawValue else {
+                    state = .path
+                    continue // Do not increment index.
+                }
+                url.host  = base.host
+                url.path  = base.path
+                url.query = base.query
+                guard idx != input.endIndex else {
+                    break stateMachine
+                }
+                switch ASCII(input[idx]) {
+                case .questionMark?:
+                    url.query = ""
+                    state     = .query
+                case .numberSign?:
+                    url.fragment = ""
+                    state        = .fragment
+                default:
+                    url.query = nil
+                    if input[idx...].hasWindowsDriveLetterPrefix() {
+                        validationFailure("Unexpected windows drive letter")
+                        url.host = nil
+                        url.path = []
+                        state    = .path
+                    } else {
                         shortenURLPath(&url.path, isFileScheme: true)
                     }
-                } else {
-                    state = .path
                     continue // Do not increment index.
                 }
 
             case .fileSlash:
-                if idx != input.endIndex {
-                    let c = input[idx]
-                    if c == ASCII.forwardSlash {
-                        state = .fileHost
-                        break stateMachine
-                    } else if c == ASCII.backslash {
+                if idx != input.endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
+                    if c == .backslash {
                         validationFailure("Unexpected backslash before file host")
-                        state = .fileHost
-                        break stateMachine
                     }
+                    state = .fileHost
+                    break stateMachine
                 }
                 if let base = base, base.scheme == SpecialScheme.file.rawValue,
                     input[idx...].hasWindowsDriveLetterPrefix() == false {
                     if let basePathStart = base.path.first, basePathStart.isNormalisedWindowsDriveLetter {
                         url.path.append(basePathStart)
                     } else {
-                        url.authority.host = base.authority.host
+                        url.host = base.host
                     }
                 }
                 state = .path
                 continue // Do not increment index.
 
             case .fileHost:
-                let c = (idx == input.endIndex) ? Character(ASCII.forwardSlash) : input[idx]
+                // Erase 'endIndex' to `ASCII.forwardSlash` as it is handled the same and not copied to output.
+                // Note [unicode]: Do not erase non-ASCII characters. They are copied to `buffer`.
+                let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
-                case ASCII.forwardSlash, ASCII.backslash, ASCII.questionMark, ASCII.numberSign: // or endIndex.
+                case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: // or endIndex.
                     if stateOverride == nil, buffer.isWindowsDriveLetter {
                         validationFailure("Unexpected windows drive letter in file host")
                         state = .path
                         // Note: buffer is intentionally not reset and used in the path-parsing state.
                     } else if buffer.isEmpty {
-                        url.authority.host = .empty
-                        guard stateOverride == nil else { break inputLoop }
+                        url.host = .empty
+                        if stateOverride != nil { break inputLoop }
                         state = .pathStart
                     } else {
                         guard let parsedHost = XURL.Host(buffer, isNotSpecial: false) else { 
                             validationFailure("Failed to parse host")
                             return nil
                         }
-                        url.authority.host = (parsedHost == .domain("localhost")) ? .empty : parsedHost
-                        guard stateOverride == nil else { break inputLoop }
+                        url.host = (parsedHost == .domain("localhost")) ? .empty : parsedHost
+                        if stateOverride != nil { break inputLoop }
                         buffer = ""
-                        state = .pathStart
+                        state  = .pathStart
                     }
                     continue // Do not increment index.
                 default:
-                    buffer.append(c)
+                    buffer.append(input[idx])
                 }
 
             case .pathStart:
-                guard idx != input.endIndex else { 
-                    state = .path
-                    continue // Do not increment index.
-                }
-                let c = input[idx]
-                if url.isSpecial {
-                    if c == ASCII.backslash { validationFailure("Unexpected backslash at start of path") }
-                    state = .path
-                    if c != ASCII.forwardSlash, c != ASCII.backslash { 
+                guard idx != input.endIndex else {
+                    if url.isSpecial {
+                        state = .path
                         continue // Do not increment index.
-                    } 
-                } else if stateOverride == nil, c == ASCII.questionMark {
+                    } else {
+                        break stateMachine
+                    }
+                }
+                // Erase non-ASCII characters to `ASCII.null` as this state checks for specific ASCII characters/EOF.
+                // `c` is only checked against known ASCII values and never copied to the result.
+                let c: ASCII = ASCII(input[idx]) ?? ASCII.null
+                switch c {
+                case _ where url.isSpecial:
+                    if c == .backslash {
+                        validationFailure("Unexpected backslash at start of path")
+                    }
+                    state = .path
+                    if (c == .forwardSlash || c == .backslash) == false {
+                        continue // Do not increment index.
+                    } else {
+                        break stateMachine
+                    }
+                case .questionMark where stateOverride == nil:
                     url.query = ""
                     state = .query
-                } else if stateOverride == nil, c == ASCII.numberSign {
+                case .numberSign where stateOverride == nil:
                     url.fragment = ""
                     state = .fragment
-                } else {
+                default:
                     state = .path
-                    guard c == ASCII.forwardSlash else { 
+                    if c != .forwardSlash {
                         continue // Do not increment index.
                     }
                 }
 
             case .path:
-                let c: Character
-                if idx == input.endIndex {
-                    // FIXME: Double-check this. We need to send "endIndex" through this state machine,
-                    // but it may not be correct to just treat it like a slash.
-                    c = Character(ASCII.forwardSlash)
-                } else {
-                    c = input[idx]
-                }
-                let urlScheme = url.scheme.flatMap { SpecialScheme(rawValue: $0) }
-
-                let c_isPathSeparator = (
-                    c == ASCII.forwardSlash || (urlScheme != nil && c == ASCII.backslash)
-                )
-
-                if c_isPathSeparator ||
-                    (stateOverride == nil && (c == ASCII.questionMark || c == ASCII.numberSign)) {
-
-                    if urlScheme != nil, c == ASCII.backslash { validationFailure("Unexpected backslash in path") }
-
-                    if buffer.isDoubleDotPathSegment {
-                        shortenURLPath(&url.path, isFileScheme: urlScheme == .file)
-                        if c_isPathSeparator {
-                            // FIXME: Why does the spec want us to append empty path segments?
-                            // url.path.append("")
-                        }
-                    } else if buffer.isSingleDotPathSegment {
-                        if c_isPathSeparator {
-                            // FIXME: Why does the spec want us to append empty path segments?
-                            // url.path.append("")
-                        }
-                    } else {
-                        // Note: This is a (platform-independent) Windows drive letter quirk.
-                        if urlScheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter {
-                            if url.authority.host?.isEmpty == false {
-                                validationFailure("Host should be empty if path contains a windows drive letter")
-                                url.authority.host = .empty
-                            }
-                            let secondChar = buffer.index(after: buffer.startIndex)
-                            buffer.replaceSubrange(secondChar..<buffer.index(after: secondChar), with: String(Character(ASCII.colon)))
-                        }
-                        url.path.append(buffer)
+                let urlSpecialScheme = SpecialScheme(rawValue: url.scheme)
+                
+                let isPathComponentTerminator: Bool =
+                    (idx == input.endIndex) ||
+                    (input[idx] == ASCII.forwardSlash) ||
+                    (input[idx] == ASCII.backslash && urlSpecialScheme != nil) ||
+                    (stateOverride == nil && (input[idx] == ASCII.questionMark || input[idx] == ASCII.numberSign))
+                
+                guard isPathComponentTerminator else {
+                    // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
+                    if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
+                        validationFailure("Path component contains non-URL codepoints")
                     }
-                    buffer = ""
-                    if urlScheme == .file && (c == ASCII.questionMark || c == ASCII.numberSign) { // FIXME: or endIndex.
-                        if let firstNonEmptySegment = url.path.firstIndex(where: { $0.isEmpty == false }) {
-                            if firstNonEmptySegment != url.path.startIndex { validationFailure("Unexpected empty segments at start of path") }
-                            url.path.removeSubrange(url.path.startIndex..<firstNonEmptySegment)
-                        } else {
-                            validationFailure("Unexpected empty segments at start of path")
-                            url.path.removeSubrange(url.path.index(after: url.path.startIndex)..<url.path.endIndex)
-                        }
-                    }
-                    if c == ASCII.questionMark {
-                        url.query = ""
-                        state     = .query
-                    } else if c == ASCII.numberSign {
-                        url.fragment = ""
-                        state        = .fragment
-                    }
-                } else {
-                    // TODO: Validation failure if c is not a "URL code point" or "%"
-                    if c == ASCII.percentSign {
+                    if ASCII(input[idx]) == .percentSign {
                         let nextTwo = input[idx...].prefix(2)
-                        if nextTwo.count != 2 || !nextTwo.allSatisfy({ (ASCII.A ... ASCII.F).contains($0) }) {
-                            validationFailure("Invalid % in URL")
+                        if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
+                            validationFailure("Invalid percent escaping in path component")
                         }
                     }
-                    buffer.append(c.percentEscaped(where: url_escape_path))
+                    buffer.append(input[idx].percentEscaped(where: url_escape_path))
+                    break stateMachine
+                }
+                // From here, we know:
+                // - idx == endIndex, or
+                // - input[idx] is one of a specific set of allowed ASCII characters
+                //     (forwardSlash, backslash, questionMark or numberSign), and
+                // - if input[idx] is ASCII.backslash, it implies url.isSpecial.
+                //
+ 				// To simplify bounds-checking in the following logic, we will encode
+                // the state (idx == endIndex) by the ASCII.null character.
+                let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx])! : ASCII.null
+                if c == .backslash {
+                    validationFailure("Unexpected backslash in path")
+                }
+                switch buffer {
+                case _ where buffer.isDoubleDotPathSegment:
+                    shortenURLPath(&url.path, isFileScheme: urlSpecialScheme == .file)
+                    fallthrough
+                case _ where buffer.isSingleDotPathSegment:
+                    if !(c == .forwardSlash || c == .backslash) {
+                        url.path.append("")
+                    }
+                default:
+                    if urlSpecialScheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter {
+                        if !(url.host == nil || url.host == .empty) {
+                            validationFailure("Expected empty host for file URL")
+                            url.host = .empty
+                        }
+                        let secondChar = buffer.index(after: buffer.startIndex)
+                        buffer.replaceSubrange(secondChar..<buffer.index(after: secondChar), with: String(Character(ASCII.colon)))
+                    }
+                    url.path.append(buffer)
+                }
+                buffer = ""
+                if urlSpecialScheme == .file, (c == .null /* endIndex */ || c == .questionMark || c == .numberSign) {
+                    while url.path.count > 1, url.path[0].isEmpty {
+                        validationFailure("Empty prefix segment in path")
+                        url.path.removeFirst()
+                    }
+                }
+                switch c {
+                case .questionMark:
+                    url.query = ""
+                    state     = .query
+                case .numberSign:
+                    url.fragment = ""
+                    state        = .fragment
+                default:
+                    break
                 }
 
             case .cannotBeABaseURLPath:
                 guard idx != input.endIndex else {
-                    break // ???
+                    break stateMachine
                 }
-                let c = input[idx]
+                let c = ASCII(input[idx])
                 switch c {
-                case ASCII.questionMark:
+                case .questionMark?:
                     url.query = ""
                     state     = .query
-                case ASCII.numberSign:
+                case .numberSign?:
                     url.fragment = ""
                     state        = .fragment
                 default:
-                    // TODO: validate and percent-encode using control options.
+                    // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
+                    if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
+                        validationFailure("Path component contains non-URL codepoints")
+                    }
+                    if ASCII(input[idx]) == .percentSign {
+                        let nextTwo = input[idx...].prefix(2)
+                        if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
+                            validationFailure("Invalid percent escaping in path component")
+                        }
+                    }
+                    let escapedChar = input[idx].percentEscaped(where: url_escape_c0)
                     if url.path.isEmpty {
-                        url.path.append(String(c))
+                        url.path.append(escapedChar)
                     } else {
-                        url.path[0].append(c)
+                        url.path[0].append(escapedChar)
                     }
                 }
 
             case .query:
+                // Note: we only accept the UTF8 encoding option.
+                // This parser doesn't even have an argument to choose anything else.
                 guard idx != input.endIndex else { 
-                    break // ???
+                    break stateMachine
                 }
-                let c = input[idx]
-                if stateOverride == nil, c == ASCII.numberSign {
+                if stateOverride == nil, ASCII(input[idx]) == .numberSign {
                     url.fragment = ""
                     state        = .fragment
-                    break
+                    break stateMachine
                 }
-                // TODO: Yeah... this stuff.
-                if url.query != nil {
-                    url.query!.append(c)
+                // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
+                if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
+                    validationFailure("Fragment contains non-URL codepoints")
+                }
+                if ASCII(input[idx]) == .percentSign {
+                    let nextTwo = input[idx...].prefix(2)
+                    if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
+                        validationFailure("Invalid percent escaping in fragment")
+                    }
+                }
+                let urlIsSpecial = url.isSpecial
+                let escapedChar = input[idx].percentEscaped(where: { asciiChar in
+                    switch asciiChar {
+                    case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign: fallthrough
+                    case _ where asciiChar.codePoint < ASCII.exclamationMark.codePoint:      fallthrough
+                    case _ where asciiChar.codePoint > ASCII.tilde.codePoint:                fallthrough
+                    case .apostrophe where urlIsSpecial: return true
+                    default: return false
+                    }
+                })
+                if url.query == nil {
+                    url.query = escapedChar
                 } else {
-                    url.query = String(c)
+                    url.query!.append(escapedChar)
                 }
-
 
             case .fragment:
-                guard idx != input.endIndex else { break }
-                let c = input[idx]
-                if c == ASCII.null { validationFailure("Unexpected null code point in fragment") }
-                // TODO: validate characters, percent-encode using fragment options.
-                if var frag = url.fragment { 
-                    frag.append(c)
-                } else {
-                    url.fragment = String(c)
+                guard idx != input.endIndex else {
+                    break stateMachine
                 }
-            }
+                // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
+                if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
+                    validationFailure("Fragment contains non-URL codepoints")
+                }
+                if ASCII(input[idx]) == .percentSign {
+                    let nextTwo = input[idx...].prefix(2)
+                    if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
+                        validationFailure("Invalid percent escaping in fragment")
+                    }
+                }
+                let escapedChar = input[idx].percentEscaped(where: url_escape_fragment)
+                if url.fragment == nil {
+                    url.fragment = escapedChar
+                } else {
+                    url.fragment!.append(escapedChar)
+                }
+            } // end of `stateMachine: switch state {`
 
             if idx == input.endIndex { break }
             idx = input.index(after: idx)
-        }
+            
+        } // end of `inputLoop: while true {`
 
-
-        print("final state: \(state)")
         return url
     }
 }

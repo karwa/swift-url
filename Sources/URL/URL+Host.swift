@@ -140,7 +140,7 @@ extension XURL.Host: CustomStringConvertible {
 
 extension XURL.Host: Codable {
     
-    enum Kind: String, Codable {
+    public enum Kind: String, Codable {
         case domain
         case ipv4Address
         case ipv6Address
@@ -148,7 +148,7 @@ extension XURL.Host: Codable {
         case empty
     }
     
-    var kind: Kind {
+    public var kind: Kind {
        switch self {
         case .empty:        return .empty
         case .ipv4Address:  return .ipv4Address
