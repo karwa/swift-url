@@ -269,6 +269,200 @@ extension XURL.Parser {
         case query
         case fragment
     }
+    
+    struct ValidationError: Equatable, CustomStringConvertible {
+        private var code: UInt8
+
+        // Named errors and their descriptions/examples taken from:
+        // https://github.com/whatwg/url/pull/502 on 15.06.2020
+        internal static var unexpectedC0ControlOrSpace:         Self { Self(code: 0) }
+        internal static var unexpectedASCIITabOrNewline:        Self { Self(code: 1) }
+        internal static var invalidSchemeStart:                 Self { Self(code: 2) }
+        internal static var fileSchemeMissingFollowingSolidus:  Self { Self(code: 3) }
+        internal static var invalidScheme:                      Self { Self(code: 4) }
+        internal static var missingSchemeNonRelativeURL:        Self { Self(code: 5) }
+        internal static var relativeURLMissingBeginningSolidus: Self { Self(code: 6) }
+        internal static var unexpectedReverseSolidus:           Self { Self(code: 7) }
+        internal static var missingSolidusBeforeAuthority:      Self { Self(code: 8) }
+        internal static var unexpectedCommercialAt:             Self { Self(code: 9) }
+        internal static var missingCredentials:                 Self { Self(code: 10) }
+        internal static var unexpectedPortWithoutHost:          Self { Self(code: 11) }
+        internal static var emptyHostSpecialScheme:             Self { Self(code: 12) }
+        internal static var hostInvalid:                        Self { Self(code: 13) }
+        internal static var portOutOfRange:                     Self { Self(code: 14) }
+        internal static var portInvalid:                        Self { Self(code: 15) }
+        internal static var unexpectedWindowsDriveLetter:       Self { Self(code: 16) }
+        internal static var unexpectedWindowsDriveLetterHost:   Self { Self(code: 17) }
+        internal static var unexpectedHostFileScheme:           Self { Self(code: 18) }
+        internal static var unexpectedEmptyPath:                Self { Self(code: 19) }
+        internal static var invalidURLCodePoint:                Self { Self(code: 20) }
+        internal static var unescapedPercentSign:               Self { Self(code: 21) }
+        // TODO: host-related errors. Map these to our existing host-parser errors.
+        internal static var unclosedIPv6Address:                Self { Self(code: 22) }
+        internal static var domainToASCIIFailure:               Self { Self(code: 23) }
+        internal static var domainToASCIIEmptyDomainFailure:    Self { Self(code: 24) }
+        internal static var hostForbiddenCodePoint:             Self { Self(code: 25) }
+        // This one is not in the spec.
+        internal static var _baseURLRequired:                   Self { Self(code: 99) }
+        
+        var description: String {
+            switch self {
+            case .unexpectedC0ControlOrSpace:
+                return #"""
+                The input to the URL parser contains a leading or trailing C0 control or space.
+                The URL parser subsequently strips any matching code points.
+                
+                Example: " https://example.org "
+                """#
+            case .unexpectedASCIITabOrNewline:
+                return #"""
+                The input to the URL parser contains ASCII tab or newlines.
+                The URL parser subsequently strips any matching code points.
+                
+                Example: "ht
+                tps://example.org"
+                """#
+            case .invalidSchemeStart:
+                return #"""
+                The first code point of a URL’s scheme is not an ASCII alpha.
+
+                Example: "3ttps://example.org"
+                """#
+            case .fileSchemeMissingFollowingSolidus:
+                return #"""
+                The URL parser encounters a URL with a "file" scheme that is not followed by "//".
+
+                Example: "file:c:/my-secret-folder"
+                """#
+            case .invalidScheme:
+                return #"""
+                The URL’s scheme contains an invalid code point.
+
+                Example: "^_^://example.org" and "https//example.org"
+                """#
+            case .missingSchemeNonRelativeURL:
+                return #"""
+                The input is missing a scheme, because it does not begin with an ASCII alpha,
+                and either no base URL was provided or the base URL cannot be used as a base URL
+                because its cannot-be-a-base-URL flag is set.
+
+                Example (Input’s scheme is missing and no base URL is given):
+                (url, base) = ("💩", nil)
+                
+                Example (Input’s scheme is missing, but the base URL’s cannot-be-a-base-URL flag is set):
+                (url, base) = ("💩", "mailto:user@example.org")
+                """#
+            case .relativeURLMissingBeginningSolidus:
+                return #"""
+                The input is a relative-URL String that does not begin with U+002F (/).
+
+                Example: (url, base) = ("foo.html", "https://example.org/")
+                """#
+            case .unexpectedReverseSolidus:
+                return #"""
+                The URL has a special scheme and it uses U+005C (\) instead of U+002F (/).
+
+                Example: "https://example.org\path\to\file"
+                """#
+            case .missingSolidusBeforeAuthority:
+                return #"""
+                The URL includes credentials that are not preceded by "//".
+
+                Example: "https:user@example.org"
+                """#
+            case .unexpectedCommercialAt:
+                return #"""
+                The URL includes credentials, however this is considered invalid.
+
+                Example: "https://user@example.org"
+                """#
+            case .missingCredentials:
+                return #"""
+                A U+0040 (@) is found between the URL’s scheme and host, but the URL does not include credentials.
+
+                Example: "https://@example.org"
+                """#
+            case .unexpectedPortWithoutHost:
+                return #"""
+                The URL contains a port, but no host.
+
+                Example: "https://:443"
+                """#
+            case .emptyHostSpecialScheme:
+                return #"""
+                The URL has a special scheme, but does not contain a host.
+
+                Example: "https://#fragment"
+                """#
+            case .hostInvalid:
+                // FIXME: Javascript example.
+                return #"""
+                The host portion of the URL is an empty string when it includes credentials or a port and the basic URL parser’s state is overridden.
+
+                Example:
+                  const url = new URL("https://example:9000");
+                  url.hostname = "";
+                """#
+            case .portOutOfRange:
+                return #"""
+                The input’s port is too big.
+
+                Example: "https://example.org:70000"
+                """#
+            case .portInvalid:
+                return #"""
+                The input’s port is invalid.
+
+                Example: "https://example.org:7z"
+                """#
+            case .unexpectedWindowsDriveLetter:
+                return #"""
+                The input is a relative-URL string that starts with a Windows drive letter and the base URL’s scheme is "file".
+
+                Example: (url, base) = ("/c:/path/to/file", "file:///c:/")
+                """#
+            case .unexpectedWindowsDriveLetterHost:
+                return #"""
+                The file URL’s host is a Windows drive letter.
+
+                Example: "file://c:"
+                """#
+            case .unexpectedHostFileScheme:
+                // FIXME: Javascript example.
+                return #"""
+                The URL’s scheme is changed to "file" and the existing URL has a host.
+
+                Example:
+                  const url = new URL("https://example.org");
+                  url.protocol = "file";
+                """#
+            case .unexpectedEmptyPath:
+                return #"""
+                The URL’s scheme is "file" and it contains an empty path segment.
+
+                Example: "file:///c:/path//to/file"
+                """#
+            case .invalidURLCodePoint:
+                return #"""
+                A code point is found that is not a URL code point or U+0025 (%), in the URL’s path, query, or fragment.
+
+                Example: "https://example.org/>"
+                """#
+            case .unescapedPercentSign:
+                return #"""
+                A U+0025 (%) is found that is not followed by two ASCII hex digits, in the URL’s path, query, or fragment.
+
+                Example: "https://example.org/%s"
+                """#
+            case ._baseURLRequired:
+                return #"""
+                A base URL is required.
+                """#
+            default:
+                return "??"
+            }
+        }
+    }
 
     public static func parse(_ input: String) -> XURL.Components? {
         parse(input, base: nil, url: nil, stateOverride: nil)
@@ -278,7 +472,7 @@ extension XURL.Parser {
 
     static func parse(_ input: String, base: XURL.Components?, url: XURL.Components?, stateOverride: State?) -> XURL.Components? {
 
-        func validationFailure(_ msg: String) {
+        func validationFailure(_ msg: ValidationError) {
             print("Validation failure - \(msg).")
         }
         var input = input[...]
@@ -288,7 +482,7 @@ extension XURL.Parser {
 
         // 2. Remove all ASCII newlines and tabs. 
         let invalidRanges = input.subranges { $0.isASCIINewlineOrTab }
-        if !invalidRanges.isEmpty { validationFailure("Input contains newline or tab characters") }
+        if !invalidRanges.isEmpty { validationFailure(.unexpectedASCIITabOrNewline) }
         input.removeSubranges(invalidRanges)
 
         guard !input.isEmpty else { return nil }
@@ -331,7 +525,7 @@ extension XURL.Parser {
                     state = .scheme
                 default:
                     guard stateOverride == nil else {
-                        validationFailure("Scheme starts with invalid character")
+                        validationFailure(.invalidSchemeStart)
                         return nil
                     }
                     state = .noScheme
@@ -350,7 +544,7 @@ extension XURL.Parser {
                     break // Handled below.
                 default:
                     guard stateOverride == nil else {
-                        validationFailure("invalid scheme")
+                        validationFailure(.invalidScheme)
                         return nil
                     }
                     buffer = ""
@@ -384,7 +578,7 @@ extension XURL.Parser {
                 case .file:
                     state = .file
                     if !input[idx...].hasPrefix("//") { // FIXME: ASCII check.
-                        validationFailure("file URL should start with file://")
+                        validationFailure(.fileSchemeMissingFollowingSolidus)
                     }
                 case .some(_):
                     if base?.scheme == url.scheme {
@@ -409,12 +603,12 @@ extension XURL.Parser {
                 // `c` is only checked against known ASCII values and never copied to the result.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 guard let base = base else {
-                    validationFailure("input does not have a scheme, but no base given")
+                    validationFailure(.missingSchemeNonRelativeURL)
                     return nil
                 }
                 guard base.cannotBeABaseURL == false else {
                     guard c == ASCII.numberSign else {
-                        validationFailure("base cannot be a base URL, and input is not a fragment")
+                        validationFailure(.missingSchemeNonRelativeURL)
                         return nil
                     }
                     url.scheme = base.scheme
@@ -433,7 +627,7 @@ extension XURL.Parser {
 
             case .specialRelativeOrAuthority:
                 guard input[idx...].hasPrefix("//") else { // FIXME: ASCII check.
-                    validationFailure("Expected // delimiter between scheme and authority")
+                    validationFailure(.relativeURLMissingBeginningSolidus)
                     state = .relative
                     continue // Do not increment index.    
                 }
@@ -450,7 +644,7 @@ extension XURL.Parser {
             case .relative:
                 guard let base = base else {
                     // Note: The spec doesn't say what happens here if base is nil.
-                    validationFailure("input is a relative URL; a base URL is required")
+                    validationFailure(._baseURLRequired)
                     return nil
                 }
                 url.scheme = base.scheme
@@ -465,7 +659,7 @@ extension XURL.Parser {
                 let c: ASCII = ASCII(input[idx]) ?? .null
                 switch c {
                 case .backslash where url.isSpecial:
-                    validationFailure("Unexpected backslash in relative URL")
+                    validationFailure(.unexpectedReverseSolidus)
                     state = .relativeSlash
                 case .forwardSlash:
                     state = .relativeSlash
@@ -502,12 +696,12 @@ extension XURL.Parser {
                         state = .authority
                     }
                 case .backslash where urlIsSpecial:
-                    validationFailure("Unexpected relative backslash")
+                    validationFailure(.unexpectedReverseSolidus)
                     state = .specialAuthorityIgnoreSlashes
                 default:
                     // Note: The spec doesn't say what happens here if base is nil.
                     guard let base = base else {
-                        validationFailure("Expected base URL for relative slash state")
+                        validationFailure(._baseURLRequired)
                         return nil
                     }
                     url.copyAuthority(from: base)
@@ -518,7 +712,7 @@ extension XURL.Parser {
             case .specialAuthoritySlashes:
                 state = .specialAuthorityIgnoreSlashes
                 guard input[idx...].hasPrefix("//") else { // FIXME: ASCII check.
-                    validationFailure("Expected // delimiter between scheme and authority")
+                    validationFailure(.missingSolidusBeforeAuthority)
                     continue // Do not increment index.
                 }
                 idx = input.index(after: idx)
@@ -531,7 +725,7 @@ extension XURL.Parser {
                     state = .authority
                     continue // Do not increment index.
                 }
-                validationFailure("Too many slashes between scheme and authority - will be ignored")
+                validationFailure(.missingSolidusBeforeAuthority)
 
             case .authority:
                 // Erase 'endIndex' to `ASCII.forwardSlash`, as they are handled the same,
@@ -540,7 +734,7 @@ extension XURL.Parser {
                 let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
                 case .commercialAt?:
-                    validationFailure("It is unwise to include credentials in URLs")
+                    validationFailure(.unexpectedCommercialAt)
                     if flag_at {
                         buffer.insert(contentsOf: "%40", at: buffer.startIndex)
                     }
@@ -559,7 +753,7 @@ extension XURL.Parser {
                     fallthrough
                 case ASCII.backslash? where url.isSpecial:
                     if flag_at, buffer.isEmpty {
-                        validationFailure("Expected host after @")
+                        validationFailure(.missingCredentials)
                         return nil
                     }
                     idx    = input.index(idx, offsetBy: -1 * buffer.count)
@@ -583,12 +777,11 @@ extension XURL.Parser {
                 switch c {
                 case .colon? where flag_squareBracket == false:
                     guard buffer.isEmpty == false else {
-                        validationFailure("Expected host before :")
+                        validationFailure(.unexpectedPortWithoutHost)
                         return nil
                     }
                     guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSpecialScheme == nil) else {
-                        validationFailure("Failed to parse host")
-                        return nil 
+                        return nil
                     }
                     url.host = parsedHost
                     buffer = ""
@@ -599,15 +792,14 @@ extension XURL.Parser {
                 case .backslash? where urlSpecialScheme != nil:
                     if buffer.isEmpty {
                         if urlSpecialScheme != nil {
-                            validationFailure("Expected host")
+                            validationFailure(.emptyHostSpecialScheme)
                             return nil
                         } else if stateOverride != nil, (url.hasCredentials || url.port != nil) {
-                            validationFailure("Failed to set empty host - given components include other details")
+                            validationFailure(.hostInvalid)
                             break inputLoop
                         }
                     }
                     guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSpecialScheme == nil) else {
-                        validationFailure("Failed to parse host")
                         return nil
                     }
                     url.host = parsedHost
@@ -640,7 +832,7 @@ extension XURL.Parser {
                 case _ where stateOverride != nil:
                     if buffer.isEmpty == false {
                         guard let parsedInteger = UInt16(buffer) else {
-                            validationFailure("Invalid value for port")
+                            validationFailure(.portOutOfRange)
                             return nil
                         }
                         url.port = (parsedInteger == SpecialScheme(rawValue: url.scheme)?.defaultPort) ? nil : parsedInteger
@@ -650,7 +842,7 @@ extension XURL.Parser {
                     if stateOverride != nil { break inputLoop }
                     continue // Do not increment index.
                 default:
-                    validationFailure("Invalid character in port")
+                    validationFailure(.portInvalid)
                     return nil
                 }
 
@@ -658,7 +850,7 @@ extension XURL.Parser {
                 url.scheme = SpecialScheme.file.rawValue
                 if idx != input.endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
                     if c == .backslash {
-                        validationFailure("Unexpected backslash in file URL")
+                        validationFailure(.unexpectedReverseSolidus)
                     }
                     state = .fileSlash
                     break stateMachine
@@ -683,7 +875,7 @@ extension XURL.Parser {
                 default:
                     url.query = nil
                     if input[idx...].hasWindowsDriveLetterPrefix() {
-                        validationFailure("Unexpected windows drive letter")
+                        validationFailure(.unexpectedWindowsDriveLetter)
                         url.host = nil
                         url.path = []
                         state    = .path
@@ -696,7 +888,7 @@ extension XURL.Parser {
             case .fileSlash:
                 if idx != input.endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
                     if c == .backslash {
-                        validationFailure("Unexpected backslash before file host")
+                        validationFailure(.unexpectedReverseSolidus)
                     }
                     state = .fileHost
                     break stateMachine
@@ -719,7 +911,7 @@ extension XURL.Parser {
                 switch c {
                 case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: // or endIndex.
                     if stateOverride == nil, buffer.isWindowsDriveLetter {
-                        validationFailure("Unexpected windows drive letter in file host")
+                        validationFailure(.unexpectedWindowsDriveLetterHost)
                         state = .path
                         // Note: buffer is intentionally not reset and used in the path-parsing state.
                     } else if buffer.isEmpty {
@@ -728,7 +920,6 @@ extension XURL.Parser {
                         state = .pathStart
                     } else {
                         guard let parsedHost = XURL.Host(buffer, isNotSpecial: false) else { 
-                            validationFailure("Failed to parse host")
                             return nil
                         }
                         url.host = (parsedHost == .domain("localhost")) ? .empty : parsedHost
@@ -756,7 +947,7 @@ extension XURL.Parser {
                 switch c {
                 case _ where url.isSpecial:
                     if c == .backslash {
-                        validationFailure("Unexpected backslash at start of path")
+                        validationFailure(.unexpectedReverseSolidus)
                     }
                     state = .path
                     if (c == .forwardSlash || c == .backslash) == false {
@@ -789,12 +980,12 @@ extension XURL.Parser {
                 guard isPathComponentTerminator else {
                     // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
                     if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
-                        validationFailure("Path component contains non-URL codepoints")
+                        validationFailure(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
                         let nextTwo = input[idx...].prefix(2)
                         if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                            validationFailure("Invalid percent escaping in path component")
+                            validationFailure(.unescapedPercentSign)
                         }
                     }
                     buffer.append(input[idx].percentEscaped(where: url_escape_path))
@@ -810,7 +1001,7 @@ extension XURL.Parser {
                 // the state (idx == endIndex) by the ASCII.null character.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx])! : ASCII.null
                 if c == .backslash {
-                    validationFailure("Unexpected backslash in path")
+                    validationFailure(.unexpectedReverseSolidus)
                 }
                 switch buffer {
                 case _ where buffer.isDoubleDotPathSegment:
@@ -823,7 +1014,7 @@ extension XURL.Parser {
                 default:
                     if urlSpecialScheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter {
                         if !(url.host == nil || url.host == .empty) {
-                            validationFailure("Expected empty host for file URL")
+                            validationFailure(.unexpectedHostFileScheme)
                             url.host = .empty
                         }
                         let secondChar = buffer.index(after: buffer.startIndex)
@@ -834,7 +1025,7 @@ extension XURL.Parser {
                 buffer = ""
                 if urlSpecialScheme == .file, (c == .null /* endIndex */ || c == .questionMark || c == .numberSign) {
                     while url.path.count > 1, url.path[0].isEmpty {
-                        validationFailure("Empty prefix segment in path")
+                        validationFailure(.unexpectedEmptyPath)
                         url.path.removeFirst()
                     }
                 }
@@ -864,12 +1055,12 @@ extension XURL.Parser {
                 default:
                     // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
                     if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
-                        validationFailure("Path component contains non-URL codepoints")
+                        validationFailure(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
                         let nextTwo = input[idx...].prefix(2)
                         if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                            validationFailure("Invalid percent escaping in path component")
+                            validationFailure(.unescapedPercentSign)
                         }
                     }
                     let escapedChar = input[idx].percentEscaped(where: url_escape_c0)
@@ -893,12 +1084,12 @@ extension XURL.Parser {
                 }
                 // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
                 if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
-                    validationFailure("Fragment contains non-URL codepoints")
+                    validationFailure(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
                     let nextTwo = input[idx...].prefix(2)
                     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                        validationFailure("Invalid percent escaping in fragment")
+                        validationFailure(.unescapedPercentSign)
                     }
                 }
                 let urlIsSpecial = url.isSpecial
@@ -923,12 +1114,12 @@ extension XURL.Parser {
                 }
                 // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
                 if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
-                    validationFailure("Fragment contains non-URL codepoints")
+                    validationFailure(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
                     let nextTwo = input[idx...].prefix(2)
                     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                        validationFailure("Invalid percent escaping in fragment")
+                        validationFailure(.unescapedPercentSign)
                     }
                 }
                 let escapedChar = input[idx].percentEscaped(where: url_escape_fragment)
