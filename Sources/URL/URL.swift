@@ -473,7 +473,7 @@ extension XURL.Parser {
         return parse(input, baseURL: nil)
     }
 
-    public static func parse(_ input: String, baseURL: XURL.Components? = nil) -> XURL.Components? {
+    public static func parse(_ input: String, baseURL: XURL.Components?) -> XURL.Components? {
         return _parse(input, base: baseURL, url: nil, stateOverride: nil, onValidationError: { _ in })
     }
     
@@ -492,7 +492,7 @@ extension XURL.Parser {
         return (parseAndReport(input, baseURL: nil), nil)
     }
     
-    public static func parseAndReport(_ input: String, baseURL: XURL.Components? = nil) -> Result {
+    public static func parseAndReport(_ input: String, baseURL: XURL.Components?) -> Result {
         var errors: [ValidationError] = []
         errors.reserveCapacity(8)
         let components = _parse(input, base: baseURL, url: nil, stateOverride: nil, onValidationError: { errors.append($0) })
@@ -723,7 +723,9 @@ extension XURL.Parser {
                 default:
                     url.copyAuthority(from: base)
                     url.path      = base.path
+                    if url.path.isEmpty == false {
                     url.path.removeLast()
+                    }
                     url.query     = nil
                     state         = .path
                     continue // Do not increment index.
