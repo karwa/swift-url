@@ -270,7 +270,7 @@ extension XURL.Parser {
         case fragment
     }
     
-    struct ValidationError: Equatable, CustomStringConvertible {
+    public struct ValidationError: Equatable, CustomStringConvertible {
         private var code: UInt8
 
         // Named errors and their descriptions/examples taken from:
@@ -305,7 +305,7 @@ extension XURL.Parser {
         // This one is not in the spec.
         internal static var _baseURLRequired:                   Self { Self(code: 99) }
         
-        var description: String {
+        public var description: String {
             switch self {
             case .unexpectedC0ControlOrSpace:
                 return #"""
@@ -463,29 +463,67 @@ extension XURL.Parser {
             }
         }
     }
+    
+    // Parse, ignoring non-fatal validation errors.
 
     public static func parse(_ input: String, base: String? = nil) -> XURL.Components? {
-        if let baseString = base {
-            if let baseComponents = parse(baseString, base: nil) {
-                return parse(input, base: baseComponents, url: nil, stateOverride: nil)
-            } else {
-                return nil
-            }
+        if let baseString = base, baseString.isEmpty == false {
+            return parse(baseString, baseURL: nil).flatMap { parse(input, baseURL: $0) }
         }
-        return parse(input, base: nil, url: nil, stateOverride: nil)
+        return parse(input, baseURL: nil)
     }
 
-    // TODO: Collect validation failure messages in to an Array (or some other collection), instead of printing them.
+    public static func parse(_ input: String, baseURL: XURL.Components? = nil) -> XURL.Components? {
+        return _parse(input, base: baseURL, url: nil, stateOverride: nil, onValidationError: { _ in })
+    }
+    
+    // Parse, reporting validation errors.
+    
+    public struct Result {
+        public var components: XURL.Components?
+        public var validationErrors: [ValidationError]
+    }
+    
+    public static func parseAndReport(_ input: String, base: String? = nil) -> (url: Result?, base: Result?) {
+        if let baseString = base, baseString.isEmpty == false {
+            let baseResult = parseAndReport(baseString, baseURL: nil)
+            return baseResult.components.map { (parseAndReport(input, baseURL: $0), baseResult) } ?? (nil, baseResult)
+        }
+        return (parseAndReport(input, baseURL: nil), nil)
+    }
+    
+    public static func parseAndReport(_ input: String, baseURL: XURL.Components? = nil) -> Result {
+        var errors: [ValidationError] = []
+        errors.reserveCapacity(8)
+        let components = _parse(input, base: baseURL, url: nil, stateOverride: nil, onValidationError: { errors.append($0) })
+        return Result(components: components, validationErrors: errors)
+    }
 
-    static func parse(_ input: String, base: XURL.Components?, url: XURL.Components?, stateOverride: State?) -> XURL.Components? {
+    // Parser algorithm.
+    
+    /// The "Basic URL Parser" algorithm described by:
+    /// https://url.spec.whatwg.org/#url-parsing as of 14.06.2020
+    ///
+    /// - parameters:
+    /// 	- input:				The String to parse
+    ///     - base:					The base-URL, in case `input` is a relative URL string
+    ///     - url:					An existing parsed URL to modify
+    ///     - stateOverride:		The starting state of the parser. Used when modifying a URL.
+    ///     - onValidationError:	A callback for handling any validation errors that occur. Most of these are non-fatal.
+    /// - returns:	The parsed URL components, or `nil` if the input failed to parse.
+    ///
+    private static func _parse(_ input: String, base: XURL.Components?,
+            		           url: XURL.Components?, stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? {
 
         func validationFailure(_ msg: ValidationError) {
-            print("Validation failure - \(msg).")
+            onValidationError(msg)
         }
         var input = input[...]
 
         // 1. Trim leading/trailing C0 control characters and spaces.
         input = input.trim { $0.isC0OrSpace }
+        
+        // TODO: Add validation error.
 
         // 2. Remove all ASCII newlines and tabs. 
         let invalidRanges = input.subranges { $0.isASCIINewlineOrTab }
@@ -584,7 +622,8 @@ extension XURL.Parser {
                 switch bufferSpecialScheme {
                 case .file:
                     state = .file
-                    if !input[idx...].hasPrefix("//") { // FIXME: ASCII check.
+                    let nextIdx = input.index(after: idx)
+                    if !input[nextIdx...].hasPrefix("//") { // FIXME: ASCII check.
                         validationFailure(.fileSchemeMissingFollowingSolidus)
                     }
                 case .some(_):
@@ -844,9 +883,9 @@ extension XURL.Parser {
                         }
                         url.port = (parsedInteger == SpecialScheme(rawValue: url.scheme)?.defaultPort) ? nil : parsedInteger
                         buffer   = ""
-                        state    = .pathStart
                     }
                     if stateOverride != nil { break inputLoop }
+                    state = .pathStart
                     continue // Do not increment index.
                 default:
                     validationFailure(.portInvalid)
@@ -990,7 +1029,7 @@ extension XURL.Parser {
                         validationFailure(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
-                        let nextTwo = input[idx...].prefix(2)
+                        let nextTwo = input[idx...].dropFirst().prefix(2)
                         if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
                             validationFailure(.unescapedPercentSign)
                         }
@@ -1065,7 +1104,7 @@ extension XURL.Parser {
                         validationFailure(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
-                        let nextTwo = input[idx...].prefix(2)
+                        let nextTwo = input[idx...].dropFirst().prefix(2)
                         if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
                             validationFailure(.unescapedPercentSign)
                         }
@@ -1094,7 +1133,7 @@ extension XURL.Parser {
                     validationFailure(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
-                    let nextTwo = input[idx...].prefix(2)
+                    let nextTwo = input[idx...].dropFirst().prefix(2)
                     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
                         validationFailure(.unescapedPercentSign)
                     }
@@ -1124,7 +1163,7 @@ extension XURL.Parser {
                     validationFailure(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
-                    let nextTwo = input[idx...].prefix(2)
+                    let nextTwo = input[idx...].dropFirst().prefix(2)
                     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
                         validationFailure(.unescapedPercentSign)
                     }
