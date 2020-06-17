@@ -68,25 +68,82 @@ extension XURL {
         /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
         ///
         public var cannotBeABaseURL = false
-
+        
         // TODO:
         // URL also has an associated blob URL entry that is either null or a blob URL entry. It is initially null.
+    }
+}
+
+// Internal helpers.
+
+extension XURL.Components {
+    
+    var isSpecial: Bool {
+        XURL.Parser.SpecialScheme(rawValue: scheme) != nil
+    }
+
+    var hasCredentials: Bool {
+        !username.isEmpty || !password.isEmpty
+    }
+    
+    /// A URL cannot have a username/password/port if its host is null or the empty string, its cannot-be-a-base-URL flag is set, or its scheme is "file".
+    ///
+    /// https://url.spec.whatwg.org/#url-miscellaneous as seen on 14.06.2020
+    ///
+    var cannotHaveCredentialsOrPort: Bool {
+        return host == nil || host == .empty || self.cannotBeABaseURL || scheme == XURL.Parser.SpecialScheme.file.rawValue
+    }
+
+    /// Copies the username, password, host and port fields from `other`.
+    ///
+    fileprivate mutating func copyAuthority(from other: Self) {
+        self.username = other.username
+        self.password = other.password
+        self.host     = other.host
+        self.port     = other.port
+    }
+    
+    func serialised(excludeFragment: Bool = false) -> String {
+        var result = ""
+        result.append(self.scheme)
+        result.append(":")
         
-        var isSpecial: Bool {
-            XURL.Parser.SpecialScheme(rawValue: scheme) != nil
+        if let host = self.host {
+            result.append("//")
+            if self.hasCredentials {
+                result.append(self.username)
+                if !self.password.isEmpty {
+                    result.append(":")
+                    result.append(self.password)
+                }
+                result.append("@")
+            }
+            result.append(host.description)
+            if let port = self.port {
+                result.append(":")
+                result.append(String(port))
+            }
+        } else if self.scheme == XURL.Parser.SpecialScheme.file.rawValue {
+            result.append("//")
         }
-
-        var hasCredentials: Bool {
-            !username.isEmpty || !password.isEmpty
+        
+        if self.cannotBeABaseURL {
+            if self.path.isEmpty == false {
+                result.append(self.path[0])
+            }
+        } else {
+            for pathComponent in self.path {
+                result.append("/\(pathComponent)")
+            }
         }
-
-        /// Copies the username, password, host and port fields from other.
-        mutating func copyAuthority(from other: Self) {
-            self.username = other.username
-            self.password = other.password
-            self.host     = other.host
-            self.port     = other.port
+        
+        if let query = self.query {
+            result.append("?\(query)")
         }
+        if let fragment = self.fragment, excludeFragment == false {
+            result.append("#\(fragment)")
+        }
+        return result
     }
 }
 
@@ -466,15 +523,15 @@ extension XURL.Parser {
     
     // Parse, ignoring non-fatal validation errors.
 
-    public static func parse(_ input: String, base: String? = nil) -> XURL.Components? {
+    public static func parse<S>(_ input: S, base: String? = nil) -> XURL.Components? where S: StringProtocol {
         if let baseString = base, baseString.isEmpty == false {
-            return parse(baseString, baseURL: nil).flatMap { parse(input, baseURL: $0) }
+            return parse(baseString[...], baseURL: nil).flatMap { parse(input[...], baseURL: $0) }
         }
-        return parse(input, baseURL: nil)
+        return parse(input[...], baseURL: nil)
     }
 
-    public static func parse(_ input: String, baseURL: XURL.Components?) -> XURL.Components? {
-        return _parse(input, base: baseURL, url: nil, stateOverride: nil, onValidationError: { _ in })
+    public static func parse<S>(_ input: S, baseURL: XURL.Components?) -> XURL.Components? where S: StringProtocol {
+        return _parse(input[...] as! Substring, base: baseURL, url: nil, stateOverride: nil, onValidationError: { _ in })
     }
     
     // Parse, reporting validation errors.
@@ -484,19 +541,25 @@ extension XURL.Parser {
         public var validationErrors: [ValidationError]
     }
     
-    public static func parseAndReport(_ input: String, base: String? = nil) -> (url: Result?, base: Result?) {
+    public static func parseAndReport<S>(_ input: S, base: String? = nil) -> (url: Result?, base: Result?) where S: StringProtocol {
         if let baseString = base, baseString.isEmpty == false {
-            let baseResult = parseAndReport(baseString, baseURL: nil)
+            let baseResult = parseAndReport(baseString[...], baseURL: nil)
             return baseResult.components.map { (parseAndReport(input, baseURL: $0), baseResult) } ?? (nil, baseResult)
         }
         return (parseAndReport(input, baseURL: nil), nil)
     }
     
-    public static func parseAndReport(_ input: String, baseURL: XURL.Components?) -> Result {
+    public static func parseAndReport<S>(_ input: S, baseURL: XURL.Components?) -> Result where S: StringProtocol {
         var errors: [ValidationError] = []
         errors.reserveCapacity(8)
-        let components = _parse(input, base: baseURL, url: nil, stateOverride: nil, onValidationError: { errors.append($0) })
+        let components = _parse(input[...] as! Substring, base: baseURL, url: nil, stateOverride: nil, onValidationError: { errors.append($0) })
         return Result(components: components, validationErrors: errors)
+    }
+    
+    // Modification.
+    
+    internal static func modify<S>(_ input: S, url: XURL.Components?, stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? where S: StringProtocol {
+        return _parse(input[...] as! Substring, base: nil, url: url, stateOverride: stateOverride, onValidationError: onValidationError)
     }
 
     // Parser algorithm.
@@ -505,15 +568,15 @@ extension XURL.Parser {
     /// https://url.spec.whatwg.org/#url-parsing as of 14.06.2020
     ///
     /// - parameters:
-    /// 	- input:				The String to parse
+    /// 	- input:				The String to parse (as a Substring).
     ///     - base:					The base-URL, in case `input` is a relative URL string
     ///     - url:					An existing parsed URL to modify
     ///     - stateOverride:		The starting state of the parser. Used when modifying a URL.
     ///     - onValidationError:	A callback for handling any validation errors that occur. Most of these are non-fatal.
     /// - returns:	The parsed URL components, or `nil` if the input failed to parse.
     ///
-    private static func _parse(_ input: String, base: XURL.Components?,
-            		           url: XURL.Components?, stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? {
+    private static func _parse(_ input: Substring, base: XURL.Components?,
+             		            url: XURL.Components?, stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? {
 
         func validationFailure(_ msg: ValidationError) {
             onValidationError(msg)

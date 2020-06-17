@@ -122,12 +122,14 @@ extension XURL.Host {
 
 extension XURL.Host: CustomStringConvertible {
 
+    /// Serialises the host, according to https://url.spec.whatwg.org/#host-serializing (as of 14.06.2020).
+    ///
     public var description: String {
         switch self {
         case .ipv4Address(let address):
             return address.description
         case .ipv6Address(let address):
-            return address.description
+            return "[\(address.description)]"
         case .opaque(let host):
             return host.description
         case .domain(let domain):
