@@ -44,12 +44,15 @@ extension XURL.Host {
 
     public struct HostParserError: Error, Equatable, CustomStringConvertible {
         private let errorCode: UInt8
-        internal static var expectedClosingSquareBracket: Self { Self(errorCode: 0) }
+        internal static var expectedClosingSquareBracket:   Self { Self(errorCode: 0) }
+        internal static var containsForbiddenHostCodePoint: Self { Self(errorCode: 1) }
 
         public var description: String {
             switch self {
             case .expectedClosingSquareBracket:
                 return "Invalid IPv6 Address - expected closing ']'"
+            case .expectedClosingSquareBracket:
+                return "Host contains forbidden codepoint"
             default:
                 assert(false, "Unrecognised error code: \(errorCode)")
                 return "Internal Error: Unrecognised error code"
@@ -93,9 +96,13 @@ extension XURL.Host {
         //
         // 7. If asciiDomain is failure, validation error, return failure.
         //
-        // 8. If asciiDomain contains a forbidden host code point, validation error, return failure.
+        let asciiDomain = input // FIXME: Domain2ASCII lowercases the text. We need to emulate that.
+        
+        if asciiDomain.contains(where: { ASCII($0)?.isForbiddenHostCodePoint ?? false }) {
+            return .failure(.hostParserError(.containsForbiddenHostCodePoint))
+        }
 
-        switch IPAddress.V4.parse(input) {
+        switch IPAddress.V4.parse(asciiDomain) {
         case .success(let address):
             return .success(.ipv4Address(address))
         case .failure(let err) where err.isFormattingError == false:
@@ -104,7 +111,7 @@ extension XURL.Host {
             break
         }
         
-        return .success(.domain(String(decoding: input, as: UTF8.self)))
+        return .success(.domain(String(decoding: asciiDomain, as: UTF8.self)))
     }
 }
 
