@@ -8,70 +8,174 @@ public struct XURL {
 }
 
 extension XURL {
-
+    
     public struct Components: Equatable, Hashable, Codable {
-
-        /// A URL’s scheme is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing. It is initially the empty string.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-        ///
-        public var scheme: String = ""
+        private final class Storage: Equatable, Hashable, Codable {
+            var scheme: String
+            var username: String
+            var password: String
+            var host: XURL.Host?
+            var port: UInt16?
+            var path: [String]
+            var query: String?
+            var fragment: String?
+            var cannotBeABaseURL = false
+            // TODO:
+            // URL also has an associated blob URL entry that is either null or a blob URL entry. It is initially null.
+         
+            init(scheme: String, username: String, password: String, host: XURL.Host?,
+                 port: UInt16?, path: [String], query: String?, fragment: String?,
+                 cannotBeABaseURL: Bool) {
+                self.scheme = scheme; self.username = username; self.password = password; self.host = host
+                self.port = port; self.path = path; self.query = query; self.fragment = fragment
+                self.cannotBeABaseURL = cannotBeABaseURL
+            }
+            
+            func copy() -> Self {
+                return Self(
+                    scheme: scheme, username: username, password: password, host: host,
+                    port: port, path: path, query: query, fragment: fragment,
+                    cannotBeABaseURL: cannotBeABaseURL
+                )
+            }
+            
+            static func == (lhs: Storage, rhs: Storage) -> Bool {
+            	return
+                lhs.scheme == rhs.scheme &&
+                lhs.username == rhs.username &&
+                lhs.password == rhs.password &&
+                lhs.host == rhs.host &&
+                lhs.port == rhs.port &&
+                lhs.path == rhs.path &&
+                lhs.query == rhs.query &&
+                lhs.fragment == rhs.fragment &&
+                lhs.cannotBeABaseURL == rhs.cannotBeABaseURL
+            }
+            
+            func hash(into hasher: inout Hasher) {
+                scheme.hash(into: &hasher)
+                username.hash(into: &hasher)
+                password.hash(into: &hasher)
+                host.hash(into: &hasher)
+                port.hash(into: &hasher)
+                path.hash(into: &hasher)
+                query.hash(into: &hasher)
+                fragment.hash(into: &hasher)
+                cannotBeABaseURL.hash(into: &hasher)
+            }
+        }
         
-        /// A URL’s username is an ASCII string identifying a username. It is initially the empty string.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-        ///
-        public var username: String = ""
-      
-        /// A URL’s password is an ASCII string identifying a password. It is initially the empty string.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-        ///
-        public var password: String = ""
-                
-      	/// A URL’s host is null or a host. It is initially null.
-        ///
-        /// A host is a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
-        /// Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-        /// https://url.spec.whatwg.org/#host-representation as of 14.06.2020
-        ///
-        public var host: XURL.Host?
-
-        /// A URL’s port is either null or a 16-bit unsigned integer that identifies a networking port. It is initially null.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-		///
-        public var port: UInt16?
-
-        /// A URL’s path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form. It is initially empty.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-        ///
-        public var path: [String] = []
+        private var _storage: Storage
         
-        /// A URL’s query is either null or an ASCII string. It is initially null.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-        ///
-        public var query: String?
+        private mutating func ensureUnique() {
+            if !isKnownUniquelyReferenced(&_storage) {
+                _storage = _storage.copy()
+            }
+        }
         
-        /// A URL’s fragment is either null or an ASCII string that can be used for further processing on the resource the URL’s other components identify. It is initially null.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-        ///
-        public var fragment: String?
-        
-        /// A URL also has an associated cannot-be-a-base-URL flag. It is initially unset.
-        ///
-        /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
-        ///
-        public var cannotBeABaseURL = false
-        
-        // TODO:
-        // URL also has an associated blob URL entry that is either null or a blob URL entry. It is initially null.
+        public init(scheme: String = "", username: String = "", password: String = "", host: XURL.Host? = nil,
+                    port: UInt16? = nil, path: [String] = [], query: String? = nil, fragment: String? = nil,
+                     cannotBeABaseURL: Bool = false) {
+            self._storage = Storage(
+                scheme: scheme, username: username, password: password, host: host,
+                port: port, path: path, query: query, fragment: fragment,
+                cannotBeABaseURL: cannotBeABaseURL
+            )
+        }
     }
+}
+
+extension XURL.Components {
+        
+    
+    /// A URL’s scheme is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing. It is initially the empty string.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    ///
+    public var scheme: String {
+        get { return _storage.scheme }
+        set { ensureUnique(); _storage.scheme = newValue }
+    }
+    
+    /// A URL’s username is an ASCII string identifying a username. It is initially the empty string.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    ///
+    public var username: String {
+       get { return _storage.username }
+       set { ensureUnique(); _storage.username = newValue }
+   }
+  
+    /// A URL’s password is an ASCII string identifying a password. It is initially the empty string.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    ///
+    public var password: String {
+       get { return _storage.password }
+       set { ensureUnique(); _storage.password = newValue }
+   }
+            
+    /// A URL’s host is null or a host. It is initially null.
+    ///
+    /// A host is a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+    /// Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    /// https://url.spec.whatwg.org/#host-representation as of 14.06.2020
+    ///
+    public var host: XURL.Host? {
+       get { return _storage.host }
+       set { ensureUnique(); _storage.host = newValue }
+    }
+
+    /// A URL’s port is either null or a 16-bit unsigned integer that identifies a networking port. It is initially null.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    ///
+    public var port: UInt16? {
+       get { return _storage.port }
+       set { ensureUnique(); _storage.port = newValue }
+    }
+
+    /// A URL’s path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form. It is initially empty.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    ///
+    public var path: [String] {
+        get { return _storage.path }
+        _modify { ensureUnique(); yield &_storage.path }
+        set { ensureUnique(); _storage.path = newValue }
+    }
+    
+    /// A URL’s query is either null or an ASCII string. It is initially null.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    ///
+    public var query: String? {
+       get { return _storage.query }
+       set { ensureUnique(); _storage.query = newValue }
+    }
+    
+    /// A URL’s fragment is either null or an ASCII string that can be used for further processing on the resource the URL’s other components identify. It is initially null.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    ///
+    public var fragment: String? {
+       get { return _storage.fragment }
+       set { ensureUnique(); _storage.fragment = newValue }
+    }
+    
+    /// A URL also has an associated cannot-be-a-base-URL flag. It is initially unset.
+    ///
+    /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
+    ///
+    public var cannotBeABaseURL: Bool {
+       get { return _storage.cannotBeABaseURL }
+       set { ensureUnique(); _storage.cannotBeABaseURL = newValue }
+    }
+    
+    // TODO:
+    // URL also has an associated blob URL entry that is either null or a blob URL entry. It is initially null.
 }
 
 // Internal helpers.
