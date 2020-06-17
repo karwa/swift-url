@@ -111,15 +111,15 @@ extension ASCII {
 
     /// Returns `true` if this character is a forbidden host code point, otherwise `false`.
     ///
-    /// From the [spec](https://url.spec.whatwg.org/#host-miscellaneous):
-    ///
     /// A forbidden host code point is U+0000 NULL, U+0009 TAB, U+000A LF, U+000D CR,
-    /// U+0020 SPACE, U+0023 (#), U+0025 (%), U+002F (/), U+003A (:), U+003F (?),
-    /// U+0040 (@), U+005B ([), U+005C (\), or U+005D (]).
+    /// U+0020 SPACE, U+0023 (#), U+0025 (%), U+002F (/), U+003A (:), U+003C (<), U+003E (>),
+    /// U+003F (?), U+0040 (@), U+005B ([), U+005C (\), U+005D (]), or U+005E (^)
+    ///
+    /// https://url.spec.whatwg.org/#host-miscellaneous as of 14.06.2020.
     ///
     var isForbiddenHostCodePoint: Bool {
-        let low:  UInt64 = 0b1000_0100_0000_0000_1000_0000_0010_1001____0000_0000_0000_0000_0010_0110_0000_0001
-        let high: UInt64 = 0b0000_0000_0000_0000_0000_0000_0000_0000____0011_1000_0000_0000_0000_0000_0000_0001
+        let low:  UInt64 = 0b1101_0100_0000_0000_1000_0000_0010_1001____0000_0000_0000_0000_0010_0110_0000_0001
+        let high: UInt64 = 0b0000_0000_0000_0000_0000_0000_0000_0000____0111_1000_0000_0000_0000_0000_0000_0001
         let (lowHigh, index) = codePoint.quotientAndRemainder(dividingBy: 64)
         if lowHigh == 0 {
             return (low &>> index) & 0x01 == 1
