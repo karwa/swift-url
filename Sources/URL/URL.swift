@@ -697,8 +697,6 @@ extension XURL.Parser {
         if !invalidRanges.isEmpty { validationFailure(.unexpectedASCIITabOrNewline) }
         input.removeSubranges(invalidRanges)
 
-        guard !input.isEmpty else { return nil }
-
         // 3. Begin state machine.
         var state = stateOverride ?? .schemeStart
         var url   = url ?? XURL.Components()
