@@ -3,7 +3,7 @@ import XCTest
 
 final class WHATWGTests: XCTestCase {
         
-    struct URLConstructorTestInfo {
+    struct URLConstructorTestInfo: CustomStringConvertible {
         var input:          String? = nil
         var base:           String? = nil
         var href:           String? = nil
@@ -72,6 +72,36 @@ final class WHATWGTests: XCTestCase {
                 }
             }
         }
+        
+        public var description: String {
+            var result = """
+            {
+            \t.input:    \(input!)
+            \t.base:     \(base ?? "<nil>")
+            
+            """
+            guard failure != true else {
+               result += """
+                \t--XX FAIL XX--
+                }
+                """
+                return result
+            }
+            result += """
+            \t.href:     \(href ?? "<nil>")
+            \t.protocol: \(`protocol` ?? "<nil>")
+            \t.username: \(username ?? "<nil>")
+            \t.password: \(password ?? "<nil>")
+            \t.host:     \(host ?? "<nil>")
+            \t.hostname: \(hostname ?? "<nil>")
+            \t.port:     \(port?.description ?? "<nil>")
+            \t.pathname: \(pathname ?? "<nil>")
+            \t.search:   \(search ?? "<nil>")
+            \t.hash:     \(hash ?? "<nil>")
+            }
+            """
+            return result
+        }
     }
     
     func testURLConstructor() throws {
@@ -122,6 +152,15 @@ final class WHATWGTests: XCTestCase {
         
         let reportString = report.generateReport()
         try reportString.data(using: .utf8)!.write(to: URL(fileURLWithPath: "/var/tmp/url_whatwg_report.txt"))
+    }
+    
+    func testFailing() {
+        __BREAKPOINT__ = {
+            print("breakpoint")
+        }
+        let result = WebURL("", base: "http://example.org/foo/bar")
+        XCTAssertNotNil(result)
+        print(result)
     }
 }
 

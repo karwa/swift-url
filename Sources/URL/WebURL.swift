@@ -141,3 +141,23 @@ extension WebURL {
         }
     }
 }
+
+extension WebURL: CustomDebugStringConvertible {
+
+    public var debugDescription: String {
+        return """
+        {
+        \t.href:     \(href)
+        \t.scheme:   \(scheme)
+        \t.username: \(username)
+        \t.password: \(password)
+        \t.host:     \(host)
+        \t.hostname: \(hostname)
+        \t.port:     \(port?.description ?? "<nil>")
+        \t.pathname: \(pathname)
+        \t.search:   \(search)
+        \t.fragment: \(fragment)
+        }
+        """
+    }
+}

@@ -1,6 +1,8 @@
 import Algorithms // for Collection.trim
 import SE0270_RangeSet
 
+public var __BREAKPOINT__: ()->Void = {}
+
 /// A String which is known to contain a valid URL.
 ///
 public struct XURL {
@@ -374,9 +376,6 @@ func shortenURLPath(_ path: inout [String], isFileScheme: Bool) {
     if isFileScheme, path.count == 1, path[0].isNormalisedWindowsDriveLetter { return }
     path.removeLast()
 }
-
-public var __BREAKPOINT__: ()->Void = {}
-
 
 extension XURL {
 
