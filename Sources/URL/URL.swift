@@ -703,6 +703,7 @@ extension XURL.Parser {
         var idx    = input.startIndex
         var buffer = ""
         var flag_at = false // @flag in spec.
+        var flag_passwordTokenSeen = false // passwordTokenSeenFlag in spec.
         var flag_squareBracket = false // [] flag in spec.
 
         inputLoop: while true {
@@ -951,15 +952,23 @@ extension XURL.Parser {
                         buffer.insert(contentsOf: "%40", at: buffer.startIndex)
                     }
                     flag_at = true
-                    // Parse username and password out of "buffer"
-                    let passwordTokenIndex = buffer.firstIndex(where: { $0 == ASCII.colon })
-                    let passwordStartIndex = passwordTokenIndex.flatMap { buffer.index(after: $0) }
-                    let parsedUsername = buffer[..<(passwordTokenIndex ?? buffer.endIndex)]
-                        .percentEscaped(where: url_escape_userInfo)
-                    let parsedPassword = buffer[(passwordStartIndex ?? buffer.endIndex)...]
-                        .percentEscaped(where: url_escape_userInfo)
-                    url.username.append(parsedUsername)
-                    url.password.append(parsedPassword)
+                    // Parse username and password out of "buffer".
+                    // `flag_passwordTokenSeen` being true means that while looking ahead for the end of the host,
+                    // we found another '@'; meaning the _first_ '@' was actually part of the password.
+                    // e.g. "scheme://user:hello@world@stuff" - the password is actually "hello@world", not "hello".
+                    if flag_passwordTokenSeen {
+                        url.password.append(buffer.percentEscaped(where: url_escape_userInfo))
+                    } else {
+                        let passwordTokenIndex = buffer.firstIndex(where: { $0 == ASCII.colon })
+                        let passwordStartIndex = passwordTokenIndex.flatMap { buffer.index(after: $0) }
+                        let parsedUsername = buffer[..<(passwordTokenIndex ?? buffer.endIndex)]
+                            .percentEscaped(where: url_escape_userInfo)
+                        let parsedPassword = buffer[(passwordStartIndex ?? buffer.endIndex)...]
+                            .percentEscaped(where: url_escape_userInfo)
+                        url.username.append(parsedUsername)
+                        url.password.append(parsedPassword)
+                        flag_passwordTokenSeen = (passwordTokenIndex != nil)
+                    }
                     buffer = ""
                 case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?: // or endIndex.
                     fallthrough
