@@ -86,32 +86,31 @@ extension XURL.Host {
             }
         }
 
+        let domain = PercentEscaping.decode(bytes: input)
         // TODO:
-        //
-        // 5. Let domain be the result of running 'UTF-8 decode without BOM' on the string percent decoding of input.
-        //    Note: Alternatively 'UTF-8 decode without BOM or fail' can be used, coupled with an early return for failure,
-        //          as domain to ASCII fails on U+FFFD REPLACEMENT CHARACTER.
         //
         // 6. Let asciiDomain be the result of running domain to ASCII on domain.
         //
         // 7. If asciiDomain is failure, validation error, return failure.
         //
-        let asciiDomain = input // FIXME: Domain2ASCII lowercases the text. We need to emulate that.
+        let asciiDomain = domain // FIXME: Domain2ASCII lowercases the text. We need to emulate that.
         
-        if asciiDomain.contains(where: { ASCII($0)?.isForbiddenHostCodePoint ?? false }) {
-            return .failure(.hostParserError(.containsForbiddenHostCodePoint))
-        }
+        return asciiDomain.withUnsafeBufferPointer { asciiDomain in
+            if asciiDomain.contains(where: { ASCII($0)?.isForbiddenHostCodePoint ?? false }) {
+                return .failure(.hostParserError(.containsForbiddenHostCodePoint))
+            }
 
-        switch IPAddress.V4.parse(asciiDomain) {
-        case .success(let address):
-            return .success(.ipv4Address(address))
-        case .failure(let err) where err.isFormattingError == false:
-            return .failure(.ipv4AddressError(err))
-        default:
-            break
+            switch IPAddress.V4.parse(asciiDomain) {
+            case .success(let address):
+                return .success(.ipv4Address(address))
+            case .failure(let err) where err.isFormattingError == false:
+                return .failure(.ipv4AddressError(err))
+            default:
+                break
+            }
+            
+            return .success(.domain(String(decoding: asciiDomain, as: UTF8.self)))
         }
-        
-        return .success(.domain(String(decoding: asciiDomain, as: UTF8.self)))
     }
 }
 
