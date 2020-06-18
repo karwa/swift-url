@@ -134,10 +134,47 @@ final class WHATWGTests: XCTestCase {
         }
         
         var report = TestReport()
-        report.expectedFailures = []
+        report.expectedFailures = [
+            // These test failures are due to us not having implemented the `domain2ascii` transform,
+            // often in combination with other features (e.g. with percent encoding).
+            //
+            270, // domain2ascii: U+3000 is mapped to U+0020 (space) which is disallowed.
+            272, // domain2ascii: (no-break, zero-width, zero-width-no-break) are name-prepped away to nothing.
+            276, // domain2ascii: U+3002 is mapped to U+002E (dot).
+            286, // domain2ascii: fullwidth input should be converted to ASCII and NOT IDN-ized.
+            288, // domain2ascii: URL spec forbids the following. https://www.w3.org/Bugs/Public/show_bug.cgi?id=24257
+            289, // domain2ascii: Same as 288, but escaped.
+            291, // domain2ascii: %00 in fullwidth should fail.
+            292, // domain2ascii: Same as 290, but escaped.
+            294, // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
+            295, // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
+            312, // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
+            412, // domain2ascii: Hosts and percent-encoding.
+            413, // domain2ascii: Hosts and percent-encoding.
+            621, // domain2ascii: IDNA ignored code points in file URLs hosts.
+            622, // domain2ascii: IDNA ignored code points in file URLs hosts.
+            624, // domain2ascii: Empty host after the domain to ASCII.
+            625, // domain2ascii: Empty host after the domain to ASCII.
+            626, // domain2ascii: Empty host after the domain to ASCII.
+            
+            // These tests appear to involve special URLs rejecting non-URL codepoints.
+            // I think this is also handled by domain2ascii, as the spec never asks us to validate
+            // special hostnames (i.e. domains); even though it does ask us to validate opaque hosts for non-special URLs.
+            //
+            278, // non-url-codepoint: Invalid unicode characters should fail... U+FDD0 is disallowed; %ef%b7%90 is U+FDD0.
+            280, // non-url-codepoint: Same as 278, but escaped.
+            282, // non-url-codepoint: U+FFFD.
+            283, // non-url-codepoint: Same as 282, but escaped.
+            408, // non-url-codepoint: Hosts and percent-encoding.
+            409, // non-url-codepoint: Hosts and percent-encoding.
+            410, // non-url-codepoint: Hosts and percent-encoding.
+            411, // non-url-codepoint: Hosts and percent-encoding.
+        ]
         for (item, index) in zip(array, 0..<array.count) {
             if let sectionName = item as? String {
                 report.recordSection(sectionName)
+                assert(report.expectedFailures.contains(index) == false,
+                       "Whoops - you added a comment item to the expected failures list.")
             } else if let rawTestInfo = item as? Dictionary<String, Any> {
                 let testInfo = URLConstructorTestInfo(from: rawTestInfo)
                 report.recordTest(index: index) { report in
@@ -167,7 +204,13 @@ final class WHATWGTests: XCTestCase {
 
 fileprivate struct TestReport {
     var expectedFailures: Set<Int> = []
+    
     private var testFailures = [Int: [String: Any]]()
+    private var num_xPass_pass = 0
+    private var num_xPass_fail = 0
+    private var num_xFail_pass = 0
+    private var num_xFail_fail = 0
+    // Current test.
     private var currentTestDidFail      = false
     private var currentTestCapturedData = [String: Any]()
     
@@ -178,18 +221,23 @@ fileprivate struct TestReport {
         currentTestDidFail = false
         currentTestCapturedData.removeAll(keepingCapacity: true)
         defer {
+            if index == 278 {
+                __BREAKPOINT__()
+            }
             if expectedFailures.contains(index) {
                 if !currentTestDidFail {
+                    num_xFail_pass += 1
                     currentTestCapturedData["TESTREPORT_REASON"] = "✅❌❔ UNEXPECTED PASS"
                 	testFailures[index] = currentTestCapturedData
                 } else {
-                    // Expected to fail and it did. All good.
+                    num_xFail_fail += 1
                 }
             } else {
                 if currentTestDidFail {
+                    num_xPass_fail += 1
                     testFailures[index] = currentTestCapturedData
                 } else {
-                    // Expected not to fail and it didn't. All good.
+                    num_xPass_pass += 1
                 }
             }
             currentTestDidFail = false
@@ -235,6 +283,10 @@ fileprivate struct TestReport {
         ------------------------------
         ------------------------------
               \(testFailures.count) Tests Failed
+        ------------------------------
+        Pass: \(num_xPass_pass + num_xFail_pass) (\(num_xPass_pass) expected)
+        Fail: \(num_xPass_fail + num_xFail_fail) (\(num_xFail_fail) expected)
+        Total: \(num_xPass_pass + num_xPass_fail + num_xFail_pass + num_xFail_fail) tests run
         ------------------------------
         """, to: &output)
         for index in testFailures.keys.sorted() {
