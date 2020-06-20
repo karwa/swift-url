@@ -438,3 +438,10 @@ extension ASCII {
         return idx
     }
 }
+
+extension ASCII {    
+    var lowercased: ASCII {
+        guard ASCII.ranges.uppercaseAlpha.contains(self) else { return self }
+        return ASCII(_unchecked: ASCII.a.codePoint + (self.codePoint - ASCII.A.codePoint))
+    }
+}

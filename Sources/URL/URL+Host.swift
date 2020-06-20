@@ -86,16 +86,19 @@ extension XURL.Host {
             }
         }
 
-        let domain = PercentEscaping.decode(bytes: input)
+        // TODO: Make this lazy.
+        var domain = PercentEscaping.decode(bytes: input)
         // TODO:
         //
         // 6. Let asciiDomain be the result of running domain to ASCII on domain.
         //
         // 7. If asciiDomain is failure, validation error, return failure.
         //
-        let asciiDomain = domain // FIXME: Domain2ASCII lowercases the text. We need to emulate that.
+        if let error = fake_domain2ascii(&domain) {
+            return .failure(.hostParserError(error))
+        }
         
-        return asciiDomain.withUnsafeBufferPointer { asciiDomain in
+        return domain.withUnsafeBufferPointer { asciiDomain in
             if asciiDomain.contains(where: { ASCII($0)?.isForbiddenHostCodePoint ?? false }) {
                 return .failure(.hostParserError(.containsForbiddenHostCodePoint))
             }
@@ -112,6 +115,16 @@ extension XURL.Host {
             return .success(.domain(String(decoding: asciiDomain, as: UTF8.self)))
         }
     }
+}
+
+// This is a poor approximation of unicode's "domain2ascii" algorithm,
+// which simply lowercases ASCII alphas and fails for non-ASCII characters.
+func fake_domain2ascii(_ domain: inout Array<UInt8>) -> XURL.Host.HostParserError? {
+    for i in domain.indices {
+        guard let asciiChar = ASCII(domain[i]) else { return .containsForbiddenHostCodePoint }
+        domain[i] = asciiChar.lowercased.codePoint
+    }
+    return nil
 }
 
 extension XURL.Host {
