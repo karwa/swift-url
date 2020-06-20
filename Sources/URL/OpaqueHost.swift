@@ -34,44 +34,46 @@ extension OpaqueHost {
         }
     }
 
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>) -> Result<OpaqueHost, ParseError> {
-        guard input.isEmpty == false else { return .failure(.emptyInput) }
-
+    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ParseError)->Void) -> OpaqueHost? {
+        // This isn't technically in the spec algorithm, but opaque hosts are defined to be non-nil.
+        guard input.isEmpty == false else { onValidationError(.emptyInput); return nil }
+
         var iter = input.makeIterator()
         while let byte = iter.next() {
             guard let asciiChar = ASCII(byte) else {
                 continue // Non-ASCII codepoints checked below.
             }
             if asciiChar == .percentSign {
-                guard let percentEncodedByte1 = iter.next(), ASCII(percentEncodedByte1)?.isHexDigit == true else {
-                    return .failure(.invalidPercentEscaping)
-                }
-                guard let percentEncodedByte2 = iter.next(), ASCII(percentEncodedByte2)?.isHexDigit == true else {
-                    return .failure(.invalidPercentEscaping)
+                if let percentEncodedByte1 = iter.next(), ASCII(percentEncodedByte1)?.isHexDigit != true,
+                   let percentEncodedByte2 = iter.next(), ASCII(percentEncodedByte2)?.isHexDigit != true {
+                    onValidationError(.invalidPercentEscaping)
                 }
             } else if asciiChar.isForbiddenHostCodePoint {
-                return .failure(.containsForbiddenHostCodePoint)
+                onValidationError(.containsForbiddenHostCodePoint)
+                return nil
             }
-        }        
-        guard hasNonURLCodePoints(input, allowPercentSign: true) == false else {
-            return .failure(.containsNonURLCodePoint)
+        }
+        if hasNonURLCodePoints(input, allowPercentSign: true) {
+            onValidationError(.containsNonURLCodePoint)
         }
 
         let escapedHostname = PercentEscaping.encode(bytes: input, where: url_escape_c0)
         assert(escapedHostname.isEmpty == false)
-        return .success(OpaqueHost(unchecked: escapedHostname))
+        return OpaqueHost(unchecked: escapedHostname)
     }
 }
 
 extension OpaqueHost {
 
-    @inlinable public static func parse<S>(_ input: S) -> Result<OpaqueHost, ParseError> where S: StringProtocol {
-        return input._withUTF8 { Self.parse($0) }
+    @inlinable public static func parse<S>(_ input: S, onValidationError: (ParseError)->Void) -> OpaqueHost? where S: StringProtocol {
+        return input._withUTF8 { Self.parse($0, onValidationError: onValidationError) }
     }
 
     @inlinable public init?<S>(_ input: S) where S: StringProtocol {
-        guard case .success(let parsed) = Self.parse(input) else { return nil }
-        self = parsed 
+        guard let parsedValue = Self.parse(input, onValidationError: { _ in }) else {
+            return nil
+        }
+        self = parsedValue
     }
 }
 

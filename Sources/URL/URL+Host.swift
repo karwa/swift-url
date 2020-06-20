@@ -78,12 +78,10 @@ extension XURL.Host {
         }
 
         if isNotSpecial {
-            switch OpaqueHost.parse(input) {
-            case .success(let host):
-                return .success(.opaque(host))
-            case .failure(let error):
-                return .failure(.opaqueHostError(error))
+            guard let host = OpaqueHost.parse(input, onValidationError: { _ in }) else {
+                return .failure(.opaqueHostError(.invalidPercentEscaping)) // FIXME
             }
+            return .success(.opaque(host))
         }
 
         // TODO: Make this lazy.
