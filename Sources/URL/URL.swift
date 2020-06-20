@@ -803,8 +803,8 @@ extension XURL.Parser {
                         state = .pathOrAuthority
                         idx   = nextIdx
                     } else {
-                        // TODO: Spec literally says "append an empty string to url’s path" -- but why?
                         url.cannotBeABaseURL = true
+                        url.path.append("")
                         state = .cannotBeABaseURLPath
                     }
                 }
@@ -822,10 +822,11 @@ extension XURL.Parser {
                         validationFailure(.missingSchemeNonRelativeURL)
                         return nil
                     }
-                    url.scheme = base.scheme
-                    url.path   = base.path
-                    url.query  = base.query
+                    url.scheme   = base.scheme
+                    url.path     = base.path
+                    url.query    = base.query
                     url.fragment = ""
+                    url.cannotBeABaseURL = true
                     state = .fragment
                     break stateMachine
                 }
@@ -1285,11 +1286,7 @@ extension XURL.Parser {
                         }
                     }
                     let escapedChar = input[idx].percentEscaped(where: url_escape_c0)
-                    if url.path.isEmpty {
-                        url.path.append(escapedChar)
-                    } else {
-                        url.path[0].append(escapedChar)
-                    }
+                    url.path[0].append(escapedChar)
                 }
 
             case .query:
