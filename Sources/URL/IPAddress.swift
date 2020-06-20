@@ -484,6 +484,15 @@ extension IPAddress.V4 {
             let pieces     = rawPtr.bindMemory(to: UInt32.self)
             var pieceIndex = -1
             var idx        = input.startIndex
+            
+            // We need to track and continue processing numeric digits even if a piece overflows,
+            // because the standard works in terms of mathematical integers, not fixed-size binary integers.
+            // A piece overflow in a well-formatted IP-address string is a `.pieceOverflows` error (terminating URL host-parsing with "failure"),
+            // but in a non-IP-address string, it should be ignored in favour of a `.unexpectedTrailingCharacter` error
+            // (making URL host-parsing treat the string as a domain).
+            // For example, the string "10000000000.com" should return an `.unexpectedTrailingCharacter` error due to the `.com`,
+            // not an overflow error.
+            var pieceDidOverflow = false
 
             while idx != input.endIndex {
                 var value: UInt32 = 0
@@ -516,8 +525,8 @@ extension IPAddress.V4 {
                     var (overflowM, overflowA) = (false, false)
                     (value, overflowM) = value.multipliedReportingOverflow(by: radix)
                     (value, overflowA) = value.addingReportingOverflow(UInt32(numericValue))
-                    guard !overflowM, !overflowA else {
-                        return .failure(.pieceOverflows)
+                    if overflowM || overflowA {
+                        pieceDidOverflow = true
                     }
                     idx = input.index(after: idx)
                 }
@@ -536,6 +545,9 @@ extension IPAddress.V4 {
 
             guard idx == input.endIndex else {
                 return .failure(.unexpectedTrailingCharacter)
+            }
+            guard pieceDidOverflow == false else {
+                return .failure(.pieceOverflows)
             }
 
             var rawAddress: UInt32 = 0
