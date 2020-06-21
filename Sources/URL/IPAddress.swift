@@ -145,15 +145,17 @@ extension IPAddress.V6 {
     /// TODO: Add description of accepted formats.
     ///
     /// - parameters:
-    ///     - input: A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - input: 				A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - onValidationError:    A callback to be invoked if a validation error occurs. This callback is only invoked once,
+    ///                              and any validation error terminates parsing.
     /// - returns:
-    ///     A result object containing either the successfully-parsed address, or a failure message.
+    ///     Either the successfully-parsed address, or `.none` if parsing fails.
     ///
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>) -> Result<Self, ParseError> {
-        guard input.isEmpty == false else { return .failure(.emptyInput) }
+    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ParseError)->Void) -> Self? {
+        guard input.isEmpty == false else { onValidationError(.emptyInput); return nil }
 
         var result: IPAddress.V6.AddressType = (0, 0, 0, 0, 0, 0, 0, 0)
-        return withUnsafeMutableBytes(of: &result) { tuplePointer -> Result<Self, ParseError> in
+        return withUnsafeMutableBytes(of: &result) { tuplePointer -> Self? in
             let addressBuffer = tuplePointer.bindMemory(to: UInt16.self)
             var pieceIndex    = 0
             var compress      = -1 // We treat -1 as "null".
@@ -163,7 +165,8 @@ extension IPAddress.V6 {
             if input[idx] == ASCII.colon {
                 idx = input.index(after: idx)
                 guard idx != input.endIndex, input[idx] == ASCII.colon else {
-                    return .failure(.unexpectedLeadingColon)
+                    onValidationError(.unexpectedLeadingColon)
+                    return nil
                 }
                 idx          = input.index(after: idx)
                 pieceIndex &+= 1
@@ -173,12 +176,14 @@ extension IPAddress.V6 {
             parseloop: 
             while idx != input.endIndex {
                 guard pieceIndex != 8 else {
-                    return .failure(.tooManyPieces)
+                    onValidationError(.tooManyPieces)
+                    return nil
                 }
                 // If the piece starts with a ':', it must be a compressed group of pieces.
                 guard input[idx] != ASCII.colon else {
                     guard compress == -1 else {
-                        return .failure(.multipleCompressedPieces)
+                        onValidationError(.multipleCompressedPieces)
+                        return nil
                     }
                     idx          = input.index(after: idx)
                     pieceIndex &+= 1
@@ -210,30 +215,35 @@ extension IPAddress.V6 {
                     pieceIndex &+= 1
                     idx = input.index(after: idx)
                     guard idx != input.endIndex else {
-                        return .failure(.unexpectedTrailingColon)
+                        onValidationError(.unexpectedTrailingColon)
+                        return nil
                     }
                     continue parseloop
                 }
                 guard _slowPath(input[idx] != ASCII.period) else {
                     guard length != 0 else {
-                        return .failure(.unexpectedPeriod)
+                        onValidationError(.unexpectedPeriod)
+                        return nil
                     }
                     guard !(pieceIndex > 6) else {
-                        return .failure(.invalidPositionForIPv4Address)
+                        onValidationError(.invalidPositionForIPv4Address)
+                        return nil
                     }
 
-                    switch IPAddress.V4.parse_simple(UnsafeBufferPointer(rebasing: input[pieceStartIndex...])) {
-                    case .success(let value):
-                        addressBuffer[pieceIndex]      = UInt16(truncatingIfNeeded: value.rawAddress >> 16)
-                        addressBuffer[pieceIndex &+ 1] = UInt16(truncatingIfNeeded: value.rawAddress)
-                    case .failure(let err):
-                        return .failure(.invalidIPv4Address(err))
+                    guard let value = IPAddress.V4.parse_simple(
+                        UnsafeBufferPointer(rebasing: input[pieceStartIndex...]),
+                        onValidationError: { onValidationError(.invalidIPv4Address($0)) }
+                    ) else {
+                        return nil
                     }
+                    addressBuffer[pieceIndex]      = UInt16(truncatingIfNeeded: value.rawAddress >> 16)
+                    addressBuffer[pieceIndex &+ 1] = UInt16(truncatingIfNeeded: value.rawAddress)
                     pieceIndex &+= 2
 
                     break parseloop
                 }
-                return .failure(.unexpectedCharacter)
+                onValidationError(.unexpectedCharacter)
+                return nil
             }
 
             if compress != -1 {
@@ -250,27 +260,28 @@ extension IPAddress.V6 {
                 }
             } else {
                 guard pieceIndex == 8 else {
-                    return .failure(.notEnoughPieces)
+                    onValidationError(.notEnoughPieces)
+                    return nil
                 }
             }
 
             // Parsing successful.
-            return .success(IPAddress.V6(rawAddress: 
+            return IPAddress.V6(rawAddress:
                 UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
                   .load(fromByteOffset: 0, as: IPAddress.V6.AddressType.self)
-            ))
+            )
         }
     }
 }
 
 extension IPAddress.V6 {
     
-    @inlinable public static func parse<S>(_ input: S) -> Result<Self, ParseError> where S: StringProtocol {
-        return input._withUTF8 { parse($0) }
+    @inlinable public static func parse<S>(_ input: S, onValidationError: (ParseError)->Void) -> Self? where S: StringProtocol {
+        return input._withUTF8 { parse($0, onValidationError: onValidationError) }
     }
 
     @inlinable public init?<S>(_ input: S) where S: StringProtocol {
-        guard case .success(let parsed) = Self.parse(input) else { return nil }
+        guard let parsed = Self.parse(input, onValidationError: { _ in }) else { return nil }
         self = parsed 
     }
 }
@@ -328,7 +339,13 @@ extension IPAddress.V6: Codable {
     public init(from decoder: Decoder) throws {
        let container = try decoder.singleValueContainer()
        let string = try container.decode(String.self)
-       self = try Self.parse(string).get()
+       guard let parsedValue = Self.parse(string, onValidationError: { _ in }) else {
+         throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Invalid IPv6 Address"
+         )
+       }
+       self = parsedValue
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -387,6 +404,12 @@ extension IPAddress.V4: Equatable, Hashable {
 }
 
 extension IPAddress.V4 {
+    
+    public enum ParseResult {
+        case success(IPAddress.V4)
+        case failure
+        case notAnIPAddress
+    }
 
     public struct ParseError: Error, Equatable, CustomStringConvertible {
         private let errorCode: UInt8
@@ -416,17 +439,6 @@ extension IPAddress.V4 {
         // -
         internal static var tooManyPieces:   Self { Self(errorCode: 8) }
         internal static var notEnoughPieces: Self { Self(errorCode: 10) }
-
-        /// If `true`, this error relates to a parsing failure (e.g. an invalid character).
-        //  Otherwise, it indicates that the 
-        internal var isFormattingError: Bool {
-            switch self {
-            case .pieceOverflows, .addressOverflows:
-                return false
-            default:
-                return true
-            }
-        }
         
         public var description: String {
             switch self {
@@ -464,34 +476,31 @@ extension IPAddress.V4 {
     /// A single trailing '.' is permitted.
     ///
     /// - parameters:
-    ///     - input: A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - input: 				A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - onValidationError:	A callback to be invoked if a validation error occurs.
     /// - returns:
-    ///     A result object containing either the successfully-parsed address, or a failure message.
+    ///     A result object containing either the successfully-parsed address, or a failure flag communicating whether parsing
+    ///     failed because the string was not in the correct format.
     ///
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>) -> Result<Self, ParseError> {
-        guard input.isEmpty == false else { return .failure(.emptyInput) }
+    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ParseError)->Void) -> ParseResult {
+        guard input.isEmpty == false else { onValidationError(.emptyInput); return .failure }
 
         // This algorithm isn't from the WHATWG spec, but supports all the required shorthands.
         // Translated and adapted to Swift (with some modifications) from:
         // https://android.googlesource.com/platform/bionic/+/froyo/libc/inet/inet_aton.c
-
-        // Note the "returning input" from the WHATWG parser is equivalent to returning a ParseError
-        // where `isFormattingError` is `true`, and "returning failure" from the WHATWG parser is
-        // equivalent to returning a ParseError where `isFormattingError` is `false`.
         
         var __pieces: (UInt32, UInt32, UInt32, UInt32) = (0, 0, 0, 0)
-        return withUnsafeMutableBytes(of: &__pieces) { rawPtr -> Result<Self, ParseError> in
+        return withUnsafeMutableBytes(of: &__pieces) { rawPtr -> ParseResult in
             let pieces     = rawPtr.bindMemory(to: UInt32.self)
             var pieceIndex = -1
             var idx        = input.startIndex
             
             // We need to track and continue processing numeric digits even if a piece overflows,
             // because the standard works in terms of mathematical integers, not fixed-size binary integers.
-            // A piece overflow in a well-formatted IP-address string is a `.pieceOverflows` error (terminating URL host-parsing with "failure"),
-            // but in a non-IP-address string, it should be ignored in favour of a `.unexpectedTrailingCharacter` error
-            // (making URL host-parsing treat the string as a domain).
-            // For example, the string "10000000000.com" should return an `.unexpectedTrailingCharacter` error due to the `.com`,
-            // not an overflow error.
+            // A piece overflow in a well-formatted IP-address string should return a `.failure`,
+            // but in a non-IP-address string, it should be ignored in favour of a `.notAnIPAddress` result.
+            // For example, the string "10000000000.com" should return `.notAnIPAddress` due to the `.com`,
+            // not a `.failure` due to overflow.
             var pieceDidOverflow = false
 
             while idx != input.endIndex {
@@ -499,7 +508,8 @@ extension IPAddress.V4 {
                 var radix: UInt32 = 10
 
                 guard ASCII.ranges.digits.contains(input[idx]) else { 
-                    return .failure(.pieceBeginsWithInvalidCharacter)
+                    onValidationError(.pieceBeginsWithInvalidCharacter)
+                    return .notAnIPAddress
                 }
                 // Leading '0' or '0x' sets the radix.
                 if input[idx] == ASCII.n0 {
@@ -519,9 +529,9 @@ extension IPAddress.V4 {
                     guard let numericValue = ASCII(input[idx]).map({ ASCII.parseHexDigit(ascii: $0) }),
                         numericValue != ASCII.parse_NotFound else { break }
                     guard numericValue < radix else {
-                        return .failure(.pieceContainsInvalidCharacterForRadix)
+                        onValidationError(.pieceContainsInvalidCharacterForRadix)
+                        return .notAnIPAddress
                     }
-                    // TODO: Is there a cheaper way to predict overflow?
                     var (overflowM, overflowA) = (false, false)
                     (value, overflowM) = value.multipliedReportingOverflow(by: radix)
                     (value, overflowA) = value.addingReportingOverflow(UInt32(numericValue))
@@ -532,7 +542,8 @@ extension IPAddress.V4 {
                 }
                 // Set value for piece.
                 guard pieceIndex < 3 else {
-                    return .failure(.tooManyPieces)
+                    onValidationError(.tooManyPieces)
+                    return .notAnIPAddress
                 }
                 pieceIndex &+= 1
                 pieces[pieceIndex] = value
@@ -544,10 +555,12 @@ extension IPAddress.V4 {
             }
 
             guard idx == input.endIndex else {
-                return .failure(.unexpectedTrailingCharacter)
+                onValidationError(.unexpectedTrailingCharacter)
+                return .notAnIPAddress
             }
             guard pieceDidOverflow == false else {
-                return .failure(.pieceOverflows)
+                onValidationError(.pieceOverflows)
+                return .failure
             }
 
             var rawAddress: UInt32 = 0
@@ -557,20 +570,20 @@ extension IPAddress.V4 {
             case 1: // 'a.b'     - 8-bits/24-bits.
                 var invalidBits = pieces[0] & ~0x000000FF
                 invalidBits    |= pieces[1] & ~0x00FFFFFF
-                guard invalidBits == 0 else { return .failure(.addressOverflows) }
+                guard invalidBits == 0 else { onValidationError(.addressOverflows); return .failure }
                 rawAddress = (pieces[0] << 24) | pieces[1]
             case 2: // 'a.b.c'   - 8-bits/8-bits/16-bits.
                 var invalidBits = pieces[0] & ~0x000000FF
                 invalidBits    |= pieces[1] & ~0x000000FF
                 invalidBits    |= pieces[2] & ~0x0000FFFF
-                guard invalidBits == 0 else { return .failure(.addressOverflows) }
+                guard invalidBits == 0 else { onValidationError(.addressOverflows); return .failure }
                 rawAddress = (pieces[0] << 24) | (pieces[1] << 16) | pieces[2]
             case 3: // 'a.b.c.d' - 8-bits/8-bits/8-bits/8-bits.
                 var invalidBits = pieces[0] & ~0x000000FF
                 invalidBits    |= pieces[1] & ~0x000000FF
                 invalidBits    |= pieces[2] & ~0x000000FF
                 invalidBits    |= pieces[3] & ~0x000000FF
-                guard invalidBits == 0 else { return .failure(.addressOverflows) }
+                guard invalidBits == 0 else { onValidationError(.addressOverflows); return .failure }
                 rawAddress = (pieces[0] << 24) | (pieces[1] << 16) | (pieces[2] << 8) | pieces[3]
             default:
                 fatalError("Internal error. pieceIndex has unexpected value.")
@@ -586,23 +599,27 @@ extension IPAddress.V4 {
     /// Trailing '.'s are not permitted.
     ///
     /// - parameters:
-    ///     - input: A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - input: 				A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - onValidationError:    A callback to be invoked if a validation error occurs. This callback is only invoked once,
+    ///      						and any validation error terminates parsing.
     /// - returns:
-    ///     A result object containing either the successfully-parsed address, or a failure message.
+    ///     Either the successfully-parsed address, or `.none` if parsing failed.
     ///
-    public static func parse_simple(_ input: UnsafeBufferPointer<UInt8>) -> Result<Self, ParseError> {
+    public static func parse_simple(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ParseError)->Void) -> Self? {
 
         var result      = UInt32(0)
         var idx         = input.startIndex
         var numbersSeen = 0
         while idx != input.endIndex {
             // Consume '.' separator from end of previous piece.
-            if numbersSeen > 0 {
-                guard input[idx] == ASCII.period else {
-                    return .failure(.invalidCharacter)
+            if numbersSeen != 0 {
+                guard ASCII(input[idx]) == .period else {
+                    onValidationError(.invalidCharacter)
+                    return nil
                 }
                 guard numbersSeen < 4 else {
-                    return .failure(.tooManyPieces)
+                    onValidationError(.tooManyPieces)
+                    return nil
                 }
                 idx = input.index(after: idx)
             }
@@ -615,18 +632,21 @@ extension IPAddress.V4 {
                 case -1: 
                     ipv4Piece = Int(digit)
                 case 0:
-                    return .failure(.unsupportedRadix)
+                    onValidationError(.unsupportedRadix)
+                    return nil
                 default: 
                     ipv4Piece *= 10
                     ipv4Piece += Int(digit)
                 }
                 guard ipv4Piece < 256 else {
-                    return .failure(.pieceOverflows)
+                    onValidationError(.pieceOverflows)
+                    return nil
                 }
                 idx = input.index(after: idx)
             }
             guard ipv4Piece != -1 else {
-                return .failure(.pieceBeginsWithInvalidCharacter)
+                onValidationError(.pieceBeginsWithInvalidCharacter)
+                return nil
             }
             // Accumulate in to result.
             result <<= 8
@@ -634,17 +654,18 @@ extension IPAddress.V4 {
             numbersSeen &+= 1
         }
         guard numbersSeen == 4 else {
-            return .failure(.notEnoughPieces)
+            onValidationError(.notEnoughPieces)
+            return nil
         }
-        return .success(IPAddress.V4(rawAddress: result))
+        return IPAddress.V4(rawAddress: result)
     }
 }
 
 
 extension IPAddress.V4 {
 
-    @inlinable public static func parse<S>(_ input: S) -> Result<Self, ParseError> where S: StringProtocol {
-        return input._withUTF8 { parse($0) }
+    @inlinable public static func parse<S>(_ input: S) -> ParseResult where S: StringProtocol {
+        return input._withUTF8 { parse($0, onValidationError: { _ in }) }
     }
 
     @inlinable public init?<S>(_ input: S) where S: StringProtocol {
@@ -685,7 +706,13 @@ extension IPAddress.V4: Codable {
     public init(from decoder: Decoder) throws {
        let container = try decoder.singleValueContainer()
        let string = try container.decode(String.self)
-       self = try Self.parse(string).get()
+    	guard let parsedValue = Self(string) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid IPv4 Address"
+            )
+        }
+        self = parsedValue
     }
 
     public func encode(to encoder: Encoder) throws {

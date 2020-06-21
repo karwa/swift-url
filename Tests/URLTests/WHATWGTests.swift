@@ -175,8 +175,8 @@ final class WHATWGTests: XCTestCase {
         __BREAKPOINT__ = {
             print("breakpoint")
         }
-        let result = WebURL("http://10000000000.com", base: "http://other.com/")
-        XCTAssertNil(result)
+        let result = WebURL("sc://%/", base: "about:blank")
+        XCTAssertNotNil(result)
         print(result)
     }
 }
@@ -201,12 +201,10 @@ fileprivate struct TestReport {
         currentTestDidFail = false
         currentTestCapturedData.removeAll(keepingCapacity: true)
         defer {
-            if index == 278 {
-                __BREAKPOINT__()
-            }
             if expectedFailures.contains(index) {
                 if !currentTestDidFail {
                     num_xFail_pass += 1
+                    XCTFail("Unexpected pass for test \(index). Data: \(currentTestCapturedData)")
                     currentTestCapturedData["TESTREPORT_REASON"] = "✅❌❔ UNEXPECTED PASS"
                 	testFailures[index] = currentTestCapturedData
                 } else {
@@ -215,6 +213,7 @@ fileprivate struct TestReport {
             } else {
                 if currentTestDidFail {
                     num_xPass_fail += 1
+                    XCTFail("Unexpected fail for test \(index). Data: \(currentTestCapturedData)")
                     testFailures[index] = currentTestCapturedData
                 } else {
                     num_xPass_pass += 1
@@ -239,21 +238,18 @@ fileprivate struct TestReport {
     mutating func expectEqual<T: Equatable>(_ lhs: T, _ rhs: T, _ key: String? = nil) {
         if lhs != rhs {
             currentTestDidFail = true
-            XCTFail("expectEqual failed: (\(lhs)) is not equal to (\(rhs)")
         }
     }
     
     mutating func expectTrue(_ lhs: Bool, _ message: String = "condition was false") {
         if lhs == false {
             currentTestDidFail = true
-            XCTFail("expectTrue failed - \(message)")
         }
     }
     
     mutating func expectFalse(_ lhs: Bool, _ message: String = "condition was true") {
         if lhs == true {
             currentTestDidFail = true
-            XCTFail("expectFalse failed - \(message)")
         }
     }
     

@@ -25,7 +25,7 @@ extension XURL.Host {
     public enum ParseError: Error, Equatable, CustomStringConvertible {
         case ipv4AddressError(IPAddress.V4.ParseError)
         case ipv6AddressError(IPAddress.V6.ParseError)
-        case opaqueHostError(OpaqueHost.ParseError)
+        case opaqueHostError(OpaqueHost.ValidationError)
         case hostParserError(HostParserError)
 
         public var description: String {
@@ -69,11 +69,10 @@ extension XURL.Host {
             guard input.last == ASCII.rightSquareBracket else {
                 return .failure(.hostParserError(.expectedClosingSquareBracket))
             }
-            switch IPAddress.V6.parse(UnsafeBufferPointer(rebasing: input.dropFirst().dropLast())) {
-            case .success(let address):
+            if let address = IPAddress.V6.parse(UnsafeBufferPointer(rebasing: input.dropFirst().dropLast()), onValidationError: { _ in }) {
                 return .success(.ipv6Address(address))
-            case .failure(let error):
-                return .failure(.ipv6AddressError(error))
+            } else {
+                return .failure(.ipv6AddressError(.emptyInput)) // FIXME
             }
         }
 
@@ -101,12 +100,12 @@ extension XURL.Host {
                 return .failure(.hostParserError(.containsForbiddenHostCodePoint))
             }
 
-            switch IPAddress.V4.parse(asciiDomain) {
+            switch IPAddress.V4.parse(asciiDomain, onValidationError: { _ in }) {
             case .success(let address):
                 return .success(.ipv4Address(address))
-            case .failure(let err) where err.isFormattingError == false:
-                return .failure(.ipv4AddressError(err))
-            default:
+            case .failure:
+                return .failure(.ipv4AddressError(.tooManyPieces)) // FIXME
+            case .notAnIPAddress:
                 break
             }
             

@@ -9,7 +9,7 @@ public struct OpaqueHost: Equatable, Hashable, Codable {
 
 extension OpaqueHost {
 
-    public struct ParseError: Error, Equatable, CustomStringConvertible {
+    public struct ValidationError: Equatable, CustomStringConvertible {
         private let errorCode: UInt8
 
         static var emptyInput:                     Self { Self(errorCode: 0) }
@@ -34,10 +34,10 @@ extension OpaqueHost {
         }
     }
 
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ParseError)->Void) -> OpaqueHost? {
+    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ValidationError)->Void) -> OpaqueHost? {
         // This isn't technically in the spec algorithm, but opaque hosts are defined to be non-nil.
         guard input.isEmpty == false else { onValidationError(.emptyInput); return nil }
-
+
         var iter = input.makeIterator()
         while let byte = iter.next() {
             guard let asciiChar = ASCII(byte) else {
@@ -65,7 +65,7 @@ extension OpaqueHost {
 
 extension OpaqueHost {
 
-    @inlinable public static func parse<S>(_ input: S, onValidationError: (ParseError)->Void) -> OpaqueHost? where S: StringProtocol {
+    @inlinable public static func parse<S>(_ input: S, onValidationError: (ValidationError)->Void) -> OpaqueHost? where S: StringProtocol {
         return input._withUTF8 { Self.parse($0, onValidationError: onValidationError) }
     }
 
