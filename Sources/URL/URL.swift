@@ -400,6 +400,7 @@ extension XURL.Parser {
         case specialAuthorityIgnoreSlashes
         case authority
         case host
+        case hostname
         case port
         case file
         case fileSlash
@@ -983,6 +984,8 @@ extension XURL.Parser {
                     buffer.append(input[idx])
                 }
 
+            case .hostname:
+                fallthrough
             case .host:
                 let urlSpecialScheme = SpecialScheme(rawValue: url.scheme)
                 guard !(stateOverride != nil && urlSpecialScheme == .file) else {
@@ -1007,7 +1010,7 @@ extension XURL.Parser {
                     url.host = parsedHost
                     buffer = ""
                     state  = .port
-                    if stateOverride == .host { break inputLoop }
+                    if stateOverride == .hostname { break inputLoop }
                 case .forwardSlash?, .questionMark?, .numberSign?: // or endIndex.
                     fallthrough
                 case .backslash? where urlSpecialScheme != nil:

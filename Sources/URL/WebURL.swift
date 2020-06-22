@@ -70,7 +70,7 @@ extension WebURL {
         get { return components.host?.description ?? "" }
         set {
             guard components.cannotBeABaseURL == false else { return }
-            reparse(newValue, stateOverride: .host)
+            reparse(newValue, stateOverride: .hostname)
         }
     }
     
