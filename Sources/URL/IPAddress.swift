@@ -85,7 +85,7 @@ extension IPAddress.V6: Equatable, Hashable {
 
 extension IPAddress.V6 {
 
-    public struct ParseError: Error, Equatable, CustomStringConvertible {
+    public struct ValidationError: Equatable, CustomStringConvertible {
         private let errorCode: UInt8
         private let context: Int
         private init(errorCode: UInt8, context: Int = -1) {
@@ -106,7 +106,7 @@ extension IPAddress.V6 {
         internal static var multipleCompressedPieces: Self { Self(errorCode: 8) }
         // -
         internal static var invalidPositionForIPv4Address: Self { Self(errorCode: 9) }
-        internal static func invalidIPv4Address(_ err: IPAddress.V4.ParseError) -> Self {
+        internal static func invalidIPv4Address(_ err: IPAddress.V4.ValidationError) -> Self {
             Self(errorCode: 10, context: err.packedAsInt)
         }
 
@@ -131,7 +131,7 @@ extension IPAddress.V6 {
             case .invalidPositionForIPv4Address:
                 return "Invalid position for IPv4 address segment"
             case _ where self.errorCode == Self.invalidIPv4Address(.emptyInput).errorCode:
-                let wrappedError = IPAddress.V4.ParseError(unpacking: context)
+                let wrappedError = IPAddress.V4.ValidationError(unpacking: context)
                 return "Invalid IPv4 address: \(wrappedError)"
             default:
                 assert(false, "Unrecognised error code: \(errorCode). Context: \(context)")
@@ -151,7 +151,7 @@ extension IPAddress.V6 {
     /// - returns:
     ///     Either the successfully-parsed address, or `.none` if parsing fails.
     ///
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ParseError)->Void) -> Self? {
+    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ValidationError)->Void) -> Self? {
         guard input.isEmpty == false else { onValidationError(.emptyInput); return nil }
 
         var result: IPAddress.V6.AddressType = (0, 0, 0, 0, 0, 0, 0, 0)
@@ -276,7 +276,7 @@ extension IPAddress.V6 {
 
 extension IPAddress.V6 {
     
-    @inlinable public static func parse<S>(_ input: S, onValidationError: (ParseError)->Void) -> Self? where S: StringProtocol {
+    @inlinable public static func parse<S>(_ input: S, onValidationError: (ValidationError)->Void) -> Self? where S: StringProtocol {
         return input._withUTF8 { parse($0, onValidationError: onValidationError) }
     }
 
@@ -411,7 +411,7 @@ extension IPAddress.V4 {
         case notAnIPAddress
     }
 
-    public struct ParseError: Error, Equatable, CustomStringConvertible {
+    public struct ValidationError: Equatable, CustomStringConvertible {
         private let errorCode: UInt8
         private init(errorCode: UInt8) {
             self.errorCode = errorCode
@@ -482,7 +482,7 @@ extension IPAddress.V4 {
     ///     A result object containing either the successfully-parsed address, or a failure flag communicating whether parsing
     ///     failed because the string was not in the correct format.
     ///
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ParseError)->Void) -> ParseResult {
+    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ValidationError)->Void) -> ParseResult {
         guard input.isEmpty == false else { onValidationError(.emptyInput); return .failure }
 
         // This algorithm isn't from the WHATWG spec, but supports all the required shorthands.
@@ -605,7 +605,7 @@ extension IPAddress.V4 {
     /// - returns:
     ///     Either the successfully-parsed address, or `.none` if parsing failed.
     ///
-    public static func parse_simple(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ParseError)->Void) -> Self? {
+    public static func parse_simple(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ValidationError)->Void) -> Self? {
 
         var result      = UInt32(0)
         var idx         = input.startIndex

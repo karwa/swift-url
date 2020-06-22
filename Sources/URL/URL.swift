@@ -432,6 +432,7 @@ extension XURL.Parser {
     
     public struct ValidationError: Equatable, CustomStringConvertible {
         private var code: UInt8
+        private var hostParserError: XURL.Host.ValidationError? = nil
 
         // Named errors and their descriptions/examples taken from:
         // https://github.com/whatwg/url/pull/502 on 15.06.2020
@@ -457,6 +458,10 @@ extension XURL.Parser {
         internal static var unexpectedEmptyPath:                Self { Self(code: 19) }
         internal static var invalidURLCodePoint:                Self { Self(code: 20) }
         internal static var unescapedPercentSign:               Self { Self(code: 21) }
+        
+        internal static func hostParserError(_ err: XURL.Host.ValidationError) -> Self {
+            Self(code: 22, hostParserError: err)
+        }
         // TODO: host-related errors. Map these to our existing host-parser errors.
         internal static var unclosedIPv6Address:                Self { Self(code: 22) }
         internal static var domainToASCIIFailure:               Self { Self(code: 23) }
@@ -618,6 +623,8 @@ extension XURL.Parser {
                 return #"""
                 A base URL is required.
                 """#
+            case _ where self.code == Self.hostParserError(.ipv6AddressError(.emptyInput)).code:
+                return self.hostParserError!.description
             default:
                 return "??"
             }
@@ -1002,7 +1009,9 @@ extension XURL.Parser {
                         validationFailure(.unexpectedPortWithoutHost)
                         return nil
                     }
-                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSpecialScheme == nil) else {
+                    guard let parsedHost = XURL.Host.parse(
+                        buffer, isNotSpecial: urlSpecialScheme == nil,
+                        onValidationError: { onValidationError(.hostParserError($0)) }) else {
                         return nil
                     }
                     url.host = parsedHost
@@ -1021,7 +1030,9 @@ extension XURL.Parser {
                             break inputLoop
                         }
                     }
-                    guard let parsedHost = XURL.Host(buffer, isNotSpecial: urlSpecialScheme == nil) else {
+                    guard let parsedHost = XURL.Host.parse(
+                        buffer, isNotSpecial: urlSpecialScheme == nil,
+                        onValidationError: { onValidationError(.hostParserError($0)) }) else {
                         return nil
                     }
                     url.host = parsedHost
@@ -1141,7 +1152,9 @@ extension XURL.Parser {
                         if stateOverride != nil { break inputLoop }
                         state = .pathStart
                     } else {
-                        guard let parsedHost = XURL.Host(buffer, isNotSpecial: false) else { 
+                        guard let parsedHost = XURL.Host.parse(
+                            buffer, isNotSpecial: false,
+                            onValidationError: { onValidationError(.hostParserError($0)) }) else {
                             return nil
                         }
                         url.host = (parsedHost == .domain("localhost")) ? .empty : parsedHost

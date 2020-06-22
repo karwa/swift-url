@@ -22,9 +22,9 @@ extension XURL.Host {
 
 extension XURL.Host {
 
-    public enum ParseError: Error, Equatable, CustomStringConvertible {
-        case ipv4AddressError(IPAddress.V4.ParseError)
-        case ipv6AddressError(IPAddress.V6.ParseError)
+    public enum ValidationError: Equatable, CustomStringConvertible {
+        case ipv4AddressError(IPAddress.V4.ValidationError)
+        case ipv6AddressError(IPAddress.V6.ValidationError)
         case opaqueHostError(OpaqueHost.ValidationError)
         case hostParserError(HostParserError)
 
@@ -60,27 +60,22 @@ extension XURL.Host {
         }
     }
 
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>, isNotSpecial: Bool = false) -> Result<Self, ParseError> {
+    public static func parse(_ input: UnsafeBufferPointer<UInt8>, isNotSpecial: Bool = false, onValidationError: (ValidationError)->Void) -> Self? {
 
         guard input.isEmpty == false else { 
-            return .success(.empty)
+            return .empty
         }        
         if input.first == ASCII.leftSquareBracket {
             guard input.last == ASCII.rightSquareBracket else {
-                return .failure(.hostParserError(.expectedClosingSquareBracket))
+                onValidationError(.hostParserError(.expectedClosingSquareBracket))
+                return nil
             }
-            if let address = IPAddress.V6.parse(UnsafeBufferPointer(rebasing: input.dropFirst().dropLast()), onValidationError: { _ in }) {
-                return .success(.ipv6Address(address))
-            } else {
-                return .failure(.ipv6AddressError(.emptyInput)) // FIXME
-            }
+            let slice = UnsafeBufferPointer(rebasing: input.dropFirst().dropLast())
+            return IPAddress.V6.parse(slice, onValidationError: { onValidationError(.ipv6AddressError($0)) }).map { .ipv6Address($0) }
         }
 
         if isNotSpecial {
-            guard let host = OpaqueHost.parse(input, onValidationError: { _ in }) else {
-                return .failure(.opaqueHostError(.invalidPercentEscaping)) // FIXME
-            }
-            return .success(.opaque(host))
+            return OpaqueHost.parse(input, onValidationError: { onValidationError(.opaqueHostError($0)) }).map { .opaque($0) }
         }
 
         // TODO: Make this lazy.
@@ -92,24 +87,28 @@ extension XURL.Host {
         // 7. If asciiDomain is failure, validation error, return failure.
         //
         if let error = fake_domain2ascii(&domain) {
-            return .failure(.hostParserError(error))
+            onValidationError(.hostParserError(error))
+            return nil
         }
         
         return domain.withUnsafeBufferPointer { asciiDomain in
             if asciiDomain.contains(where: { ASCII($0)?.isForbiddenHostCodePoint ?? false }) {
-                return .failure(.hostParserError(.containsForbiddenHostCodePoint))
+                onValidationError(.hostParserError(.containsForbiddenHostCodePoint))
+                return nil
             }
 
-            switch IPAddress.V4.parse(asciiDomain, onValidationError: { _ in }) {
+            var ipv4Error: IPAddress.V4.ValidationError?
+            switch IPAddress.V4.parse(asciiDomain, onValidationError: { ipv4Error = $0 }) {
             case .success(let address):
-                return .success(.ipv4Address(address))
+                return .ipv4Address(address)
             case .failure:
-                return .failure(.ipv4AddressError(.tooManyPieces)) // FIXME
+                onValidationError(.ipv4AddressError(ipv4Error!))
+                return nil
             case .notAnIPAddress:
                 break
             }
             
-            return .success(.domain(String(decoding: asciiDomain, as: UTF8.self)))
+            return .domain(String(decoding: asciiDomain, as: UTF8.self))
         }
     }
 }
@@ -126,12 +125,12 @@ func fake_domain2ascii(_ domain: inout Array<UInt8>) -> XURL.Host.HostParserErro
 
 extension XURL.Host {
 
-    @inlinable public static func parse<S>(_ input: S, isNotSpecial: Bool = false) -> Result<Self, ParseError> where S: StringProtocol {
-        return input._withUTF8 { Self.parse($0, isNotSpecial: isNotSpecial) }
+    @inlinable public static func parse<S>(_ input: S, isNotSpecial: Bool = false, onValidationError: (ValidationError)->Void) -> Self? where S: StringProtocol {
+        return input._withUTF8 { Self.parse($0, isNotSpecial: isNotSpecial, onValidationError: onValidationError) }
     }
 
     @inlinable public init?<S>(_ input: S, isNotSpecial: Bool = false) where S: StringProtocol {
-        guard case .success(let parsed) = Self.parse(input, isNotSpecial: isNotSpecial) else { return nil }
+        guard let parsed = Self.parse(input, isNotSpecial: isNotSpecial, onValidationError: { _ in }) else { return nil }
         self = parsed 
     }
 }
