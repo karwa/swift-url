@@ -282,25 +282,6 @@ Note: Unicode requirements of URLs:
 - Query and Fragment are both ASCII strings
 
 */
-extension Character {
-    private var asciiValue: UInt8? {
-        self.isASCII ? self.utf8.first.unsafelyUnwrapped : nil
-    }
-
-    fileprivate var isC0OrSpace: Bool {
-        self.asciiValue.map { 
-            (0x00...0x20).contains($0)
-            } ?? false
-    }
-
-    fileprivate var isASCIINewlineOrTab: Bool {
-        self.asciiValue.map { 
-            $0 == 0x09 // TAB 
-                || $0 == 0x0A // LF
-                || $0 == 0x0D // CR
-            } ?? false
-    }
-}
 
 extension StringProtocol {
 
@@ -688,19 +669,28 @@ extension XURL.Parser {
     private static func _parse(_ input: Substring, base: XURL.Components?,
              		            url: XURL.Components?, stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? {
 
-        func validationFailure(_ msg: ValidationError) {
-            onValidationError(msg)
-        }
         var input = input[...]
 
         // 1. Trim leading/trailing C0 control characters and spaces.
-        input = input.trim { $0.isC0OrSpace }
-        
-        // TODO: Add validation error.
+        input = input.trim {
+            switch ASCII($0) {
+            case ASCII.ranges.controlCharacters?: fallthrough
+            case .space?:                         return true
+            default: return false
+            }
+        }
+        // TODO: Add validation error when C0/space characters present.
 
         // 2. Remove all ASCII newlines and tabs. 
-        let invalidRanges = input.subranges { $0.isASCIINewlineOrTab }
-        if !invalidRanges.isEmpty { validationFailure(.unexpectedASCIITabOrNewline) }
+        let invalidRanges = input.subranges {
+            switch ASCII($0) {
+            case .horizontalTab?:  fallthrough
+            case .lineFeed?:       fallthrough
+            case .carriageReturn?: return true
+            default: return false
+            }
+        }
+        if !invalidRanges.isEmpty { onValidationError(.unexpectedASCIITabOrNewline) }
         input.removeSubranges(invalidRanges)
 
         // 3. Begin state machine.
@@ -742,7 +732,7 @@ extension XURL.Parser {
                     state = .scheme
                 default:
                     guard stateOverride == nil else {
-                        validationFailure(.invalidSchemeStart)
+                        onValidationError(.invalidSchemeStart)
                         return nil
                     }
                     state = .noScheme
@@ -761,7 +751,7 @@ extension XURL.Parser {
                     break // Handled below.
                 default:
                     guard stateOverride == nil else {
-                        validationFailure(.invalidScheme)
+                        onValidationError(.invalidScheme)
                         return nil
                     }
                     buffer = ""
@@ -796,7 +786,7 @@ extension XURL.Parser {
                     state = .file
                     let nextIdx = input.index(after: idx)
                     if !input[nextIdx...].hasPrefix("//") { // FIXME: ASCII check.
-                        validationFailure(.fileSchemeMissingFollowingSolidus)
+                        onValidationError(.fileSchemeMissingFollowingSolidus)
                     }
                 case .some(_):
                     if base?.scheme == url.scheme {
@@ -821,12 +811,12 @@ extension XURL.Parser {
                 // `c` is only checked against known ASCII values and never copied to the result.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 guard let base = base else {
-                    validationFailure(.missingSchemeNonRelativeURL)
+                    onValidationError(.missingSchemeNonRelativeURL)
                     return nil
                 }
                 guard base.cannotBeABaseURL == false else {
                     guard c == ASCII.numberSign else {
-                        validationFailure(.missingSchemeNonRelativeURL)
+                        onValidationError(.missingSchemeNonRelativeURL)
                         return nil
                     }
                     url.scheme   = base.scheme
@@ -846,7 +836,7 @@ extension XURL.Parser {
 
             case .specialRelativeOrAuthority:
                 guard input[idx...].hasPrefix("//") else { // FIXME: ASCII check.
-                    validationFailure(.relativeURLMissingBeginningSolidus)
+                    onValidationError(.relativeURLMissingBeginningSolidus)
                     state = .relative
                     continue // Do not increment index.    
                 }
@@ -863,7 +853,7 @@ extension XURL.Parser {
             case .relative:
                 guard let base = base else {
                     // Note: The spec doesn't say what happens here if base is nil.
-                    validationFailure(._baseURLRequired)
+                    onValidationError(._baseURLRequired)
                     return nil
                 }
                 url.scheme = base.scheme
@@ -878,7 +868,7 @@ extension XURL.Parser {
                 let c: ASCII = ASCII(input[idx]) ?? .null
                 switch c {
                 case .backslash where url.isSpecial:
-                    validationFailure(.unexpectedReverseSolidus)
+                    onValidationError(.unexpectedReverseSolidus)
                     state = .relativeSlash
                 case .forwardSlash:
                     state = .relativeSlash
@@ -917,12 +907,12 @@ extension XURL.Parser {
                         state = .authority
                     }
                 case .backslash where urlIsSpecial:
-                    validationFailure(.unexpectedReverseSolidus)
+                    onValidationError(.unexpectedReverseSolidus)
                     state = .specialAuthorityIgnoreSlashes
                 default:
                     // Note: The spec doesn't say what happens here if base is nil.
                     guard let base = base else {
-                        validationFailure(._baseURLRequired)
+                        onValidationError(._baseURLRequired)
                         return nil
                     }
                     url.copyAuthority(from: base)
@@ -933,7 +923,7 @@ extension XURL.Parser {
             case .specialAuthoritySlashes:
                 state = .specialAuthorityIgnoreSlashes
                 guard input[idx...].hasPrefix("//") else { // FIXME: ASCII check.
-                    validationFailure(.missingSolidusBeforeAuthority)
+                    onValidationError(.missingSolidusBeforeAuthority)
                     continue // Do not increment index.
                 }
                 idx = input.index(after: idx)
@@ -946,7 +936,7 @@ extension XURL.Parser {
                     state = .authority
                     continue // Do not increment index.
                 }
-                validationFailure(.missingSolidusBeforeAuthority)
+                onValidationError(.missingSolidusBeforeAuthority)
 
             case .authority:
                 // Erase 'endIndex' to `ASCII.forwardSlash`, as they are handled the same,
@@ -955,7 +945,7 @@ extension XURL.Parser {
                 let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
                 case .commercialAt?:
-                    validationFailure(.unexpectedCommercialAt)
+                    onValidationError(.unexpectedCommercialAt)
                     if flag_at {
                         buffer.insert(contentsOf: "%40", at: buffer.startIndex)
                     }
@@ -982,7 +972,7 @@ extension XURL.Parser {
                     fallthrough
                 case ASCII.backslash? where url.isSpecial:
                     if flag_at, buffer.isEmpty {
-                        validationFailure(.missingCredentials)
+                        onValidationError(.missingCredentials)
                         return nil
                     }
                     idx    = input.index(idx, offsetBy: -1 * buffer.count)
@@ -1006,7 +996,7 @@ extension XURL.Parser {
                 switch c {
                 case .colon? where flag_squareBracket == false:
                     guard buffer.isEmpty == false else {
-                        validationFailure(.unexpectedPortWithoutHost)
+                        onValidationError(.unexpectedPortWithoutHost)
                         return nil
                     }
                     guard let parsedHost = XURL.Host.parse(
@@ -1023,10 +1013,10 @@ extension XURL.Parser {
                 case .backslash? where urlSpecialScheme != nil:
                     if buffer.isEmpty {
                         if urlSpecialScheme != nil {
-                            validationFailure(.emptyHostSpecialScheme)
+                            onValidationError(.emptyHostSpecialScheme)
                             return nil
                         } else if stateOverride != nil, (url.hasCredentials || url.port != nil) {
-                            validationFailure(.hostInvalid)
+                            onValidationError(.hostInvalid)
                             break inputLoop
                         }
                     }
@@ -1065,7 +1055,7 @@ extension XURL.Parser {
                 case _ where stateOverride != nil:
                     if buffer.isEmpty == false {
                         guard let parsedInteger = UInt16(buffer) else {
-                            validationFailure(.portOutOfRange)
+                            onValidationError(.portOutOfRange)
                             return nil
                         }
                         url.port = (parsedInteger == SpecialScheme(rawValue: url.scheme)?.defaultPort) ? nil : parsedInteger
@@ -1075,7 +1065,7 @@ extension XURL.Parser {
                     state = .pathStart
                     continue // Do not increment index.
                 default:
-                    validationFailure(.portInvalid)
+                    onValidationError(.portInvalid)
                     return nil
                 }
 
@@ -1083,7 +1073,7 @@ extension XURL.Parser {
                 url.scheme = SpecialScheme.file.rawValue
                 if idx != input.endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
                     if c == .backslash {
-                        validationFailure(.unexpectedReverseSolidus)
+                        onValidationError(.unexpectedReverseSolidus)
                     }
                     state = .fileSlash
                     break stateMachine
@@ -1108,7 +1098,7 @@ extension XURL.Parser {
                 default:
                     url.query = nil
                     if input[idx...].hasWindowsDriveLetterPrefix() {
-                        validationFailure(.unexpectedWindowsDriveLetter)
+                        onValidationError(.unexpectedWindowsDriveLetter)
                         url.host = nil
                         url.path = []
                     } else {
@@ -1121,7 +1111,7 @@ extension XURL.Parser {
             case .fileSlash:
                 if idx != input.endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
                     if c == .backslash {
-                        validationFailure(.unexpectedReverseSolidus)
+                        onValidationError(.unexpectedReverseSolidus)
                     }
                     state = .fileHost
                     break stateMachine
@@ -1144,7 +1134,7 @@ extension XURL.Parser {
                 switch c {
                 case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: // or endIndex.
                     if stateOverride == nil, buffer.isWindowsDriveLetter {
-                        validationFailure(.unexpectedWindowsDriveLetterHost)
+                        onValidationError(.unexpectedWindowsDriveLetterHost)
                         state = .path
                         // Note: buffer is intentionally not reset and used in the path-parsing state.
                     } else if buffer.isEmpty {
@@ -1182,7 +1172,7 @@ extension XURL.Parser {
                 switch c {
                 case _ where url.isSpecial:
                     if c == .backslash {
-                        validationFailure(.unexpectedReverseSolidus)
+                        onValidationError(.unexpectedReverseSolidus)
                     }
                     state = .path
                     if (c == .forwardSlash || c == .backslash) == false {
@@ -1215,12 +1205,12 @@ extension XURL.Parser {
                 guard isPathComponentTerminator else {
                     // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
                     if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
-                        validationFailure(.invalidURLCodePoint)
+                        onValidationError(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
                         let nextTwo = input[idx...].dropFirst().prefix(2)
                         if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                            validationFailure(.unescapedPercentSign)
+                            onValidationError(.unescapedPercentSign)
                         }
                     }
                     buffer.append(input[idx].percentEscaped(where: url_escape_path))
@@ -1236,7 +1226,7 @@ extension XURL.Parser {
                 // the state (idx == endIndex) by the ASCII.null character.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx])! : ASCII.null
                 if c == .backslash {
-                    validationFailure(.unexpectedReverseSolidus)
+                    onValidationError(.unexpectedReverseSolidus)
                 }
                 switch buffer {
                 case _ where buffer.isDoubleDotPathSegment:
@@ -1249,7 +1239,7 @@ extension XURL.Parser {
                 default:
                     if urlSpecialScheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter {
                         if !(url.host == nil || url.host == .empty) {
-                            validationFailure(.unexpectedHostFileScheme)
+                            onValidationError(.unexpectedHostFileScheme)
                             url.host = .empty
                         }
                         let secondChar = buffer.index(after: buffer.startIndex)
@@ -1260,7 +1250,7 @@ extension XURL.Parser {
                 buffer = ""
                 if urlSpecialScheme == .file, (c == .null /* endIndex */ || c == .questionMark || c == .numberSign) {
                     while url.path.count > 1, url.path[0].isEmpty {
-                        validationFailure(.unexpectedEmptyPath)
+                        onValidationError(.unexpectedEmptyPath)
                         url.path.removeFirst()
                     }
                 }
@@ -1290,12 +1280,12 @@ extension XURL.Parser {
                 default:
                     // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
                     if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
-                        validationFailure(.invalidURLCodePoint)
+                        onValidationError(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
                         let nextTwo = input[idx...].dropFirst().prefix(2)
                         if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                            validationFailure(.unescapedPercentSign)
+                            onValidationError(.unescapedPercentSign)
                         }
                     }
                     let escapedChar = input[idx].percentEscaped(where: url_escape_c0)
@@ -1315,12 +1305,12 @@ extension XURL.Parser {
                 }
                 // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
                 if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
-                    validationFailure(.invalidURLCodePoint)
+                    onValidationError(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
                     let nextTwo = input[idx...].dropFirst().prefix(2)
                     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                        validationFailure(.unescapedPercentSign)
+                        onValidationError(.unescapedPercentSign)
                     }
                 }
                 let urlIsSpecial = url.isSpecial
@@ -1345,12 +1335,12 @@ extension XURL.Parser {
                 }
                 // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
                 if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
-                    validationFailure(.invalidURLCodePoint)
+                    onValidationError(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
                     let nextTwo = input[idx...].dropFirst().prefix(2)
                     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                        validationFailure(.unescapedPercentSign)
+                        onValidationError(.unescapedPercentSign)
                     }
                 }
                 let escapedChar = input[idx].percentEscaped(where: url_escape_fragment)
