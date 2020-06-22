@@ -128,3 +128,74 @@ extension ASCII {
         }
     }
 }
+
+extension Collection where Element == UInt8 {
+
+    /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
+    ///
+    /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
+    ///
+    func isWindowsDriveLetter() -> Bool {
+        var it = makeIterator()
+        guard let char1 = it.next(), let ascii1 = ASCII(char1), ASCII.ranges.isAlpha(ascii1) else { return false }
+        guard let char2 = it.next(), let ascii2 = ASCII(char2), (ascii2 == .colon || ascii2 == .verticalBar) else { return false }
+        guard it.next() == nil else { return false }
+        return true
+    }
+    
+    /// A normalized Windows drive letter is a Windows drive letter of which the second code point is U+003A (:).
+    ///
+    /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
+    ///
+    func isNormalisedWindowsDriveLetter() -> Bool {
+        isWindowsDriveLetter() && (self.dropFirst().first.map { ASCII($0) == .colon } ?? false)
+    }
+
+    /// A string starts with a Windows drive letter if all of the following are true:
+    ///
+    /// - its length is greater than or equal to 2
+    /// - its first two code points are a Windows drive letter
+    /// - its length is 2 or its third code point is U+002F (/), U+005C (\), U+003F (?), or U+0023 (#).
+    ///
+    /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
+    ///
+    func hasWindowsDriveLetterPrefix() -> Bool {
+        var it = makeIterator()
+        guard let char1 = it.next(), let ascii1 = ASCII(char1), ASCII.ranges.isAlpha(ascii1) else { return false }
+        guard let char2 = it.next(), let ascii2 = ASCII(char2), (ascii2 == .colon || ascii2 == .verticalBar) else { return false }
+        guard let char3 = it.next() else { return true }
+        switch ASCII(char3) {
+        case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: return true
+        default: return false
+        }
+    }
+
+    /// Returns true if the next contents of `iterator` are either the ASCII period, %2e, or %2E.
+    /// Otherwise, returns false.
+    private func checkForDotOrCaseInsensitivePercentEncodedDot(in iterator: inout Iterator) -> Bool {
+        guard let char1 = iterator.next(), let ascii1 = ASCII(char1) else { return false }
+        if ascii1 == .period { return true }
+        guard char1 == .percentSign, iterator.next() == ASCII.n2,
+              let third = iterator.next(), third == ASCII.E || third == ASCII.e else { return false }
+        return true
+    }
+
+    func isSingleDotPathSegment() -> Bool {
+        var it = makeIterator()
+        guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+        guard it.next() == nil else { return false }
+        return true
+    }
+
+    func isDoubleDotPathSegment() -> Bool {
+        var it = makeIterator()
+        guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+        guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+        guard it.next() == nil else { return false }
+        return true
+    }
+    
+    func hasDoubleASCIIForwardslashPrefix() -> Bool {
+        return self.prefix(2).elementsEqual("//".utf8)
+    }
+}
