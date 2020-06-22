@@ -26,6 +26,24 @@ extension StringProtocol {
     }
 }
 
+extension Collection where Element == UInt8 {
+    
+    /// If the byte at `index` is a UTF8-encoded codepoint's header byte, returns
+    /// the `SubSequence` of the entire codepoint. Returns `nil` otherwise
+    /// (i.e. the byte at `index` is a continuation byte or not a valid UTF8 header byte).
+    ///
+    internal func utf8EncodedCodePoint(startingAt index: Index) -> SubSequence? {
+        let length = (~self[index]).leadingZeroBitCount
+        switch length {
+        case 0:  return index != endIndex ? self[index..<self.index(after: index)] : nil // ASCII.
+        case 2:  fallthrough
+        case 3:  fallthrough
+        case 4:  return self.index(index, offsetBy: length, limitedBy: self.endIndex).map { self[index..<$0] }
+        default: return nil // Continuation byte or invald UTF8.
+        }
+    }
+}
+
 /// Performs the given closure with a stack-buffer whose UTF8 code-unit capacity matches
 /// the small-string capacity on the current platform. The goal is that creating a String
 /// from this buffer won't cause a heap allocation.

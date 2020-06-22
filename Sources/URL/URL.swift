@@ -1,5 +1,4 @@
 import Algorithms // for Collection.trim
-import SE0270_RangeSet
 
 public var __BREAKPOINT__: ()->Void = {}
 
@@ -283,7 +282,7 @@ Note: Unicode requirements of URLs:
 
 */
 
-extension StringProtocol {
+extension Collection where Element == UInt8 {
 
     /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
 	///
@@ -291,8 +290,8 @@ extension StringProtocol {
     ///
     var isWindowsDriveLetter: Bool {
         var it = makeIterator()
-        guard let first = it.next(), ASCII.ranges.isAlpha(first) else { return false }
-        guard let second = it.next(), (second == ASCII.colon || second == ASCII.verticalBar) else { return false }
+        guard let char1 = it.next(), let ascii1 = ASCII(char1), ASCII.ranges.isAlpha(ascii1) else { return false }
+        guard let char2 = it.next(), let ascii2 = ASCII(char2), (ascii2 == .colon || ascii2 == .verticalBar) else { return false }
         guard it.next() == nil else { return false }
         return true
     }
@@ -302,7 +301,7 @@ extension StringProtocol {
     /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
     ///
     var isNormalisedWindowsDriveLetter: Bool {
-        isWindowsDriveLetter && self.dropFirst().first == ASCII.colon
+        isWindowsDriveLetter && (self.dropFirst().first.map { ASCII($0) == .colon } ?? false)
     }
 
 	/// A string starts with a Windows drive letter if all of the following are true:
@@ -315,23 +314,21 @@ extension StringProtocol {
     ///
     func hasWindowsDriveLetterPrefix() -> Bool {
         var it = makeIterator()
-        guard let first = it.next(), ASCII.ranges.isAlpha(first) else { return false }
-        guard let second = it.next(), (second == ASCII.colon || second == ASCII.verticalBar) else { return false }
-        guard let third = it.next() else { return true }
-        switch third {
-        case ASCII.forwardSlash, ASCII.backslash, ASCII.questionMark, ASCII.numberSign:
-            return true
-        default:
-            return false
+        guard let char1 = it.next(), let ascii1 = ASCII(char1), ASCII.ranges.isAlpha(ascii1) else { return false }
+        guard let char2 = it.next(), let ascii2 = ASCII(char2), (ascii2 == .colon || ascii2 == .verticalBar) else { return false }
+        guard let char3 = it.next() else { return true }
+        switch ASCII(char3) {
+        case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: return true
+        default: return false
         }
     }
 
     /// Returns true if the next contents of `iterator` are either the ASCII period, %2e, or %2E.
     /// Otherwise, returns false.
     private func checkForDotOrCaseInsensitivePercentEncodedDot(in iterator: inout Iterator) -> Bool {
-        guard let first = iterator.next() else { return false }
-        if first == ASCII.period { return true }
-        guard first == ASCII.percentSign, iterator.next() == ASCII.n2,
+        guard let char1 = iterator.next(), let ascii1 = ASCII(char1) else { return false }
+        if ascii1 == .period { return true }
+        guard char1 == .percentSign, iterator.next() == ASCII.n2,
               let third = iterator.next(), third == ASCII.E || third == ASCII.e else { return false }
         return true
     }
@@ -350,11 +347,15 @@ extension StringProtocol {
         guard it.next() == nil else { return false }
         return true
     }
+    
+    func hasDoubleASCIIForwardslashPrefix() -> Bool {
+        return self.prefix(2).elementsEqual("//".utf8)
+    }
 }
 
 func shortenURLPath(_ path: inout [String], isFileScheme: Bool) {
     guard path.isEmpty == false else { return }
-    if isFileScheme, path.count == 1, path[0].isNormalisedWindowsDriveLetter { return }
+    if isFileScheme, path.count == 1, path[0].utf8.isNormalisedWindowsDriveLetter { return }
     path.removeLast()
 }
 
@@ -385,6 +386,13 @@ extension XURL.Parser {
             case .ws:    return 80
             case .wss:   return 443
             }
+        }
+        
+        init?<C>(asciiBytes: C) where C: Collection, C.Element == UInt8 {
+            guard let parsed = Self(rawValue: String(decoding: asciiBytes, as: Unicode.ASCII.self)) else {
+                return nil
+            }
+            self = parsed
         }
     }
 
@@ -451,6 +459,7 @@ extension XURL.Parser {
         internal static var hostForbiddenCodePoint:             Self { Self(code: 25) }
         // This one is not in the spec.
         internal static var _baseURLRequired:                   Self { Self(code: 99) }
+        internal static var _invalidUTF8:                       Self { Self(code: 98) }
         
         public var description: String {
             switch self {
@@ -617,13 +626,13 @@ extension XURL.Parser {
 
     public static func parse<S>(_ input: S, base: String? = nil) -> XURL.Components? where S: StringProtocol {
         if let baseString = base, baseString.isEmpty == false {
-            return parse(baseString[...], baseURL: nil).flatMap { parse(input[...], baseURL: $0) }
+            return parse(baseString, baseURL: nil).flatMap { parse(input[...], baseURL: $0) }
         }
         return parse(input[...], baseURL: nil)
     }
 
     public static func parse<S>(_ input: S, baseURL: XURL.Components?) -> XURL.Components? where S: StringProtocol {
-        return _parse(input[...] as! Substring, base: baseURL, url: nil, stateOverride: nil, onValidationError: { _ in })
+        return input._withUTF8 { _parse($0, base: baseURL, url: nil, stateOverride: nil, onValidationError: { _ in }) }
     }
     
     // Parse, reporting validation errors.
@@ -635,27 +644,32 @@ extension XURL.Parser {
     
     public static func parseAndReport<S>(_ input: S, base: String? = nil) -> (url: Result?, base: Result?) where S: StringProtocol {
         if let baseString = base, baseString.isEmpty == false {
-            let baseResult = parseAndReport(baseString[...], baseURL: nil)
+            let baseResult = parseAndReport(baseString, baseURL: nil)
             return baseResult.components.map { (parseAndReport(input, baseURL: $0), baseResult) } ?? (nil, baseResult)
         }
         return (parseAndReport(input, baseURL: nil), nil)
     }
     
     public static func parseAndReport<S>(_ input: S, baseURL: XURL.Components?) -> Result where S: StringProtocol {
-        var errors: [ValidationError] = []
-        errors.reserveCapacity(8)
-        let components = _parse(input[...] as! Substring, base: baseURL, url: nil, stateOverride: nil, onValidationError: { errors.append($0) })
-        return Result(components: components, validationErrors: errors)
+        return input._withUTF8 { utf8 in
+            var errors: [ValidationError] = []
+            errors.reserveCapacity(8)
+            let components = _parse(utf8, base: baseURL, url: nil, stateOverride: nil, onValidationError: { errors.append($0) })
+            return Result(components: components, validationErrors: errors)
+        }
     }
     
     // Modification.
     
     internal static func modify<S>(_ input: S, url: XURL.Components?, stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? where S: StringProtocol {
-        return _parse(input[...] as! Substring, base: nil, url: url, stateOverride: stateOverride, onValidationError: onValidationError)
+        return input._withUTF8 { _parse($0, base: nil, url: url, stateOverride: stateOverride, onValidationError: onValidationError) }
     }
+}
 
-    // Parser algorithm.
-    
+// Parsing algorithm.
+
+extension XURL.Parser {
+
     /// The "Basic URL Parser" algorithm described by:
     /// https://url.spec.whatwg.org/#url-parsing as of 14.06.2020
     ///
@@ -667,39 +681,54 @@ extension XURL.Parser {
     ///     - onValidationError:	A callback for handling any validation errors that occur. Most of these are non-fatal.
     /// - returns:	The parsed URL components, or `nil` if the input failed to parse.
     ///
-    private static func _parse(_ input: Substring, base: XURL.Components?,
-             		            url: XURL.Components?, stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? {
+    fileprivate static func _parse<C>(
+        _ input: C, base: XURL.Components?, url: XURL.Components?,
+        stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? where C: BidirectionalCollection, C.Element == UInt8 {
 
         var input = input[...]
-
+        
         // 1. Trim leading/trailing C0 control characters and spaces.
-        input = input.trim {
+        let trimmedInput = input.trim {
             switch ASCII($0) {
             case ASCII.ranges.controlCharacters?: fallthrough
             case .space?:                         return true
             default: return false
             }
         }
-        // TODO: Add validation error when C0/space characters present.
+        if trimmedInput.startIndex != input.startIndex || trimmedInput.endIndex != input.endIndex {
+            onValidationError(.unexpectedC0ControlOrSpace)
+        }
+        input = trimmedInput
 
-        // 2. Remove all ASCII newlines and tabs. 
-        let invalidRanges = input.subranges {
-            switch ASCII($0) {
-            case .horizontalTab?:  fallthrough
-            case .lineFeed?:       fallthrough
-            case .carriageReturn?: return true
-            default: return false
+        // 2. Remove all ASCII newlines and tabs.
+        func isASCIITabOrNewline(_ byte: UInt8) -> Bool {
+            switch ASCII(byte) {
+            case .horizontalTab?:   fallthrough
+            case .lineFeed?:        fallthrough
+            case .carriageReturn?:  return true
+            default: _onFastPath(); return false
             }
         }
-        if !invalidRanges.isEmpty { onValidationError(.unexpectedASCIITabOrNewline) }
-        input.removeSubranges(invalidRanges)
+        if input.contains(where: isASCIITabOrNewline) {
+            onValidationError(.unexpectedASCIITabOrNewline)
+            return _parse_stateMachine(input.lazy.filter { isASCIITabOrNewline($0) == false }, base: base, url: url,
+                                       stateOverride: stateOverride, onValidationError: onValidationError)
+        } else {
+            return _parse_stateMachine(input, base: base, url: url,
+                                       stateOverride: stateOverride, onValidationError: onValidationError)
+        }
+    }
+    
+    private static func _parse_stateMachine<C>(
+        _ input: C, base: XURL.Components?, url: XURL.Components?,
+        stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? where C: Collection, C.Element == UInt8 {
 
         // 3. Begin state machine.
         var state = stateOverride ?? .schemeStart
         var url   = url ?? XURL.Components()
 
         var idx    = input.startIndex
-        var buffer = ""
+        var buffer = [UInt8](); buffer.reserveCapacity(32)
         var flag_at = false // @flag in spec.
         var flag_passwordTokenSeen = false // passwordTokenSeenFlag in spec.
         var flag_squareBracket = false // [] flag in spec.
@@ -717,36 +746,30 @@ extension XURL.Parser {
             //                        typically comes up with `stateOverride`.
             // - `return nil`         means failure.
             // - `continue`           means "loop over inputLoop again, from the beginning (**without** first advancing the character)"
-                
-            // There are also notes about how non-ASCII characters are treated.
-            // The idea is to eventually move to parsing input as an UnsafeBufferPointer<UInt8>, because iterating Strings is slooooow,
-            // and almost all of this logic just checks for patterns of ASCII characters. Hopefully we can isolate any pieces that need
-            // to be unicode-aware.
 
             case .schemeStart:
                 // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
-                // `c` is only used if it is known to be within an allowed ASCII range.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 switch c {
                 case _ where ASCII.ranges.isAlpha(c):
-                    buffer.append(Character(c).lowercased())
+                    buffer.append(c.lowercased.codePoint)
                     state = .scheme
+                    break stateMachine
                 default:
                     guard stateOverride == nil else {
                         onValidationError(.invalidSchemeStart)
                         return nil
                     }
                     state = .noScheme
-                    continue // Do not increment index.
+                    continue // Do not advance index. Non-ASCII characters go through this path.
                 }
                  
             case .scheme:
                 // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
-                // `c` is only used if it is known to be within an allowed ASCII range.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 switch c {
                 case _ where ASCII.ranges.isAlphaNumeric(c), .plus, .minus, .period:
-                    buffer.append(Character(c).lowercased())
+                    buffer.append(c.lowercased.codePoint)
                     break stateMachine
                 case .colon:
                     break // Handled below.
@@ -755,13 +778,13 @@ extension XURL.Parser {
                         onValidationError(.invalidScheme)
                         return nil
                     }
-                    buffer = ""
+                    buffer.removeAll(keepingCapacity: true)
                     state  = .noScheme
                     idx    = input.startIndex
-                    continue // Do not increment index.
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 assert(c == .colon)
-                let bufferSpecialScheme = SpecialScheme(rawValue: buffer)
+                let bufferSpecialScheme = SpecialScheme(asciiBytes: buffer)
                 if stateOverride != nil {
                     let urlSpecialScheme = SpecialScheme(rawValue: url.scheme)
                     if (urlSpecialScheme == nil) != (bufferSpecialScheme == nil) { 
@@ -774,8 +797,8 @@ extension XURL.Parser {
                         break inputLoop
                     }
                 }
-                url.scheme = buffer
-                buffer = ""
+                url.scheme = String(decoding: buffer, as: Unicode.ASCII.self)
+                buffer.removeAll(keepingCapacity: true)
                 if stateOverride != nil {
                     if url.port == bufferSpecialScheme?.defaultPort {
                         url.port = nil
@@ -786,7 +809,7 @@ extension XURL.Parser {
                 case .file:
                     state = .file
                     let nextIdx = input.index(after: idx)
-                    if !input[nextIdx...].hasPrefix("//") { // FIXME: ASCII check.
+                    if !input[nextIdx...].hasDoubleASCIIForwardslashPrefix() {
                         onValidationError(.fileSchemeMissingFollowingSolidus)
                     }
                 case .some(_):
@@ -809,7 +832,6 @@ extension XURL.Parser {
 
             case .noScheme:
                 // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
-                // `c` is only checked against known ASCII values and never copied to the result.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 guard let base = base else {
                     onValidationError(.missingSchemeNonRelativeURL)
@@ -818,7 +840,7 @@ extension XURL.Parser {
                 guard base.cannotBeABaseURL == false else {
                     guard c == ASCII.numberSign else {
                         onValidationError(.missingSchemeNonRelativeURL)
-                        return nil
+                        return nil // Non-ASCII characters get rejected here.
                     }
                     url.scheme   = base.scheme
                     url.path     = base.path
@@ -833,13 +855,13 @@ extension XURL.Parser {
                 } else {
                     state = .relative
                 }
-                continue // Do not increment index.
+                continue // Do not increment index. Non-ASCII characters go through this path.
 
             case .specialRelativeOrAuthority:
-                guard input[idx...].hasPrefix("//") else { // FIXME: ASCII check.
+                guard input[idx...].hasDoubleASCIIForwardslashPrefix() else {
                     onValidationError(.relativeURLMissingBeginningSolidus)
                     state = .relative
-                    continue // Do not increment index.    
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 state = .specialAuthorityIgnoreSlashes
                 idx   = input.index(after: idx)
@@ -847,7 +869,7 @@ extension XURL.Parser {
             case .pathOrAuthority:
                 guard idx != input.endIndex, ASCII(input[idx]) == .forwardSlash else {
                     state = .path
-                    continue // Do not increment index.
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 state = .authority
 
@@ -865,7 +887,6 @@ extension XURL.Parser {
                     break stateMachine
                 }
                 // Erase non-ASCII characters to `ASCII.null`.
-                // `c` is only checked against known ASCII values and never copied to the result.
                 let c: ASCII = ASCII(input[idx]) ?? .null
                 switch c {
                 case .backslash where url.isSpecial:
@@ -892,12 +913,11 @@ extension XURL.Parser {
                     }
                     url.query     = nil
                     state         = .path
-                    continue // Do not increment index.
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 }
 
             case .relativeSlash:
                 // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
-                // `c` is only checked against known ASCII values and never copied to the result.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 let urlIsSpecial = url.isSpecial
                 switch c {
@@ -911,21 +931,20 @@ extension XURL.Parser {
                     onValidationError(.unexpectedReverseSolidus)
                     state = .specialAuthorityIgnoreSlashes
                 default:
-                    // Note: The spec doesn't say what happens here if base is nil.
                     guard let base = base else {
                         onValidationError(._baseURLRequired)
                         return nil
                     }
                     url.copyAuthority(from: base)
                     state = .path
-                    continue // Do not increment index.
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 }
 
             case .specialAuthoritySlashes:
                 state = .specialAuthorityIgnoreSlashes
-                guard input[idx...].hasPrefix("//") else { // FIXME: ASCII check.
+                guard input[idx...].hasDoubleASCIIForwardslashPrefix() else {
                     onValidationError(.missingSolidusBeforeAuthority)
-                    continue // Do not increment index.
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 idx = input.index(after: idx)
 
@@ -935,20 +954,19 @@ extension XURL.Parser {
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 guard c == .forwardSlash || c == .backslash else {
                     state = .authority
-                    continue // Do not increment index.
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 onValidationError(.missingSolidusBeforeAuthority)
 
             case .authority:
                 // Erase 'endIndex' to `ASCII.forwardSlash`, as they are handled the same,
-                // and `c` is not copied to the result in that case.
-                // Note [unicode]: Do not erase non-ASCII characters. They are copied to `buffer`.
+                // and `c` is not copied to the result in that case. Do not erase non-ASCII code-points.
                 let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
                 case .commercialAt?:
                     onValidationError(.unexpectedCommercialAt)
                     if flag_at {
-                        buffer.insert(contentsOf: "%40", at: buffer.startIndex)
+                        buffer.insert(contentsOf: "%40".utf8, at: buffer.startIndex)
                     }
                     flag_at = true
                     // Parse username and password out of "buffer".
@@ -956,19 +974,19 @@ extension XURL.Parser {
                     // we found another '@'; meaning the _first_ '@' was actually part of the password.
                     // e.g. "scheme://user:hello@world@stuff" - the password is actually "hello@world", not "hello".
                     if flag_passwordTokenSeen {
-                        url.password.append(buffer.percentEscaped(where: url_escape_userInfo))
+                        url.password.append(PercentEscaping.encode(bytes: buffer, where: url_escape_userInfo))
                     } else {
                         let passwordTokenIndex = buffer.firstIndex(where: { $0 == ASCII.colon })
                         let passwordStartIndex = passwordTokenIndex.flatMap { buffer.index(after: $0) }
-                        let parsedUsername = buffer[..<(passwordTokenIndex ?? buffer.endIndex)]
-                            .percentEscaped(where: url_escape_userInfo)
-                        let parsedPassword = buffer[(passwordStartIndex ?? buffer.endIndex)...]
-                            .percentEscaped(where: url_escape_userInfo)
+                        let parsedUsername = PercentEscaping.encode(bytes: buffer[..<(passwordTokenIndex ?? buffer.endIndex)],
+                                                                    where: url_escape_userInfo)
+                        let parsedPassword = PercentEscaping.encode(bytes: buffer[(passwordStartIndex ?? buffer.endIndex)...],
+                                                                    where: url_escape_userInfo)
                         url.username.append(parsedUsername)
                         url.password.append(parsedPassword)
                         flag_passwordTokenSeen = (passwordTokenIndex != nil)
                     }
-                    buffer = ""
+                    buffer.removeAll(keepingCapacity: true)
                 case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?: // or endIndex.
                     fallthrough
                 case ASCII.backslash? where url.isSpecial:
@@ -977,11 +995,18 @@ extension XURL.Parser {
                         return nil
                     }
                     idx    = input.index(idx, offsetBy: -1 * buffer.count)
-                    buffer = ""
+                    buffer.removeAll(keepingCapacity: true)
                     state  = .host
                     continue // Do not increment index.
                 default:
-                    buffer.append(input[idx])
+                    // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
+                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                        onValidationError(._invalidUTF8)
+                        return nil
+                    }
+                    buffer.append(contentsOf: codePoint)
+                    idx = codePoint.endIndex
+                    continue // We already skipped `idx` to the end of the code-point.
                 }
 
             case .hostname:
@@ -993,8 +1018,7 @@ extension XURL.Parser {
                     continue // Do not increment index.
                 }
                 // Erase 'endIndex' to `ASCII.forwardSlash`, as they are handled the same,
-                // and `c` is not copied to the result in that case.
-                // Note [unicode]: Do not erase non-ASCII characters. They are copied to `buffer`.
+                // and `c` is not copied to the result in that case. Do not erase non-ASCII code-points.
                 let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
                 case .colon? where flag_squareBracket == false:
@@ -1002,13 +1026,14 @@ extension XURL.Parser {
                         onValidationError(.unexpectedPortWithoutHost)
                         return nil
                     }
-                    guard let parsedHost = XURL.Host.parse(
-                        buffer, isNotSpecial: urlSpecialScheme == nil,
-                        onValidationError: { onValidationError(.hostParserError($0)) }) else {
+                    guard let parsedHost = buffer.withUnsafeBufferPointer({
+                        XURL.Host.parse($0, isNotSpecial: urlSpecialScheme == nil,
+                                        onValidationError: { onValidationError(.hostParserError($0)) })
+                    }) else {
                         return nil
                     }
                     url.host = parsedHost
-                    buffer = ""
+                    buffer.removeAll(keepingCapacity: true)
                     state  = .port
                     if stateOverride == .hostname { break inputLoop }
                 case .forwardSlash?, .questionMark?, .numberSign?: // or endIndex.
@@ -1023,24 +1048,32 @@ extension XURL.Parser {
                             break inputLoop
                         }
                     }
-                    guard let parsedHost = XURL.Host.parse(
-                        buffer, isNotSpecial: urlSpecialScheme == nil,
-                        onValidationError: { onValidationError(.hostParserError($0)) }) else {
+                    guard let parsedHost = buffer.withUnsafeBufferPointer({
+                        XURL.Host.parse($0, isNotSpecial: urlSpecialScheme == nil,
+                                        onValidationError: { onValidationError(.hostParserError($0)) })
+                    }) else {
                         return nil
                     }
                     url.host = parsedHost
-                    buffer = ""
+                    buffer.removeAll(keepingCapacity: true)
                     state  = .pathStart
                     if stateOverride != nil { break inputLoop }
                     continue // Do not increment index.
                 case .leftSquareBracket?:
                     flag_squareBracket = true
-                    buffer.append(Character(ASCII.leftSquareBracket))
+                    buffer.append(ASCII.leftSquareBracket.codePoint)
                 case .rightSquareBracket?:
                     flag_squareBracket = false
-                    buffer.append(Character(ASCII.rightSquareBracket))
+                    buffer.append(ASCII.rightSquareBracket.codePoint)
                 default:
-                    buffer.append(input[idx])
+                    // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
+                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                        onValidationError(._invalidUTF8)
+                        return nil
+                    }
+                    buffer.append(contentsOf: codePoint)
+                    idx = codePoint.endIndex
+                    continue // We already skipped `idx` to the end of the code-point.
                 }
 
             case .port:
@@ -1049,24 +1082,24 @@ extension XURL.Parser {
                 // `c` is only copied if it is known to be within an allowed ASCII range.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? ASCII.null : ASCII.forwardSlash
                 switch c {
-                case _ where ASCII.ranges.digits.contains(c):
-                    buffer.append(Character(c))
+                case ASCII.ranges.digits:
+                    buffer.append(c.codePoint)
                 case .forwardSlash, .questionMark, .numberSign: // or endIndex.
                     fallthrough
                 case .backslash where url.isSpecial:
                     fallthrough
                 case _ where stateOverride != nil:
                     if buffer.isEmpty == false {
-                        guard let parsedInteger = UInt16(buffer) else {
+                        guard let parsedInteger = UInt16(String(decoding: buffer, as: Unicode.ASCII.self)) else {
                             onValidationError(.portOutOfRange)
                             return nil
                         }
                         url.port = (parsedInteger == SpecialScheme(rawValue: url.scheme)?.defaultPort) ? nil : parsedInteger
-                        buffer   = ""
+                        buffer.removeAll(keepingCapacity: true)
                     }
                     if stateOverride != nil { break inputLoop }
                     state = .pathStart
-                    continue // Do not increment index.
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 default:
                     onValidationError(.portInvalid)
                     return nil
@@ -1108,7 +1141,7 @@ extension XURL.Parser {
                         shortenURLPath(&url.path, isFileScheme: true)
                     }
                     state = .path
-                    continue // Do not increment index.
+                    continue // Do not increment index. Non-ASCII characters go through this path.
                 }
 
             case .fileSlash:
@@ -1121,18 +1154,18 @@ extension XURL.Parser {
                 }
                 if let base = base, base.scheme == SpecialScheme.file.rawValue,
                     input[idx...].hasWindowsDriveLetterPrefix() == false {
-                    if let basePathStart = base.path.first, basePathStart.isNormalisedWindowsDriveLetter {
+                    if let basePathStart = base.path.first, basePathStart.utf8.isNormalisedWindowsDriveLetter {
                         url.path.append(basePathStart)
                     } else {
                         url.host = base.host
                     }
                 }
                 state = .path
-                continue // Do not increment index.
+                continue // Do not increment index. Non-ASCII characters go through this path.
 
             case .fileHost:
                 // Erase 'endIndex' to `ASCII.forwardSlash` as it is handled the same and not copied to output.
-                // Note [unicode]: Do not erase non-ASCII characters. They are copied to `buffer`.
+                // Do not erase non-ASCII characters.
                 let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
                 case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: // or endIndex.
@@ -1145,19 +1178,27 @@ extension XURL.Parser {
                         if stateOverride != nil { break inputLoop }
                         state = .pathStart
                     } else {
-                        guard let parsedHost = XURL.Host.parse(
-                            buffer, isNotSpecial: false,
-                            onValidationError: { onValidationError(.hostParserError($0)) }) else {
+                        guard let parsedHost = buffer.withUnsafeBufferPointer({
+                            XURL.Host.parse($0, isNotSpecial: false,
+                                            onValidationError: { onValidationError(.hostParserError($0)) })
+                        }) else {
                             return nil
                         }
                         url.host = (parsedHost == .domain("localhost")) ? .empty : parsedHost
                         if stateOverride != nil { break inputLoop }
-                        buffer = ""
+                        buffer.removeAll(keepingCapacity: true)
                         state  = .pathStart
                     }
                     continue // Do not increment index.
                 default:
-                    buffer.append(input[idx])
+                    // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
+                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                        onValidationError(._invalidUTF8)
+                        return nil
+                    }
+                    buffer.append(contentsOf: codePoint)
+                    idx = codePoint.endIndex
+                    continue // We already skipped `idx` to the end of the code-point.
                 }
 
             case .pathStart:
@@ -1170,7 +1211,6 @@ extension XURL.Parser {
                     }
                 }
                 // Erase non-ASCII characters to `ASCII.null` as this state checks for specific ASCII characters/EOF.
-                // `c` is only checked against known ASCII values and never copied to the result.
                 let c: ASCII = ASCII(input[idx]) ?? ASCII.null
                 switch c {
                 case _ where url.isSpecial:
@@ -1179,7 +1219,7 @@ extension XURL.Parser {
                     }
                     state = .path
                     if (c == .forwardSlash || c == .backslash) == false {
-                        continue // Do not increment index.
+                        continue // Do not increment index. Non-ASCII characters go through this path.
                     } else {
                         break stateMachine
                     }
@@ -1192,7 +1232,7 @@ extension XURL.Parser {
                 default:
                     state = .path
                     if c != .forwardSlash {
-                        continue // Do not increment index.
+                        continue // Do not increment index. Non-ASCII characters go through this path.
                     }
                 }
 
@@ -1206,8 +1246,12 @@ extension XURL.Parser {
                     (stateOverride == nil && (input[idx] == ASCII.questionMark || input[idx] == ASCII.numberSign))
                 
                 guard isPathComponentTerminator else {
-                    // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
-                    if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
+                    // This may be a non-ASCII codePoint.
+                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                        onValidationError(._invalidUTF8)
+                        return nil
+                    }
+                    if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                         onValidationError(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
@@ -1216,8 +1260,9 @@ extension XURL.Parser {
                             onValidationError(.unescapedPercentSign)
                         }
                     }
-                    buffer.append(input[idx].percentEscaped(where: url_escape_path))
-                    break stateMachine
+                    buffer.append(contentsOf: PercentEscaping.encode(bytes: codePoint, where: url_escape_path).utf8)
+                    idx = codePoint.endIndex
+                    continue // We already skipped `idx` to the end of the code-point.
                 }
                 // From here, we know:
                 // - idx == endIndex, or
@@ -1246,11 +1291,11 @@ extension XURL.Parser {
                             url.host = .empty
                         }
                         let secondChar = buffer.index(after: buffer.startIndex)
-                        buffer.replaceSubrange(secondChar..<buffer.index(after: secondChar), with: String(Character(ASCII.colon)))
+                        buffer[secondChar] = ASCII.colon.codePoint
                     }
-                    url.path.append(buffer)
+                    url.path.append(String(decoding: buffer, as: UTF8.self))
                 }
-                buffer = ""
+                buffer.removeAll(keepingCapacity: true)
                 if urlSpecialScheme == .file, (c == .null /* endIndex */ || c == .questionMark || c == .numberSign) {
                     while url.path.count > 1, url.path[0].isEmpty {
                         onValidationError(.unexpectedEmptyPath)
@@ -1281,8 +1326,12 @@ extension XURL.Parser {
                     url.fragment = ""
                     state        = .fragment
                 default:
-                    // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
-                    if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
+                    // This may be a non-ASCII codePoint.
+                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                        onValidationError(._invalidUTF8)
+                        return nil
+                    }
+                    if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                         onValidationError(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
@@ -1291,8 +1340,10 @@ extension XURL.Parser {
                             onValidationError(.unescapedPercentSign)
                         }
                     }
-                    let escapedChar = input[idx].percentEscaped(where: url_escape_c0)
+                    let escapedChar = PercentEscaping.encode(bytes: codePoint, where: url_escape_c0)
                     url.path[0].append(escapedChar)
+                    idx = codePoint.endIndex
+                    continue // We already skipped `idx` to the end of the code-point.
                 }
 
             case .query:
@@ -1306,8 +1357,12 @@ extension XURL.Parser {
                     state        = .fragment
                     break stateMachine
                 }
-                // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
-                if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
+                // This may be a non-ASCII codePoint.
+                guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                    onValidationError(._invalidUTF8)
+                    return nil
+                }
+                if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                     onValidationError(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
@@ -1317,7 +1372,7 @@ extension XURL.Parser {
                     }
                 }
                 let urlIsSpecial = url.isSpecial
-                let escapedChar = input[idx].percentEscaped(where: { asciiChar in
+                let escapedChar = PercentEscaping.encode(bytes: codePoint, where: { asciiChar in
                     switch asciiChar {
                     case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign: fallthrough
                     case _ where asciiChar.codePoint < ASCII.exclamationMark.codePoint:      fallthrough
@@ -1331,13 +1386,19 @@ extension XURL.Parser {
                 } else {
                     url.query!.append(escapedChar)
                 }
+                idx = codePoint.endIndex
+                continue // We already skipped `idx` to the end of the code-point.
 
             case .fragment:
                 guard idx != input.endIndex else {
                     break stateMachine
                 }
-                // TODO: Add a version of this which accepts a byte buffer and returns the codepoint's end-index.
-                if hasNonURLCodePoints(input[idx].utf8, allowPercentSign: true) {
+                // This may be a non-ASCII codePoint.
+                guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                    onValidationError(._invalidUTF8)
+                    return nil
+                }
+                if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                     onValidationError(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
@@ -1346,15 +1407,23 @@ extension XURL.Parser {
                         onValidationError(.unescapedPercentSign)
                     }
                 }
-                let escapedChar = input[idx].percentEscaped(where: url_escape_fragment)
+                let escapedChar = PercentEscaping.encode(bytes: codePoint, where: url_escape_fragment)
                 if url.fragment == nil {
                     url.fragment = escapedChar
                 } else {
                     url.fragment!.append(escapedChar)
                 }
+                idx = codePoint.endIndex
+                continue // We already skipped `idx` to the end of the code-point.
+                
             } // end of `stateMachine: switch state {`
 
             if idx == input.endIndex { break }
+			assert(ASCII(input[idx]) != nil, """
+                      This should only be reached if we have an ASCII character.
+                      Other characters should have been funelled to a unicode-aware state,
+                      which should consume entire code-points until some other ASCII character.
+                   """)
             idx = input.index(after: idx)
             
         } // end of `inputLoop: while true {`
