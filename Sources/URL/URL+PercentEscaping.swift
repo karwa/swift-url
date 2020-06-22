@@ -1,5 +1,7 @@
+// TODO: Think about exposing this as a public API.
+// The issue with round-tripping Strings like "%100" (as required by the URL standard) makes it a bit awkward.
 
-public enum PercentEscaping {}
+enum PercentEscaping {}
 
 extension PercentEscaping {
 
@@ -9,14 +11,18 @@ extension PercentEscaping {
     ///   where ZZ is the byte's numerical value as a hexadecimal string.
     /// - Bytes which are valid ASCII characters are also transformed if the predicate returns `true`.
     ///
+    /// -  important: 	This algorithm does not round-trip for arbitrary byte sequences unless `shouldEscapeASCII` includes
+    /// 				the `ASCII.percentSign` character itself. If not, sequences which happen to contain a valid escape string already
+    ///                 will be not be escaped, and the reciever, expecting an additional level of escaping, will over-unescape the resulting String.
+    ///
     /// - parameters:
     ///     - bytes:                The sequence of bytes to encode.
     ///     - shouldEscapeASCII:    The predicate which decides if a particular ASCII character should be escaped or not.
     ///
     /// - returns:  A percent-escaped ASCII `String` containing only the % character, upper-case hex digits, and
-    ///             characters allowed by the predicate. The original byte sequence may be decoded from this `String`. 
+    ///             characters allowed by the predicate.
     ///
-    public static func encode<S>(bytes: S, where shouldEscapeASCII: (ASCII)->Bool) -> String where S: Sequence, S.Element == UInt8 {
+    static func encode<S>(bytes: S, where shouldEscapeASCII: (ASCII)->Bool) -> String where S: Sequence, S.Element == UInt8 {
         var output = ""
         output.reserveCapacity(bytes.underestimatedCount)
         withSmallStringSizedStackBuffer { buffer in
@@ -34,8 +40,7 @@ extension PercentEscaping {
                     continue
                 }
                 // ASCII bytes are conditionally escaped, depending on the predicate.
-                if //asciiChar == .percentSign || 
-                   shouldEscapeASCII(asciiChar) { 
+                if shouldEscapeASCII(asciiChar) {
                     _escape(byte: byte, into: UnsafeMutableBufferPointer(rebasing: buffer[i...]))
                     i &+= 3
                 } else {
@@ -47,6 +52,39 @@ extension PercentEscaping {
             output.append(String(decoding: UnsafeBufferPointer(rebasing: buffer[..<i]), as: Unicode.ASCII.self))
         }
         return output
+    }
+    
+    /// Encodes a single UTF8-encoded codepoint as an ASCII `String`, by means of the "percent-escaping" transformation.
+    ///
+    /// - Code-points which are not ASCII characters are always transformed as the sequence "%ZZ%ZZ%ZZ...",
+    ///   where ZZ are the UTF8 bytes' numerical values as a hexadecimal string.
+    /// - Bytes which are valid ASCII characters are also transformed if the predicate returns `true`.
+    ///
+    /// -  important:	This algorithm does not encode the `ASCII.percentSign` character itself,
+    /// 			   	unless it is explicitly told to do so by the predicate.
+    /// - precondition:	`singleUTF8CodePoint` may not be larger than 4 bytes.
+    ///
+    /// - parameters:
+    ///     - singleUTF8CodePoint:  The single UTF8-encoded codepoint to transform. May not be larger than 4 bytes.
+    ///     - shouldEscapeASCII:    The predicate which decides if a particular ASCII character should be escaped or not.
+    ///
+    /// - returns:  A percent-escaped ASCII `String` containing only the % character, upper-case hex digits, and
+    ///             characters allowed by the predicate.
+    ///
+    static func encode<C>(singleUTF8CodePoint: C, where shouldEscapeASCII: (ASCII)->Bool) -> String where C: Collection, C.Element == UInt8 {
+        precondition(singleUTF8CodePoint.count <= 4, "Cannot encode more than a single codepoint")
+        return String(unsafeUninitializedCapacity: 12) { buffer in
+            var i = 0
+            for byte in singleUTF8CodePoint {
+                if let asciiChar = ASCII(byte), shouldEscapeASCII(asciiChar) == false {
+                    buffer[0] = byte
+                    return 1 // An ASCII byte means the code-point is over.
+                }
+                _escape(byte: byte, into: UnsafeMutableBufferPointer(rebasing: buffer[i...]))
+                i &+= 3
+            }
+            return i
+        }
     }
 
     /// Note: Assumes that output.count >= 3.
@@ -70,7 +108,7 @@ extension PercentEscaping {
     ///
     /// - returns:  An `Array` of bytes containing the unescaped contents of the given sequence. 
     ///
-    public static func decode<C>(bytes: C) -> Array<UInt8> where C: Collection, C.Element == UInt8 {
+    static func decode<C>(bytes: C) -> Array<UInt8> where C: Collection, C.Element == UInt8 {
         var decodedByteCount = 0
         switch _decode(bytes: bytes, onDecode: { _ in decodedByteCount &+= 1 }) {
         case .none:
@@ -96,7 +134,7 @@ extension PercentEscaping {
     ///
     /// - returns:  A `String` containing the unescaped contents of the given byte sequence, interpreted as UTF8. 
     ///
-    public static func decodeString<C>(utf8 bytes: C) -> String where C: Collection, C.Element == UInt8 {
+    static func decodeString<C>(utf8 bytes: C) -> String where C: Collection, C.Element == UInt8 {
 
         // We cannot decode in fixed-size chunks, since each chunk might not be a valid UTF8 sequence.
         // So there ends up being 3 potential strategies to decoding:
@@ -148,7 +186,7 @@ extension PercentEscaping {
     ///
     /// - returns:  A `String` containing the unescaped contents of the given `String`, interpreted as UTF8. 
     ///
-    public static func decodeString<S>(_ string: S) -> String where S: StringProtocol {
+    static func decodeString<S>(_ string: S) -> String where S: StringProtocol {
         let original = string
         return string._withUTF8 { bytes in
             var decodedByteCount = 0
@@ -221,7 +259,7 @@ extension StringProtocol {
     ///
     @_specialize(where Self == String)
     @_specialize(where Self == Substring)
-    public func percentEscaped(where shouldEscapeASCII: (ASCII)->Bool) -> String {
+    func percentEscaped(where shouldEscapeASCII: (ASCII)->Bool) -> String {
         return self._withUTF8 { PercentEscaping.encode(bytes: $0, where: shouldEscapeASCII) }
     }
 
@@ -235,7 +273,7 @@ extension StringProtocol {
     ///
     @_specialize(where Self == String)
     @_specialize(where Self == Substring)
-    public func removingPercentEscaping() -> String {
+    func removingPercentEscaping() -> String {
         return PercentEscaping.decodeString(self)
     }
 }
@@ -253,7 +291,7 @@ extension Character {
     ///
     /// - returns:  A percent-escaped ASCII String from which the original Character may be decoded. 
     ///
-    public func percentEscaped(where shouldEscapeASCII: (ASCII)->Bool) -> String {
+    func percentEscaped(where shouldEscapeASCII: (ASCII)->Bool) -> String {
         return PercentEscaping.encode(bytes: self.utf8, where: shouldEscapeASCII)
     }
 }

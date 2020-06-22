@@ -1260,7 +1260,7 @@ extension XURL.Parser {
                             onValidationError(.unescapedPercentSign)
                         }
                     }
-                    buffer.append(contentsOf: PercentEscaping.encode(bytes: codePoint, where: url_escape_path).utf8)
+                    buffer.append(contentsOf: PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: url_escape_path).utf8)
                     idx = codePoint.endIndex
                     continue // We already skipped `idx` to the end of the code-point.
                 }
@@ -1340,7 +1340,7 @@ extension XURL.Parser {
                             onValidationError(.unescapedPercentSign)
                         }
                     }
-                    let escapedChar = PercentEscaping.encode(bytes: codePoint, where: url_escape_c0)
+                    let escapedChar = PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: url_escape_c0)
                     url.path[0].append(escapedChar)
                     idx = codePoint.endIndex
                     continue // We already skipped `idx` to the end of the code-point.
@@ -1372,7 +1372,7 @@ extension XURL.Parser {
                     }
                 }
                 let urlIsSpecial = url.isSpecial
-                let escapedChar = PercentEscaping.encode(bytes: codePoint, where: { asciiChar in
+                let escapedChar = PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: { asciiChar in
                     switch asciiChar {
                     case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign: fallthrough
                     case _ where asciiChar.codePoint < ASCII.exclamationMark.codePoint:      fallthrough
@@ -1407,7 +1407,7 @@ extension XURL.Parser {
                         onValidationError(.unescapedPercentSign)
                     }
                 }
-                let escapedChar = PercentEscaping.encode(bytes: codePoint, where: url_escape_fragment)
+                let escapedChar = PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: url_escape_fragment)
                 if url.fragment == nil {
                     url.fragment = escapedChar
                 } else {
