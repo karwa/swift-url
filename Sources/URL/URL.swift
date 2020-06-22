@@ -288,7 +288,7 @@ extension Collection where Element == UInt8 {
 	///
     /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
     ///
-    var isWindowsDriveLetter: Bool {
+    func isWindowsDriveLetter() -> Bool {
         var it = makeIterator()
         guard let char1 = it.next(), let ascii1 = ASCII(char1), ASCII.ranges.isAlpha(ascii1) else { return false }
         guard let char2 = it.next(), let ascii2 = ASCII(char2), (ascii2 == .colon || ascii2 == .verticalBar) else { return false }
@@ -300,8 +300,8 @@ extension Collection where Element == UInt8 {
     ///
     /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
     ///
-    var isNormalisedWindowsDriveLetter: Bool {
-        isWindowsDriveLetter && (self.dropFirst().first.map { ASCII($0) == .colon } ?? false)
+    func isNormalisedWindowsDriveLetter() -> Bool {
+        isWindowsDriveLetter() && (self.dropFirst().first.map { ASCII($0) == .colon } ?? false)
     }
 
 	/// A string starts with a Windows drive letter if all of the following are true:
@@ -333,14 +333,14 @@ extension Collection where Element == UInt8 {
         return true
     }
 
-    var isSingleDotPathSegment: Bool {
+    func isSingleDotPathSegment() -> Bool {
         var it = makeIterator()
         guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
         guard it.next() == nil else { return false }
         return true
     }
 
-    var isDoubleDotPathSegment: Bool {
+    func isDoubleDotPathSegment() -> Bool {
         var it = makeIterator()
         guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
         guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
@@ -355,7 +355,7 @@ extension Collection where Element == UInt8 {
 
 func shortenURLPath(_ path: inout [String], isFileScheme: Bool) {
     guard path.isEmpty == false else { return }
-    if isFileScheme, path.count == 1, path[0].utf8.isNormalisedWindowsDriveLetter { return }
+    if isFileScheme, path.count == 1, path[0].utf8.isNormalisedWindowsDriveLetter() { return }
     path.removeLast()
 }
 
@@ -1154,7 +1154,7 @@ extension XURL.Parser {
                 }
                 if let base = base, base.scheme == SpecialScheme.file.rawValue,
                     input[idx...].hasWindowsDriveLetterPrefix() == false {
-                    if let basePathStart = base.path.first, basePathStart.utf8.isNormalisedWindowsDriveLetter {
+                    if let basePathStart = base.path.first, basePathStart.utf8.isNormalisedWindowsDriveLetter() {
                         url.path.append(basePathStart)
                     } else {
                         url.host = base.host
@@ -1169,7 +1169,7 @@ extension XURL.Parser {
                 let c: ASCII? = (idx != input.endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
                 case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: // or endIndex.
-                    if stateOverride == nil, buffer.isWindowsDriveLetter {
+                    if stateOverride == nil, buffer.isWindowsDriveLetter() {
                         onValidationError(.unexpectedWindowsDriveLetterHost)
                         state = .path
                         // Note: buffer is intentionally not reset and used in the path-parsing state.
@@ -1277,15 +1277,15 @@ extension XURL.Parser {
                     onValidationError(.unexpectedReverseSolidus)
                 }
                 switch buffer {
-                case _ where buffer.isDoubleDotPathSegment:
+                case _ where buffer.isDoubleDotPathSegment():
                     shortenURLPath(&url.path, isFileScheme: urlSpecialScheme == .file)
                     fallthrough
-                case _ where buffer.isSingleDotPathSegment:
+                case _ where buffer.isSingleDotPathSegment():
                     if !(c == .forwardSlash || c == .backslash) {
                         url.path.append("")
                     }
                 default:
-                    if urlSpecialScheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter {
+                    if urlSpecialScheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter() {
                         if !(url.host == nil || url.host == .empty) {
                             onValidationError(.unexpectedHostFileScheme)
                             url.host = .empty
