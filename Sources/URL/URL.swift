@@ -39,8 +39,51 @@ extension XURL {
             }
         }
         
-        init<C>(asciiBytes: C) where C: Collection, C.Element == UInt8 {
-            self = Self(rawValue: String(decoding: asciiBytes, as: Unicode.ASCII.self))
+        static func parse<C>(asciiBytes: C) -> Scheme where C: Collection, C.Element == UInt8 {
+            func notRecognised() -> Scheme {
+                // FIXME (swift): This should be `Unicode.ASCII.self`, but UTF8 decoding is literally 10x faster.
+                return .other(String(decoding: asciiBytes, as: UTF8.self))
+            }
+            // We use ASCII.init(_unchecked:) because we're only checking equality for specific ASCII sequences.
+            // We don't actually care if the byte is ASCII, or use any algorithms which rely on that.
+            var iter = asciiBytes.lazy.map { ASCII(_unchecked: $0) }.makeIterator()
+            switch iter.next() {
+            case .h?:
+                guard iter.next() == .t, iter.next() == .t, iter.next() == .p else { return notRecognised() }
+                switch iter.next() {
+                case .s?:
+                    guard iter.next() == nil else { return notRecognised() }
+                    return .https
+                case .none:
+                    return .http
+                case .some(_):
+                    return notRecognised()
+                }
+            case .f?:
+                switch iter.next() {
+                case .i?:
+                    guard iter.next() == .l, iter.next() == .e, iter.next() == nil else { return notRecognised() }
+                    return .file
+                case .t?:
+                    guard iter.next() == .p, iter.next() == nil else { return notRecognised() }
+                    return .ftp
+                default:
+                    return notRecognised()
+                }
+            case .w?:
+                guard iter.next() == .s else { return notRecognised() }
+            	switch iter.next() {
+                case .s?:
+                    guard iter.next() == nil else { return notRecognised() }
+                    return .wss
+                case .none:
+                    return .ws
+                default:
+                    return notRecognised()
+                }
+            default:
+                return notRecognised()
+            }
         }
         
         var defaultPort: UInt16? {
@@ -740,7 +783,7 @@ extension XURL.Parser {
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 assert(c == .colon)
-                let newScheme = XURL.Scheme(asciiBytes: buffer)
+                let newScheme = XURL.Scheme.parse(asciiBytes: buffer)
                 if stateOverride != nil {
                     if url.scheme.isSpecial != newScheme.isSpecial {
                         break inputLoop
