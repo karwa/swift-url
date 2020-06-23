@@ -7,10 +7,66 @@ public struct XURL {
 }
 
 extension XURL {
+    public enum Scheme: RawRepresentable, Equatable, Hashable, Codable {
+        case ftp
+        case file
+        case http
+        case https
+        case ws
+        case wss
+        case other(String)
+        
+        public init(rawValue: String) {
+            switch rawValue {
+            case "ftp":   self = .ftp
+            case "file":  self = .file
+            case "http":  self = .http
+            case "https": self = .https
+            case "ws":    self = .ws
+            case "wss":   self = .wss
+            default:      self = .other(rawValue)
+            }
+        }
+        public var rawValue: String {
+            switch self {
+            case .ftp: return "ftp"
+            case .file: return "file"
+            case .http: return "http"
+            case .https: return "https"
+            case .ws: return "ws"
+            case .wss: return "wss"
+            case .other(let scheme): return scheme
+            }
+        }
+        
+        init<C>(asciiBytes: C) where C: Collection, C.Element == UInt8 {
+            self = Self(rawValue: String(decoding: asciiBytes, as: Unicode.ASCII.self))
+        }
+        
+        var defaultPort: UInt16? {
+            switch self {
+            case .ftp:   return 21
+            case .file:  return nil
+            case .http:  return 80
+            case .https: return 443
+            case .ws:    return 80
+            case .wss:   return 443
+            case .other: return nil
+            }
+        }
+        
+        public var isSpecial: Bool {
+            if case .other = self { return false }
+            return true
+        }
+    }
+}
+
+extension XURL {
     
     public struct Components: Equatable, Hashable, Codable {
         fileprivate final class Storage: Equatable, Hashable, Codable {
-            var scheme: String
+            var scheme: XURL.Scheme
             var username: String
             var password: String
             var host: XURL.Host?
@@ -22,7 +78,7 @@ extension XURL {
             // TODO:
             // URL also has an associated blob URL entry that is either null or a blob URL entry. It is initially null.
          
-            init(scheme: String, username: String, password: String, host: XURL.Host?,
+            init(scheme: Scheme, username: String, password: String, host: XURL.Host?,
                  port: UInt16?, path: [String], query: String?, fragment: String?,
                  cannotBeABaseURL: Bool) {
                 self.scheme = scheme; self.username = username; self.password = password; self.host = host
@@ -63,10 +119,6 @@ extension XURL {
                 cannotBeABaseURL.hash(into: &hasher)
             }
             
-            var isSpecial: Bool {
-                XURL.Parser.SpecialScheme(rawValue: scheme) != nil
-            }
-            
             var hasCredentials: Bool {
                 !username.isEmpty || !password.isEmpty
             }
@@ -93,7 +145,7 @@ extension XURL {
             self._storage = _storage
         }
         
-        public init(scheme: String = "", username: String = "", password: String = "", host: XURL.Host? = nil,
+        public init(scheme: Scheme = .other(""), username: String = "", password: String = "", host: XURL.Host? = nil,
                     port: UInt16? = nil, path: [String] = [], query: String? = nil, fragment: String? = nil,
                      cannotBeABaseURL: Bool = false) {
             self._storage = Storage(
@@ -112,7 +164,7 @@ extension XURL.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var scheme: String {
+    public var scheme: XURL.Scheme {
         get { return _storage.scheme }
         set { ensureUnique(); _storage.scheme = newValue }
     }
@@ -217,7 +269,7 @@ extension XURL.Components {
     /// https://url.spec.whatwg.org/#url-miscellaneous as seen on 14.06.2020
     ///
     var cannotHaveCredentialsOrPort: Bool {
-        return host == nil || host == .empty || self.cannotBeABaseURL || scheme == XURL.Parser.SpecialScheme.file.rawValue
+        return host == nil || host == .empty || self.cannotBeABaseURL || scheme == .file
     }
 
     /// Copies the username, password, host and port fields from `other`.
@@ -231,7 +283,7 @@ extension XURL.Components {
     
     func serialised(excludeFragment: Bool = false) -> String {
         var result = ""
-        result.append(self.scheme)
+        result.append(self.scheme.rawValue)
         result.append(":")
         
         if let host = self.host {
@@ -249,7 +301,7 @@ extension XURL.Components {
                 result.append(":")
                 result.append(String(port))
             }
-        } else if self.scheme == XURL.Parser.SpecialScheme.file.rawValue {
+        } else if self.scheme == .file {
             result.append("//")
         }
         
@@ -298,33 +350,6 @@ extension XURL {
 }
 
 extension XURL.Parser {
-
-    enum SpecialScheme: String {
-        case ftp = "ftp"
-        case file = "file"
-        case http = "http"
-        case https = "https"
-        case ws = "ws"
-        case wss = "wss"
-
-        var defaultPort: UInt16? {
-            switch self {
-            case .ftp:   return 21
-            case .file:  return nil
-            case .http:  return 80
-            case .https: return 443
-            case .ws:    return 80
-            case .wss:   return 443
-            }
-        }
-        
-        init?<C>(asciiBytes: C) where C: Collection, C.Element == UInt8 {
-            guard let parsed = Self(rawValue: String(decoding: asciiBytes, as: Unicode.ASCII.self)) else {
-                return nil
-            }
-            self = parsed
-        }
-    }
 
     enum State {
         case schemeStart
@@ -715,41 +740,34 @@ extension XURL.Parser {
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 assert(c == .colon)
-                let bufferSpecialScheme = SpecialScheme(asciiBytes: buffer)
+                let newScheme = XURL.Scheme(asciiBytes: buffer)
                 if stateOverride != nil {
-                    let urlSpecialScheme = SpecialScheme(rawValue: url.scheme)
-                    if (urlSpecialScheme == nil) != (bufferSpecialScheme == nil) { 
+                    if url.scheme.isSpecial != newScheme.isSpecial {
                         break inputLoop
                     }
-                    if bufferSpecialScheme == .file && (url.hasCredentials || url.port != nil) {
+                    if newScheme == .file && (url.hasCredentials || url.port != nil) {
                         break inputLoop
                     }
-                    if urlSpecialScheme == .file && (url.host?.isEmpty ?? true) {
+                    if url.scheme == .file && (url.host?.isEmpty ?? true) {
                         break inputLoop
                     }
                 }
-                url.scheme = String(decoding: buffer, as: Unicode.ASCII.self)
+                url.scheme = newScheme
                 buffer.removeAll(keepingCapacity: true)
                 if stateOverride != nil {
-                    if url.port == bufferSpecialScheme?.defaultPort {
+                    if url.port == url.scheme.defaultPort {
                         url.port = nil
                     }
                     break inputLoop
                 }
-                switch bufferSpecialScheme {
+                switch url.scheme {
                 case .file:
                     state = .file
                     let nextIdx = input.index(after: idx)
                     if !input[nextIdx...].hasDoubleASCIIForwardslashPrefix() {
                         onValidationError(.fileSchemeMissingFollowingSolidus)
                     }
-                case .some(_):
-                    if base?.scheme == url.scheme {
-                        state = .specialRelativeOrAuthority
-                    } else {
-                        state = .specialAuthoritySlashes
-                    }
-                case .none:
+                case .other:
                     let nextIdx = input.index(after: idx)
                     if nextIdx != input.endIndex, ASCII(input[nextIdx]) == .forwardSlash {
                         state = .pathOrAuthority
@@ -758,6 +776,12 @@ extension XURL.Parser {
                         url.cannotBeABaseURL = true
                         url.path.append("")
                         state = .cannotBeABaseURLPath
+                    }
+                default:
+                    if base?.scheme == url.scheme {
+                        state = .specialRelativeOrAuthority
+                    } else {
+                        state = .specialAuthoritySlashes
                     }
                 }
 
@@ -781,7 +805,7 @@ extension XURL.Parser {
                     state = .fragment
                     break stateMachine
                 }
-                if base.scheme == SpecialScheme.file.rawValue {
+                if base.scheme == .file {
                     state = .file
                 } else {
                     state = .relative
@@ -820,7 +844,7 @@ extension XURL.Parser {
                 // Erase non-ASCII characters to `ASCII.null`.
                 let c: ASCII = ASCII(input[idx]) ?? .null
                 switch c {
-                case .backslash where url.isSpecial:
+                case .backslash where url.scheme.isSpecial:
                     onValidationError(.unexpectedReverseSolidus)
                     state = .relativeSlash
                 case .forwardSlash:
@@ -850,15 +874,14 @@ extension XURL.Parser {
             case .relativeSlash:
                 // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
-                let urlIsSpecial = url.isSpecial
                 switch c {
                 case .forwardSlash:
-                    if urlIsSpecial {
+                    if url.scheme.isSpecial {
                         state = .specialAuthorityIgnoreSlashes
                     } else {
                         state = .authority
                     }
-                case .backslash where urlIsSpecial:
+                case .backslash where url.scheme.isSpecial:
                     onValidationError(.unexpectedReverseSolidus)
                     state = .specialAuthorityIgnoreSlashes
                 default:
@@ -920,7 +943,7 @@ extension XURL.Parser {
                     buffer.removeAll(keepingCapacity: true)
                 case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?: // or endIndex.
                     fallthrough
-                case ASCII.backslash? where url.isSpecial:
+                case ASCII.backslash? where url.scheme.isSpecial:
                     if flag_at, buffer.isEmpty {
                         onValidationError(.missingCredentials)
                         return false
@@ -943,8 +966,7 @@ extension XURL.Parser {
             case .hostname:
                 fallthrough
             case .host:
-                let urlSpecialScheme = SpecialScheme(rawValue: url.scheme)
-                guard !(stateOverride != nil && urlSpecialScheme == .file) else {
+                guard !(stateOverride != nil && url.scheme == .file) else {
                     state = .fileHost
                     continue // Do not increment index.
                 }
@@ -958,7 +980,7 @@ extension XURL.Parser {
                         return false
                     }
                     guard let parsedHost = buffer.withUnsafeBufferPointer({
-                        XURL.Host.parse($0, isNotSpecial: urlSpecialScheme == nil,
+                        XURL.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false,
                                         onValidationError: { onValidationError(.hostParserError($0)) })
                     }) else {
                         return false
@@ -969,9 +991,9 @@ extension XURL.Parser {
                     if stateOverride == .hostname { break inputLoop }
                 case .forwardSlash?, .questionMark?, .numberSign?: // or endIndex.
                     fallthrough
-                case .backslash? where urlSpecialScheme != nil:
+                case .backslash? where url.scheme.isSpecial:
                     if buffer.isEmpty {
-                        if urlSpecialScheme != nil {
+                        if url.scheme.isSpecial {
                             onValidationError(.emptyHostSpecialScheme)
                             return false
                         } else if stateOverride != nil, (url.hasCredentials || url.port != nil) {
@@ -980,7 +1002,7 @@ extension XURL.Parser {
                         }
                     }
                     guard let parsedHost = buffer.withUnsafeBufferPointer({
-                        XURL.Host.parse($0, isNotSpecial: urlSpecialScheme == nil,
+                        XURL.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false,
                                         onValidationError: { onValidationError(.hostParserError($0)) })
                     }) else {
                         return false
@@ -1017,7 +1039,7 @@ extension XURL.Parser {
                     buffer.append(c.codePoint)
                 case .forwardSlash, .questionMark, .numberSign: // or endIndex.
                     fallthrough
-                case .backslash where url.isSpecial:
+                case .backslash where url.scheme.isSpecial:
                     fallthrough
                 case _ where stateOverride != nil:
                     if buffer.isEmpty == false {
@@ -1025,7 +1047,7 @@ extension XURL.Parser {
                             onValidationError(.portOutOfRange)
                             return false
                         }
-                        url.port = (parsedInteger == SpecialScheme(rawValue: url.scheme)?.defaultPort) ? nil : parsedInteger
+                        url.port = (parsedInteger == url.scheme.defaultPort) ? nil : parsedInteger
                         buffer.removeAll(keepingCapacity: true)
                     }
                     if stateOverride != nil { break inputLoop }
@@ -1037,7 +1059,7 @@ extension XURL.Parser {
                 }
 
             case .file:
-                url.scheme = SpecialScheme.file.rawValue
+                url.scheme = .file
                 if idx != input.endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
                     if c == .backslash {
                         onValidationError(.unexpectedReverseSolidus)
@@ -1045,7 +1067,7 @@ extension XURL.Parser {
                     state = .fileSlash
                     break stateMachine
                 }
-                guard let base = base, base.scheme == SpecialScheme.file.rawValue else {
+                guard let base = base, base.scheme == .file else {
                     state = .path
                     continue // Do not increment index.
                 }
@@ -1083,7 +1105,7 @@ extension XURL.Parser {
                     state = .fileHost
                     break stateMachine
                 }
-                if let base = base, base.scheme == SpecialScheme.file.rawValue,
+                if let base = base, base.scheme == .file,
                     input[idx...].hasWindowsDriveLetterPrefix() == false {
                     if let basePathStart = base.path.first, basePathStart.utf8.isNormalisedWindowsDriveLetter() {
                         url.path.append(basePathStart)
@@ -1134,7 +1156,7 @@ extension XURL.Parser {
 
             case .pathStart:
                 guard idx != input.endIndex else {
-                    if url.isSpecial {
+                    if url.scheme.isSpecial {
                         state = .path
                         continue // Do not increment index.
                     } else {
@@ -1144,7 +1166,7 @@ extension XURL.Parser {
                 // Erase non-ASCII characters to `ASCII.null` as this state checks for specific ASCII characters/EOF.
                 let c: ASCII = ASCII(input[idx]) ?? ASCII.null
                 switch c {
-                case _ where url.isSpecial:
+                case _ where url.scheme.isSpecial:
                     if c == .backslash {
                         onValidationError(.unexpectedReverseSolidus)
                     }
@@ -1168,12 +1190,10 @@ extension XURL.Parser {
                 }
 
             case .path:
-                let urlSpecialScheme = SpecialScheme(rawValue: url.scheme)
-                
                 let isPathComponentTerminator: Bool =
                     (idx == input.endIndex) ||
                     (input[idx] == ASCII.forwardSlash) ||
-                    (input[idx] == ASCII.backslash && urlSpecialScheme != nil) ||
+                    (input[idx] == ASCII.backslash && url.scheme.isSpecial) ||
                     (stateOverride == nil && (input[idx] == ASCII.questionMark || input[idx] == ASCII.numberSign))
                 
                 guard isPathComponentTerminator else {
@@ -1209,14 +1229,14 @@ extension XURL.Parser {
                 }
                 switch buffer {
                 case _ where buffer.isDoubleDotPathSegment():
-                    shortenURLPath(&url.path, isFileScheme: urlSpecialScheme == .file)
+                    shortenURLPath(&url.path, isFileScheme: url.scheme == .file)
                     fallthrough
                 case _ where buffer.isSingleDotPathSegment():
                     if !(c == .forwardSlash || c == .backslash) {
                         url.path.append("")
                     }
                 default:
-                    if urlSpecialScheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter() {
+                    if url.scheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter() {
                         if !(url.host == nil || url.host == .empty) {
                             onValidationError(.unexpectedHostFileScheme)
                             url.host = .empty
@@ -1227,7 +1247,7 @@ extension XURL.Parser {
                     url.path.append(String(decoding: buffer, as: UTF8.self))
                 }
                 buffer.removeAll(keepingCapacity: true)
-                if urlSpecialScheme == .file, (c == .null /* endIndex */ || c == .questionMark || c == .numberSign) {
+                if url.scheme == .file, (c == .null /* endIndex */ || c == .questionMark || c == .numberSign) {
                     while url.path.count > 1, url.path[0].isEmpty {
                         onValidationError(.unexpectedEmptyPath)
                         url.path.removeFirst()
@@ -1302,7 +1322,7 @@ extension XURL.Parser {
                         onValidationError(.unescapedPercentSign)
                     }
                 }
-                let urlIsSpecial = url.isSpecial
+                let urlIsSpecial = url.scheme.isSpecial
                 let escapedChar = PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: { asciiChar in
                     switch asciiChar {
                     case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign: fallthrough

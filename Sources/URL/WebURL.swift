@@ -25,7 +25,7 @@ extension WebURL {
 
     /// Known as `protocol` in JavaScript.
     public var scheme: String {
-        get { return components.scheme + ":" }
+        get { return components.scheme.rawValue + ":" }
         set { components.modify(newValue + ":", stateOverride: .schemeStart) }
     }
     
