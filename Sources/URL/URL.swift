@@ -9,7 +9,7 @@ public struct XURL {
 extension XURL {
     
     public struct Components: Equatable, Hashable, Codable {
-        private final class Storage: Equatable, Hashable, Codable {
+        fileprivate final class Storage: Equatable, Hashable, Codable {
             var scheme: String
             var username: String
             var password: String
@@ -62,14 +62,35 @@ extension XURL {
                 fragment.hash(into: &hasher)
                 cannotBeABaseURL.hash(into: &hasher)
             }
+            
+            var isSpecial: Bool {
+                XURL.Parser.SpecialScheme(rawValue: scheme) != nil
+            }
+            
+            var hasCredentials: Bool {
+                !username.isEmpty || !password.isEmpty
+            }
+            
+            /// Copies the username, password, host and port fields from `other`.
+            ///
+            func copyAuthority(from other: XURL.Components.Storage) {
+                self.username = other.username
+                self.password = other.password
+                self.host     = other.host
+                self.port     = other.port
+            }
         }
         
-        private var _storage: Storage
+        fileprivate var _storage: Storage
         
         private mutating func ensureUnique() {
             if !isKnownUniquelyReferenced(&_storage) {
                 _storage = _storage.copy()
             }
+        }
+        
+        fileprivate init(_storage: Storage) {
+            self._storage = _storage
         }
         
         public init(scheme: String = "", username: String = "", password: String = "", host: XURL.Host? = nil,
@@ -181,12 +202,14 @@ extension XURL.Components {
 
 extension XURL.Components {
     
-    var isSpecial: Bool {
-        XURL.Parser.SpecialScheme(rawValue: scheme) != nil
-    }
-
-    var hasCredentials: Bool {
-        !username.isEmpty || !password.isEmpty
+    /// Modifies URL components by parsing a given string from the desired parser state.
+    ///
+    @discardableResult
+    internal mutating func modify<S>(_ input: S, stateOverride: XURL.Parser.State?) -> Bool where S: StringProtocol {
+        ensureUnique()
+        return input._withUTF8 {
+            return XURL.Parser._parse($0, base: nil, url: _storage, stateOverride: stateOverride, onValidationError: { _ in })
+        }
     }
     
     /// A URL cannot have a username/password/port if its host is null or the empty string, its cannot-be-a-base-URL flag is set, or its scheme is "file".
@@ -213,7 +236,7 @@ extension XURL.Components {
         
         if let host = self.host {
             result.append("//")
-            if self.hasCredentials {
+            if self._storage.hasCredentials {
                 result.append(self.username)
                 if !self.password.isEmpty {
                     result.append(":")
@@ -539,7 +562,10 @@ extension XURL.Parser {
     }
 
     public static func parse<S>(_ input: S, baseURL: XURL.Components?) -> XURL.Components? where S: StringProtocol {
-        return input._withUTF8 { _parse($0, base: baseURL, url: nil, stateOverride: nil, onValidationError: { _ in }) }
+        return input._withUTF8 {
+            let result = XURL.Components()
+            return _parse($0, base: baseURL, url: result._storage, stateOverride: nil, onValidationError: { _ in }) ? result : nil
+        }
     }
     
     // Parse, reporting validation errors.
@@ -561,15 +587,13 @@ extension XURL.Parser {
         return input._withUTF8 { utf8 in
             var errors: [ValidationError] = []
             errors.reserveCapacity(8)
-            let components = _parse(utf8, base: baseURL, url: nil, stateOverride: nil, onValidationError: { errors.append($0) })
-            return Result(components: components, validationErrors: errors)
+            let components = XURL.Components()
+            if _parse(utf8, base: baseURL, url: components._storage, stateOverride: nil, onValidationError: { errors.append($0) }) {
+                return Result(components: components, validationErrors: errors)
+            } else {
+                return Result(components: nil, validationErrors: errors)
+            }
         }
-    }
-    
-    // Modification.
-    
-    internal static func modify<S>(_ input: S, url: XURL.Components?, stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? where S: StringProtocol {
-        return input._withUTF8 { _parse($0, base: nil, url: url, stateOverride: stateOverride, onValidationError: onValidationError) }
     }
 }
 
@@ -581,17 +605,18 @@ extension XURL.Parser {
     /// https://url.spec.whatwg.org/#url-parsing as of 14.06.2020
     ///
     /// - parameters:
-    /// 	- input:				The String to parse (as a Substring).
-    ///     - base:					The base-URL, in case `input` is a relative URL string
-    ///     - url:					An existing parsed URL to modify
+    /// 	- input:				A String, as a Collection of UTF8-encoded bytes. Null-termination is not required.
+    ///     - base:					The base URL, if `input` is a relative URL string.
+    ///     - url:					The URL storage to hold the parser's results.
     ///     - stateOverride:		The starting state of the parser. Used when modifying a URL.
-    ///     - onValidationError:	A callback for handling any validation errors that occur. Most of these are non-fatal.
-    /// - returns:	The parsed URL components, or `nil` if the input failed to parse.
+    ///     - onValidationError:	A callback for handling any validation errors that occur.
+    /// - returns:	`true` if the input was parsed successfully (in which case, `url` has been modified with the results),
+    ///  			or `false` if the input could not be parsed.
     ///
     fileprivate static func _parse<C>(
-        _ input: C, base: XURL.Components?, url: XURL.Components?,
-        stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? where C: BidirectionalCollection, C.Element == UInt8 {
-
+        _ input: C, base: XURL.Components?, url: XURL.Components.Storage,
+        stateOverride: State?, onValidationError: (ValidationError)->Void) -> Bool where C: BidirectionalCollection, C.Element == UInt8 {
+        
         var input = input[...]
         
         // 1. Trim leading/trailing C0 control characters and spaces.
@@ -627,12 +652,11 @@ extension XURL.Parser {
     }
     
     private static func _parse_stateMachine<C>(
-        _ input: C, base: XURL.Components?, url: XURL.Components?,
-        stateOverride: State?, onValidationError: (ValidationError)->Void) -> XURL.Components? where C: Collection, C.Element == UInt8 {
+        _ input: C, base: XURL.Components?, url: XURL.Components.Storage,
+        stateOverride: State?, onValidationError: (ValidationError)->Void) -> Bool where C: Collection, C.Element == UInt8 {
 
         // 3. Begin state machine.
         var state = stateOverride ?? .schemeStart
-        var url   = url ?? XURL.Components()
 
         var idx    = input.startIndex
         var buffer = [UInt8](); buffer.reserveCapacity(32)
@@ -665,7 +689,7 @@ extension XURL.Parser {
                 default:
                     guard stateOverride == nil else {
                         onValidationError(.invalidSchemeStart)
-                        return nil
+                        return false
                     }
                     state = .noScheme
                     continue // Do not advance index. Non-ASCII characters go through this path.
@@ -683,7 +707,7 @@ extension XURL.Parser {
                 default:
                     guard stateOverride == nil else {
                         onValidationError(.invalidScheme)
-                        return nil
+                        return false
                     }
                     buffer.removeAll(keepingCapacity: true)
                     state  = .noScheme
@@ -742,12 +766,12 @@ extension XURL.Parser {
                 let c: ASCII = (idx != input.endIndex) ? ASCII(input[idx]) ?? .null : .null
                 guard let base = base else {
                     onValidationError(.missingSchemeNonRelativeURL)
-                    return nil
+                    return false
                 }
                 guard base.cannotBeABaseURL == false else {
                     guard c == ASCII.numberSign else {
                         onValidationError(.missingSchemeNonRelativeURL)
-                        return nil // Non-ASCII characters get rejected here.
+                        return false // Non-ASCII characters get rejected here.
                     }
                     url.scheme   = base.scheme
                     url.path     = base.path
@@ -784,11 +808,11 @@ extension XURL.Parser {
                 guard let base = base else {
                     // Note: The spec doesn't say what happens here if base is nil.
                     onValidationError(._baseURLRequired)
-                    return nil
+                    return false
                 }
                 url.scheme = base.scheme
                 guard idx != input.endIndex else {
-                    url.copyAuthority(from: base)
+                    url.copyAuthority(from: base._storage)
                     url.path     = base.path
                     url.query    = base.query
                     break stateMachine
@@ -802,18 +826,18 @@ extension XURL.Parser {
                 case .forwardSlash:
                     state = .relativeSlash
                 case .questionMark:
-                    url.copyAuthority(from: base)
+                    url.copyAuthority(from: base._storage)
                     url.path      = base.path
                     url.query     = ""
                     state         = .query
                 case .numberSign:
-                    url.copyAuthority(from: base)
+                    url.copyAuthority(from: base._storage)
                     url.path      = base.path
                     url.query     = base.query
                     url.fragment  = ""
                     state         = .fragment
                 default:
-                    url.copyAuthority(from: base)
+                    url.copyAuthority(from: base._storage)
                     url.path      = base.path
                     if url.path.isEmpty == false {
                     url.path.removeLast()
@@ -840,9 +864,9 @@ extension XURL.Parser {
                 default:
                     guard let base = base else {
                         onValidationError(._baseURLRequired)
-                        return nil
+                        return false
                     }
-                    url.copyAuthority(from: base)
+                    url.copyAuthority(from: base._storage)
                     state = .path
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 }
@@ -899,7 +923,7 @@ extension XURL.Parser {
                 case ASCII.backslash? where url.isSpecial:
                     if flag_at, buffer.isEmpty {
                         onValidationError(.missingCredentials)
-                        return nil
+                        return false
                     }
                     idx    = input.index(idx, offsetBy: -1 * buffer.count)
                     buffer.removeAll(keepingCapacity: true)
@@ -909,7 +933,7 @@ extension XURL.Parser {
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
                     guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
                         onValidationError(._invalidUTF8)
-                        return nil
+                        return false
                     }
                     buffer.append(contentsOf: codePoint)
                     idx = codePoint.endIndex
@@ -931,13 +955,13 @@ extension XURL.Parser {
                 case .colon? where flag_squareBracket == false:
                     guard buffer.isEmpty == false else {
                         onValidationError(.unexpectedPortWithoutHost)
-                        return nil
+                        return false
                     }
                     guard let parsedHost = buffer.withUnsafeBufferPointer({
                         XURL.Host.parse($0, isNotSpecial: urlSpecialScheme == nil,
                                         onValidationError: { onValidationError(.hostParserError($0)) })
                     }) else {
-                        return nil
+                        return false
                     }
                     url.host = parsedHost
                     buffer.removeAll(keepingCapacity: true)
@@ -949,7 +973,7 @@ extension XURL.Parser {
                     if buffer.isEmpty {
                         if urlSpecialScheme != nil {
                             onValidationError(.emptyHostSpecialScheme)
-                            return nil
+                            return false
                         } else if stateOverride != nil, (url.hasCredentials || url.port != nil) {
                             onValidationError(.hostInvalid)
                             break inputLoop
@@ -959,7 +983,7 @@ extension XURL.Parser {
                         XURL.Host.parse($0, isNotSpecial: urlSpecialScheme == nil,
                                         onValidationError: { onValidationError(.hostParserError($0)) })
                     }) else {
-                        return nil
+                        return false
                     }
                     url.host = parsedHost
                     buffer.removeAll(keepingCapacity: true)
@@ -976,7 +1000,7 @@ extension XURL.Parser {
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
                     guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
                         onValidationError(._invalidUTF8)
-                        return nil
+                        return false
                     }
                     buffer.append(contentsOf: codePoint)
                     idx = codePoint.endIndex
@@ -999,7 +1023,7 @@ extension XURL.Parser {
                     if buffer.isEmpty == false {
                         guard let parsedInteger = UInt16(String(decoding: buffer, as: Unicode.ASCII.self)) else {
                             onValidationError(.portOutOfRange)
-                            return nil
+                            return false
                         }
                         url.port = (parsedInteger == SpecialScheme(rawValue: url.scheme)?.defaultPort) ? nil : parsedInteger
                         buffer.removeAll(keepingCapacity: true)
@@ -1009,7 +1033,7 @@ extension XURL.Parser {
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 default:
                     onValidationError(.portInvalid)
-                    return nil
+                    return false
                 }
 
             case .file:
@@ -1089,7 +1113,7 @@ extension XURL.Parser {
                             XURL.Host.parse($0, isNotSpecial: false,
                                             onValidationError: { onValidationError(.hostParserError($0)) })
                         }) else {
-                            return nil
+                            return false
                         }
                         url.host = (parsedHost == .domain("localhost")) ? .empty : parsedHost
                         if stateOverride != nil { break inputLoop }
@@ -1101,7 +1125,7 @@ extension XURL.Parser {
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
                     guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
                         onValidationError(._invalidUTF8)
-                        return nil
+                        return false
                     }
                     buffer.append(contentsOf: codePoint)
                     idx = codePoint.endIndex
@@ -1156,7 +1180,7 @@ extension XURL.Parser {
                     // This may be a non-ASCII codePoint.
                     guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
                         onValidationError(._invalidUTF8)
-                        return nil
+                        return false
                     }
                     if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                         onValidationError(.invalidURLCodePoint)
@@ -1236,7 +1260,7 @@ extension XURL.Parser {
                     // This may be a non-ASCII codePoint.
                     guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
                         onValidationError(._invalidUTF8)
-                        return nil
+                        return false
                     }
                     if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                         onValidationError(.invalidURLCodePoint)
@@ -1267,7 +1291,7 @@ extension XURL.Parser {
                 // This may be a non-ASCII codePoint.
                 guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
                     onValidationError(._invalidUTF8)
-                    return nil
+                    return false
                 }
                 if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                     onValidationError(.invalidURLCodePoint)
@@ -1303,7 +1327,7 @@ extension XURL.Parser {
                 // This may be a non-ASCII codePoint.
                 guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
                     onValidationError(._invalidUTF8)
-                    return nil
+                    return false
                 }
                 if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                     onValidationError(.invalidURLCodePoint)
@@ -1335,7 +1359,7 @@ extension XURL.Parser {
             
         } // end of `inputLoop: while true {`
 
-        return url
+        return true
     }
     
 

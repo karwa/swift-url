@@ -17,15 +17,6 @@ public struct WebURL {
 
 extension WebURL {
     
-    private mutating func reparse<S: StringProtocol>(_ value: S, stateOverride: XURL.Parser.State) {
-        guard let newComponents = XURL.Parser.modify(
-            value, url: self.components, stateOverride: stateOverride, onValidationError: { _ in }
-        ) else {
-            return
-        }
-        self.components = newComponents
-    }
-    
     // TODO: href setter, origin, searchParams
     
     public var href: String {
@@ -35,7 +26,7 @@ extension WebURL {
     /// Known as `protocol` in JavaScript.
     public var scheme: String {
         get { return components.scheme + ":" }
-        set { reparse(newValue + ":", stateOverride: .schemeStart) }
+        set { components.modify(newValue + ":", stateOverride: .schemeStart) }
     }
     
     public var username: String {
@@ -62,7 +53,7 @@ extension WebURL {
         }
         set {
             guard components.cannotBeABaseURL == false else { return }
-            reparse(newValue, stateOverride: .host)
+            components.modify(newValue, stateOverride: .host)
         }
     }
     
@@ -70,7 +61,7 @@ extension WebURL {
         get { return components.host?.description ?? "" }
         set {
             guard components.cannotBeABaseURL == false else { return }
-            reparse(newValue, stateOverride: .hostname)
+            components.modify(newValue, stateOverride: .hostname)
         }
     }
     
@@ -92,7 +83,7 @@ extension WebURL {
         set {
             guard components.cannotBeABaseURL == false else { return }
             components.path.removeAll()
-            reparse(newValue, stateOverride: .pathStart)
+            components.modify(newValue, stateOverride: .pathStart)
         }
     }
     
@@ -114,7 +105,7 @@ extension WebURL {
                 input = newValue[...]
             }
             components.query = ""
-            reparse(input, stateOverride: .query)
+            components.modify(input, stateOverride: .query)
             // TODO: Set query object’s list to the result of parsing newString.
         }
     }
@@ -137,7 +128,7 @@ extension WebURL {
                 input = newValue[...]
             }
             components.fragment = ""
-            reparse(input, stateOverride: .fragment)
+            components.modify(input, stateOverride: .fragment)
         }
     }
 }

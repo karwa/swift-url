@@ -5,6 +5,7 @@ extension BidirectionalCollection {
     ///
     /// e.g. `[2, 10, 11, 15, 20, 21, 100].trim(where: { $0.isMultiple(of: 2) })` == `[11, 15, 20, 21]`
     ///
+    @inlinable
     public func trim(where predicate: (Element) throws -> Bool) rethrows -> SubSequence {
         var sliceStart = startIndex
         var sliceEnd = endIndex
