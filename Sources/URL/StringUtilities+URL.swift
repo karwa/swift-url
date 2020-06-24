@@ -45,7 +45,7 @@ func hasNonURLCodePoints<S>(_ input: S, allowPercentSign: Bool = false) -> Bool 
         switch (~byte1).leadingZeroBitCount { // a.k.a leadingNonZeroBitCount.
         case 0:
             // ASCII.
-            if byte1 == 0x25, allowPercentSign { 
+            if byte1 == 0x25, allowPercentSign {
                 continue
             }
             let low:  UInt64 = 0b1010_1111_1111_1111_1111_1111_1101_0010____0000_0000_0000_0000_0000_0000_0000_0000
@@ -56,9 +56,6 @@ func hasNonURLCodePoints<S>(_ input: S, allowPercentSign: Bool = false) -> Bool 
             } else {
                 guard (high &>> index) & 0x01 == 1 else { return true }
             }
-        case 1:
-            // Unexpected continuation byte. Invalid UTF8.
-            return true 
         case 2:
             // 2-byte sequence.
             guard let byte2 = input.next() else { 
@@ -196,6 +193,8 @@ extension Collection where Element == UInt8 {
     }
     
     func hasDoubleASCIIForwardslashPrefix() -> Bool {
-        return self.prefix(2).elementsEqual("//".utf8)
+        var it = makeIterator()
+        return it.next() == ASCII.forwardSlash.codePoint &&
+               it.next() == ASCII.forwardSlash.codePoint
     }
 }

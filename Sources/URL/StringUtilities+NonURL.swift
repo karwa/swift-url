@@ -15,10 +15,19 @@ extension String {
             self = String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
         }
         #else
-        let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: capacity)
-        defer { buffer.deallocate() }
-        let count = try initializer(buffer)
-        self = String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
+        if capacity <= 32 {
+            let newStr = try with32ByteStackBuffer { buffer -> String in
+                let count = try initializer(buffer)
+                return String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
+            }
+            self = newStr
+            return
+        } else {
+            let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: capacity)
+            defer { buffer.deallocate() }
+            let count = try initializer(buffer)
+            self = String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
+        }
         #endif
     }
 }
@@ -42,14 +51,15 @@ extension Collection where Element == UInt8 {
     /// (i.e. the byte at `index` is a continuation byte or not a valid UTF8 header byte).
     ///
     internal func utf8EncodedCodePoint(startingAt index: Index) -> SubSequence? {
-        let length = (~self[index]).leadingZeroBitCount
-        switch length {
-        case 0:  return index != endIndex ? self[index..<self.index(after: index)] : nil // ASCII.
-        case 2:  fallthrough
-        case 3:  fallthrough
-        case 4:  return self.index(index, offsetBy: length, limitedBy: self.endIndex).map { self[index..<$0] }
-        default: return nil // Continuation byte or invald UTF8.
-        }
+        let byte = self[index]
+        // ASCII.
+        if _fastPath(byte & 0b1000_0000 == 0b0000_0000) { return self[index..<self.index(after: index)] }
+        // Valid UTF8 sequences.
+        if byte & 0b1110_0000 == 0b1100_0000 { return self[index..<self.index(index, offsetBy: 2)] }
+        if byte & 0b1111_0000 == 0b1110_0000 { return self[index..<self.index(index, offsetBy: 3)] }
+        if byte & 0b1111_1000 == 0b1111_0000 { return self[index..<self.index(index, offsetBy: 4)] }
+        // Continuation bytes or invalid UTF8.
+        return nil
     }
 }
 
@@ -65,6 +75,17 @@ func withSmallStringSizedStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<U
     var buffer: (Int64, Int64) = (0,0)
     let capacity = 15
     #endif
+    return try withUnsafeMutablePointer(to: &buffer) { ptr in
+        return try ptr.withMemoryRebound(to: UInt8.self, capacity: capacity) { basePtr in
+            let bufPtr = UnsafeMutableBufferPointer(start: basePtr, count: capacity)
+            return try perform(bufPtr)
+        }
+    }
+}
+
+func with32ByteStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<UInt8>) throws -> T) rethrows -> T {
+    var buffer: (Int64, Int64, Int64, Int64) = (0, 0, 0, 0)
+    let capacity = 32
     return try withUnsafeMutablePointer(to: &buffer) { ptr in
         return try ptr.withMemoryRebound(to: UInt8.self, capacity: capacity) { basePtr in
             let bufPtr = UnsafeMutableBufferPointer(start: basePtr, count: capacity)
