@@ -92,7 +92,7 @@ extension WebURLParser.Host {
         }
         
         return domain.withUnsafeBufferPointer { asciiDomain in
-            if asciiDomain.contains(where: { ASCII($0)?.isForbiddenHostCodePoint ?? false }) {
+            if asciiDomain.contains(where: { ASCII($0).map { URLStringUtils.isForbiddenHostCodePoint($0) } ?? false }) {
                 onValidationError(.hostParserError(.containsForbiddenHostCodePoint))
                 return nil
             }

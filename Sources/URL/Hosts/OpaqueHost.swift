@@ -48,12 +48,12 @@ extension OpaqueHost {
                    let percentEncodedByte2 = iter.next(), ASCII(percentEncodedByte2)?.isHexDigit != true {
                     onValidationError(.invalidPercentEscaping)
                 }
-            } else if asciiChar.isForbiddenHostCodePoint {
+            } else if URLStringUtils.isForbiddenHostCodePoint(asciiChar) {
                 onValidationError(.containsForbiddenHostCodePoint)
                 return nil
             }
         }
-        if hasNonURLCodePoints(input, allowPercentSign: true) {
+        if URLStringUtils.hasNonURLCodePoints(input, allowPercentSign: true) {
             onValidationError(.containsNonURLCodePoint)
         }
 

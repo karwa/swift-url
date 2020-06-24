@@ -738,7 +738,7 @@ extension WebURLParser {
                 case .file:
                     state = .file
                     let nextIdx = input.index(after: idx)
-                    if !input[nextIdx...].hasDoubleASCIIForwardslashPrefix() {
+                    if !URLStringUtils.hasDoubleSolidusPrefix(input[nextIdx...]) {
                         onValidationError(.fileSchemeMissingFollowingSolidus)
                     }
                 case .other:
@@ -787,7 +787,7 @@ extension WebURLParser {
                 continue // Do not increment index. Non-ASCII characters go through this path.
 
             case .specialRelativeOrAuthority:
-                guard input[idx...].hasDoubleASCIIForwardslashPrefix() else {
+                guard URLStringUtils.hasDoubleSolidusPrefix(input[idx...]) else {
                     onValidationError(.relativeURLMissingBeginningSolidus)
                     state = .relative
                     continue // Do not increment index. Non-ASCII characters go through this path.
@@ -870,7 +870,7 @@ extension WebURLParser {
 
             case .specialAuthoritySlashes:
                 state = .specialAuthorityIgnoreSlashes
-                guard input[idx...].hasDoubleASCIIForwardslashPrefix() else {
+                guard URLStringUtils.hasDoubleSolidusPrefix(input[idx...]) else {
                     onValidationError(.missingSolidusBeforeAuthority)
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 }
@@ -1068,7 +1068,7 @@ extension WebURLParser {
                     state        = .fragment
                 default:
                     url.query = nil
-                    if input[idx...].hasWindowsDriveLetterPrefix() {
+                    if URLStringUtils.hasWindowsDriveLetterPrefix(input[idx...]) {
                         onValidationError(.unexpectedWindowsDriveLetter)
                         url.host = nil
                         url.path = []
@@ -1088,8 +1088,8 @@ extension WebURLParser {
                     break stateMachine
                 }
                 if let base = base, base.scheme == .file,
-                    input[idx...].hasWindowsDriveLetterPrefix() == false {
-                    if let basePathStart = base.path.first, basePathStart.utf8.isNormalisedWindowsDriveLetter() {
+                    URLStringUtils.hasWindowsDriveLetterPrefix(input[idx...]) == false {
+                    if let basePathStart = base.path.first, URLStringUtils.isNormalisedWindowsDriveLetter(basePathStart.utf8) {
                         url.path.append(basePathStart)
                     } else {
                         url.host = base.host
@@ -1104,7 +1104,7 @@ extension WebURLParser {
                 let c: ASCII? = (idx != endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
                 case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: // or endIndex.
-                    if stateOverride == nil, buffer.isWindowsDriveLetter() {
+                    if stateOverride == nil, URLStringUtils.isWindowsDriveLetter(buffer) {
                         onValidationError(.unexpectedWindowsDriveLetterHost)
                         state = .path
                         // Note: buffer is intentionally not reset and used in the path-parsing state.
@@ -1184,7 +1184,7 @@ extension WebURLParser {
                         onValidationError(._invalidUTF8)
                         return false
                     }
-                    if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
+                    if URLStringUtils.hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                         onValidationError(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
@@ -1214,15 +1214,15 @@ extension WebURLParser {
                     onValidationError(.unexpectedReverseSolidus)
                 }
                 switch buffer {
-                case _ where buffer.isDoubleDotPathSegment():
+                case _ where URLStringUtils.isDoubleDotPathSegment(buffer):
                     shortenURLPath(&url.path, isFileScheme: url.scheme == .file)
                     fallthrough
-                case _ where buffer.isSingleDotPathSegment():
+                case _ where URLStringUtils.isSingleDotPathSegment(buffer):
                     if !(c == .forwardSlash || c == .backslash) {
                         url.path.append("")
                     }
                 default:
-                    if url.scheme == .file, url.path.isEmpty, buffer.isWindowsDriveLetter() {
+                    if url.scheme == .file, url.path.isEmpty, URLStringUtils.isWindowsDriveLetter(buffer) {
                         if !(url.host == nil || url.host == .empty) {
                             onValidationError(.unexpectedHostFileScheme)
                             url.host = .empty
@@ -1279,7 +1279,7 @@ extension WebURLParser {
                         onValidationError(._invalidUTF8)
                         return false
                     }
-                    if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
+                    if URLStringUtils.hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                         onValidationError(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
@@ -1335,7 +1335,7 @@ extension WebURLParser {
                     onValidationError(._invalidUTF8)
                     return false
                 }
-                if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
+                if URLStringUtils.hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                     onValidationError(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
@@ -1372,7 +1372,7 @@ extension WebURLParser {
                     onValidationError(._invalidUTF8)
                     return false
                 }
-                if hasNonURLCodePoints(codePoint, allowPercentSign: true) {
+                if URLStringUtils.hasNonURLCodePoints(codePoint, allowPercentSign: true) {
                     onValidationError(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
@@ -1403,7 +1403,7 @@ extension WebURLParser {
 
     static func shortenURLPath(_ path: inout [String], isFileScheme: Bool) {
         guard path.isEmpty == false else { return }
-        if isFileScheme, path.count == 1, path[0].utf8.isNormalisedWindowsDriveLetter() { return }
+        if isFileScheme, path.count == 1, URLStringUtils.isNormalisedWindowsDriveLetter(path[0].utf8) { return }
         path.removeLast()
     }
 }
