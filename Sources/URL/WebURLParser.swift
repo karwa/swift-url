@@ -936,7 +936,7 @@ extension WebURLParser {
                     continue // Do not increment index.
                 default:
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
-                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                    guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
                         onValidationError(._invalidUTF8)
                         return false
                     }
@@ -1002,7 +1002,7 @@ extension WebURLParser {
                     buffer.append(ASCII.rightSquareBracket.codePoint)
                 default:
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
-                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                    guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
                         onValidationError(._invalidUTF8)
                         return false
                     }
@@ -1127,7 +1127,7 @@ extension WebURLParser {
                     continue // Do not increment index.
                 default:
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
-                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                    guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
                         onValidationError(._invalidUTF8)
                         return false
                     }
@@ -1180,7 +1180,7 @@ extension WebURLParser {
                 
                 guard isPathComponentTerminator else {
                     // This may be a non-ASCII codePoint.
-                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                    guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
                         onValidationError(._invalidUTF8)
                         return false
                     }
@@ -1275,7 +1275,7 @@ extension WebURLParser {
                     flushBuffer()
                 default:
                     // This may be a non-ASCII codePoint.
-                    guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                    guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
                         onValidationError(._invalidUTF8)
                         return false
                     }
@@ -1331,7 +1331,7 @@ extension WebURLParser {
                     break stateMachine
                 }
                 // This may be a non-ASCII codePoint.
-                guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
                     onValidationError(._invalidUTF8)
                     return false
                 }
@@ -1368,7 +1368,7 @@ extension WebURLParser {
                     break stateMachine
                 }
                 // This may be a non-ASCII codePoint.
-                guard let codePoint = input.utf8EncodedCodePoint(startingAt: idx) else {
+                guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
                     onValidationError(._invalidUTF8)
                     return false
                 }

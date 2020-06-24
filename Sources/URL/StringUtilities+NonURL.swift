@@ -1,20 +1,19 @@
 
 // - General (non URL-related) String utilities.
 
+// -- String Creation.
+
 extension String {
+    
     init(
         _unsafeUninitializedCapacity capacity: Int,
         initializingUTF8With initializer: (_ buffer: UnsafeMutableBufferPointer<UInt8>) throws -> Int) rethrows {
         #if swift(>=5.3)
         if #available(macOS 11.0, iOS 14.0, *) {
             self = try String(unsafeUninitializedCapacity: capacity, initializingUTF8With: initializer)
-        } else {
-            let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: capacity)
-            defer { buffer.deallocate() }
-            let count = try initializer(buffer)
-            self = String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
+            return
         }
-        #else
+        #endif
         if capacity <= 32 {
             let newStr = try with32ByteStackBuffer { buffer -> String in
                 let count = try initializer(buffer)
@@ -28,44 +27,14 @@ extension String {
             let count = try initializer(buffer)
             self = String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
         }
-        #endif
     }
 }
 
-extension StringProtocol {
-    @inlinable 
-    func _withUTF8<T>(_ body: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
-        if var string = self as? String {
-            return try string.withUTF8(body)
-        } else {
-            var substring = self as! Substring
-            return try substring.withUTF8(body)
-        }
-    }
-}
-
-extension Collection where Element == UInt8 {
-    
-    /// If the byte at `index` is a UTF8-encoded codepoint's header byte, returns
-    /// the `SubSequence` of the entire codepoint. Returns `nil` otherwise
-    /// (i.e. the byte at `index` is a continuation byte or not a valid UTF8 header byte).
-    ///
-    internal func utf8EncodedCodePoint(startingAt index: Index) -> SubSequence? {
-        let byte = self[index]
-        // ASCII.
-        if _fastPath(byte & 0b1000_0000 == 0b0000_0000) { return self[index..<self.index(after: index)] }
-        // Valid UTF8 sequences.
-        if byte & 0b1110_0000 == 0b1100_0000 { return self[index..<self.index(index, offsetBy: 2)] }
-        if byte & 0b1111_0000 == 0b1110_0000 { return self[index..<self.index(index, offsetBy: 3)] }
-        if byte & 0b1111_1000 == 0b1111_0000 { return self[index..<self.index(index, offsetBy: 4)] }
-        // Continuation bytes or invalid UTF8.
-        return nil
-    }
-}
-
-/// Performs the given closure with a stack-buffer whose UTF8 code-unit capacity matches
-/// the small-string capacity on the current platform. The goal is that creating a String
-/// from this buffer won't cause a heap allocation.
+/// Performs the given closure with a (hopefully) stack-allocated buffer whose UTF8 code-unit capacity matches
+/// the smol-string capacity on the current platform. The goal is that creating a `String` from this buffer
+/// will create a smol-string (no heap allocation), so it's good to use in a loop where you're making lots
+/// of temporary `String`s (maybe because you need to `.append` them to a pre-existing `String`,
+/// but `String` doesn't let you just append UTF8 code-units directly).
 ///
 func withSmallStringSizedStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<UInt8>) throws -> T) rethrows -> T {
     #if arch(i386) || arch(arm) || arch(wasm32)
@@ -83,7 +52,7 @@ func withSmallStringSizedStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<U
     }
 }
 
-func with32ByteStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<UInt8>) throws -> T) rethrows -> T {
+private func with32ByteStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<UInt8>) throws -> T) rethrows -> T {
     var buffer: (Int64, Int64, Int64, Int64) = (0, 0, 0, 0)
     let capacity = 32
     return try withUnsafeMutablePointer(to: &buffer) { ptr in
@@ -93,3 +62,48 @@ func with32ByteStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<UInt8>) thr
         }
     }
 }
+
+// -- UTF8 stuff.
+
+extension StringProtocol {
+    
+    @inlinable @inline(__always)
+    func _withUTF8<T>(_ body: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
+        if var string = self as? String {
+            return try string.withUTF8(body)
+        } else {
+            var substring = self as! Substring
+            return try substring.withUTF8(body)
+        }
+    }
+}
+
+extension Unicode.UTF8 {
+
+    /// If the first byte in `bytes` is a UTF8-encoded codepoint's header byte, returns
+    /// the `SubSequence` of the entire codepoint. This function does not validate the codepoint.
+    ///
+    /// - parameters:
+    ///   - bytes: The byte string to inspect. Must not be empty. The first byte will be
+    ///            taken as the header, and the function will return `nil` if `bytes`
+    ///            does not contain the entire codepoint.
+    /// - returns: The bytes which make up the codepoint's UTF8 representation.
+    ///            Returns `nil` if the first byte in `bytes` is a continuation byte,
+    ///            not a UTF8 header byte, or if `bytes` does not contain
+    ///            the entire codepoint promised by the header.
+    ///
+    static func rangeOfEncodedCodePoint<C>(fromStartOf bytes: C) -> C.SubSequence? where C: Collection, C.Element == UInt8 {
+        let startIndex = bytes.startIndex
+        let byte = bytes[startIndex]
+        var end: C.Index?
+        // ASCII.
+        if _fastPath(byte & 0b1000_0000 == 0b0000_0000) { end = bytes.index(after: startIndex) }
+        // Valid UTF8 sequences.
+        if byte & 0b1110_0000 == 0b1100_0000 { end = bytes.index(startIndex, offsetBy: 2, limitedBy: bytes.endIndex) }
+        if byte & 0b1111_0000 == 0b1110_0000 { end = bytes.index(startIndex, offsetBy: 3, limitedBy: bytes.endIndex) }
+        if byte & 0b1111_1000 == 0b1111_0000 { end = bytes.index(startIndex, offsetBy: 4, limitedBy: bytes.endIndex) }
+        // Continuation bytes or invalid UTF8.
+        return end.map { bytes[startIndex..<$0] }
+    }
+}
+
