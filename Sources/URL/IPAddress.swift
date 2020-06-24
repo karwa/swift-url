@@ -291,7 +291,7 @@ extension IPAddress.V6: CustomStringConvertible {
     public var description: String {
         // Maximum normalised length of an IPv6 address = 39 bytes
         // 32 (128 bits/4 bits per hex character) + 7 (separators)
-        return String(unsafeUninitializedCapacity: 39) { stringBuffer in
+        return String(_unsafeUninitializedCapacity: 39) { stringBuffer in
             return withUnsafeBytes(of: rawAddress) { __rawRawAddressBuffer in
                 let rawAddressBuffer = __rawRawAddressBuffer.bindMemory(to: UInt16.self)
                 // Look for ranges of consecutive zeroes.
@@ -679,7 +679,7 @@ extension IPAddress.V4: CustomStringConvertible {
     public var description: String {
         // 15 bytes is the maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX"),
         // but is also happily the small-string size on 64-bit platforms.
-        return String(unsafeUninitializedCapacity: 15) { stringBuffer in
+        return String(_unsafeUninitializedCapacity: 15) { stringBuffer in
             return withUnsafeBytes(of: rawAddress.byteSwapped) { __rawAddressBytes -> Int in
                 let addressBytes    = __rawAddressBytes.bindMemory(to: UInt8.self)
                 var stringBufferIdx = stringBuffer.startIndex

@@ -57,7 +57,12 @@ extension OpaqueHost {
             onValidationError(.containsNonURLCodePoint)
         }
 
-        let escapedHostname = PercentEscaping.encode(bytes: input, where: url_escape_c0)
+        var escapedHostname = ""
+        PercentEscaping.encodeIterativelyAsString(
+            bytes: input,
+            escapeSet: .url_c0,
+            processChunk: { piece in escapedHostname.append(piece) }
+        )
         assert(escapedHostname.isEmpty == false)
         return OpaqueHost(unchecked: escapedHostname)
     }

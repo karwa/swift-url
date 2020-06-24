@@ -33,7 +33,10 @@ extension WebURL {
         get { return components.username }
         set {
             guard components.cannotHaveCredentialsOrPort == false else { return }
-            components.username = newValue.percentEscaped(where: url_escape_userInfo)
+            components.username = ""
+            PercentEscaping.encodeIterativelyAsString(bytes: newValue.utf8, escapeSet: .url_userInfo) {
+                components.username.append($0)
+            }
         }
     }
     
@@ -41,7 +44,10 @@ extension WebURL {
         get { return components.password }
         set {
             guard components.cannotHaveCredentialsOrPort == false else { return }
-            components.password = newValue.percentEscaped(where: url_escape_userInfo)
+            components.password = ""
+            PercentEscaping.encodeIterativelyAsString(bytes: newValue.utf8, escapeSet: .url_userInfo) {
+                components.password.append($0)
+            }
         }
     }
     

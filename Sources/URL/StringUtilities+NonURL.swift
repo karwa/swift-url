@@ -1,18 +1,27 @@
 
 // - General (non URL-related) String utilities.
 
-#if swift(<5.3)
 extension String {
     init(
-        unsafeUninitializedCapacity capacity: Int,
+        _unsafeUninitializedCapacity capacity: Int,
         initializingUTF8With initializer: (_ buffer: UnsafeMutableBufferPointer<UInt8>) throws -> Int) rethrows {
+        #if swift(>=5.3)
+        if #available(macOS 11.0, iOS 14.0, *) {
+            self = try String(unsafeUninitializedCapacity: capacity, initializingUTF8With: initializer)
+        } else {
             let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: capacity)
             defer { buffer.deallocate() }
-            let count = try initializer(buffer) 
+            let count = try initializer(buffer)
             self = String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
+        }
+        #else
+        let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: capacity)
+        defer { buffer.deallocate() }
+        let count = try initializer(buffer)
+        self = String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(count)), as: UTF8.self)
+        #endif
     }
 }
-#endif
 
 extension StringProtocol {
     @inlinable 

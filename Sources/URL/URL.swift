@@ -971,16 +971,24 @@ extension XURL.Parser {
                     // we found another '@'; meaning the _first_ '@' was actually part of the password.
                     // e.g. "scheme://user:hello@world@stuff" - the password is actually "hello@world", not "hello".
                     if flag_passwordTokenSeen {
-                        url.password.append(PercentEscaping.encode(bytes: buffer, where: url_escape_userInfo))
+                        PercentEscaping.encodeIterativelyAsString(
+                            bytes: buffer,
+                            escapeSet: .url_userInfo,
+                            processChunk: { piece in url.password.append(piece) }
+                        )
                     } else {
                         let passwordTokenIndex = buffer.firstIndex(where: { $0 == ASCII.colon })
                         let passwordStartIndex = passwordTokenIndex.flatMap { buffer.index(after: $0) }
-                        let parsedUsername = PercentEscaping.encode(bytes: buffer[..<(passwordTokenIndex ?? buffer.endIndex)],
-                                                                    where: url_escape_userInfo)
-                        let parsedPassword = PercentEscaping.encode(bytes: buffer[(passwordStartIndex ?? buffer.endIndex)...],
-                                                                    where: url_escape_userInfo)
-                        url.username.append(parsedUsername)
-                        url.password.append(parsedPassword)
+                        PercentEscaping.encodeIterativelyAsString(
+                            bytes: buffer[..<(passwordTokenIndex ?? buffer.endIndex)],
+                            escapeSet: .url_userInfo,
+                            processChunk: { piece in url.username.append(piece) }
+                        )
+                        PercentEscaping.encodeIterativelyAsString(
+                            bytes: buffer[(passwordStartIndex ?? buffer.endIndex)...],
+                            escapeSet: .url_userInfo,
+                            processChunk: { piece in url.password.append(piece) }
+                        )
                         flag_passwordTokenSeen = (passwordTokenIndex != nil)
                     }
                     buffer.removeAll(keepingCapacity: true)
@@ -1086,7 +1094,7 @@ extension XURL.Parser {
                     fallthrough
                 case _ where stateOverride != nil:
                     if buffer.isEmpty == false {
-                        guard let parsedInteger = UInt16(String(decoding: buffer, as: Unicode.ASCII.self)) else {
+                        guard let parsedInteger = UInt16(String(decoding: buffer, as: UTF8.self)) else {
                             onValidationError(.portOutOfRange)
                             return false
                         }
@@ -1254,7 +1262,11 @@ extension XURL.Parser {
                             onValidationError(.unescapedPercentSign)
                         }
                     }
-                    buffer.append(contentsOf: PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: url_escape_path).utf8)
+                    PercentEscaping.encodeAsBuffer(
+                        singleUTF8CodePoint: codePoint,
+                        escapeSet: .url_path,
+                        processResult: { piece in buffer.append(contentsOf: piece) }
+                    )
                     idx = codePoint.endIndex
                     continue // We already skipped `idx` to the end of the code-point.
                 }
@@ -1334,8 +1346,11 @@ extension XURL.Parser {
                             onValidationError(.unescapedPercentSign)
                         }
                     }
-                    let escapedChar = PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: url_escape_c0)
-                    url.path[0].append(escapedChar)
+                    PercentEscaping.encodeAsString(
+                        singleUTF8CodePoint: codePoint,
+                        escapeSet: .url_c0,
+                        processResult: { piece in url.path[0].append(piece) }
+                    )
                     idx = codePoint.endIndex
                     continue // We already skipped `idx` to the end of the code-point.
                 }
@@ -1366,7 +1381,7 @@ extension XURL.Parser {
                     }
                 }
                 let urlIsSpecial = url.scheme.isSpecial
-                let escapedChar = PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: { asciiChar in
+                let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
                     switch asciiChar {
                     case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign: fallthrough
                     case _ where asciiChar.codePoint < ASCII.exclamationMark.codePoint:      fallthrough
@@ -1375,11 +1390,16 @@ extension XURL.Parser {
                     default: return false
                     }
                 })
-                if url.query == nil {
-                    url.query = escapedChar
-                } else {
-                    url.query!.append(escapedChar)
-                }
+                PercentEscaping.encodeAsString(
+                    singleUTF8CodePoint: codePoint,
+                    escapeSet: escapeSet,
+                    processResult: { escapedChar in
+                        if url.query == nil {
+                            url.query = escapedChar
+                        } else {
+                            url.query!.append(escapedChar)
+                        }
+                })
                 idx = codePoint.endIndex
                 continue // We already skipped `idx` to the end of the code-point.
 
@@ -1401,12 +1421,16 @@ extension XURL.Parser {
                         onValidationError(.unescapedPercentSign)
                     }
                 }
-                let escapedChar = PercentEscaping.encode(singleUTF8CodePoint: codePoint, where: url_escape_fragment)
-                if url.fragment == nil {
-                    url.fragment = escapedChar
-                } else {
-                    url.fragment!.append(escapedChar)
-                }
+                PercentEscaping.encodeAsString(
+                    singleUTF8CodePoint: codePoint,
+                    escapeSet: .url_fragment,
+                    processResult: { escapedChar in
+                        if url.fragment == nil {
+                            url.fragment = escapedChar
+                        } else {
+                            url.fragment?.append(escapedChar)
+                        }
+                })
                 idx = codePoint.endIndex
                 continue // We already skipped `idx` to the end of the code-point.
                 
