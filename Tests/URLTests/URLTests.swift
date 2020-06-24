@@ -7,21 +7,21 @@ final class URLTests: XCTestCase {
         // These examples taken from the spec:
         // https://url.spec.whatwg.org/#urls
 
-        if let results = XURL.Parser.parse("https://example.org/") {
+        if let results = WebURLParser.parse("https://example.org/") {
             XCTAssertEqual(results.scheme, .https)
             XCTAssertEqual(results.host, .domain("example.org"))
         } else {
             XCTFail("Failed to parse")
         }
 
-        if let results = XURL.Parser.parse("https://////example.org///") {
+        if let results = WebURLParser.parse("https://////example.org///") {
             XCTAssertEqual(results.scheme, .https)
             XCTAssertEqual(results.host, .domain("example.org"))
         } else {
             XCTFail("Failed to parse")
         }
 	
-        if let results = XURL.Parser.parse("https://example.com/././foo") {
+        if let results = WebURLParser.parse("https://example.com/././foo") {
             XCTAssertEqual(results.scheme, .https)
             XCTAssertEqual(results.host, .domain("example.com"))
             XCTAssertEqual(results.path, ["foo"])
@@ -29,23 +29,21 @@ final class URLTests: XCTestCase {
             XCTFail("Failed to parse")
         }
 
-        // XFAIL: We need to normalise the case.
-
-        // if let results = XURL.Parser.parse("https://EXAMPLE.com/../x") {
-        //     XCTAssertEqual(results.scheme, "https")
-        //     XCTAssertEqual(results.authority.host, .domain("example.com"))
-        //     XCTAssertEqual(results.path, ["x"])
-        // } else {
-        //     XCTFail("Failed to parse")
-        // }
+         if let results = WebURLParser.parse("https://EXAMPLE.com/../x") {
+             XCTAssertEqual(results.scheme, .https)
+             XCTAssertEqual(results.host, .domain("example.com"))
+             XCTAssertEqual(results.path, ["x"])
+         } else {
+             XCTFail("Failed to parse")
+         }
     }
 
    func testBasic() {
 
-       let testData: [(String, XURL.Components)] = [
+       let testData: [(String, WebURLParser.Components)] = [
 
         // Leading, trailing whitespace.
-        ("        http://www.google.com   ", XURL.Components(
+        ("        http://www.google.com   ", WebURLParser.Components(
             scheme: .http,
             username: "", password: "", host: .domain("www.google.com"), port: nil,
             path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -55,21 +53,21 @@ final class URLTests: XCTestCase {
         //
         // FIXME: Includes empty path components, but I'm *sure* this follows the spec
         // (in fact, we deviate a little so we don't add quite so many empty path components).
-        ("http://mail.yahoo.com/€uronews/", XURL.Components(
+        ("http://mail.yahoo.com/€uronews/", WebURLParser.Components(
             scheme: .http,
             username: "", password: "", host: .domain("mail.yahoo.com"), port: nil,
             path: ["%E2%82%ACuronews", ""], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
         // Spaces in credentials.
-        ("ftp://%100myUsername:sec ret ))@ftp.someServer.de:21/file/thing/book.txt", XURL.Components(
+        ("ftp://%100myUsername:sec ret ))@ftp.someServer.de:21/file/thing/book.txt", WebURLParser.Components(
             scheme: .ftp,
             username: "%100myUsername", password: "sec%20ret%20))", host: .domain("ftp.someserver.de"), port: nil,
             path: ["file", "thing", "book.txt"], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
         // Windows drive letters.
-        ("file:///C|/demo", XURL.Components(
+        ("file:///C|/demo", WebURLParser.Components(
             scheme: .file,
             username: "", password: "", host: .empty, port: nil,
             path: ["C:", "demo"], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -79,35 +77,35 @@ final class URLTests: XCTestCase {
         //
         // FIXME: Includes empty path components, but I'm *sure* this follows the spec
         // (in fact, we deviate a little so we don't add quite so many empty path components).
-        ("http://www.test.com/../athing/anotherthing/.././something/", XURL.Components(
+        ("http://www.test.com/../athing/anotherthing/.././something/", WebURLParser.Components(
             scheme: .http,
             username: "", password: "", host: .domain("www.test.com"), port: nil,
             path: ["athing", "something", ""], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
         // IPv6 address.
-        ("https://[::ffff:192.168.0.1]/aThing", XURL.Components(
+        ("https://[::ffff:192.168.0.1]/aThing", WebURLParser.Components(
             scheme: .https,
             username: "", password: "", host: .ipv6Address(IPAddress.V6("::ffff:c0a8:1")!), port: nil,
             path: ["aThing"], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
         // IPv4 address.
-        ("https://192.168.0.1/aThing", XURL.Components(
+        ("https://192.168.0.1/aThing", WebURLParser.Components(
             scheme: .https,
             username: "", password: "", host: .ipv4Address(IPAddress.V4("192.168.0.1")!), port: nil,
             path: ["aThing"], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
         // Non-ASCII opaque host.
-        ("tp://www.bücher.de", XURL.Components(
+        ("tp://www.bücher.de", WebURLParser.Components(
             scheme: .other("tp"),
             username: "", password: "", host: .opaque(OpaqueHost("www.b%C3%BCcher.de")!), port: nil,
             path: [], query: nil, fragment: nil, cannotBeABaseURL: false)
         ),
 
         // Emoji opaque host.
-        ("tp://👩‍👩‍👦‍👦️/family", XURL.Components(
+        ("tp://👩‍👩‍👦‍👦️/family", WebURLParser.Components(
             scheme: .other("tp"),
             username: "", password: "",
             host: .opaque(OpaqueHost("%F0%9F%91%A9%E2%80%8D%F0%9F%91%A9%E2%80%8D%F0%9F%91%A6%E2%80%8D%F0%9F%91%A6%EF%B8%8F")!), port: nil,
@@ -126,7 +124,7 @@ final class URLTests: XCTestCase {
 
        print("===================")
        for (input, expectedComponents) in testData {
-            let results = XURL.Parser.parse(input)
+            let results = WebURLParser.parse(input)
             XCTAssertEqual(results, expectedComponents, "Failed to correctly parse \(input)")
             debugPrint(input, results)
         }
@@ -134,8 +132,8 @@ final class URLTests: XCTestCase {
    }
 
    func testInvalidIPv4() {
-        let testData: [(String, XURL.Components?)] = [
-            ("https://0x3h", XURL.Components(
+        let testData: [(String, WebURLParser.Components?)] = [
+            ("https://0x3h", WebURLParser.Components(
                 scheme: .https,
                 username: "", password: "", host: .domain("0x3h"), port: nil,
                 path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)),
@@ -143,7 +141,7 @@ final class URLTests: XCTestCase {
         ]
 
         for (input, expectedComponents) in testData {
-            let results = XURL.Parser.parse(input)
+            let results = WebURLParser.parse(input)
             XCTAssertEqual(results, expectedComponents, "Failed to correctly parse \(input)")
         }
    }
@@ -221,7 +219,7 @@ final class URLTests: XCTestCase {
 }
 
 
-fileprivate func debugPrint(_ url: String, _ parsedComponents: XURL.Components?) {
+fileprivate func debugPrint(_ url: String, _ parsedComponents: WebURLParser.Components?) {
     print("URL:\t|\(url)|")
     if let results = parsedComponents {
         print("Results:\n\(results)")

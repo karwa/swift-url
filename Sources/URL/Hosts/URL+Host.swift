@@ -1,5 +1,5 @@
 
-extension XURL {
+extension WebURLParser {
     public enum Host: Equatable, Hashable {
         case domain(String)
         case ipv4Address(IPAddress.V4)
@@ -9,7 +9,7 @@ extension XURL {
     }
 }
 
-extension XURL.Host {
+extension WebURLParser.Host {
 
     var isEmpty: Bool {
         switch self {
@@ -20,7 +20,7 @@ extension XURL.Host {
     }
 }
 
-extension XURL.Host {
+extension WebURLParser.Host {
 
     public enum ValidationError: Equatable, CustomStringConvertible {
         case ipv4AddressError(IPAddress.V4.ValidationError)
@@ -115,7 +115,7 @@ extension XURL.Host {
 
 // This is a poor approximation of unicode's "domain2ascii" algorithm,
 // which simply lowercases ASCII alphas and fails for non-ASCII characters.
-func fake_domain2ascii(_ domain: inout Array<UInt8>) -> XURL.Host.HostParserError? {
+func fake_domain2ascii(_ domain: inout Array<UInt8>) -> WebURLParser.Host.HostParserError? {
     for i in domain.indices {
         guard let asciiChar = ASCII(domain[i]) else { return .containsForbiddenHostCodePoint }
         domain[i] = asciiChar.lowercased.codePoint
@@ -123,7 +123,7 @@ func fake_domain2ascii(_ domain: inout Array<UInt8>) -> XURL.Host.HostParserErro
     return nil
 }
 
-extension XURL.Host {
+extension WebURLParser.Host {
 
     @inlinable public static func parse<S>(_ input: S, isNotSpecial: Bool = false, onValidationError: (ValidationError)->Void) -> Self? where S: StringProtocol {
         return input._withUTF8 { Self.parse($0, isNotSpecial: isNotSpecial, onValidationError: onValidationError) }
@@ -135,7 +135,7 @@ extension XURL.Host {
     }
 }
 
-extension XURL.Host: CustomStringConvertible {
+extension WebURLParser.Host: CustomStringConvertible {
 
     /// Serialises the host, according to https://url.spec.whatwg.org/#host-serializing (as of 14.06.2020).
     ///
@@ -155,7 +155,7 @@ extension XURL.Host: CustomStringConvertible {
     }
 }
 
-extension XURL.Host: Codable {
+extension WebURLParser.Host: Codable {
     
     public enum Kind: String, Codable {
         case domain

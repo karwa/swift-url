@@ -1,16 +1,16 @@
 
 public struct WebURL {
-    private var components: XURL.Components
+    private var components: WebURLParser.Components
     
     public init?(_ url: String, base: String? = nil) {
-        guard let components = XURL.Parser.parse(url, base: base) else {
+        guard let components = WebURLParser.parse(url, base: base) else {
             return nil
         }
         self.components = components
     }
     
     // For testing only.
-    public init(components: XURL.Components) {
+    public init(components: WebURLParser.Components) {
         self.components = components
     }
 }

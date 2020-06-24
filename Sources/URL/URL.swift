@@ -1,12 +1,13 @@
 import Algorithms // for Collection.trim
 
-/// A String which is known to contain a valid URL.
+/// A namespace for deconstructed URL components and operations on them.
+/// These types and methods should be wrapped or aliased in to a more user-friendly model.
 ///
-public struct XURL {
-    var string: String
-}
+/// See: https://url.spec.whatwg.org/ for more information.
+///
+public enum WebURLParser {}
 
-extension XURL {
+extension WebURLParser {
     public enum Scheme: RawRepresentable, Equatable, Hashable, Codable {
         case ftp
         case file
@@ -72,7 +73,7 @@ extension XURL {
                 }
             case .w?:
                 guard iter.next() == .s else { return notRecognised() }
-            	switch iter.next() {
+                switch iter.next() {
                 case .s?:
                     guard iter.next() == nil else { return notRecognised() }
                     return .wss
@@ -86,7 +87,7 @@ extension XURL {
             }
         }
         
-        var defaultPort: UInt16? {
+        public var defaultPort: UInt16? {
             switch self {
             case .ftp:   return 21
             case .file:  return nil
@@ -105,14 +106,15 @@ extension XURL {
     }
 }
 
-extension XURL {
+
+extension WebURLParser {
     
     public struct Components: Equatable, Hashable, Codable {
         fileprivate final class Storage: Equatable, Hashable, Codable {
-            var scheme: XURL.Scheme
+            var scheme: WebURLParser.Scheme
             var username: String
             var password: String
-            var host: XURL.Host?
+            var host: WebURLParser.Host?
             var port: UInt16?
             var path: [String]
             var query: String?
@@ -121,7 +123,7 @@ extension XURL {
             // TODO:
             // URL also has an associated blob URL entry that is either null or a blob URL entry. It is initially null.
          
-            init(scheme: Scheme, username: String, password: String, host: XURL.Host?,
+            init(scheme: WebURLParser.Scheme, username: String, password: String, host: WebURLParser.Host?,
                  port: UInt16?, path: [String], query: String?, fragment: String?,
                  cannotBeABaseURL: Bool) {
                 self.scheme = scheme; self.username = username; self.password = password; self.host = host
@@ -168,7 +170,7 @@ extension XURL {
             
             /// Copies the username, password, host and port fields from `other`.
             ///
-            func copyAuthority(from other: XURL.Components.Storage) {
+            func copyAuthority(from other: WebURLParser.Components.Storage) {
                 self.username = other.username
                 self.password = other.password
                 self.host     = other.host
@@ -188,7 +190,7 @@ extension XURL {
             self._storage = _storage
         }
         
-        public init(scheme: Scheme = .other(""), username: String = "", password: String = "", host: XURL.Host? = nil,
+        public init(scheme: WebURLParser.Scheme = .other(""), username: String = "", password: String = "", host: WebURLParser.Host? = nil,
                     port: UInt16? = nil, path: [String] = [], query: String? = nil, fragment: String? = nil,
                      cannotBeABaseURL: Bool = false) {
             self._storage = Storage(
@@ -200,14 +202,14 @@ extension XURL {
     }
 }
 
-extension XURL.Components {
+extension WebURLParser.Components {
         
     
     /// A URL’s scheme is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing. It is initially the empty string.
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var scheme: XURL.Scheme {
+    public var scheme: WebURLParser.Scheme {
         get { return _storage.scheme }
         set { ensureUnique(); _storage.scheme = newValue }
     }
@@ -238,7 +240,7 @@ extension XURL.Components {
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     /// https://url.spec.whatwg.org/#host-representation as of 14.06.2020
     ///
-    public var host: XURL.Host? {
+    public var host: WebURLParser.Host? {
        get { return _storage.host }
        set { ensureUnique(); _storage.host = newValue }
     }
@@ -295,18 +297,18 @@ extension XURL.Components {
 
 // Internal helpers.
 
-extension XURL.Components {
+extension WebURLParser.Components {
     
     /// Modifies URL components by parsing a given string from the desired parser state.
     ///
     @discardableResult
-    internal mutating func modify<S>(_ input: S, stateOverride: XURL.Parser.State?) -> Bool where S: StringProtocol {
+    internal mutating func modify<S>(_ input: S, stateOverride: WebURLParser.ParserState?) -> Bool where S: StringProtocol {
         ensureUnique()
         return input._withUTF8 {
             var buffer = [UInt8]()
             buffer.reserveCapacity(32)
-            return XURL.Parser._parse($0, base: nil, url: _storage, stateOverride: stateOverride,
-                                      workingBuffer: &buffer, onValidationError: { _ in })
+            return WebURLParser._parse($0, base: nil, url: _storage, stateOverride: stateOverride,
+                                       workingBuffer: &buffer, onValidationError: { _ in })
         }
     }
     
@@ -371,7 +373,7 @@ extension XURL.Components {
     }
 }
 
-extension XURL.Components: CustomDebugStringConvertible {
+extension WebURLParser.Components: CustomDebugStringConvertible {
 
     public var debugDescription: String {
         return """
@@ -387,17 +389,9 @@ extension XURL.Components: CustomDebugStringConvertible {
     }
 }
 
-extension XURL {
+extension WebURLParser {
 
-    /// This parser is pretty-much a direct transcription of the WHATWG spec in to Swift.
-    /// See: https://url.spec.whatwg.org/#url-parsing
-    ///
-    public struct Parser {}
-}
-
-extension XURL.Parser {
-
-    enum State {
+    enum ParserState {
         case schemeStart
         case scheme
         case noScheme
@@ -423,7 +417,7 @@ extension XURL.Parser {
     
     public struct ValidationError: Equatable, CustomStringConvertible {
         private var code: UInt8
-        private var hostParserError: XURL.Host.ValidationError? = nil
+        private var hostParserError: WebURLParser.Host.ValidationError? = nil
 
         // Named errors and their descriptions/examples taken from:
         // https://github.com/whatwg/url/pull/502 on 15.06.2020
@@ -450,7 +444,7 @@ extension XURL.Parser {
         internal static var invalidURLCodePoint:                Self { Self(code: 20) }
         internal static var unescapedPercentSign:               Self { Self(code: 21) }
         
-        internal static func hostParserError(_ err: XURL.Host.ValidationError) -> Self {
+        internal static func hostParserError(_ err: WebURLParser.Host.ValidationError) -> Self {
             Self(code: 22, hostParserError: err)
         }
         // TODO: host-related errors. Map these to our existing host-parser errors.
@@ -626,11 +620,11 @@ extension XURL.Parser {
 
 // Parser entry-points.
 
-extension XURL.Parser {
+extension WebURLParser {
     
     // Parse, ignoring non-fatal validation errors.
 
-    public static func parse<S>(_ input: S, base: String? = nil) -> XURL.Components? where S: StringProtocol {
+    public static func parse<S>(_ input: S, base: String? = nil) -> Components? where S: StringProtocol {
         var buffer = [UInt8]()
         buffer.reserveCapacity(64)
         if let baseString = base, baseString.isEmpty == false {
@@ -643,15 +637,15 @@ extension XURL.Parser {
         return parse_impl(input, baseURL: nil, workingBuffer: &buffer)
     }
     
-    public static func parse<S>(_ input: S, baseURL: XURL.Components?) -> XURL.Components? where S: StringProtocol {
+    public static func parse<S>(_ input: S, baseURL: Components?) -> Components? where S: StringProtocol {
         var buffer = [UInt8]()
         buffer.reserveCapacity(64)
     	return parse_impl(input, baseURL: baseURL, workingBuffer: &buffer)
     }
 
-    private static func parse_impl<S>(_ input: S, baseURL: XURL.Components?, workingBuffer: inout [UInt8]) -> XURL.Components? where S: StringProtocol {
+    private static func parse_impl<S>(_ input: S, baseURL: Components?, workingBuffer: inout [UInt8]) -> Components? where S: StringProtocol {
         return input._withUTF8 {
-            let result = XURL.Components()
+            let result = Components()
             return _parse($0, base: baseURL, url: result._storage, stateOverride: nil, workingBuffer: &workingBuffer, onValidationError: { _ in }) ? result : nil
         }
     }
@@ -659,7 +653,7 @@ extension XURL.Parser {
     // Parse, reporting validation errors.
     
     public struct Result {
-        public var components: XURL.Components?
+        public var components: Components?
         public var validationErrors: [ValidationError]
     }
     
@@ -677,17 +671,17 @@ extension XURL.Parser {
         return (parseAndReport_impl(input, baseURL: nil, workingBuffer: &buffer), nil)
     }
     
-    public static func parseAndReport<S>(_ input: S, baseURL: XURL.Components?) -> Result where S: StringProtocol {
+    public static func parseAndReport<S>(_ input: S, baseURL: Components?) -> Result where S: StringProtocol {
         var buffer = [UInt8]()
         buffer.reserveCapacity(64)
         return parseAndReport_impl(input, baseURL: baseURL, workingBuffer: &buffer)
     }
     
-    private static func parseAndReport_impl<S>(_ input: S, baseURL: XURL.Components?, workingBuffer: inout [UInt8]) -> Result where S: StringProtocol {
+    private static func parseAndReport_impl<S>(_ input: S, baseURL: Components?, workingBuffer: inout [UInt8]) -> Result where S: StringProtocol {
         return input._withUTF8 { utf8 in
             var errors: [ValidationError] = []
             errors.reserveCapacity(8)
-            let components = XURL.Components()
+            let components = Components()
             if _parse(utf8, base: baseURL, url: components._storage, stateOverride: nil, workingBuffer: &workingBuffer, onValidationError: { errors.append($0) }) {
                 return Result(components: components, validationErrors: errors)
             } else {
@@ -699,7 +693,7 @@ extension XURL.Parser {
 
 // Parsing algorithm.
 
-extension XURL.Parser {
+extension WebURLParser {
 
     /// The "Basic URL Parser" algorithm described by:
     /// https://url.spec.whatwg.org/#url-parsing as of 14.06.2020
@@ -715,8 +709,8 @@ extension XURL.Parser {
     ///  			or `false` if the input could not be parsed.
     ///
     fileprivate static func _parse<C>(
-        _ input: C, base: XURL.Components?, url: XURL.Components.Storage,
-        stateOverride: State?, workingBuffer: inout [UInt8],
+        _ input: C, base: Components?, url: Components.Storage,
+        stateOverride: ParserState?, workingBuffer: inout [UInt8],
         onValidationError: (ValidationError)->Void) -> Bool where C: BidirectionalCollection, C.Element == UInt8 {
         
         var input = input[...]
@@ -754,8 +748,8 @@ extension XURL.Parser {
     }
     
     private static func _parse_stateMachine<C>(
-        _ input: C, base: XURL.Components?, url: XURL.Components.Storage,
-        stateOverride: State?, workingBuffer buffer: inout [UInt8],
+        _ input: C, base: Components?, url: Components.Storage,
+        stateOverride: ParserState?, workingBuffer buffer: inout [UInt8],
         onValidationError: (ValidationError)->Void) -> Bool where C: Collection, C.Element == UInt8 {
         
         // 3. Begin state machine.
@@ -820,7 +814,7 @@ extension XURL.Parser {
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 assert(c == .colon)
-                let newScheme = XURL.Scheme.parse(asciiBytes: buffer)
+                let newScheme = WebURLParser.Scheme.parse(asciiBytes: buffer)
                 if stateOverride != nil {
                     if url.scheme.isSpecial != newScheme.isSpecial {
                         break inputLoop
@@ -1068,8 +1062,8 @@ extension XURL.Parser {
                         return false
                     }
                     guard let parsedHost = buffer.withUnsafeBufferPointer({
-                        XURL.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false,
-                                        onValidationError: { onValidationError(.hostParserError($0)) })
+                        WebURLParser.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false,
+                                                onValidationError: { onValidationError(.hostParserError($0)) })
                     }) else {
                         return false
                     }
@@ -1090,8 +1084,8 @@ extension XURL.Parser {
                         }
                     }
                     guard let parsedHost = buffer.withUnsafeBufferPointer({
-                        XURL.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false,
-                                        onValidationError: { onValidationError(.hostParserError($0)) })
+                        WebURLParser.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false,
+                                                onValidationError: { onValidationError(.hostParserError($0)) })
                     }) else {
                         return false
                     }
@@ -1220,8 +1214,8 @@ extension XURL.Parser {
                         state = .pathStart
                     } else {
                         guard let parsedHost = buffer.withUnsafeBufferPointer({
-                            XURL.Host.parse($0, isNotSpecial: false,
-                                            onValidationError: { onValidationError(.hostParserError($0)) })
+                            WebURLParser.Host.parse($0, isNotSpecial: false,
+                                                    onValidationError: { onValidationError(.hostParserError($0)) })
                         }) else {
                             return false
                         }
