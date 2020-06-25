@@ -507,23 +507,25 @@ extension IPAddress.V4 {
                 var value: UInt32 = 0
                 var radix: UInt32 = 10
 
-                guard ASCII.ranges.digits.contains(input[idx]) else { 
-                    onValidationError(.pieceBeginsWithInvalidCharacter)
-                    return .notAnIPAddress
-                }
-                // Leading '0' or '0x' sets the radix.
-                if input[idx] == ASCII.n0 {
-                    idx = input.index(after: idx)
-                    if idx != input.endIndex {
-                        switch input[idx] {
-                        case ASCII.x, ASCII.X:
-                            radix = 16
-                            idx   = input.index(after: idx)
-                        default:
-                            radix = 8
+                do {
+                    guard let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) else {
+                        onValidationError(.pieceBeginsWithInvalidCharacter)
+                        return .notAnIPAddress
+                    }
+                    // Leading '0' or '0x' sets the radix.
+                    if asciiChar == ASCII.n0 {
+                        idx = input.index(after: idx)
+                        if idx != input.endIndex {
+                            switch input[idx] {
+                            case ASCII.x, ASCII.X:
+                                radix = 16
+                                idx   = input.index(after: idx)
+                            default:
+                                radix = 8
+                            }
                         }
                     }
-                }
+                };
                 // Parse remaining digits in piece.
                 while idx != input.endIndex {
                     guard let numericValue = ASCII(input[idx]).map({ ASCII.parseHexDigit(ascii: $0) }),

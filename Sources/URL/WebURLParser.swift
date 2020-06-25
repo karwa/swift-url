@@ -661,7 +661,7 @@ extension WebURLParser {
                 // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
                 let c: ASCII = (idx != endIndex) ? ASCII(input[idx]) ?? .null : .null
                 switch c {
-                case _ where ASCII.ranges.isAlpha(c):
+                case _ where c.isAlpha:
                     buffer.append(c.lowercased.codePoint)
                     state = .scheme
                     break stateMachine
@@ -678,7 +678,7 @@ extension WebURLParser {
                 // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
                 let c: ASCII = (idx != endIndex) ? ASCII(input[idx]) ?? .null : .null
                 switch c {
-                case _ where ASCII.ranges.isAlphaNumeric(c), .plus, .minus, .period:
+                case _ where c.isAlphaNumeric, .plus, .minus, .period:
                     buffer.append(c.lowercased.codePoint)
                     break stateMachine
                 case .colon:

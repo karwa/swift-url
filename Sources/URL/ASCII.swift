@@ -1,4 +1,4 @@
-public struct ASCII {
+struct ASCII {
     public let codePoint: UInt8
 }
 
@@ -19,11 +19,6 @@ extension ASCII {
     @inlinable public init?(_ c: Character) {
         guard let asciiVal = c.asciiValue else { return nil }
         self.init(_unchecked: asciiVal)
-    }
-
-    @inlinable public init?(_ s: UnicodeScalar) {
-        guard s.value & 0xFFFFFF80 == 0 else { return nil }
-        self.init(_unchecked: UInt8(s.value))
     }
 }
 
@@ -97,7 +92,7 @@ extension ASCII {
     }
 }
 
-public extension ASCII {
+extension ASCII {
 
     // Control Characters.
     @inlinable static var null                  : ASCII { ASCII(_unchecked: 0x00) }
@@ -244,75 +239,26 @@ extension ASCII {
         public var digits           : Range<ASCII> { ASCII(_unchecked: 0x30)..<ASCII(_unchecked: 0x3A) }
         public var uppercaseAlpha   : Range<ASCII> { ASCII(_unchecked: 0x41)..<ASCII(_unchecked: 0x5B) }
         public var lowercaseAlpha   : Range<ASCII> { ASCII(_unchecked: 0x61)..<ASCII(_unchecked: 0x7B) }
-
-        // FIXME: These should be instance members.
-        public func isAlpha(_ char: ASCII) -> Bool {
-            uppercaseAlpha.contains(char) || lowercaseAlpha.contains(char) 
-        }
-        public func isAlphaNumeric(_ char: ASCII) -> Bool {
-            isAlpha(char) || digits.contains(char)
-        }
-
-        public func isAlpha(_ char: Character) -> Bool {
-            uppercaseAlpha.contains(char) || lowercaseAlpha.contains(char) 
-        }
-        public func isAlphaNumeric(_ char: Character) -> Bool {
-            isAlpha(char) || digits.contains(char)
-        }
     }
 
     public static var ranges: Ranges { Ranges() }
-}
-
-extension ASCII {
-
-    public var unicodeScalar: UnicodeScalar {
-        return UnicodeScalar(codePoint)
-    }
-}
-
-extension ASCII {
-
-    internal static var allCharacters: AnySequence<ASCII> {
-        struct Iter: IteratorProtocol {
-            var codePoint: UInt8
-            mutating func next() -> ASCII? {
-                guard let ascii = ASCII(codePoint) else { return nil }
-                codePoint &+= 1
-                return ascii
-            }
-        }
-        return AnySequence(IteratorSequence(Iter(codePoint: 0)))
-    }
-}
-
-extension Character {
-    @inlinable public init(_ ascii: ASCII) {
-        self.init(Unicode.Scalar(ascii.codePoint))
-    }
-}
-
-extension Range where Bound == ASCII {
     
-    @inlinable public func contains(_ char: Character) -> Bool {
-        ASCII(char).map { self.contains($0) } ?? false
+    /// Whether or not this is an alpha character (a-z, A-Z).
+    ///
+    public var isAlpha: Bool {
+        ASCII.ranges.uppercaseAlpha.contains(self) || ASCII.ranges.lowercaseAlpha.contains(self)
     }
-
-    @inlinable public func contains(_ codePoint: UInt8) -> Bool {
-        Range<UInt8>(uncheckedBounds: (lower: lowerBound.codePoint, upper: upperBound.codePoint))
-          .contains(codePoint)
-    }
-}
-
-extension ClosedRange where Bound == ASCII {
     
-    @inlinable public func contains(_ char: Character) -> Bool {
-        ASCII(char).map { self.contains($0) } ?? false
+    /// Whether or not this is an alphanumeric character (a-z, A-Z, 0-9).
+    ///
+    public var isAlphaNumeric: Bool {
+        isAlpha || ASCII.ranges.digits.contains(self)
     }
 
-    @inlinable public func contains(_ codePoint: UInt8) -> Bool {
-        ClosedRange<UInt8>(uncheckedBounds: (lower: lowerBound.codePoint, upper: upperBound.codePoint))
-          .contains(codePoint)
+    /// Whether or not this is a hex digit (a-f, A-F, 0-9).
+    ///
+    public var isHexDigit: Bool {
+        ASCII.parseHexDigit(ascii: self) != ASCII.parse_NotFound
     }
 }
 
@@ -375,12 +321,6 @@ extension ASCII {
         let hexValue = parseHexDigit(ascii: ascii)
         // Yes, there's a branch, but I didn't fancy a second lookup table.
         return hexValue < 10 ? hexValue : DC
-    }
-}
-
-extension ASCII {
-    public var isHexDigit: Bool {
-        ASCII.parseHexDigit(ascii: self) != ASCII.parse_NotFound
     }
 }
 

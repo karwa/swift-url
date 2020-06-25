@@ -141,7 +141,7 @@ extension URLStringUtils where T: Collection, T.Element == UInt8 {
     ///
     static func isWindowsDriveLetter(_ bytes: T) -> Bool {
         var it = bytes.makeIterator()
-        guard let char1 = it.next(), let ascii1 = ASCII(char1), ASCII.ranges.isAlpha(ascii1) else { return false }
+        guard let char1 = it.next(), let ascii1 = ASCII(char1), ascii1.isAlpha else { return false }
         guard let char2 = it.next(), let ascii2 = ASCII(char2), (ascii2 == .colon || ascii2 == .verticalBar) else { return false }
         guard it.next() == nil else { return false }
         return true
@@ -165,7 +165,7 @@ extension URLStringUtils where T: Collection, T.Element == UInt8 {
     ///
     static func hasWindowsDriveLetterPrefix(_ bytes: T) -> Bool {
         var it = bytes.makeIterator()
-        guard let char1 = it.next(), let ascii1 = ASCII(char1), ASCII.ranges.isAlpha(ascii1) else { return false }
+        guard let char1 = it.next(), let ascii1 = ASCII(char1), ascii1.isAlpha else { return false }
         guard let char2 = it.next(), let ascii2 = ASCII(char2), (ascii2 == .colon || ascii2 == .verticalBar) else { return false }
         guard let char3 = it.next() else { return true }
         switch ASCII(char3) {
