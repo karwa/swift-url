@@ -1,5 +1,5 @@
 // TODO: Think about exposing this as a public API.
-// The issue with round-tripping Strings like "%100" (as required by the URL standard) makes it a bit awkward.
+// The issue with round-tripping Strings like "%100" (the URL standard version doesn't round-trip) makes it a bit awkward.
 
 enum PercentEscaping {
     struct EscapeSet {
@@ -26,6 +26,8 @@ extension PercentEscaping {
     /// - Bytes which are not valid ASCII characters are always transformed as the sequence "%ZZ",
     ///   where ZZ is the byte's numerical value as a hexadecimal string.
     /// - Bytes which are valid ASCII characters are also transformed if the predicate returns `true`.
+    ///
+    /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
     ///
     /// -  important: 	This algorithm does not round-trip for arbitrary byte sequences unless `escapeSet` includes
     /// 				the `ASCII.percentSign` character itself. If not, sequences which happen to contain a valid escape string already
@@ -79,6 +81,8 @@ extension PercentEscaping {
     /// - Code-points which are not ASCII characters are always transformed as the sequence "%ZZ%ZZ%ZZ...",
     ///   where ZZ are the UTF8 bytes' numerical values as a hexadecimal string.
     /// - Bytes which are valid ASCII characters are also transformed if the predicate returns `true`.
+    ///
+    /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
     ///
     /// -  important:    This algorithm does not encode the `ASCII.percentSign` character itself,
     ///                  unless it is explicitly told to do so by the escape set.
@@ -139,7 +143,9 @@ extension PercentEscaping {
     /// The decoder replaces patterns of the form "%ZZ" with the byte 0xZZ, where Z is an ASCII hexadecimal digit.
     /// The decoded sequence is returned as a binary blob, without additional interpretation. If the contents are expected
     /// to be a UTF8-encoded `String`, use the `decodeString` function instead.
-    /// 
+    ///
+    /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
+    ///
     /// - parameters:
     ///     - bytes:    The sequence of bytes to decode.
     ///
@@ -165,6 +171,8 @@ extension PercentEscaping {
     /// The decoder replaces patterns of the form "%ZZ" with the byte 0xZZ, where Z is an ASCII hexadecimal digit.
     /// If the decoded byte sequence represents an invalid UTF8 `String`, it will be repaired by replacing
     /// the appropriate parts with the unicode replacement character (U+FFFD).
+    ///
+    /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
     /// 
     /// - parameters:
     ///     - bytes:    The sequence of bytes to decode.
@@ -217,7 +225,9 @@ extension PercentEscaping {
     /// The decoder replaces patterns of the form "%ZZ" with the byte 0xZZ, where Z is an ASCII hexadecimal digit.
     /// If the decoded byte sequence represents an invalid UTF8 `String`, it will be repaired by replacing
     /// the appropriate parts with the unicode replacement character (U+FFFD).
-    /// 
+    ///
+    /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
+    ///
     /// - parameters:
     ///     - string:    The string to decode.
     ///
@@ -335,6 +345,8 @@ extension Character {
 
 // - URL Percent-escaping predicates.
 
+// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
+//
 extension PercentEscaping.EscapeSet {
     
     static var url_c0: Self {
