@@ -9,7 +9,7 @@ public enum WebURLParser {}
 
 extension WebURLParser {
     
-    public struct Components: Equatable, Hashable, Codable {
+    struct Components: Equatable, Hashable, Codable {
         fileprivate final class Storage: Equatable, Hashable, Codable {
             var scheme: WebURLParser.Scheme
             var username: String
@@ -86,11 +86,7 @@ extension WebURLParser {
             }
         }
         
-        fileprivate init(_storage: Storage) {
-            self._storage = _storage
-        }
-        
-        public init(scheme: WebURLParser.Scheme = .other(""), username: String = "", password: String = "", host: WebURLParser.Host? = nil,
+        init(scheme: WebURLParser.Scheme = .other(""), username: String = "", password: String = "", host: WebURLParser.Host? = nil,
                     port: UInt16? = nil, path: [String] = [], query: String? = nil, fragment: String? = nil,
                      cannotBeABaseURL: Bool = false) {
             self._storage = Storage(
@@ -109,7 +105,7 @@ extension WebURLParser.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var scheme: WebURLParser.Scheme {
+    var scheme: WebURLParser.Scheme {
         get { return _storage.scheme }
         set { ensureUnique(); _storage.scheme = newValue }
     }
@@ -118,7 +114,7 @@ extension WebURLParser.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var username: String {
+    var username: String {
        get { return _storage.username }
        set { ensureUnique(); _storage.username = newValue }
    }
@@ -127,7 +123,7 @@ extension WebURLParser.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var password: String {
+    var password: String {
        get { return _storage.password }
        set { ensureUnique(); _storage.password = newValue }
    }
@@ -140,7 +136,7 @@ extension WebURLParser.Components {
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     /// https://url.spec.whatwg.org/#host-representation as of 14.06.2020
     ///
-    public var host: WebURLParser.Host? {
+    var host: WebURLParser.Host? {
        get { return _storage.host }
        set { ensureUnique(); _storage.host = newValue }
     }
@@ -149,7 +145,7 @@ extension WebURLParser.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var port: UInt16? {
+    var port: UInt16? {
        get { return _storage.port }
        set { ensureUnique(); _storage.port = newValue }
     }
@@ -158,7 +154,7 @@ extension WebURLParser.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var path: [String] {
+    var path: [String] {
         get { return _storage.path }
         _modify { ensureUnique(); yield &_storage.path }
         set { ensureUnique(); _storage.path = newValue }
@@ -168,7 +164,7 @@ extension WebURLParser.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var query: String? {
+    var query: String? {
        get { return _storage.query }
        set { ensureUnique(); _storage.query = newValue }
     }
@@ -177,7 +173,7 @@ extension WebURLParser.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var fragment: String? {
+    var fragment: String? {
        get { return _storage.fragment }
        set { ensureUnique(); _storage.fragment = newValue }
     }
@@ -186,7 +182,7 @@ extension WebURLParser.Components {
     ///
     /// https://url.spec.whatwg.org/#url-representation as of 14.06.2020
     ///
-    public var cannotBeABaseURL: Bool {
+    var cannotBeABaseURL: Bool {
        get { return _storage.cannotBeABaseURL }
        set { ensureUnique(); _storage.cannotBeABaseURL = newValue }
     }
@@ -202,7 +198,7 @@ extension WebURLParser.Components {
     /// Modifies URL components by parsing a given string from the desired parser state.
     ///
     @discardableResult
-    internal mutating func modify<S>(_ input: S, stateOverride: WebURLParser.ParserState?) -> Bool where S: StringProtocol {
+    mutating func modify<S>(_ input: S, stateOverride: WebURLParser.ParserState?) -> Bool where S: StringProtocol {
         ensureUnique()
         return input._withUTF8 {
             var buffer = [UInt8]()
@@ -229,7 +225,7 @@ extension WebURLParser.Components {
         self.port     = other.port
     }
     
-    func serialised(excludeFragment: Bool = false) -> String {
+    func serialized(excludeFragment: Bool = false) -> String {
         var result = ""
         result.append(self.scheme.rawValue)
         result.append(":")
@@ -270,22 +266,6 @@ extension WebURLParser.Components {
             result.append("#\(fragment)")
         }
         return result
-    }
-}
-
-extension WebURLParser.Components: CustomDebugStringConvertible {
-
-    public var debugDescription: String {
-        return """
-        Scheme:\t\(scheme)
-        Username:\t\(username)
-        Password:\t\(password)
-        Host:\t\(host?.description ?? "<nil>")
-        Port:\t\(port?.description ?? "<nil>")
-        Path:\t\(path)
-        Query:\t\(query ?? "<nil>")
-        Fragment:\t\(fragment ?? "<nil>")
-        """
     }
 }
 
@@ -524,7 +504,7 @@ extension WebURLParser {
     
     // Parse, ignoring non-fatal validation errors.
 
-    public static func parse<S>(_ input: S, base: String? = nil) -> Components? where S: StringProtocol {
+    static func parse<S>(_ input: S, base: String? = nil) -> Components? where S: StringProtocol {
         var buffer = [UInt8]()
         buffer.reserveCapacity(64)
         if let baseString = base, baseString.isEmpty == false {
@@ -537,7 +517,7 @@ extension WebURLParser {
         return parse_impl(input, baseURL: nil, workingBuffer: &buffer)
     }
     
-    public static func parse<S>(_ input: S, baseURL: Components?) -> Components? where S: StringProtocol {
+    static func parse<S>(_ input: S, baseURL: Components?) -> Components? where S: StringProtocol {
         var buffer = [UInt8]()
         buffer.reserveCapacity(64)
     	return parse_impl(input, baseURL: baseURL, workingBuffer: &buffer)
@@ -552,12 +532,12 @@ extension WebURLParser {
     
     // Parse, reporting validation errors.
     
-    public struct Result {
-        public var components: Components?
-        public var validationErrors: [ValidationError]
+    struct Result {
+        var components: Components?
+        var validationErrors: [ValidationError]
     }
     
-    public static func parseAndReport<S>(_ input: S, base: String? = nil) -> (url: Result?, base: Result?) where S: StringProtocol {
+    static func parseAndReport<S>(_ input: S, base: String? = nil) -> (url: Result?, base: Result?) where S: StringProtocol {
          var buffer = [UInt8]()
         buffer.reserveCapacity(64)
         if let baseString = base, baseString.isEmpty == false {
@@ -571,7 +551,7 @@ extension WebURLParser {
         return (parseAndReport_impl(input, baseURL: nil, workingBuffer: &buffer), nil)
     }
     
-    public static func parseAndReport<S>(_ input: S, baseURL: Components?) -> Result where S: StringProtocol {
+    static func parseAndReport<S>(_ input: S, baseURL: Components?) -> Result where S: StringProtocol {
         var buffer = [UInt8]()
         buffer.reserveCapacity(64)
         return parseAndReport_impl(input, baseURL: baseURL, workingBuffer: &buffer)
@@ -1400,8 +1380,7 @@ extension WebURLParser {
         return true
     }
     
-
-    static func shortenURLPath(_ path: inout [String], isFileScheme: Bool) {
+    private static func shortenURLPath(_ path: inout [String], isFileScheme: Bool) {
         guard path.isEmpty == false else { return }
         if isFileScheme, path.count == 1, URLStringUtils.isNormalisedWindowsDriveLetter(path[0].utf8) { return }
         path.removeLast()

@@ -1,16 +1,31 @@
+// Javascript-y object model.
+// Documentation comments adapted from Mozilla (https://developer.mozilla.org/en-US/docs/Web/API/URL)
 
+/// The `WebURL` interface is used to parse, construct, normalize, and encode URLs.
+///
+/// It works by providing properties which allow you to easily read and modify the components of a URL.
+/// You normally create a new URL object by specifying the URL as a string when calling its initializer,
+/// or by providing a relative URL and a base URL.
+/// You can then easily read the parsed components of the URL or make changes to the URL.
+///
+/// The parser and API are designed according to the WHATWG specification (https://url.spec.whatwg.org/)
+/// as it was on 14.06.2020. Therefore, it should match the expectations of web developers and more accurately reflect
+/// the kinds of URLs a browser will accept or reject.
+///
 public struct WebURL {
     private var components: WebURLParser.Components
     
-    public init?(_ url: String, base: String? = nil) {
+    public init?(_ url: String, base: String?) {
         guard let components = WebURLParser.parse(url, base: base) else {
             return nil
         }
         self.components = components
     }
     
-    // For testing only.
-    public init(components: WebURLParser.Components) {
+    public init?(_ url: String, baseURL: WebURL) {
+        guard let components = WebURLParser.parse(url, baseURL: baseURL.components) else {
+            return nil
+        }
         self.components = components
     }
 }
@@ -19,16 +34,22 @@ extension WebURL {
     
     // TODO: href setter, origin, searchParams
     
+    /// A stringifier that returns a `String` containing the whole URL.
+    ///
     public var href: String {
-        get { return components.serialised(excludeFragment: false) }
+        get { return components.serialized(excludeFragment: false) }
     }
 
-    /// Known as `protocol` in JavaScript.
+    /// A `String` containing the protocol scheme of the URL, including the final ':'.
+    /// Called `protocol` in JavaScript.
+    ///
     public var scheme: String {
         get { return components.scheme.rawValue + ":" }
         set { components.modify(newValue + ":", stateOverride: .schemeStart) }
     }
     
+    /// A `String` containing the username specified before the domain name.
+    ///
     public var username: String {
         get { return components.username }
         set {
@@ -40,6 +61,8 @@ extension WebURL {
         }
     }
     
+    /// A `String` containing the password specified before the domain name.
+    ///
     public var password: String {
         get { return components.password }
         set {
@@ -51,6 +74,8 @@ extension WebURL {
         }
     }
     
+    /// A `String` containing the domain (that is the hostname) followed by (if a port was specified) a ':' and the port of the URL.
+    ///
     public var host: String {
         get {
             guard let host = components.host else { return "" }
@@ -63,6 +88,8 @@ extension WebURL {
         }
     }
     
+    /// A `String` containing the domain of the URL.
+    ///
     public var hostname: String {
         get { return components.host?.description ?? "" }
         set {
@@ -71,6 +98,8 @@ extension WebURL {
         }
     }
     
+    /// The port number of the URL
+    ///
     public var port: UInt16? {
         get { return components.port }
         set {
@@ -79,6 +108,8 @@ extension WebURL {
         }
     }
     
+    /// A `String` containing an initial '/' followed by the path of the URL.
+    ///
     public var pathname: String {
         get {
             if components.cannotBeABaseURL || components.path.isEmpty {
@@ -93,6 +124,9 @@ extension WebURL {
         }
     }
     
+    /// A `String` indicating the URL's parameter string; if any parameters are provided,
+    /// this string includes all of them, beginning with the leading '?' character.
+	///
     public var search: String {
         get {
             guard let query = components.query, query.isEmpty == false else { return "" }
@@ -116,7 +150,9 @@ extension WebURL {
         }
     }
    
-    /// Known as `hash` in JavaScript.
+    /// A `String` containing a '#' followed by the fragment identifier of the URL.
+    /// Called `hash` in JavaScript.
+    ///
     public var fragment: String {
         get {
             guard let fragment = components.fragment, fragment.isEmpty == false else { return "" }
@@ -139,11 +175,46 @@ extension WebURL {
     }
 }
 
+// Standard protocols.
+
+extension WebURL: Equatable, Hashable, Codable, LosslessStringConvertible {
+    
+    public static func == (lhs: WebURL, rhs: WebURL) -> Bool {
+        return lhs.href == rhs.href
+    }
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(href)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container    = try decoder.singleValueContainer()
+        guard let parsed = WebURL(try container.decode(String.self)) else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Not a valid URL string")
+        }
+        self = parsed
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(href)
+    }
+    
+    public init?(_ description: String) {
+        guard let parsed = WebURL(description, base: nil) else { return nil }
+        self = parsed
+    }
+    
+    public var description: String {
+        return href
+    }
+}
+
 extension WebURL: CustomDebugStringConvertible {
 
     public var debugDescription: String {
         return """
-        {
+        \n{
         \t.href:     \(href)
         \t.scheme:   \(scheme)
         \t.username: \(username)
