@@ -596,17 +596,19 @@ extension WebURLParser {
         var input = input[...]
         
         // 1. Trim leading/trailing C0 control characters and spaces.
-        let trimmedInput = input.trim {
-            switch ASCII($0) {
-            case ASCII.ranges.controlCharacters?: fallthrough
-            case .space?:                         return true
-            default: return false
+        if stateOverride == nil {
+            let trimmedInput = input.trim {
+                switch ASCII($0) {
+                case ASCII.ranges.controlCharacters?: fallthrough
+                case .space?:                         return true
+                default: return false
+                }
             }
+            if trimmedInput.startIndex != input.startIndex || trimmedInput.endIndex != input.endIndex {
+                onValidationError(.unexpectedC0ControlOrSpace)
+            }
+            input = trimmedInput
         }
-        if trimmedInput.startIndex != input.startIndex || trimmedInput.endIndex != input.endIndex {
-            onValidationError(.unexpectedC0ControlOrSpace)
-        }
-        input = trimmedInput
 
         // 2. Remove all ASCII newlines and tabs.
         func isASCIITabOrNewline(_ byte: UInt8) -> Bool {

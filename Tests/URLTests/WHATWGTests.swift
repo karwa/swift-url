@@ -168,12 +168,9 @@ final class WHATWGTests: XCTestCase {
             622, // domain2ascii: IDNA ignored code points in file URLs hosts.
             626, // domain2ascii: Empty host after the domain to ASCII.
         ]
-        report.expectedFailures = []
         for item in array {
             if let sectionName = item as? String {
                 report.recordSection(sectionName)
-//                assert(report.expectedFailures.contains(report) == false,
-//                       "Whoops - you added a comment item to the expected failures list.")
             } else if let rawTestInfo = item as? Dictionary<String, Any> {
                 let testInfo = URLConstructorTestCase(from: rawTestInfo)
                 report.recordTest { report in
@@ -182,7 +179,7 @@ final class WHATWGTests: XCTestCase {
                           report: &report)
                 }
             } else {
-                assertionFailure("👽 - Unexpected item found. Index: \(index). Type: \(type(of: item)). Value: \(item)")
+                assertionFailure("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")
             }
         }
         
@@ -305,6 +302,9 @@ extension WHATWGTests {
         
         // Run the tests.
         var report = TestReport()
+        report.expectedFailures = [
+            96, // IDNA Nontransitional_Processing.
+        ]
         for testGroup in testGroups {
             report.recordSection(testGroup.property)
             if let stringProperty = webURLStringPropertyWithJSName(testGroup.property) {
