@@ -243,6 +243,10 @@ extension ASCII {
 
     public static var ranges: Ranges { Ranges() }
     
+    public func isA(_ range: KeyPath<ASCII.Ranges, Range<ASCII>>) -> Bool {
+        return ASCII.ranges[keyPath: range].contains(self)
+    }
+    
     /// Whether or not this is an alpha character (a-z, A-Z).
     ///
     public var isAlpha: Bool {

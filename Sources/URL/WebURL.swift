@@ -104,7 +104,7 @@ extension WebURL {
         get { return components.port }
         set {
             guard components.cannotHaveCredentialsOrPort == false else { return }
-            components.port = newValue
+            components.port = (newValue == components.scheme.defaultPort) ? nil : newValue
         }
     }
     

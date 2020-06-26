@@ -39,7 +39,7 @@ final class HostParsing_IPv4: XCTestCase {
             XCTAssertEqual(addr.rawAddress, expectedRawAddress, "Unexpected result for address: \(string)")
             // Check that libc gets the same result.
             XCTAssertEqual(addr.networkAddress, parse_aton(string), "Mismatch detected for address: \(string)")
-            // Check the serialised value.
+            // Check the serialized value.
             XCTAssertEqual(addr.description, "192.255.2.5")
         }
     }
