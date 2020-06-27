@@ -31,13 +31,25 @@ public struct WebURL {
 }
 
 extension WebURL {
+    public typealias Scheme = WebURLParser.Scheme
+    public typealias Host   = WebURLParser.Host
+    public typealias Origin = WebURLParser.Origin
     
-    // TODO: href setter, origin, searchParams
+    // TODO: searchParams
     
     /// A stringifier that returns a `String` containing the whole URL.
     ///
     public var href: String {
         get { return components.serialized(excludeFragment: false) }
+        set {
+            guard let newComponents = WebURL(newValue)?.components else { return }
+            components = newComponents
+            // TODO: Update searchParams once we have that.
+        }
+    }
+    
+    public var origin: Origin {
+        return components.origin
     }
 
     /// A `String` containing the protocol scheme of the URL, including the final ':'.
@@ -221,6 +233,7 @@ extension WebURL: CustomDebugStringConvertible {
         \t.password: \(password)
         \t.host:     \(host)
         \t.hostname: \(hostname)
+        \t.origin:   \(origin)
         \t.port:     \(port?.description ?? "<nil>")
         \t.pathname: \(pathname)
         \t.search:   \(search)

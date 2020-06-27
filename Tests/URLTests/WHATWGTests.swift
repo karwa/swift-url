@@ -40,6 +40,7 @@ extension WHATWGTests {
                 ("input", \.input),
                 ("base", \.base),
                 ("href", \.href),
+                ("origin", \.origin),
                 ("protocol", \.protocol),
                 ("username", \.username),
                 ("password", \.password),
@@ -107,6 +108,7 @@ extension WHATWGTests {
             \t.password: \(password ?? "<nil>")
             \t.host:     \(host ?? "<nil>")
             \t.hostname: \(hostname ?? "<nil>")
+            \t.origin:   \(origin ?? "<nil>")
             \t.port:     \(port?.description ?? "<nil>")
             \t.pathname: \(pathname ?? "<nil>")
             \t.search:   \(search ?? "<nil>")
@@ -165,6 +167,10 @@ extension WHATWGTests {
                     report.expectEqual(parserResult.pathname, expected.pathname)
                     report.expectEqual(parserResult.search, expected.search)
                     report.expectEqual(parserResult.fragment, expected.hash)
+                    // The test file doesn't include expected `origin` values for all entries.
+                    if let expectedOrigin = expected.origin {
+                        report.expectEqual(parserResult.origin.description, expectedOrigin)
+                    }
                 }
             } else {
                 assertionFailure("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")
