@@ -186,6 +186,23 @@ extension WebURLParser.Components {
        get { return _storage.cannotBeABaseURL }
        set { ensureUnique(); _storage.cannotBeABaseURL = newValue }
     }
+   
+    /// A parsed view of a URL's `query` string as a mutable collection of name-value pairs.
+    ///
+    /// Note that changing the URL's query string via this object uses the `application/x-www-form-urlencoded` percent-encoding
+    /// set, rather than the typical query/special-query percent-encoding set used by the `query` property. Thus:
+    ///
+    /// ```swift
+    /// var components = WebURLParser.parse("https://example.com/?a=b ~")
+    /// print(components.serialized()) // https://example.com/?a=b%20~
+    /// components.queryParameters.items.sort()
+    /// print(components.serialized()) // https://example.com/?a=b+%7E
+    /// ```
+    ///
+    var queryParameters: WebURLParser.QueryParameters? {
+        get { return query?._withUTF8 { WebURLParser.QueryParameters(parsingUTF8: $0) } }
+        set { query = newValue?.serialized }
+    }
     
     // TODO:
     // URL also has an associated blob URL entry that is either null or a blob URL entry. It is initially null.

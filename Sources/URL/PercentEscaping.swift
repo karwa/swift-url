@@ -41,14 +41,14 @@ extension PercentEscaping {
     ///
     static func encodeIterativelyAsBuffer<S>(
         bytes: S, escapeSet: EscapeSet,
-        processChunk: (UnsafeBufferPointer<UInt8>)->Void
+        processChunk: (UnsafeMutableBufferPointer<UInt8>)->Void
     ) where S: Sequence, S.Element == UInt8 {
         withSmallStringSizedStackBuffer { buffer in
             var i = 0
             for byte in bytes {
                 // If the buffer can't hold an escaped byte, flush it.
                 if i &+ 3 > buffer.count {
-                    processChunk(UnsafeBufferPointer(rebasing: buffer[..<i]))
+                    processChunk(UnsafeMutableBufferPointer(rebasing: buffer[..<i]))
                     i = 0
                 }
                 if let asciiChar = ASCII(byte), escapeSet.shouldEscape(asciiChar) == false {
@@ -60,7 +60,7 @@ extension PercentEscaping {
                 }
             }
             // Flush the buffer.
-            processChunk(UnsafeBufferPointer(rebasing: buffer[..<i]))
+            processChunk(UnsafeMutableBufferPointer(rebasing: buffer[..<i]))
         }
     }
     
@@ -136,6 +136,32 @@ extension PercentEscaping {
     }
 }
 
+/// A plugin for the percent-escaping decoder, allowing additional characters
+/// to be optionally unescaped at the same time that percent-decoding happens.
+///
+/// It is written this way (as a protocol) to encourage generic specialisation.
+///
+fileprivate protocol DecoderPlugin {
+    
+    /// If the plugin wishes to replace the given `byte`, returns the replacement byte.
+    /// Otherwise, returns `nil`
+    ///
+    static func replaceIfDesired(_ byte: UInt8) -> UInt8?
+}
+
+fileprivate struct NoopDecoderPlugin: DecoderPlugin {
+    static func replaceIfDesired(_ byte: UInt8) -> UInt8? {
+        return nil
+    }
+}
+
+fileprivate struct ReplacePlusWithSpace: DecoderPlugin {
+    static func replaceIfDesired(_ byte: UInt8) -> UInt8? {
+        if byte == ASCII.plus { return ASCII.space.codePoint }
+        return nil
+    }
+}
+
 extension PercentEscaping {
 
     /// Decodes the given percent-escaped byte sequence, without interpreting the result.   
@@ -153,15 +179,15 @@ extension PercentEscaping {
     ///
     static func decode<C>(bytes: C) -> Array<UInt8> where C: Collection, C.Element == UInt8 {
         var decodedByteCount = 0
-        switch _decode(bytes: bytes, onDecode: { _ in decodedByteCount &+= 1 }) {
+        switch _decode(bytes: bytes, plugin: NoopDecoderPlugin.self, onDecode: { _ in decodedByteCount &+= 1 }) {
         case .none:
             assert(decodedByteCount == bytes.count)
             return Array(bytes)
         case .some(let firstEscapedByte):
-            assert(decodedByteCount < bytes.count)
+            assert(decodedByteCount <= bytes.count)
             return Array(unsafeUninitializedCapacity: decodedByteCount) { buffer, count in
                 count = buffer.initialize(from: bytes[..<firstEscapedByte]).1
-                _ = _decode(bytes: bytes[firstEscapedByte...], onDecode: { buffer[count] = $0; count &+= 1 })
+                _ = _decode(bytes: bytes[firstEscapedByte...], plugin: NoopDecoderPlugin.self, onDecode: { buffer[count] = $0; count &+= 1 })
             }
         }
     }
@@ -202,15 +228,15 @@ extension PercentEscaping {
         // (it often isn't even escaped at all). So we choose option #3. 
 
         var decodedByteCount = 0
-        switch _decode(bytes: bytes, onDecode: { _ in decodedByteCount &+= 1 }) {
+        switch _decode(bytes: bytes, plugin: NoopDecoderPlugin.self, onDecode: { _ in decodedByteCount &+= 1 }) {
         case .none:
             assert(decodedByteCount == bytes.count)
             return String(decoding: bytes, as: UTF8.self)
         case .some(let firstEscapedByte):
-            assert(decodedByteCount < bytes.count)
+            assert(decodedByteCount <= bytes.count)
             return String(_unsafeUninitializedCapacity: decodedByteCount) { buffer in
                 var i = buffer.initialize(from: bytes[..<firstEscapedByte]).1
-                _ = _decode(bytes: bytes[firstEscapedByte...], onDecode: { buffer[i] = $0; i &+= 1 })
+                _ = _decode(bytes: bytes[firstEscapedByte...], plugin: NoopDecoderPlugin.self, onDecode: { buffer[i] = $0; i &+= 1 })
                 return i
             }
         }
@@ -237,22 +263,22 @@ extension PercentEscaping {
         let original = string
         return string._withUTF8 { bytes in
             var decodedByteCount = 0
-            switch _decode(bytes: bytes, onDecode: { _ in decodedByteCount &+= 1 }) {
+            switch _decode(bytes: bytes, plugin: NoopDecoderPlugin.self, onDecode: { _ in decodedByteCount &+= 1 }) {
             case .none:
                 assert(decodedByteCount == bytes.count)
                 return String(original) // This shouldn't result in a copy.
             case .some(let firstEscapedByte):
-                assert(decodedByteCount < bytes.count)
+                assert(decodedByteCount <= bytes.count)
                 return String(_unsafeUninitializedCapacity: decodedByteCount) { buffer in
                     var i = buffer.initialize(from: bytes[..<firstEscapedByte]).1
-                    _ = _decode(bytes: bytes[firstEscapedByte...], onDecode: { buffer[i] = $0; i &+= 1 })
+                    _ = _decode(bytes: bytes[firstEscapedByte...], plugin: NoopDecoderPlugin.self, onDecode: { buffer[i] = $0; i &+= 1 })
                     return i
                 }
             }
         }
     }
 
-    private static func _decode<C>(bytes: C, onDecode: (UInt8)->Void) -> C.Index? where C: Collection, C.Element == UInt8 {
+    private static func _decode<C, P>(bytes: C, plugin: P.Type, onDecode: (UInt8)->Void) -> C.Index? where C: Collection, C.Element == UInt8, P: DecoderPlugin {
         var firstEscapedByteIndex: C.Index?
         var byte0Index = bytes.startIndex
         while byte0Index != bytes.endIndex {
@@ -282,12 +308,70 @@ extension PercentEscaping {
                     firstEscapedByteIndex = byte0Index
                 }
                 byte0Index = bytes.index(after: byte2Index)
+            } else if let replacement = plugin.replaceIfDesired(byte0) {
+                onDecode(replacement)
+                if firstEscapedByteIndex == nil {
+                    firstEscapedByteIndex = byte0Index
+                }
+                byte0Index = bytes.index(after: byte0Index)
             } else {
                 onDecode(byte0)
                 byte0Index = bytes.index(after: byte0Index)
             }
         }
         return firstEscapedByteIndex
+    }
+}
+
+// Form encoding/decoding.
+
+extension PercentEscaping {
+    
+    /// An iterative percent-escaping entrypoint for encoding a byte-sequence as an `application/x-www-form-urlencoded` String.
+    ///
+    /// The major difference to `encodeIterativelyAsString` is that spaces are escaped as "+" characters, and the escape set is fixed.
+    ///  - seealso: `encodeIterativelyAsString`
+    ///
+    static func encodeIterativelyAsStringForForm<S>(
+        bytes: S,
+        processChunk: (String)->Void
+    ) where S: Sequence, S.Element == UInt8 {
+        encodeIterativelyAsBuffer(
+            bytes: bytes,
+            escapeSet: EscapeSet { ascii in
+                // Do not percent-escape spaces because we 'plus-escape' them instead.
+                guard ascii != .space else { return false }
+                return EscapeSet.www_form_urlEncoded.shouldEscape(ascii)
+            }, processChunk: { buffer in
+                for i in buffer.startIndex..<buffer.endIndex {
+                    if buffer[i] == ASCII.space.codePoint {
+                        buffer[i] = ASCII.plus.codePoint
+                    }
+                }
+                processChunk(String(decoding: buffer, as: UTF8.self))
+            }
+        )
+    }
+
+    /// Decodes a String escaped according to the requirements of `application/x-www-form-urlencoded`.
+    ///
+    /// The major difference to `decodeString` is that the decoder will unescape the "+" character as a space, in addition to percent-decoding.
+    ///  - seealso: `decodeString`
+    ///
+    static func decodeFormEncodedString<C>(utf8 bytes: C) -> String where C: Collection, C.Element == UInt8 {
+        var decodedByteCount = 0
+        switch _decode(bytes: bytes, plugin: ReplacePlusWithSpace.self, onDecode: { _ in decodedByteCount &+= 1 }) {
+        case .none:
+            assert(decodedByteCount == bytes.count)
+            return String(decoding: bytes, as: UTF8.self)
+        case .some(let firstEscapedByte):
+            assert(decodedByteCount <= bytes.count)
+            return String(_unsafeUninitializedCapacity: decodedByteCount) { buffer in
+                var i = buffer.initialize(from: bytes[..<firstEscapedByte]).1
+                _ = _decode(bytes: bytes[firstEscapedByte...], plugin: ReplacePlusWithSpace.self, onDecode: { buffer[i] = $0; i &+= 1 })
+                return i
+            }
+        }
     }
 }
 
@@ -389,6 +473,16 @@ extension PercentEscaping.EscapeSet {
                 return true
             default:
                 return false
+            }
+        }
+    }
+    
+    static var www_form_urlEncoded: Self {
+        return Self { ascii in
+            switch ascii {
+            case _ where ascii.isAlphaNumeric: return false
+            case .asterisk, .minus, .period, .underscore: return false
+            default: return true
             }
         }
     }

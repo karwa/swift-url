@@ -487,3 +487,26 @@ fileprivate struct TestReport {
         return output
     }
 }
+
+
+// These are not technically WHATWG test cases, but they test
+// functionality exposed via the JS/WebURL model.
+//
+extension WHATWGTests {
+    
+    func testSearchParamsEscaping() {
+        var url = WebURL("http://example/?a=b ~")!
+        // Query string is escaped with the "query" escape set.
+        XCTAssertEqual(url.href, "http://example/?a=b%20~")
+        
+        // We can read through "searchParams", see the expected value, and 'href' doesn't change.
+        XCTAssertTrue(url.searchParams!.items.first! == (name: "a", value: "b ~"))
+        XCTAssertEqual(url.href, "http://example/?a=b%20~")
+        
+        // Modifying via searchParams re-escapes with the "application/x-www-form-urlencoded" escape set.
+        // But we read the same value out of it.
+        url.searchParams!.items.sort { $0.name < $1.name }
+        XCTAssertEqual(url.href, "http://example/?a=b+%7E")
+        XCTAssertTrue(url.searchParams!.items.first! == (name: "a", value: "b ~"))
+    }
+}

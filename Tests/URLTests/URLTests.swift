@@ -171,51 +171,6 @@ final class URLTests: XCTestCase {
 //            print("escaped:  '\(escaped)'\t\tUTF8: \(Array(escaped.utf8))")
         }
    }
-
-   func testutf8() {
-
-
-       let original = ""
-       let encoded = "%F0%9F%91%A9%E2%80%8D%F0%9F%91%A9%E2%80%8D%F0%9F%91%A6%E2%80%8D%F0%9F%91%A6%EF%B8%8F"
-//       let decoded = encoded.removingPercentEscaping() //PercentEscaping.decodeString(utf8: encoded.utf8)
-        print("original: '\(original)'\t\tUTF8: \(Array(original.utf8))")
-//        print("decoded : '\(decoded)'\t\tUTF8: \(Array(decoded.utf8))")
-    //    for x in UInt8.min ... UInt8.max {
-    //        let scalar = UnicodeScalar(x)
-    //        print("\(x)", "Character: \(scalar).")
-           
-    //        let result = hasNonURLCodePoints(scalar.utf8)
-    //        print("\(x)", "    Is Non-URL code point? \(result)")
-    //        print("\(x)", "    Is forbidden host code point? \(ASCII(x)?.isForbiddenHostCodePoint ?? true)")
-    //    }
-
-
-
-
-    //     var invalid: [UInt8] = [0xEF, 0xBF, 0xBE] //[0xF4, 0x8F, 0xBF, 0xBF]
-    //    for x: UInt8 in 0xA0 ... 0xAF {
-    //     //    invalid[2] = x
-
-    //        var iter = invalid.makeIterator()
-    //        let result = hasNonURLCodePoints2(&iter)
-    //        print("Is Non-URL code point? \(result)")
-
-    //        iter = invalid.makeIterator()
-
-    //         var utf8Decoder = UTF8()
-    //         Decode: while true {
-    //         switch utf8Decoder.decode(&iter) {
-    //         case .scalarValue(let v):
-    //             print("\(x)", "**** Decoded invalid sequence as: \(v) (value: \(v.value). isNonChar? \(v.properties.isNoncharacterCodePoint))")
-    //         case .error:
-    //             print("\(x)", "**** Decoder returned ERROR")
-    //         case .emptyInput:
-    //             print("\(x)", "**** Decoder returned EMPTY_INPUT")
-    //             break Decode
-    //         }
-    //    }
-    // }
-   }
 }
 
 

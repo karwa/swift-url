@@ -34,8 +34,7 @@ extension WebURL {
     public typealias Scheme = WebURLParser.Scheme
     public typealias Host   = WebURLParser.Host
     public typealias Origin = WebURLParser.Origin
-    
-    // TODO: searchParams
+    public typealias SearchParams = WebURLParser.QueryParameters
     
     /// A stringifier that returns a `String` containing the whole URL.
     ///
@@ -44,10 +43,11 @@ extension WebURL {
         set {
             guard let newComponents = WebURL(newValue)?.components else { return }
             components = newComponents
-            // TODO: Update searchParams once we have that.
         }
     }
     
+    /// Returns an `Origin` object containing the origin of the URL, that is its scheme, its domain and its port.
+    ///
     public var origin: Origin {
         return components.origin
     }
@@ -147,7 +147,6 @@ extension WebURL {
         set {
             guard newValue.isEmpty == false else {
                 components.query = nil
-                // TODO: empty query object’s list
                 return
             }
             let input: Substring
@@ -158,8 +157,14 @@ extension WebURL {
             }
             components.query = ""
             components.modify(input, stateOverride: .query)
-            // TODO: Set query object’s list to the result of parsing newString.
         }
+    }
+    
+    /// A `SearchParams` object which can be used to access the individual query parameters found in `search`.
+    ///
+    public var searchParams: SearchParams? {
+        get { components.queryParameters }
+        set { components.queryParameters = newValue }
     }
    
     /// A `String` containing a '#' followed by the fragment identifier of the URL.
