@@ -1,9 +1,19 @@
 import XCTest
 @testable import URL
 
-final class WHATWGTests: XCTestCase {
-        
-    struct URLConstructorTestCase: CustomStringConvertible {
+final class WHATWGTests: XCTestCase {}
+
+// WHATWG URL Constructor Tests.
+// Creates a URL object from a (input: String, base: String) pair, and checks that it has the expected
+// properties (host, port, path, etc).
+//
+// Data file from:
+// https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json as of 15.06.2020
+//
+extension WHATWGTests {
+    
+    // Data structure to parse the test description in to.
+    private struct URLConstructorTestCase: CustomStringConvertible {
         var input:          String? = nil
         var base:           String? = nil
         var href:           String? = nil
@@ -20,7 +30,6 @@ final class WHATWGTests: XCTestCase {
         var port:           Int? = nil
         var failure:        Bool? = nil
         
-        // So we can default-initialise in `init(from:)`
         private init() {}
         
         init(from dict: Dictionary<String, Any>) {
@@ -109,48 +118,11 @@ final class WHATWGTests: XCTestCase {
     }
     
     func testURLConstructor() throws {
-        // Data file from:
-        // https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json as of 15.06.2020
         let url  = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("urltestdata.json")
         let data = try Data(contentsOf: url)
         let array = try JSONSerialization.jsonObject(with: data, options: []) as! NSArray
         assert(array.count == 627, "Incorrect number of test cases.")
-        // The data is in a (kind-of inconvenient) heterogeneous array format:
-        // [
-        //   "Blah blah some comment",
-        //   {
-        //     "input"  : "....",
-        //     "base"   : "...",
-        //     "failure": true,
-        //     "href"   : "...",
-        //     "host"   : "...",
-        //     ...
-        //   },
-        //   "Maybe another comment, who knows?",
-        //   ...
-        // ]
-        
-        func check(parserResult: WebURL?, expected: URLConstructorTestCase, report: inout TestReport) {
-            report.capture(key: "expected", expected)
-            report.capture(key: "actual", parserResult as Any)
-            
-            guard let parserResult = parserResult else {
-                report.expectTrue(expected.failure == true)
-                return
-            }
-            report.expectFalse(expected.failure == true)
-            report.expectEqual(parserResult.scheme, expected.protocol)
-            // Lots of hostname failures are because of IDN
-            report.expectEqual(parserResult.href, expected.href)
-            report.expectEqual(parserResult.hostname, expected.hostname)
-            report.expectEqual(parserResult.port.map { Int($0) }, expected.port)
-            report.expectEqual(parserResult.username, expected.username)
-            report.expectEqual(parserResult.password, expected.password)
-            report.expectEqual(parserResult.pathname, expected.pathname)
-            report.expectEqual(parserResult.search, expected.search)
-            report.expectEqual(parserResult.fragment, expected.hash)
-        }
-        
+   
         var report = TestReport()
         report.expectedFailures = [
             // These test failures are due to us not having implemented the `domain2ascii` transform,
@@ -172,11 +144,27 @@ final class WHATWGTests: XCTestCase {
             if let sectionName = item as? String {
                 report.recordSection(sectionName)
             } else if let rawTestInfo = item as? Dictionary<String, Any> {
-                let testInfo = URLConstructorTestCase(from: rawTestInfo)
+                let expected = URLConstructorTestCase(from: rawTestInfo)
                 report.recordTest { report in
-                    check(parserResult: WebURL(testInfo.input!, base: testInfo.base),
-                          expected: testInfo,
-                          report: &report)
+                    let _parserResult = WebURL(expected.input!, base: expected.base)
+                    // Capture test data.
+                    report.capture(key: "expected", expected)
+                    report.capture(key: "actual", _parserResult as Any)
+                    // Compare results.
+                    guard let parserResult = _parserResult else {
+                        report.expectTrue(expected.failure == true)
+                        return
+                    }
+                    report.expectFalse(expected.failure == true)
+                    report.expectEqual(parserResult.scheme, expected.protocol)
+                    report.expectEqual(parserResult.href, expected.href)
+                    report.expectEqual(parserResult.hostname, expected.hostname)
+                    report.expectEqual(parserResult.port.map { Int($0) }, expected.port)
+                    report.expectEqual(parserResult.username, expected.username)
+                    report.expectEqual(parserResult.password, expected.password)
+                    report.expectEqual(parserResult.pathname, expected.pathname)
+                    report.expectEqual(parserResult.search, expected.search)
+                    report.expectEqual(parserResult.fragment, expected.hash)
                 }
             } else {
                 assertionFailure("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")
@@ -184,25 +172,36 @@ final class WHATWGTests: XCTestCase {
         }
         
         let reportString = report.generateReport()
-        try reportString.data(using: .utf8)!.write(to: URL(fileURLWithPath: "/var/tmp/url_whatwg_report.txt"))
+        let reportPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("url_whatwg_constructor_report.txt")
+        try reportString.data(using: .utf8)!.write(to: reportPath)
+        print("ℹ️ Report written to \(reportPath)")
     }
 }
 
+
+// WHATWG Setter Tests.
+// Creates a URL object from an input String (which must not fail), and modifies one property.
+// Checks the resulting (serialised) URL and that the property now returns the expected value,
+// including making any necessary transformations or ignoring invalid new-values.
+//
+// Data file from:
+// https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json as of 15.06.2020
+//
 extension WHATWGTests {
     
-    struct URLSetterTest {
+    private struct URLSetterTest {
         var comment: String?
         var href: String
         var newValue: String
         var expected: [String: String]
     }
     
-    struct URLSetterTestGroup {
+    private struct URLSetterTestGroup {
         var property: String
         var tests: [URLSetterTest]
     }
     
-    func webURLStringPropertyWithJSName(_ str: String) -> WritableKeyPath<WebURL, String>? {
+    private func webURLStringPropertyWithJSName(_ str: String) -> WritableKeyPath<WebURL, String>? {
         switch str {
         case "search":
             return \.search
@@ -225,7 +224,7 @@ extension WHATWGTests {
         }
     }
     
-    func webURLPortPropertyWithJSName(_ str: String) -> WritableKeyPath<WebURL, UInt16?>? {
+    private func webURLPortPropertyWithJSName(_ str: String) -> WritableKeyPath<WebURL, UInt16?>? {
         switch str {
         case "port":
             return \.port
@@ -235,28 +234,27 @@ extension WHATWGTests {
     }
     
      func testURLSetters() throws {
-         // Data file from:
-         // https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json as of 15.06.2020
+
          let url   = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("setters_tests.json")
          let data  = try Data(contentsOf: url)
-         // The data is in the format:
-         // {
-         // "property" : [
-         //     {
-         //     "href": "....",
-         //     "new_value": "..."
-         //     "expected": {
-         //       "href": "...",
-         //       "property": "...",
-         //       ...
-         //      }
-         //   ],
-         // }
          var dict        = try JSONSerialization.jsonObject(with: data, options: []) as! [String: Any]
-         dict["comment"] = nil // Don't need the file-level comment.
-         assert(dict.count == 9, "Incorrect number of test cases.")
         
-         var testGroups = [URLSetterTestGroup]()
+        // The data is in the format:
+        // {
+        // "property" : [
+        //     {
+        //     "href": "....",
+        //     "new_value": "..."
+        //     "expected": {
+        //       "href": "...",
+        //       "property": "...",
+        //       ...
+        //      }
+        //   ],
+        // }
+        var testGroups = [URLSetterTestGroup]()
+        dict["comment"] = nil // Don't need the file-level comment.
+        assert(dict.count == 9, "Incorrect number of test cases.")
          for property in ["search", "hostname", "port", "hash", "host", "pathname", "password", "username", "protocol"] {
             guard let rawTestsInGroup = dict[property] as? [[String: Any]] else {
                 fatalError("No tests in group")
@@ -273,36 +271,17 @@ extension WHATWGTests {
             ))
          }
         
-        func check<T>(_ testcase: URLSetterTest, property: WritableKeyPath<WebURL, T>, transformValue: (String)->T, _ report: inout TestReport) {
-            let transformedValue = transformValue(testcase.newValue)
-            
-            testcase.comment.map { report.capture(key: "Comment", $0) }
-            report.capture(key: "Input", testcase.href)
-            report.capture(key: "New Value", testcase.newValue)
-            report.capture(key: "Transformed Value", transformedValue)
-            // Parse the given URL.
-            guard var url = WebURL(testcase.href) else {
-                report.expectTrue(false, "Failed to parse")
-                return
-            }
-            // Set the new value.
-            url[keyPath: property] = transformedValue
-            report.capture(key: "Result", url)
-            report.capture(key: "Expected", testcase.expected.lazy.map { "\($0): \"\($1)\"" }.joined(separator: "\n\t") as String)
-            // Check all expected keys against their expected values.
-            for (expected_key, expected_value) in testcase.expected {
-                if let stringKey = webURLStringPropertyWithJSName(expected_key) {
-                    report.expectEqual(url[keyPath: stringKey], expected_value, expected_key)
-                    
-                } else if let portKey = webURLPortPropertyWithJSName(expected_key) {
-                    report.expectEqual(url[keyPath: portKey], UInt16(expected_value), expected_key)
-                }
-            }
-        }
-        
         // Run the tests.
         var report = TestReport()
         report.expectedFailures = [
+            // The 'port' tests are a little special.
+            // The JS URL model exposes `port` as a String, and these XFAIL-ed tests
+            // check that parsing stops when it encounters an invalid character/overflows/etc.
+            // However, `WebURL.port` is a `UInt16?`, so these considerations simply don't apply.
+            //
+            // The tests fail because `transformValue` ends up returning `nil` for these junk strings.
+            52, 53, 54, 55, 56, 57, 58, 60, 61, // `port` tests.
+            
             96, // IDNA Nontransitional_Processing.
         ]
         for testGroup in testGroups {
@@ -310,34 +289,70 @@ extension WHATWGTests {
             if let stringProperty = webURLStringPropertyWithJSName(testGroup.property) {
                 for testcase in testGroup.tests {
                     report.recordTest { report in
-                        check(testcase, property: stringProperty, transformValue: { $0 }, &report)
+                        performSetterTest(testcase, property: stringProperty, transformValue: { $0 }, &report)
                     }
                 }
             } else if let portProperty = webURLPortPropertyWithJSName(testGroup.property) {
-                // The 'port' tests are a little special.
-                // The JavaScript URL model exposes the port as a string, and the tests include
-                // cases where the string is not a valid UInt16.
-                // We don't do that - we expose the 'port' as a `UInt16?`, so the type-system won't
-                // let you set it to an invalid value like "8080stuff".
-                // For this reason, filter out all tests where the new port value cannot be parsed in to a number.
                 for testcase in testGroup.tests {
                     report.recordTest { report in
-                        guard testcase.newValue.isEmpty || UInt16(testcase.newValue) != nil else {
-                            return
-                        }
-                        check(testcase, property: portProperty, transformValue: { UInt16($0) }, &report)
+                        performSetterTest(testcase, property: portProperty, transformValue: { UInt16($0) }, &report)
                     }
                 }
+            } else {
+                assertionFailure("Unhandled test cases for property: \(testGroup.property)")
+                report.expectTrue(false)
             }
         }
         
         let reportString = report.generateReport()
-        try reportString.data(using: .utf8)!.write(to: URL(fileURLWithPath: "/var/tmp/url_whatwg_setter_report.txt"))
-        // End.
+        let reportPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("url_whatwg_setter_report.txt")
+        try reportString.data(using: .utf8)!.write(to: reportPath)
+        print("ℹ️ Report written to \(reportPath)")
      }
+    
+    /// Runs an individual setter test.
+    ///
+    /// 1. Parses the input.
+    /// 2. Transforms the test's "new_value" property to the expected type.
+    /// 3. Sets the transformed value on the parsed URL via the `property` key-path.
+    /// 4. Checks the URL's properties and values against the expected values.
+    ///
+    private func performSetterTest<T>(_ testcase: URLSetterTest, property: WritableKeyPath<WebURL, T>, transformValue: (String)->T, _ report: inout TestReport) {
+        
+        testcase.comment.map { report.capture(key: "Comment", $0) }
+        report.capture(key: "Input", testcase.href)
+        report.capture(key: "New Value", testcase.newValue)
+        // 1. Parse the URL.
+        guard var url = WebURL(testcase.href) else {
+            report.expectTrue(false, "Failed to parse")
+            return
+        }
+        // 2. Transform the value.
+        let transformedValue = transformValue(testcase.newValue)
+        report.capture(key: "Transformed Value", transformedValue)
+        // 3. Set the value.
+        url[keyPath: property] = transformedValue
+        report.capture(key: "Result", url)
+        report.capture(key: "Expected", testcase.expected.lazy.map { "\($0): \"\($1)\"" }.joined(separator: "\n\t") as String)
+        // 4. Check all expected keys against their expected values.
+        for (expected_key, expected_value) in testcase.expected {
+            if let stringKey = webURLStringPropertyWithJSName(expected_key) {
+                report.expectEqual(url[keyPath: stringKey], expected_value, expected_key)
+                
+            } else if let portKey = webURLPortPropertyWithJSName(expected_key) {
+                report.expectEqual(url[keyPath: portKey], UInt16(expected_value), expected_key)
+            }
+        }
+    }
 }
 
-
+// A helper for generating better test reports for the WHATWG tests.
+// XCTest just doesn't handle it well:
+// - No support for "sub-tests".
+//   I'd rather see that 15 sub-tests failed than that 126 individual assertions across all sub-tests failed.
+// - The reports are only decent in Xcode.
+// - No ability to XFAIL tests and check that they really *do* fail.
+// - etc...
 fileprivate struct TestReport {
     var expectedFailures: Set<Int> = []
     
@@ -433,10 +448,15 @@ fileprivate struct TestReport {
             func printDivider() {
                 if let section = nextSection {
                     if index > section.0 {
+                        nextSection = sectionIterator.next()
+                        if index > nextSection?.0 ?? -1 {
+                            printDivider()
+                            return
+                        }
+
                         print("", to: &output)
                         print("============== \(section.1) ===========", to: &output)
                         print("", to: &output)
-                        nextSection = sectionIterator.next()
                         return
                     }
                 }
