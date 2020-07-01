@@ -16,6 +16,12 @@ final class HostParsing_IPv4: XCTestCase {
         guard inet_aton(straddr, &addr) != 0 else { return nil }
         return addr.s_addr
     }
+    
+    fileprivate func serialize_ntoa(_ netaddr: UInt32) -> String {
+        var addr    = in_addr()
+        addr.s_addr = netaddr
+        return String(cString: inet_ntoa(addr))
+    }
 
     func testBasic() {
         // 192.255.2.5 
@@ -174,12 +180,109 @@ final class HostParsing_IPv4: XCTestCase {
         if let _ = IPAddress.V4("192.F")           { XCTFail("Expected fail") }
         if let _ = IPAddress.V4("192.0F")          { XCTFail("Expected fail") }
     }
+}
 
-    func testSerialisation() {
-        if let addr = IPAddress.V4("250.0.102.02") {
-            XCTAssertEqual(addr.description, "250.0.102.2")
-        } else {
-            XCTFail("Failed to parse valid address")
+// Randomized testing.
+
+extension HostParsing_IPv4 {
+
+    /// Generate 1000 random IP addresses, serialise them via IPAddress, then
+    /// parse the serialized version back via `aton`. Ensure that the same address
+    /// is returned.
+    ///
+    func testRandom_Serialisation() {
+        for _ in 0..<1000 {
+            let randomAddress  = UInt32.random(in: .min ... .max)
+            let randomIPString = IPAddress.V4(networkAddress: randomAddress).description
+            XCTAssert(randomIPString.utf8.lazy.filter { $0 == ASCII.period.codePoint }.count == 3,
+                      "Unexpected address format: \(randomIPString) (\(randomAddress)")
+            let atonAddress = parse_aton(randomIPString)
+            XCTAssert(atonAddress == randomAddress,
+                      "Mismatch detected for address \(randomIPString) (\(randomAddress))")
+        }
+    }
+    
+    /// Generates a random IP address string representing the given address.
+    ///
+    /// The string may randomly use any shorthand (a/a.b/a.b.c/a.b.c.d), and each piece may
+    /// randomly be written in octal, decimal, or hexadecimal notation.
+    ///
+    /// For example, printing the address `123456789`:
+    /// ```
+    /// 7.0x5b.0xcd.0x15  (dec/hex/hex/hex)
+    /// 07.0x5b.52501     (oct/hex/dec)
+    /// 7.0133.0146425    (dec/oct/oct)
+    /// 7.6016277         (dec/dec)
+    /// 07.0133.0315.025  (oct/oct/oct/oct)
+    /// 7.0x5b.205.21     (dec/hex/dec/dec)
+    /// 0726746425        (oct)
+    /// ```
+    ///
+    private static func makeRandomIPAddressString(for address: UInt32) -> String {
+        enum Format: CaseIterable {
+            case a
+            case ab
+            case abc
+            case abcd
+        }
+        enum PieceRadix: CaseIterable {
+            case octal
+            case decimal
+            case hex
+        }
+        let randomIPString: String
+            
+    	func formatPiece<B: BinaryInteger>(piece: B, radix: PieceRadix) -> String {
+            switch radix {
+            case .octal:   return "0" + String(piece, radix: 8)
+            case .decimal: return String(piece, radix: 10)
+            case .hex:     return "0x" + String(piece, radix: 16)
+            }
+        }
+        switch Format.allCases.randomElement()! {
+        case .a:
+            let a = address
+            randomIPString = formatPiece(piece: a, radix: PieceRadix.allCases.randomElement()!)
+        case .ab:
+            let a =  UInt8((address & 0b11111111_00000000_00000000_00000000) >> 24)
+            let b = UInt32((address & 0b00000000_11111111_11111111_11111111))
+            randomIPString = formatPiece(piece: a, radix: PieceRadix.allCases.randomElement()!) + "." +
+                             formatPiece(piece: b, radix: PieceRadix.allCases.randomElement()!)
+        case .abc:
+            let a =  UInt8((address & 0b11111111_00000000_00000000_00000000) >> 24)
+            let b =  UInt8((address & 0b00000000_11111111_00000000_00000000) >> 16)
+            let c = UInt16((address & 0b00000000_00000000_11111111_11111111))
+            randomIPString = formatPiece(piece: a, radix: PieceRadix.allCases.randomElement()!) + "." +
+                             formatPiece(piece: b, radix: PieceRadix.allCases.randomElement()!) + "." +
+                             formatPiece(piece: c, radix: PieceRadix.allCases.randomElement()!)
+        case .abcd:
+            let a =  UInt8((address & 0b11111111_00000000_00000000_00000000) >> 24)
+            let b =  UInt8((address & 0b00000000_11111111_00000000_00000000) >> 16)
+            let c =  UInt8((address & 0b00000000_00000000_11111111_00000000) >> 8)
+            let d =  UInt8((address & 0b00000000_00000000_00000000_11111111))
+            randomIPString = formatPiece(piece: a, radix: PieceRadix.allCases.randomElement()!) + "." +
+                             formatPiece(piece: b, radix: PieceRadix.allCases.randomElement()!) + "." +
+                             formatPiece(piece: c, radix: PieceRadix.allCases.randomElement()!) + "." +
+                             formatPiece(piece: d, radix: PieceRadix.allCases.randomElement()!)
+        }
+        return randomIPString
+    }
+    
+    /// Generate 1000 random IP Address Strings, parse them via IPAddress,
+    /// check that the numerical value matches the expected network address,
+    /// and that `aton` gets the same result when parsing the same random String.
+    ///
+    func testRandom_Parsing() {
+        for _ in 0..<1000 {
+            let randomAddress       = UInt32.random(in: .min ... .max)
+            let randomAddressString = Self.makeRandomIPAddressString(for: randomAddress)
+            
+            guard let parsedAddress = IPAddress.V4(randomAddressString) else {
+                XCTFail("Failed to parse address: \(randomAddressString); expected address: \(randomAddress)")
+                continue
+            }
+            XCTAssertEqual(parsedAddress.rawAddress, randomAddress)
+            XCTAssertEqual(parsedAddress.networkAddress, parse_aton(randomAddressString))
         }
     }
 
