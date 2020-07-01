@@ -114,11 +114,11 @@ final class HostParsing_IPv6: XCTestCase {
         ]
 
         for (string, expectedError) in invalidAddresses {
-            var error: IPAddress.V6.ValidationError?
-            if let addr = IPAddress.V6.parse(string, onValidationError: { error = $0 }) {
+            var callback = LastValidationError()
+            if let addr = IPAddress.V6.parse(string, callback: &callback) {
                 XCTFail("Invalid address '\(string)' was parsed as '\(addr.rawAddress)' (raw)")
             } else {
-                XCTAssertEqual(error, expectedError, "Unexpected error for invalid address '\(string)'")
+                XCTAssertEqual(callback.error?.ipv6Error, expectedError, "Unexpected error for invalid address '\(string)'")
             }
         }
     }

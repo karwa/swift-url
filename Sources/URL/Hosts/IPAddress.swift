@@ -15,15 +15,34 @@ public protocol IPv4ParserCallback {
 
 /// An object which is informed by the IPv6 parser if a validation error occurs.
 ///
-public protocol IPv6AddressParserCallback: IPv4ParserCallback {
+public protocol IPv6AddressParserCallback {
     mutating func validationError(ipv6 error: IPAddress.V6.ValidationError)
 }
-// It would be nice to make this a mutating wrapper view, since an IPv6 callback
-// should only accept IPv4 errors in the small section where it calls the simplified IPv4 parser.
-// However, that isn't possible with Swift right now. It would trigger copy-on-write.
-extension IPv6AddressParserCallback {
+
+/// A view which allows an `IPv6AddressParserCallback` to accept IPv4 parser errors,
+/// by wrapping them in an IPv6 `invalidIPv4Address` error.
+///
+/// This allows a single object to conform to both `IPv6AddressParserCallback` and `IPv4AddressParserCallback`, without
+/// having to choose to always/never wrap IPv4 as v6 errors. With this, v4 errors are wrapped only when appropriate (i.e. when encountered via
+/// the IPv6 parser).
+///
+fileprivate struct IPParserCallbackv4Tov6<Base>: IPv4ParserCallback where Base: IPv6AddressParserCallback {
+    var v6Handler: Base
     public mutating func validationError(ipv4 error: IPAddress.V4.ValidationError) {
-        validationError(ipv6: .invalidIPv4Address(error))
+        v6Handler.validationError(ipv6: .invalidIPv4Address(error))
+    }
+}
+extension IPv6AddressParserCallback {
+    
+    fileprivate var wrappingIPv4Errors: IPParserCallbackv4Tov6<Self> {
+        get { fatalError("wrappingIPv4Errors is a modify-only view") }
+        _modify {
+    		var view = IPParserCallbackv4Tov6(v6Handler: self)
+            yield &view
+            // Unfortunately, this view can trigger COW (at least at -Onone),
+            // so we need to copy back.
+            self = view.v6Handler
+        }
     }
 }
 
@@ -254,7 +273,7 @@ extension IPAddress.V6 {
 
                     guard let value = IPAddress.V4.parse_simple(
                         UnsafeBufferPointer(rebasing: input[pieceStartIndex...]),
-                        callback: &callback
+                        callback: &callback.wrappingIPv4Errors
                     ) else {
                         return nil
                     }
