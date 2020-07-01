@@ -1,11 +1,31 @@
 import Algorithms // for Collection.longestSubrange.
 
-// TODO:
-// - Clean up error messages (see notes in tests)
-// - More tests, including error-message testing for IPv4
-// - (Maybe) Set up CI for testing on a big-endian system (s390x), endian-related fixes.
-
 public enum IPAddress {}
+
+// MARK: - Callbacks
+
+// Note: IP Address parsers have their own callback protocol because they are
+//       useful outside of URL contexts.
+
+/// An object which is informed by the IPv4 parser if a validation error occurs.
+///
+public protocol IPv4ParserCallback {
+    mutating func validationError(ipv4 error: IPAddress.V4.ValidationError)
+}
+
+/// An object which is informed by the IPv6 parser if a validation error occurs.
+///
+public protocol IPv6AddressParserCallback: IPv4ParserCallback {
+    mutating func validationError(ipv6 error: IPAddress.V6.ValidationError)
+}
+// It would be nice to make this a mutating wrapper view, since an IPv6 callback
+// should only accept IPv4 errors in the small section where it calls the simplified IPv4 parser.
+// However, that isn't possible with Swift right now. It would trigger copy-on-write.
+extension IPv6AddressParserCallback {
+    public mutating func validationError(ipv4 error: IPAddress.V4.ValidationError) {
+        validationError(ipv6: .invalidIPv4Address(error))
+    }
+}
 
 // MARK: - IPv6
 
@@ -106,8 +126,10 @@ extension IPAddress.V6 {
         internal static var multipleCompressedPieces: Self { Self(errorCode: 8) }
         // -
         internal static var invalidPositionForIPv4Address: Self { Self(errorCode: 9) }
+        
+        internal static var invalidIPv4Address_errorCode: UInt8 = 10
         internal static func invalidIPv4Address(_ err: IPAddress.V4.ValidationError) -> Self {
-            Self(errorCode: 10, context: err.packedAsInt)
+            Self(errorCode: invalidIPv4Address_errorCode, context: err.packedAsInt)
         }
 
         public var description: String {
@@ -130,7 +152,7 @@ extension IPAddress.V6 {
                 return "Multiple compressed pieces in address"
             case .invalidPositionForIPv4Address:
                 return "Invalid position for IPv4 address segment"
-            case _ where self.errorCode == Self.invalidIPv4Address(.emptyInput).errorCode:
+            case _ where self.errorCode == Self.invalidIPv4Address_errorCode:
                 let wrappedError = IPAddress.V4.ValidationError(unpacking: context)
                 return "Invalid IPv4 address: \(wrappedError)"
             default:
@@ -145,14 +167,14 @@ extension IPAddress.V6 {
     /// TODO: Add description of accepted formats.
     ///
     /// - parameters:
-    ///     - input: 				A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
-    ///     - onValidationError:    A callback to be invoked if a validation error occurs. This callback is only invoked once,
-    ///                              and any validation error terminates parsing.
+    ///     - input:       A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - callback:    A callback to be invoked if a validation error occurs. This callback is only invoked once,
+    ///                    and any validation error terminates parsing.
     /// - returns:
     ///     Either the successfully-parsed address, or `.none` if parsing fails.
     ///
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ValidationError)->Void) -> Self? {
-        guard input.isEmpty == false else { onValidationError(.emptyInput); return nil }
+    public static func parse<Callback>(_ input: UnsafeBufferPointer<UInt8>, callback: inout Callback) -> Self? where Callback: IPv6AddressParserCallback {
+        guard input.isEmpty == false else { callback.validationError(ipv6: .emptyInput); return nil }
 
         var result: IPAddress.V6.AddressType = (0, 0, 0, 0, 0, 0, 0, 0)
         return withUnsafeMutableBytes(of: &result) { tuplePointer -> Self? in
@@ -165,7 +187,7 @@ extension IPAddress.V6 {
             if input[idx] == ASCII.colon {
                 idx = input.index(after: idx)
                 guard idx != input.endIndex, input[idx] == ASCII.colon else {
-                    onValidationError(.unexpectedLeadingColon)
+                    callback.validationError(ipv6: .unexpectedLeadingColon)
                     return nil
                 }
                 idx          = input.index(after: idx)
@@ -176,13 +198,13 @@ extension IPAddress.V6 {
             parseloop: 
             while idx != input.endIndex {
                 guard pieceIndex != 8 else {
-                    onValidationError(.tooManyPieces)
+                    callback.validationError(ipv6: .tooManyPieces)
                     return nil
                 }
                 // If the piece starts with a ':', it must be a compressed group of pieces.
                 guard input[idx] != ASCII.colon else {
                     guard compress == -1 else {
-                        onValidationError(.multipleCompressedPieces)
+                        callback.validationError(ipv6: .multipleCompressedPieces)
                         return nil
                     }
                     idx          = input.index(after: idx)
@@ -215,24 +237,24 @@ extension IPAddress.V6 {
                     pieceIndex &+= 1
                     idx = input.index(after: idx)
                     guard idx != input.endIndex else {
-                        onValidationError(.unexpectedTrailingColon)
+                        callback.validationError(ipv6: .unexpectedTrailingColon)
                         return nil
                     }
                     continue parseloop
                 }
                 guard _slowPath(input[idx] != ASCII.period) else {
                     guard length != 0 else {
-                        onValidationError(.unexpectedPeriod)
+                        callback.validationError(ipv6: .unexpectedPeriod)
                         return nil
                     }
                     guard !(pieceIndex > 6) else {
-                        onValidationError(.invalidPositionForIPv4Address)
+                        callback.validationError(ipv6: .invalidPositionForIPv4Address)
                         return nil
                     }
 
                     guard let value = IPAddress.V4.parse_simple(
                         UnsafeBufferPointer(rebasing: input[pieceStartIndex...]),
-                        onValidationError: { onValidationError(.invalidIPv4Address($0)) }
+                        callback: &callback
                     ) else {
                         return nil
                     }
@@ -242,7 +264,7 @@ extension IPAddress.V6 {
 
                     break parseloop
                 }
-                onValidationError(.unexpectedCharacter)
+                callback.validationError(ipv6: .unexpectedCharacter)
                 return nil
             }
 
@@ -260,7 +282,7 @@ extension IPAddress.V6 {
                 }
             } else {
                 guard pieceIndex == 8 else {
-                    onValidationError(.notEnoughPieces)
+                    callback.validationError(ipv6: .notEnoughPieces)
                     return nil
                 }
             }
@@ -276,12 +298,15 @@ extension IPAddress.V6 {
 
 extension IPAddress.V6 {
     
-    @inlinable public static func parse<S>(_ input: S, onValidationError: (ValidationError)->Void) -> Self? where S: StringProtocol {
-        return input._withUTF8 { parse($0, onValidationError: onValidationError) }
+    @inlinable public static func parse<Source, Callback>(
+        _ input: Source, callback: inout Callback
+    ) -> Self? where Source: StringProtocol, Callback: IPv6AddressParserCallback {
+        return input._withUTF8 { parse($0, callback: &callback) }
     }
 
     @inlinable public init?<S>(_ input: S) where S: StringProtocol {
-        guard let parsed = Self.parse(input, onValidationError: { _ in }) else { return nil }
+        var callback = IgnoreValidationErrors()
+        guard let parsed = Self.parse(input, callback: &callback) else { return nil }
         self = parsed 
     }
 }
@@ -339,7 +364,7 @@ extension IPAddress.V6: Codable {
     public init(from decoder: Decoder) throws {
        let container = try decoder.singleValueContainer()
        let string = try container.decode(String.self)
-       guard let parsedValue = Self.parse(string, onValidationError: { _ in }) else {
+       guard let parsedValue = IPAddress.V6(string) else {
          throw DecodingError.dataCorruptedError(
             in: container,
             debugDescription: "Invalid IPv6 Address"
@@ -476,14 +501,14 @@ extension IPAddress.V4 {
     /// A single trailing '.' is permitted.
     ///
     /// - parameters:
-    ///     - input: 				A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
-    ///     - onValidationError:	A callback to be invoked if a validation error occurs.
+    ///     - input:     A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - callback:  A callback to be invoked if a validation error occurs.
     /// - returns:
     ///     A result object containing either the successfully-parsed address, or a failure flag communicating whether parsing
     ///     failed because the string was not in the correct format.
     ///
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ValidationError)->Void) -> ParseResult {
-        guard input.isEmpty == false else { onValidationError(.emptyInput); return .failure }
+    public static func parse<Callback>(_ input: UnsafeBufferPointer<UInt8>, callback: inout Callback) -> ParseResult where Callback: IPv4ParserCallback {
+        guard input.isEmpty == false else { callback.validationError(ipv4: .emptyInput); return .failure }
 
         // This algorithm isn't from the WHATWG spec, but supports all the required shorthands.
         // Translated and adapted to Swift (with some modifications) from:
@@ -509,7 +534,7 @@ extension IPAddress.V4 {
 
                 do {
                     guard let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) else {
-                        onValidationError(.pieceBeginsWithInvalidCharacter)
+                        callback.validationError(ipv4: .pieceBeginsWithInvalidCharacter)
                         return .notAnIPAddress
                     }
                     // Leading '0' or '0x' sets the radix.
@@ -531,7 +556,7 @@ extension IPAddress.V4 {
                     guard let numericValue = ASCII(input[idx]).map({ ASCII.parseHexDigit(ascii: $0) }),
                         numericValue != ASCII.parse_NotFound else { break }
                     guard numericValue < radix else {
-                        onValidationError(.pieceContainsInvalidCharacterForRadix)
+                        callback.validationError(ipv4: .pieceContainsInvalidCharacterForRadix)
                         return .notAnIPAddress
                     }
                     var (overflowM, overflowA) = (false, false)
@@ -544,7 +569,7 @@ extension IPAddress.V4 {
                 }
                 // Set value for piece.
                 guard pieceIndex < 3 else {
-                    onValidationError(.tooManyPieces)
+                    callback.validationError(ipv4: .tooManyPieces)
                     return .notAnIPAddress
                 }
                 pieceIndex &+= 1
@@ -557,11 +582,11 @@ extension IPAddress.V4 {
             }
 
             guard idx == input.endIndex else {
-                onValidationError(.unexpectedTrailingCharacter)
+                callback.validationError(ipv4: .unexpectedTrailingCharacter)
                 return .notAnIPAddress
             }
             guard pieceDidOverflow == false else {
-                onValidationError(.pieceOverflows)
+                callback.validationError(ipv4: .pieceOverflows)
                 return .failure
             }
 
@@ -572,20 +597,20 @@ extension IPAddress.V4 {
             case 1: // 'a.b'     - 8-bits/24-bits.
                 var invalidBits = pieces[0] & ~0x000000FF
                 invalidBits    |= pieces[1] & ~0x00FFFFFF
-                guard invalidBits == 0 else { onValidationError(.addressOverflows); return .failure }
+                guard invalidBits == 0 else { callback.validationError(ipv4: .addressOverflows); return .failure }
                 rawAddress = (pieces[0] << 24) | pieces[1]
             case 2: // 'a.b.c'   - 8-bits/8-bits/16-bits.
                 var invalidBits = pieces[0] & ~0x000000FF
                 invalidBits    |= pieces[1] & ~0x000000FF
                 invalidBits    |= pieces[2] & ~0x0000FFFF
-                guard invalidBits == 0 else { onValidationError(.addressOverflows); return .failure }
+                guard invalidBits == 0 else { callback.validationError(ipv4: .addressOverflows); return .failure }
                 rawAddress = (pieces[0] << 24) | (pieces[1] << 16) | pieces[2]
             case 3: // 'a.b.c.d' - 8-bits/8-bits/8-bits/8-bits.
                 var invalidBits = pieces[0] & ~0x000000FF
                 invalidBits    |= pieces[1] & ~0x000000FF
                 invalidBits    |= pieces[2] & ~0x000000FF
                 invalidBits    |= pieces[3] & ~0x000000FF
-                guard invalidBits == 0 else { onValidationError(.addressOverflows); return .failure }
+                guard invalidBits == 0 else { callback.validationError(ipv4: .addressOverflows); return .failure }
                 rawAddress = (pieces[0] << 24) | (pieces[1] << 16) | (pieces[2] << 8) | pieces[3]
             default:
                 fatalError("Internal error. pieceIndex has unexpected value.")
@@ -601,13 +626,13 @@ extension IPAddress.V4 {
     /// Trailing '.'s are not permitted.
     ///
     /// - parameters:
-    ///     - input: 				A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
-    ///     - onValidationError:    A callback to be invoked if a validation error occurs. This callback is only invoked once,
-    ///      						and any validation error terminates parsing.
+    ///     - input:     A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+    ///     - callback:  A callback to be invoked if a validation error occurs. This callback is only invoked once,
+    ///                  and any validation error terminates parsing.
     /// - returns:
     ///     Either the successfully-parsed address, or `.none` if parsing failed.
     ///
-    public static func parse_simple(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ValidationError)->Void) -> Self? {
+    public static func parse_simple<Callback>(_ input: UnsafeBufferPointer<UInt8>, callback: inout Callback) -> Self? where Callback: IPv4ParserCallback {
 
         var result      = UInt32(0)
         var idx         = input.startIndex
@@ -616,11 +641,11 @@ extension IPAddress.V4 {
             // Consume '.' separator from end of previous piece.
             if numbersSeen != 0 {
                 guard ASCII(input[idx]) == .period else {
-                    onValidationError(.invalidCharacter)
+                    callback.validationError(ipv4: .invalidCharacter)
                     return nil
                 }
                 guard numbersSeen < 4 else {
-                    onValidationError(.tooManyPieces)
+                    callback.validationError(ipv4: .tooManyPieces)
                     return nil
                 }
                 idx = input.index(after: idx)
@@ -634,20 +659,20 @@ extension IPAddress.V4 {
                 case -1: 
                     ipv4Piece = Int(digit)
                 case 0:
-                    onValidationError(.unsupportedRadix)
+                    callback.validationError(ipv4: .unsupportedRadix)
                     return nil
                 default: 
                     ipv4Piece *= 10
                     ipv4Piece += Int(digit)
                 }
                 guard ipv4Piece < 256 else {
-                    onValidationError(.pieceOverflows)
+                    callback.validationError(ipv4: .pieceOverflows)
                     return nil
                 }
                 idx = input.index(after: idx)
             }
             guard ipv4Piece != -1 else {
-                onValidationError(.pieceBeginsWithInvalidCharacter)
+                callback.validationError(ipv4: .pieceBeginsWithInvalidCharacter)
                 return nil
             }
             // Accumulate in to result.
@@ -656,7 +681,7 @@ extension IPAddress.V4 {
             numbersSeen &+= 1
         }
         guard numbersSeen == 4 else {
-            onValidationError(.notEnoughPieces)
+            callback.validationError(ipv4: .notEnoughPieces)
             return nil
         }
         return IPAddress.V4(rawAddress: result)
@@ -666,13 +691,16 @@ extension IPAddress.V4 {
 
 extension IPAddress.V4 {
 
-    @inlinable public static func parse<S>(_ input: S) -> ParseResult where S: StringProtocol {
-        return input._withUTF8 { parse($0, onValidationError: { _ in }) }
+    @inlinable public static func parse<Source, Callback>(
+        _ input: Source, callback: inout Callback
+    ) -> ParseResult where Source: StringProtocol, Callback: IPv4ParserCallback {
+        return input._withUTF8 { parse($0, callback: &callback) }
     }
 
-    @inlinable public init?<S>(_ input: S) where S: StringProtocol {
-        guard case .success(let parsed) = Self.parse(input) else { return nil }
-        self = parsed 
+    @inlinable public init?<Source>(_ input: Source) where Source: StringProtocol {
+        var callback = IgnoreValidationErrors()
+        guard case .success(let parsedValue) = Self.parse(input, callback: &callback) else { return nil }
+        self = parsedValue
     }
 }
 

@@ -9,7 +9,7 @@ extension String {
         _unsafeUninitializedCapacity capacity: Int,
         initializingUTF8With initializer: (_ buffer: UnsafeMutableBufferPointer<UInt8>) throws -> Int) rethrows {
         #if swift(>=5.3)
-        if #available(macOS 11.0, iOS 14.0, *) {
+        if #available(macOS 9999, iOS 14.0, *) {
             self = try String(unsafeUninitializedCapacity: capacity, initializingUTF8With: initializer)
             return
         }
@@ -99,11 +99,11 @@ extension Unicode.UTF8 {
         // ASCII.
         if _fastPath(byte & 0b1000_0000 == 0b0000_0000) { end = bytes.index(after: startIndex) }
         // Valid UTF8 sequences.
-        if byte & 0b1110_0000 == 0b1100_0000 { end = bytes.index(startIndex, offsetBy: 2, limitedBy: bytes.endIndex) }
-        if byte & 0b1111_0000 == 0b1110_0000 { end = bytes.index(startIndex, offsetBy: 3, limitedBy: bytes.endIndex) }
-        if byte & 0b1111_1000 == 0b1111_0000 { end = bytes.index(startIndex, offsetBy: 4, limitedBy: bytes.endIndex) }
+        else if byte & 0b1110_0000 == 0b1100_0000 { end = bytes.index(startIndex, offsetBy: 2, limitedBy: bytes.endIndex) }
+        else if byte & 0b1111_0000 == 0b1110_0000 { end = bytes.index(startIndex, offsetBy: 3, limitedBy: bytes.endIndex) }
+        else if byte & 0b1111_1000 == 0b1111_0000 { end = bytes.index(startIndex, offsetBy: 4, limitedBy: bytes.endIndex) }
         // Continuation bytes or invalid UTF8.
-        return end.map { bytes[startIndex..<$0] }
+        return end.map { bytes[Range(uncheckedBounds: (startIndex, $0))] }
     }
 }
 

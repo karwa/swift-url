@@ -34,9 +34,9 @@ extension OpaqueHost {
         }
     }
 
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>, onValidationError: (ValidationError)->Void) -> OpaqueHost? {
+    public static func parse<Callback>(_ input: UnsafeBufferPointer<UInt8>, callback: inout Callback) -> OpaqueHost? where Callback: URLParserCallback {
         // This isn't technically in the spec algorithm, but opaque hosts are defined to be non-nil.
-        guard input.isEmpty == false else { onValidationError(.emptyInput); return nil }
+        guard input.isEmpty == false else { callback.validationError(opaqueHost: .emptyInput); return nil }
 
         var iter = input.makeIterator()
         while let byte = iter.next() {
@@ -46,15 +46,15 @@ extension OpaqueHost {
             if asciiChar == .percentSign {
                 if let percentEncodedByte1 = iter.next(), ASCII(percentEncodedByte1)?.isHexDigit != true,
                    let percentEncodedByte2 = iter.next(), ASCII(percentEncodedByte2)?.isHexDigit != true {
-                    onValidationError(.invalidPercentEscaping)
+                    callback.validationError(opaqueHost: .invalidPercentEscaping)
                 }
             } else if URLStringUtils.isForbiddenHostCodePoint(asciiChar) {
-                onValidationError(.containsForbiddenHostCodePoint)
+                callback.validationError(opaqueHost: .containsForbiddenHostCodePoint)
                 return nil
             }
         }
         if URLStringUtils.hasNonURLCodePoints(input, allowPercentSign: true) {
-            onValidationError(.containsNonURLCodePoint)
+            callback.validationError(opaqueHost: .containsNonURLCodePoint)
         }
 
         var escapedHostname = ""
@@ -70,14 +70,15 @@ extension OpaqueHost {
 
 extension OpaqueHost {
 
-    @inlinable public static func parse<S>(_ input: S, onValidationError: (ValidationError)->Void) -> OpaqueHost? where S: StringProtocol {
-        return input._withUTF8 { Self.parse($0, onValidationError: onValidationError) }
+    @inlinable public static func parse<Source, Callback>(
+        _ input: Source, callback: inout Callback
+    ) -> OpaqueHost? where Source: StringProtocol, Callback: URLParserCallback {
+        return input._withUTF8 { Self.parse($0, callback: &callback) }
     }
 
-    @inlinable public init?<S>(_ input: S) where S: StringProtocol {
-        guard let parsedValue = Self.parse(input, onValidationError: { _ in }) else {
-            return nil
-        }
+    @inlinable public init?<Source>(_ input: Source) where Source: StringProtocol {
+        var callback = IgnoreValidationErrors()
+        guard let parsedValue = Self.parse(input, callback: &callback) else { return nil }
         self = parsedValue
     }
 }

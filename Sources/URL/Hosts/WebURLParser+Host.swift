@@ -1,5 +1,6 @@
 
 extension WebURLParser {
+    
     public enum Host: Equatable, Hashable {
         case domain(String)
         case ipv4Address(IPAddress.V4)
@@ -11,6 +12,9 @@ extension WebURLParser {
 
 extension WebURLParser.Host {
 
+    // TODO: Replace `.domain(String)` with a "Domain" type which
+    //       cannot be user-instantiated with an empty string.
+    //       Then we can remove this.
     var isEmpty: Bool {
         switch self {
             case .domain(let str): return str.isEmpty
@@ -22,27 +26,7 @@ extension WebURLParser.Host {
 
 extension WebURLParser.Host {
 
-    public enum ValidationError: Equatable, CustomStringConvertible {
-        case ipv4AddressError(IPAddress.V4.ValidationError)
-        case ipv6AddressError(IPAddress.V6.ValidationError)
-        case opaqueHostError(OpaqueHost.ValidationError)
-        case hostParserError(HostParserError)
-
-        public var description: String {
-            switch self {
-            case .ipv4AddressError(let error):
-                return error.description
-            case .ipv6AddressError(let error):
-                return error.description
-            case .opaqueHostError(let error):
-                return error.description
-            case .hostParserError(let error):
-                return error.description
-            }
-        }
-    }
-
-    public struct HostParserError: Error, Equatable, CustomStringConvertible {
+    public struct ValidationError: Error, Equatable, CustomStringConvertible {
         private let errorCode: UInt8
         internal static var expectedClosingSquareBracket:   Self { Self(errorCode: 0) }
         internal static var containsForbiddenHostCodePoint: Self { Self(errorCode: 1) }
@@ -59,26 +43,31 @@ extension WebURLParser.Host {
             }
         }
     }
+    
+    // TODO: If we were allowed to mutate the input (which the URL parser could certainly allow),
+    //       we could percent-decode it in-place.
 
-    public static func parse(_ input: UnsafeBufferPointer<UInt8>, isNotSpecial: Bool = false, onValidationError: (ValidationError)->Void) -> Self? {
+    public static func parse<Callback>(
+        _ input: UnsafeBufferPointer<UInt8>, isNotSpecial: Bool = false, callback: inout Callback
+    ) -> Self? where Callback: URLParserCallback {
 
         guard input.isEmpty == false else { 
             return .empty
         }        
         if input.first == ASCII.leftSquareBracket {
             guard input.last == ASCII.rightSquareBracket else {
-                onValidationError(.hostParserError(.expectedClosingSquareBracket))
+                callback.validationError(hostParser: .expectedClosingSquareBracket)
                 return nil
             }
             let slice = UnsafeBufferPointer(rebasing: input.dropFirst().dropLast())
-            return IPAddress.V6.parse(slice, onValidationError: { onValidationError(.ipv6AddressError($0)) }).map { .ipv6Address($0) }
+            return IPAddress.V6.parse(slice, callback: &callback).map { .ipv6Address($0) }
         }
 
         if isNotSpecial {
-            return OpaqueHost.parse(input, onValidationError: { onValidationError(.opaqueHostError($0)) }).map { .opaque($0) }
+            return OpaqueHost.parse(input, callback: &callback).map { .opaque($0) }
         }
 
-        // TODO: Make this lazy.
+        // TODO: Make this lazy or in-place.
         var domain = PercentEscaping.decode(bytes: input)
         // TODO:
         //
@@ -87,22 +76,22 @@ extension WebURLParser.Host {
         // 7. If asciiDomain is failure, validation error, return failure.
         //
         if let error = fake_domain2ascii(&domain) {
-            onValidationError(.hostParserError(error))
+            callback.validationError(hostParser: error)
             return nil
         }
         
         return domain.withUnsafeBufferPointer { asciiDomain in
             if asciiDomain.contains(where: { ASCII($0).map { URLStringUtils.isForbiddenHostCodePoint($0) } ?? false }) {
-                onValidationError(.hostParserError(.containsForbiddenHostCodePoint))
+                callback.validationError(hostParser: .containsForbiddenHostCodePoint)
                 return nil
             }
 
-            var ipv4Error: IPAddress.V4.ValidationError?
-            switch IPAddress.V4.parse(asciiDomain, onValidationError: { ipv4Error = $0 }) {
+            var ipv4Error = LastValidationError()
+            switch IPAddress.V4.parse(asciiDomain, callback: &ipv4Error) {
             case .success(let address):
                 return .ipv4Address(address)
             case .failure:
-                onValidationError(.ipv4AddressError(ipv4Error!))
+                callback.validationError(ipv4Error.error!)
                 return nil
             case .notAnIPAddress:
                 break
@@ -115,7 +104,7 @@ extension WebURLParser.Host {
 
 // This is a poor approximation of unicode's "domain2ascii" algorithm,
 // which simply lowercases ASCII alphas and fails for non-ASCII characters.
-func fake_domain2ascii(_ domain: inout Array<UInt8>) -> WebURLParser.Host.HostParserError? {
+func fake_domain2ascii(_ domain: inout Array<UInt8>) -> WebURLParser.Host.ValidationError? {
     for i in domain.indices {
         guard let asciiChar = ASCII(domain[i]) else { return .containsForbiddenHostCodePoint }
         domain[i] = asciiChar.lowercased.codePoint
@@ -125,12 +114,15 @@ func fake_domain2ascii(_ domain: inout Array<UInt8>) -> WebURLParser.Host.HostPa
 
 extension WebURLParser.Host {
 
-    @inlinable public static func parse<S>(_ input: S, isNotSpecial: Bool = false, onValidationError: (ValidationError)->Void) -> Self? where S: StringProtocol {
-        return input._withUTF8 { Self.parse($0, isNotSpecial: isNotSpecial, onValidationError: onValidationError) }
+    @inlinable public static func parse<Source, Callback>(
+        _ input: Source, isNotSpecial: Bool = false, callback: inout Callback
+    ) -> Self? where Source: StringProtocol, Callback: URLParserCallback {
+        return input._withUTF8 { Self.parse($0, isNotSpecial: isNotSpecial, callback: &callback) }
     }
 
     @inlinable public init?<S>(_ input: S, isNotSpecial: Bool = false) where S: StringProtocol {
-        guard let parsed = Self.parse(input, isNotSpecial: isNotSpecial, onValidationError: { _ in }) else { return nil }
+        var callback = IgnoreValidationErrors()
+        guard let parsed = Self.parse(input, isNotSpecial: isNotSpecial, callback: &callback) else { return nil }
         self = parsed 
     }
 }
@@ -175,6 +167,10 @@ extension WebURLParser.Host: Codable {
        }
     }
 
+    // When serialising/deserialising host objects, we need to include the kind.
+    // The string value is not enough (i.e. `Host` is not LosslessStringConvertible),
+    // because how the string is interpreted by the parser depends on the URL's scheme.
+    
     enum CodingKeys: String, CodingKey {
         case kind  = "kind"
         case value = "value"

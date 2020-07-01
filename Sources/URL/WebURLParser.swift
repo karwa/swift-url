@@ -220,8 +220,9 @@ extension WebURLParser.Components {
         return input._withUTF8 {
             var buffer = [UInt8]()
             buffer.reserveCapacity(32)
+            var callback = IgnoreValidationErrors()
             return WebURLParser._parse($0, base: nil, url: _storage, stateOverride: stateOverride,
-                                       workingBuffer: &buffer, onValidationError: { _ in })
+                                       workingBuffer: &buffer, callback: &callback)
         }
     }
     
@@ -314,7 +315,27 @@ extension WebURLParser {
     
     public struct ValidationError: Equatable, CustomStringConvertible {
         private var code: UInt8
-        private var hostParserError: WebURLParser.Host.ValidationError? = nil
+        private var hostParserError: AnyHostParserError? = nil
+        
+        enum AnyHostParserError: Equatable, CustomStringConvertible {
+            case ipv4AddressError(IPAddress.V4.ValidationError)
+            case ipv6AddressError(IPAddress.V6.ValidationError)
+            case opaqueHostError(OpaqueHost.ValidationError)
+            case hostParserError(WebURLParser.Host.ValidationError)
+
+            var description: String {
+                switch self {
+                case .ipv4AddressError(let error):
+                    return error.description
+                case .ipv6AddressError(let error):
+                    return error.description
+                case .opaqueHostError(let error):
+                    return error.description
+                case .hostParserError(let error):
+                    return error.description
+                }
+            }
+        }
 
         // Named errors and their descriptions/examples taken from:
         // https://github.com/whatwg/url/pull/502 on 15.06.2020
@@ -341,8 +362,9 @@ extension WebURLParser {
         internal static var invalidURLCodePoint:                Self { Self(code: 20) }
         internal static var unescapedPercentSign:               Self { Self(code: 21) }
         
-        internal static func hostParserError(_ err: WebURLParser.Host.ValidationError) -> Self {
-            Self(code: 22, hostParserError: err)
+        internal static var hostParserError_errorCode: UInt8 = 22
+        internal static func hostParserError(_ err: AnyHostParserError) -> Self {
+            Self(code: hostParserError_errorCode, hostParserError: err)
         }
         // TODO: host-related errors. Map these to our existing host-parser errors.
         internal static var unclosedIPv6Address:                Self { Self(code: 22) }
@@ -506,7 +528,7 @@ extension WebURLParser {
                 return #"""
                 A base URL is required.
                 """#
-            case _ where self.code == Self.hostParserError(.ipv6AddressError(.emptyInput)).code:
+            case _ where self.code == Self.hostParserError_errorCode:
                 return self.hostParserError!.description
             default:
                 return "??"
@@ -515,11 +537,71 @@ extension WebURLParser {
     }
 }
 
+/// An object which is informed by the URL parser if a validation error occurs.
+///
+/// Most validation errors are non-fatal and parsing can continue regardless. If parsing fails, the last
+/// validation error typically describes the issue which caused it to fail.
+///
+public protocol URLParserCallback: IPv6AddressParserCallback /*, IPv4ParserCallback */ {
+    mutating func validationError(_ error: WebURLParser.ValidationError)
+}
+
+// Wrap host-parser errors in an 'AnyHostParserError'.
+extension URLParserCallback {
+    // IP address errors.
+    public mutating func validationError(ipv4 error: IPAddress.V4.ValidationError) {
+        let wrapped = WebURLParser.ValidationError.AnyHostParserError.ipv4AddressError(error)
+        validationError(.hostParserError(wrapped))
+    }
+    public mutating func validationError(ipv6 error: IPAddress.V6.ValidationError) {
+        let wrapped = WebURLParser.ValidationError.AnyHostParserError.ipv6AddressError(error)
+        validationError(.hostParserError(wrapped))
+    }
+    // Other host-parser errors.
+    public mutating func validationError(hostParser error: WebURLParser.Host.ValidationError) {
+        let wrapped = WebURLParser.ValidationError.AnyHostParserError.hostParserError(error)
+        validationError(.hostParserError(wrapped))
+    }
+    public mutating func validationError(opaqueHost error: OpaqueHost.ValidationError) {
+        let wrapped = WebURLParser.ValidationError.AnyHostParserError.opaqueHostError(error)
+        validationError(.hostParserError(wrapped))
+    }
+}
+extension WebURLParser.ValidationError {
+    var ipv6Error: IPAddress.V6.ValidationError? {
+        guard case .some(.ipv6AddressError(let error)) = self.hostParserError else { return nil }
+        return error
+    }
+}
+
+/// A `URLParserCallback` which simply ignores all validation errors.
+///
+public struct IgnoreValidationErrors: URLParserCallback {
+    @inlinable @inline(__always) public init() {}
+    @inlinable @inline(__always) public mutating func validationError(_ error: WebURLParser.ValidationError) {}
+}
+
+/// A `URLParserCallback` which stores the last reported validation error.
+///
+public struct LastValidationError: URLParserCallback {
+    public var error: WebURLParser.ValidationError?
+    @inlinable @inline(__always) public init() {}
+    @inlinable @inline(__always) public mutating func validationError(_ error: WebURLParser.ValidationError) { self.error = error }
+}
+
+/// A `URLParserCallback` which stores all reported validation errors in an `Array`.
+///
+public struct CollectValidationErrors: URLParserCallback {
+    public var errors: [WebURLParser.ValidationError] = []
+    @inlinable @inline(__always) public init() { errors.reserveCapacity(8) }
+    @inlinable @inline(__always) public mutating func validationError(_ error: WebURLParser.ValidationError) { errors.append(error) }
+}
+
 // Parser entry-points.
 
 extension WebURLParser {
     
-    // Parse, ignoring non-fatal validation errors.
+    // Parse, ignoring validation errors.
 
     static func parse<S>(_ input: S, base: String? = nil) -> Components? where S: StringProtocol {
         var buffer = [UInt8]()
@@ -543,7 +625,8 @@ extension WebURLParser {
     private static func parse_impl<S>(_ input: S, baseURL: Components?, workingBuffer: inout [UInt8]) -> Components? where S: StringProtocol {
         return input._withUTF8 {
             let result = Components()
-            return _parse($0, base: baseURL, url: result._storage, stateOverride: nil, workingBuffer: &workingBuffer, onValidationError: { _ in }) ? result : nil
+            var callback = IgnoreValidationErrors()
+            return _parse($0, base: baseURL, url: result._storage, stateOverride: nil, workingBuffer: &workingBuffer, callback: &callback) ? result : nil
         }
     }
     
@@ -576,13 +659,12 @@ extension WebURLParser {
     
     private static func parseAndReport_impl<S>(_ input: S, baseURL: Components?, workingBuffer: inout [UInt8]) -> Result where S: StringProtocol {
         return input._withUTF8 { utf8 in
-            var errors: [ValidationError] = []
-            errors.reserveCapacity(8)
+            var callback = CollectValidationErrors()
             let components = Components()
-            if _parse(utf8, base: baseURL, url: components._storage, stateOverride: nil, workingBuffer: &workingBuffer, onValidationError: { errors.append($0) }) {
-                return Result(components: components, validationErrors: errors)
+            if _parse(utf8, base: baseURL, url: components._storage, stateOverride: nil, workingBuffer: &workingBuffer, callback: &callback) {
+                return Result(components: components, validationErrors: callback.errors)
             } else {
-                return Result(components: nil, validationErrors: errors)
+                return Result(components: nil, validationErrors: callback.errors)
             }
         }
     }
@@ -596,19 +678,19 @@ extension WebURLParser {
     /// https://url.spec.whatwg.org/#url-parsing as of 14.06.2020
     ///
     /// - parameters:
-    /// 	- input:				A String, as a Collection of UTF8-encoded bytes. Null-termination is not required.
-    ///     - base:					The base URL, if `input` is a relative URL string.
-    ///     - url:					The URL storage to hold the parser's results.
-    ///     - stateOverride:		The starting state of the parser. Used when modifying a URL.
-    ///     - workingBuffer:        A uniquely-referenced array for the parser to use as a scratchpad.
-    ///     - onValidationError:	A callback for handling any validation errors that occur.
+    /// 	- input:          A String, as a Collection of UTF8-encoded bytes. Null-termination is not required.
+    ///     - base:           The base URL, if `input` is a relative URL string.
+    ///     - url:            The URL storage to hold the parser's results.
+    ///     - stateOverride:  The starting state of the parser. Used when modifying a URL.
+    ///     - workingBuffer:  A uniquely-referenced array for the parser to use as a scratchpad.
+    ///     - callback:       A callback for handling any validation errors that occur.
     /// - returns:	`true` if the input was parsed successfully (in which case, `url` has been modified with the results),
-    ///  			or `false` if the input could not be parsed.
+    ///  			 or `false` if the input could not be parsed.
     ///
-    fileprivate static func _parse<C>(
-        _ input: C, base: Components?, url: Components.Storage,
+    fileprivate static func _parse<Source, Callback>(
+        _ input: Source, base: Components?, url: Components.Storage,
         stateOverride: ParserState?, workingBuffer: inout [UInt8],
-        onValidationError: (ValidationError)->Void) -> Bool where C: BidirectionalCollection, C.Element == UInt8 {
+        callback: inout Callback) -> Bool where Source: BidirectionalCollection, Source.Element == UInt8, Callback: URLParserCallback {
         
         var input = input[...]
         
@@ -622,7 +704,7 @@ extension WebURLParser {
                 }
             }
             if trimmedInput.startIndex != input.startIndex || trimmedInput.endIndex != input.endIndex {
-                onValidationError(.unexpectedC0ControlOrSpace)
+                callback.validationError(.unexpectedC0ControlOrSpace)
             }
             input = trimmedInput
         }
@@ -637,19 +719,22 @@ extension WebURLParser {
             }
         }
         if input.contains(where: isASCIITabOrNewline) {
-            onValidationError(.unexpectedASCIITabOrNewline)
-            return _parse_stateMachine(input.lazy.filter { isASCIITabOrNewline($0) == false }, base: base, url: url,
-                                       stateOverride: stateOverride, workingBuffer: &workingBuffer, onValidationError: onValidationError)
+            callback.validationError(.unexpectedASCIITabOrNewline)
+            // FIXME: `.lazy.filter` isn't correct for this, because it will check every call to `index(after:)`,
+            //        including inside unicode byte sequence checks. This should actually be our *non-unicode* `index(after:)`.
+            return _parse_stateMachine(input.trim(where: isASCIITabOrNewline).lazy.filter { isASCIITabOrNewline($0) == false },
+                                       base: base, url: url, stateOverride: stateOverride,
+                                       workingBuffer: &workingBuffer, callback: &callback)
         } else {
             return _parse_stateMachine(input, base: base, url: url,
-                                       stateOverride: stateOverride, workingBuffer: &workingBuffer, onValidationError: onValidationError)
+                                       stateOverride: stateOverride, workingBuffer: &workingBuffer, callback: &callback)
         }
     }
     
-    private static func _parse_stateMachine<C>(
-        _ input: C, base: Components?, url: Components.Storage,
+    private static func _parse_stateMachine<Source, Callback>(
+        _ input: Source, base: Components?, url: Components.Storage,
         stateOverride: ParserState?, workingBuffer buffer: inout [UInt8],
-        onValidationError: (ValidationError)->Void) -> Bool where C: Collection, C.Element == UInt8 {
+                callback: inout Callback) -> Bool where Source: Collection, Source.Element == UInt8, Callback: URLParserCallback {
         
         // 3. Begin state machine.
         var state = stateOverride ?? .schemeStart
@@ -686,7 +771,7 @@ extension WebURLParser {
                     break stateMachine
                 default:
                     guard stateOverride == nil else {
-                        onValidationError(.invalidSchemeStart)
+                        callback.validationError(.invalidSchemeStart)
                         return false
                     }
                     state = .noScheme
@@ -704,7 +789,7 @@ extension WebURLParser {
                     break // Handled below.
                 default:
                     guard stateOverride == nil else {
-                        onValidationError(.invalidScheme)
+                        callback.validationError(.invalidScheme)
                         return false
                     }
                     buffer.removeAll(keepingCapacity: true)
@@ -738,7 +823,7 @@ extension WebURLParser {
                     state = .file
                     let nextIdx = input.index(after: idx)
                     if !URLStringUtils.hasDoubleSolidusPrefix(input[nextIdx...]) {
-                        onValidationError(.fileSchemeMissingFollowingSolidus)
+                        callback.validationError(.fileSchemeMissingFollowingSolidus)
                     }
                 case .other:
                     let nextIdx = input.index(after: idx)
@@ -762,12 +847,12 @@ extension WebURLParser {
                 // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
                 let c: ASCII = (idx != endIndex) ? ASCII(input[idx]) ?? .null : .null
                 guard let base = base else {
-                    onValidationError(.missingSchemeNonRelativeURL)
+                    callback.validationError(.missingSchemeNonRelativeURL)
                     return false
                 }
                 guard base.cannotBeABaseURL == false else {
                     guard c == ASCII.numberSign else {
-                        onValidationError(.missingSchemeNonRelativeURL)
+                        callback.validationError(.missingSchemeNonRelativeURL)
                         return false // Non-ASCII characters get rejected here.
                     }
                     url.scheme   = base.scheme
@@ -787,7 +872,7 @@ extension WebURLParser {
 
             case .specialRelativeOrAuthority:
                 guard URLStringUtils.hasDoubleSolidusPrefix(input[idx...]) else {
-                    onValidationError(.relativeURLMissingBeginningSolidus)
+                    callback.validationError(.relativeURLMissingBeginningSolidus)
                     state = .relative
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 }
@@ -804,7 +889,7 @@ extension WebURLParser {
             case .relative:
                 guard let base = base else {
                     // Note: The spec doesn't say what happens here if base is nil.
-                    onValidationError(._baseURLRequired)
+                    callback.validationError(._baseURLRequired)
                     return false
                 }
                 url.scheme = base.scheme
@@ -818,7 +903,7 @@ extension WebURLParser {
                 let c: ASCII = ASCII(input[idx]) ?? .null
                 switch c {
                 case .backslash where url.scheme.isSpecial:
-                    onValidationError(.unexpectedReverseSolidus)
+                    callback.validationError(.unexpectedReverseSolidus)
                     state = .relativeSlash
                 case .forwardSlash:
                     state = .relativeSlash
@@ -855,11 +940,11 @@ extension WebURLParser {
                         state = .authority
                     }
                 case .backslash where url.scheme.isSpecial:
-                    onValidationError(.unexpectedReverseSolidus)
+                    callback.validationError(.unexpectedReverseSolidus)
                     state = .specialAuthorityIgnoreSlashes
                 default:
                     guard let base = base else {
-                        onValidationError(._baseURLRequired)
+                                callback.validationError(._baseURLRequired)
                         return false
                     }
                     url.copyAuthority(from: base._storage)
@@ -870,7 +955,7 @@ extension WebURLParser {
             case .specialAuthoritySlashes:
                 state = .specialAuthorityIgnoreSlashes
                 guard URLStringUtils.hasDoubleSolidusPrefix(input[idx...]) else {
-                    onValidationError(.missingSolidusBeforeAuthority)
+                    callback.validationError(.missingSolidusBeforeAuthority)
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 }
                 idx = input.index(after: idx)
@@ -883,7 +968,7 @@ extension WebURLParser {
                     state = .authority
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 }
-                onValidationError(.missingSolidusBeforeAuthority)
+                callback.validationError(.missingSolidusBeforeAuthority)
 
             case .authority:
                 // Erase 'endIndex' to `ASCII.forwardSlash`, as they are handled the same,
@@ -891,7 +976,7 @@ extension WebURLParser {
                 let c: ASCII? = (idx != endIndex) ? ASCII(input[idx]) : ASCII.forwardSlash
                 switch c {
                 case .commercialAt?:
-                    onValidationError(.unexpectedCommercialAt)
+                    callback.validationError(.unexpectedCommercialAt)
                     if flag_at {
                         buffer.insert(contentsOf: "%40".utf8, at: buffer.startIndex)
                     }
@@ -926,7 +1011,7 @@ extension WebURLParser {
                     fallthrough
                 case ASCII.backslash? where url.scheme.isSpecial:
                     if flag_at, buffer.isEmpty {
-                        onValidationError(.missingCredentials)
+                        callback.validationError(.missingCredentials)
                         return false
                     }
                     idx    = input.index(idx, offsetBy: -1 * buffer.count)
@@ -936,7 +1021,7 @@ extension WebURLParser {
                 default:
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
                     guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
-                        onValidationError(._invalidUTF8)
+                        callback.validationError(._invalidUTF8)
                         return false
                     }
                     buffer.append(contentsOf: codePoint)
@@ -957,12 +1042,11 @@ extension WebURLParser {
                 switch c {
                 case .colon? where flag_squareBracket == false:
                     guard buffer.isEmpty == false else {
-                        onValidationError(.unexpectedPortWithoutHost)
+                        callback.validationError(.unexpectedPortWithoutHost)
                         return false
                     }
                     guard let parsedHost = buffer.withUnsafeBufferPointer({
-                        WebURLParser.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false,
-                                                onValidationError: { onValidationError(.hostParserError($0)) })
+                        WebURLParser.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false, callback: &callback)
                     }) else {
                         return false
                     }
@@ -975,16 +1059,15 @@ extension WebURLParser {
                 case .backslash? where url.scheme.isSpecial:
                     if buffer.isEmpty {
                         if url.scheme.isSpecial {
-                            onValidationError(.emptyHostSpecialScheme)
+                            callback.validationError(.emptyHostSpecialScheme)
                             return false
                         } else if stateOverride != nil, (url.hasCredentials || url.port != nil) {
-                            onValidationError(.hostInvalid)
+                            callback.validationError(.hostInvalid)
                             break inputLoop
                         }
                     }
                     guard let parsedHost = buffer.withUnsafeBufferPointer({
-                        WebURLParser.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false,
-                                                onValidationError: { onValidationError(.hostParserError($0)) })
+                        WebURLParser.Host.parse($0, isNotSpecial: url.scheme.isSpecial == false, callback: &callback)
                     }) else {
                         return false
                     }
@@ -1002,7 +1085,7 @@ extension WebURLParser {
                 default:
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
                     guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
-                        onValidationError(._invalidUTF8)
+                        callback.validationError(._invalidUTF8)
                         return false
                     }
                     buffer.append(contentsOf: codePoint)
@@ -1025,7 +1108,7 @@ extension WebURLParser {
                 case _ where stateOverride != nil:
                     if buffer.isEmpty == false {
                         guard let parsedInteger = UInt16(String(decoding: buffer, as: UTF8.self)) else {
-                            onValidationError(.portOutOfRange)
+                            callback.validationError(.portOutOfRange)
                             return false
                         }
                         url.port = (parsedInteger == url.scheme.defaultPort) ? nil : parsedInteger
@@ -1035,7 +1118,7 @@ extension WebURLParser {
                     state = .pathStart
                     continue // Do not increment index. Non-ASCII characters go through this path.
                 default:
-                    onValidationError(.portInvalid)
+                    callback.validationError(.portInvalid)
                     return false
                 }
 
@@ -1043,7 +1126,7 @@ extension WebURLParser {
                 url.scheme = .file
                 if idx != endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
                     if c == .backslash {
-                        onValidationError(.unexpectedReverseSolidus)
+                        callback.validationError(.unexpectedReverseSolidus)
                     }
                     state = .fileSlash
                     break stateMachine
@@ -1068,7 +1151,7 @@ extension WebURLParser {
                 default:
                     url.query = nil
                     if URLStringUtils.hasWindowsDriveLetterPrefix(input[idx...]) {
-                        onValidationError(.unexpectedWindowsDriveLetter)
+                        callback.validationError(.unexpectedWindowsDriveLetter)
                         url.host = nil
                         url.path = []
                     } else {
@@ -1081,7 +1164,7 @@ extension WebURLParser {
             case .fileSlash:
                 if idx != endIndex, let c = ASCII(input[idx]), (c == .forwardSlash || c == .backslash) {
                     if c == .backslash {
-                        onValidationError(.unexpectedReverseSolidus)
+                        callback.validationError(.unexpectedReverseSolidus)
                     }
                     state = .fileHost
                     break stateMachine
@@ -1104,7 +1187,7 @@ extension WebURLParser {
                 switch c {
                 case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: // or endIndex.
                     if stateOverride == nil, URLStringUtils.isWindowsDriveLetter(buffer) {
-                        onValidationError(.unexpectedWindowsDriveLetterHost)
+                        callback.validationError(.unexpectedWindowsDriveLetterHost)
                         state = .path
                         // Note: buffer is intentionally not reset and used in the path-parsing state.
                     } else if buffer.isEmpty {
@@ -1113,8 +1196,7 @@ extension WebURLParser {
                         state = .pathStart
                     } else {
                         guard let parsedHost = buffer.withUnsafeBufferPointer({
-                            WebURLParser.Host.parse($0, isNotSpecial: false,
-                                                    onValidationError: { onValidationError(.hostParserError($0)) })
+                            WebURLParser.Host.parse($0, isNotSpecial: false, callback: &callback)
                         }) else {
                             return false
                         }
@@ -1127,7 +1209,7 @@ extension WebURLParser {
                 default:
                     // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.
                     guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
-                        onValidationError(._invalidUTF8)
+                        callback.validationError(._invalidUTF8)
                         return false
                     }
                     buffer.append(contentsOf: codePoint)
@@ -1149,7 +1231,7 @@ extension WebURLParser {
                 switch c {
                 case _ where url.scheme.isSpecial:
                     if c == .backslash {
-                        onValidationError(.unexpectedReverseSolidus)
+                        callback.validationError(.unexpectedReverseSolidus)
                     }
                     state = .path
                     if (c == .forwardSlash || c == .backslash) == false {
@@ -1180,16 +1262,16 @@ extension WebURLParser {
                 guard isPathComponentTerminator else {
                     // This may be a non-ASCII codePoint.
                     guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
-                        onValidationError(._invalidUTF8)
+                        callback.validationError(._invalidUTF8)
                         return false
                     }
                     if URLStringUtils.hasNonURLCodePoints(codePoint, allowPercentSign: true) {
-                        onValidationError(.invalidURLCodePoint)
+                        callback.validationError(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
                         let nextTwo = input[idx...].dropFirst().prefix(2)
                         if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                            onValidationError(.unescapedPercentSign)
+                            callback.validationError(.unescapedPercentSign)
                         }
                     }
                     PercentEscaping.encodeAsBuffer(
@@ -1210,7 +1292,7 @@ extension WebURLParser {
                 // the state (idx == endIndex) by the ASCII.null character.
                 let c: ASCII = (idx != endIndex) ? ASCII(input[idx])! : ASCII.null
                 if c == .backslash {
-                    onValidationError(.unexpectedReverseSolidus)
+                    callback.validationError(.unexpectedReverseSolidus)
                 }
                 switch buffer {
                 case _ where URLStringUtils.isDoubleDotPathSegment(buffer):
@@ -1223,7 +1305,7 @@ extension WebURLParser {
                 default:
                     if url.scheme == .file, url.path.isEmpty, URLStringUtils.isWindowsDriveLetter(buffer) {
                         if !(url.host == nil || url.host == .empty) {
-                            onValidationError(.unexpectedHostFileScheme)
+                            callback.validationError(.unexpectedHostFileScheme)
                             url.host = .empty
                         }
                         let secondChar = buffer.index(after: buffer.startIndex)
@@ -1234,7 +1316,7 @@ extension WebURLParser {
                 buffer.removeAll(keepingCapacity: true)
                 if url.scheme == .file, (c == .null /* endIndex */ || c == .questionMark || c == .numberSign) {
                     while url.path.count > 1, url.path[0].isEmpty {
-                        onValidationError(.unexpectedEmptyPath)
+                        callback.validationError(.unexpectedEmptyPath)
                         url.path.removeFirst()
                     }
                 }
@@ -1275,16 +1357,16 @@ extension WebURLParser {
                 default:
                     // This may be a non-ASCII codePoint.
                     guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
-                        onValidationError(._invalidUTF8)
+                        callback.validationError(._invalidUTF8)
                         return false
                     }
                     if URLStringUtils.hasNonURLCodePoints(codePoint, allowPercentSign: true) {
-                        onValidationError(.invalidURLCodePoint)
+                        callback.validationError(.invalidURLCodePoint)
                     }
                     if ASCII(input[idx]) == .percentSign {
                         let nextTwo = input[idx...].dropFirst().prefix(2)
                         if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                            onValidationError(.unescapedPercentSign)
+                            callback.validationError(.unescapedPercentSign)
                         }
                     }
                     buffer.append(contentsOf: codePoint)
@@ -1331,16 +1413,16 @@ extension WebURLParser {
                 }
                 // This may be a non-ASCII codePoint.
                 guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
-                    onValidationError(._invalidUTF8)
+                    callback.validationError(._invalidUTF8)
                     return false
                 }
                 if URLStringUtils.hasNonURLCodePoints(codePoint, allowPercentSign: true) {
-                    onValidationError(.invalidURLCodePoint)
+                    callback.validationError(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
                     let nextTwo = input[idx...].dropFirst().prefix(2)
                     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                        onValidationError(.unescapedPercentSign)
+                                callback.validationError(.unescapedPercentSign)
                     }
                 }
                 buffer.append(contentsOf: codePoint)
@@ -1368,16 +1450,16 @@ extension WebURLParser {
                 }
                 // This may be a non-ASCII codePoint.
                 guard let codePoint = UTF8.rangeOfEncodedCodePoint(fromStartOf: input[idx...]) else {
-                    onValidationError(._invalidUTF8)
+                    callback.validationError(._invalidUTF8)
                     return false
                 }
                 if URLStringUtils.hasNonURLCodePoints(codePoint, allowPercentSign: true) {
-                    onValidationError(.invalidURLCodePoint)
+                    callback.validationError(.invalidURLCodePoint)
                 }
                 if ASCII(input[idx]) == .percentSign {
                     let nextTwo = input[idx...].dropFirst().prefix(2)
                     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-                        onValidationError(.unescapedPercentSign)
+                                callback.validationError(.unescapedPercentSign)
                     }
                 }
                 buffer.append(contentsOf: codePoint)
