@@ -15,18 +15,23 @@
 public struct WebURL {
     private var components: WebURLParser.Components
     
+    // @testable
+    internal init(components: WebURLParser.Components) {
+        self.components = components
+    }
+    
     public init?(_ url: String, base: String?) {
         guard let components = WebURLParser.parse(url, base: base) else {
             return nil
         }
-        self.components = components
+        self.init(components: components)
     }
     
     public init?(_ url: String, baseURL: WebURL) {
         guard let components = WebURLParser.parse(url, baseURL: baseURL.components) else {
             return nil
         }
-        self.components = components
+        self.init(components: components)
     }
 }
 

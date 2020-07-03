@@ -285,18 +285,5 @@ extension HostParsing_IPv4 {
             XCTAssertEqual(parsedAddress.networkAddress, parse_aton(randomAddressString))
         }
     }
-
-    // TODO: Move this to an ASCII tests file.
-    func testASCIIDecimalPrinting() {
-        var buf: [UInt8] = [0, 0, 0, 0]
-        buf.withUnsafeMutableBufferPointer { buffer in 
-            for num in (UInt8.min)...(UInt8.max) {
-                let bufferContentsEnd = ASCII.insertDecimalString(for: num, into: buffer)
-                let asciiContents = Array(buffer[..<bufferContentsEnd])
-                let stdlibString  = Array(String(num, radix: 10).utf8)
-                XCTAssertEqual(stdlibString, asciiContents)
-            }
-        }
-    }
 }
 
