@@ -13,7 +13,7 @@ final class WHATWGTests: XCTestCase {}
 extension WHATWGTests {
     
     // Data structure to parse the test description in to.
-    private struct URLConstructorTestCase: CustomStringConvertible {
+    struct URLConstructorTestCase: CustomStringConvertible {
         var input:          String? = nil
         var base:           String? = nil
         var href:           String? = nil
@@ -125,7 +125,7 @@ extension WHATWGTests {
         let array = try JSONSerialization.jsonObject(with: data, options: []) as! NSArray
         assert(array.count == 627, "Incorrect number of test cases.")
    
-        var report = TestReport()
+        var report = WHATWG_TestReport()
         report.expectedFailures = [
             // These test failures are due to us not having implemented the `domain2ascii` transform,
             // often in combination with other features (e.g. with percent encoding).
@@ -160,6 +160,7 @@ extension WHATWGTests {
                     report.expectFalse(expected.failure == true)
                     report.expectEqual(parserResult.scheme, expected.protocol)
                     report.expectEqual(parserResult.href, expected.href)
+                    report.expectEqual(parserResult.host, expected.host)
                     report.expectEqual(parserResult.hostname, expected.hostname)
                     report.expectEqual(parserResult.port.map { Int($0) }, expected.port)
                     report.expectEqual(parserResult.username, expected.username)
@@ -278,7 +279,7 @@ extension WHATWGTests {
          }
         
         // Run the tests.
-        var report = TestReport()
+        var report = WHATWG_TestReport()
         report.expectedFailures = [
             // The 'port' tests are a little special.
             // The JS URL model exposes `port` as a String, and these XFAIL-ed tests
@@ -323,7 +324,7 @@ extension WHATWGTests {
     /// 3. Sets the transformed value on the parsed URL via the `property` key-path.
     /// 4. Checks the URL's properties and values against the expected values.
     ///
-    private func performSetterTest<T>(_ testcase: URLSetterTest, property: WritableKeyPath<WebURL, T>, transformValue: (String)->T, _ report: inout TestReport) {
+    private func performSetterTest<T>(_ testcase: URLSetterTest, property: WritableKeyPath<WebURL, T>, transformValue: (String)->T, _ report: inout WHATWG_TestReport) {
         
         testcase.comment.map { report.capture(key: "Comment", $0) }
         report.capture(key: "Input", testcase.href)
@@ -359,7 +360,7 @@ extension WHATWGTests {
 // - The reports are only decent in Xcode.
 // - No ability to XFAIL tests and check that they really *do* fail.
 // - etc...
-fileprivate struct TestReport {
+struct WHATWG_TestReport {
     var expectedFailures: Set<Int> = []
     
     private var testFailures = [Int: [(String, Any)]]()
@@ -372,15 +373,17 @@ fileprivate struct TestReport {
     private var currentTestIdx = 0
     private var currentTestDidFail      = false
     private var currentTestCapturedData = [(String, Any)]()
+    private var currentTestFailedKeys   = [String]()
     
     mutating func recordSection(_ name: String) {
         sections.append((currentTestIdx, name))
         currentTestIdx += 1
     }
     
-    mutating func recordTest(_ test: (inout TestReport) throws -> Void) rethrows {
+    mutating func recordTest(_ test: (inout WHATWG_TestReport) throws -> Void) rethrows {
         currentTestDidFail = false
         currentTestCapturedData.removeAll(keepingCapacity: true)
+        currentTestFailedKeys.removeAll(keepingCapacity: true)
         defer {
             if expectedFailures.contains(currentTestIdx) {
                 if !currentTestDidFail {
@@ -395,6 +398,7 @@ fileprivate struct TestReport {
                 if currentTestDidFail {
                     num_xPass_fail += 1
                     XCTFail("Unexpected fail for test \(currentTestIdx). Data: \(currentTestCapturedData)")
+                    currentTestCapturedData.insert(("FAILURE KEYS", currentTestFailedKeys), at: 0)
                     testFailures[currentTestIdx] = currentTestCapturedData
                 } else {
                     num_xPass_pass += 1
@@ -402,6 +406,7 @@ fileprivate struct TestReport {
             }
             currentTestDidFail = false
             currentTestCapturedData.removeAll(keepingCapacity: true)
+            currentTestFailedKeys.removeAll(keepingCapacity: true)
             currentTestIdx += 1
         }
         
@@ -420,18 +425,21 @@ fileprivate struct TestReport {
     mutating func expectEqual<T: Equatable>(_ lhs: T, _ rhs: T, _ key: String? = nil) {
         if lhs != rhs {
             currentTestDidFail = true
+            key.map { currentTestFailedKeys.append($0) }
         }
     }
     
-    mutating func expectTrue(_ lhs: Bool, _ message: String = "condition was false") {
+    mutating func expectTrue(_ lhs: Bool, _ key: String? = nil) {
         if lhs == false {
             currentTestDidFail = true
+            key.map { currentTestFailedKeys.append($0) }
         }
     }
     
-    mutating func expectFalse(_ lhs: Bool, _ message: String = "condition was true") {
+    mutating func expectFalse(_ lhs: Bool, _ key: String? = nil) {
         if lhs == true {
             currentTestDidFail = true
+            key.map { currentTestFailedKeys.append($0) }
         }
     }
     
