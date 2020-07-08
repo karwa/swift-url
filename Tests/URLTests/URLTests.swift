@@ -4,7 +4,6 @@ import XCTest
 // TODO:
 // Test plan.
 //================
-// - PercentEscaping: long strings, short strings, escape sets, unescaping, round-tripping
 // - hasNonURLCodePoints
 // - WebURLParser.Components.QueryParameters
 
@@ -139,7 +138,9 @@ extension URLTests {
      func testPercentEscaping() {
            let testStrings: [String] = [
              "hello, world", // ASCII
+             "hello, world. I am a long ASCII String. How are you today?", // Long ASCII
              "👩‍👩‍👦‍👦️", // Long unicode
+             "👨‍👧‍👧 is 🇬🇧 but 🙃 and 🧑🏿‍🚒!", // Long unicode 2
              "%🐶️",   // Leading percent
              "%z🐶️",  // Leading percent + one nonhex
              "%3🐶️",  // Leading percent + one hex
@@ -148,17 +149,28 @@ extension URLTests {
              "🐶️%z",  // Trailing percent + one nonhex
              "🐶️%3",  // Trailing percent + one hex
              "🐶️%3z", // Trailing percent + one hex + one nonhex
-             // "%100" FIXME: Percent escaping doesn't round-trip.
            ]
            for string in testStrings {
-    //           let escaped = string.percentEscaped(where: { _ in false })
-    //           let decoded = escaped.removingPercentEscaping() //PercentEscaping.decodeString(utf8: escaped.utf8)
+                var encoded = ""
+                PercentEscaping.encodeIterativelyAsString(bytes: string.utf8, escapeSet: .url_c0) { encoded.append($0) }
+                let decoded = PercentEscaping.decodeString(encoded)
 
-    //           XCTAssertEqual(Array(string.utf8), Array(decoded.utf8))
-    //            print("--------------")
-    //            print("original: '\(string)'\t\tUTF8: \(Array(string.utf8))")
-    //            print("decoded : '\(decoded)'\t\tUTF8: \(Array(decoded.utf8))")
-    //            print("escaped:  '\(escaped)'\t\tUTF8: \(Array(escaped.utf8))")
+               XCTAssertEqual(Array(string.utf8), Array(decoded.utf8))
+                print("--------------")
+                print("original: '\(string)'\t\tUTF8: \(Array(string.utf8))")
+                print("decoded : '\(decoded)'\t\tUTF8: \(Array(decoded.utf8))")
+                print("escaped:  '\(encoded)'\t\tUTF8: \(Array(encoded.utf8))")
+            }
+        
+            do {
+              let containsPercent = "%100"
+              var encoded = ""
+              // Must include the % sign to ensure that arbitrary strings will round-trip. URL escape sets don't include it.
+              let roundTripEscapeSet = PercentEscaping.EscapeSet { PercentEscaping.EscapeSet.url_c0.shouldEscape($0) || $0 == .percentSign }
+              PercentEscaping.encodeIterativelyAsString(bytes: containsPercent.utf8, escapeSet: roundTripEscapeSet) { encoded.append($0) }
+                
+              let decoded = PercentEscaping.decodeString(encoded)
+              XCTAssertEqual(Array(containsPercent.utf8), Array(decoded.utf8))
             }
        }
 }
