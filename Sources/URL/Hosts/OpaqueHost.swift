@@ -1,11 +1,39 @@
 
-public struct OpaqueHost: Equatable, Hashable, Codable {
+public struct OpaqueHost {
     public let hostname: String
 
     private init(unchecked hostname: String) {
         self.hostname = hostname
     } 
 }
+
+// Standard protocols.
+
+extension OpaqueHost: Equatable, Hashable, Codable, CustomStringConvertible {
+
+    public var description: String {
+        return serialized
+    }
+}
+
+// Parsing initializers.
+
+extension OpaqueHost {
+
+    @inlinable public static func parse<Source, Callback>(
+        _ input: Source, callback: inout Callback
+    ) -> OpaqueHost? where Source: StringProtocol, Callback: URLParserCallback {
+        return input._withUTF8 { Self.parse($0, callback: &callback) }
+    }
+
+    @inlinable public init?<Source>(_ input: Source) where Source: StringProtocol {
+        var callback = IgnoreValidationErrors()
+        guard let parsedValue = Self.parse(input, callback: &callback) else { return nil }
+        self = parsedValue
+    }
+}
+
+// Parsing and serialization impl.
 
 extension OpaqueHost {
 
@@ -69,23 +97,9 @@ extension OpaqueHost {
 }
 
 extension OpaqueHost {
-
-    @inlinable public static func parse<Source, Callback>(
-        _ input: Source, callback: inout Callback
-    ) -> OpaqueHost? where Source: StringProtocol, Callback: URLParserCallback {
-        return input._withUTF8 { Self.parse($0, callback: &callback) }
-    }
-
-    @inlinable public init?<Source>(_ input: Source) where Source: StringProtocol {
-        var callback = IgnoreValidationErrors()
-        guard let parsedValue = Self.parse(input, callback: &callback) else { return nil }
-        self = parsedValue
-    }
-}
-
-extension OpaqueHost: CustomStringConvertible {
-
-    public var description: String {
+    
+    public var serialized: String {
         return hostname
     }
 }
+

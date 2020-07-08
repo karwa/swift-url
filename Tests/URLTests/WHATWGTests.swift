@@ -109,7 +109,7 @@ extension WHATWGTests {
             \t.host:     \(host ?? "<nil>")
             \t.hostname: \(hostname ?? "<nil>")
             \t.origin:   \(origin ?? "<nil>")
-            \t.port:     \(port?.description ?? "<nil>")
+            \t.port:     \(port.map { String($0) } ?? "<nil>")
             \t.pathname: \(pathname ?? "<nil>")
             \t.search:   \(search ?? "<nil>")
             \t.hash:     \(hash ?? "<nil>")
@@ -169,7 +169,7 @@ extension WHATWGTests {
                     report.expectEqual(parserResult.fragment, expected.hash)
                     // The test file doesn't include expected `origin` values for all entries.
                     if let expectedOrigin = expected.origin {
-                        report.expectEqual(parserResult.origin.description, expectedOrigin)
+                        report.expectEqual(parserResult.origin.serialized, expectedOrigin)
                     }
                 }
             } else {

@@ -103,7 +103,9 @@ extension IPAddress {
     }
 }
 
-extension IPAddress.V6: Equatable, Hashable {
+// Standard protocols.
+
+extension IPAddress.V6: Equatable, Hashable, LosslessStringConvertible {
     @inlinable
     public static func ==(lhs: Self, rhs: Self) -> Bool {
         return lhs.rawAddress.0 == rhs.rawAddress.0 &&
@@ -120,7 +122,51 @@ extension IPAddress.V6: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         withUnsafeBytes(of: rawAddress) { hasher.combine(bytes: $0) }
     }
+    
+    @inlinable
+    public var description: String {
+        return serialized
+    }
 }
+
+extension IPAddress.V6: Codable {
+
+    public init(from decoder: Decoder) throws {
+       let container = try decoder.singleValueContainer()
+       let string    = try container.decode(String.self)
+       guard let parsedValue = IPAddress.V6(string) else {
+         throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Invalid IPv6 Address"
+         )
+       }
+       self = parsedValue
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(self.serialized)
+    }
+}
+
+// Parsing initializers.
+
+extension IPAddress.V6 {
+    
+    @inlinable public static func parse<Source, Callback>(
+        _ input: Source, callback: inout Callback
+    ) -> Self? where Source: StringProtocol, Callback: IPv6AddressParserCallback {
+        return input._withUTF8 { parse($0, callback: &callback) }
+    }
+
+    @inlinable public init?<S>(_ input: S) where S: StringProtocol {
+        var callback = IgnoreValidationErrors()
+        guard let parsed = Self.parse(input, callback: &callback) else { return nil }
+        self = parsed
+    }
+}
+
+// Parsing and serialization impl.
 
 extension IPAddress.V6 {
 
@@ -316,23 +362,8 @@ extension IPAddress.V6 {
 }
 
 extension IPAddress.V6 {
-    
-    @inlinable public static func parse<Source, Callback>(
-        _ input: Source, callback: inout Callback
-    ) -> Self? where Source: StringProtocol, Callback: IPv6AddressParserCallback {
-        return input._withUTF8 { parse($0, callback: &callback) }
-    }
 
-    @inlinable public init?<S>(_ input: S) where S: StringProtocol {
-        var callback = IgnoreValidationErrors()
-        guard let parsed = Self.parse(input, callback: &callback) else { return nil }
-        self = parsed 
-    }
-}
-
-extension IPAddress.V6: CustomStringConvertible {
-
-    public var description: String {
+    public var serialized: String {
         // Maximum normalised length of an IPv6 address = 39 bytes
         // 32 (128 bits/4 bits per hex character) + 7 (separators)
         return String(_unsafeUninitializedCapacity: 39) { stringBuffer in
@@ -375,26 +406,6 @@ extension IPAddress.V6: CustomStringConvertible {
                 return stringBufferIdx
             }
         }
-    }
-}
-
-extension IPAddress.V6: Codable {
-
-    public init(from decoder: Decoder) throws {
-       let container = try decoder.singleValueContainer()
-       let string = try container.decode(String.self)
-       guard let parsedValue = IPAddress.V6(string) else {
-         throw DecodingError.dataCorruptedError(
-            in: container,
-            debugDescription: "Invalid IPv6 Address"
-         )
-       }
-       self = parsedValue
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(self.description)
     }
 }
 
@@ -443,9 +454,53 @@ extension IPAddress {
     }
 }
 
-extension IPAddress.V4: Equatable, Hashable {
-    // Synthesised.
+// Standard protocols.
+
+extension IPAddress.V4: Equatable, Hashable, LosslessStringConvertible {
+    
+    public var description: String {
+        return serialized
+    }
 }
+
+extension IPAddress.V4: Codable {
+
+    public init(from decoder: Decoder) throws {
+       let container = try decoder.singleValueContainer()
+       let string    = try container.decode(String.self)
+        guard let parsedValue = Self(string) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid IPv4 Address"
+            )
+        }
+        self = parsedValue
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(self.serialized)
+    }
+}
+
+// Parsing initializers.
+
+extension IPAddress.V4 {
+
+    @inlinable public static func parse<Source, Callback>(
+        _ input: Source, callback: inout Callback
+    ) -> ParseResult where Source: StringProtocol, Callback: IPv4ParserCallback {
+        return input._withUTF8 { parse($0, callback: &callback) }
+    }
+
+    @inlinable public init?<Source>(_ input: Source) where Source: StringProtocol {
+        var callback = IgnoreValidationErrors()
+        guard case .success(let parsedValue) = Self.parse(input, callback: &callback) else { return nil }
+        self = parsedValue
+    }
+}
+
+// Parsing and serialization impl.
 
 extension IPAddress.V4 {
     
@@ -707,25 +762,9 @@ extension IPAddress.V4 {
     }
 }
 
-
 extension IPAddress.V4 {
 
-    @inlinable public static func parse<Source, Callback>(
-        _ input: Source, callback: inout Callback
-    ) -> ParseResult where Source: StringProtocol, Callback: IPv4ParserCallback {
-        return input._withUTF8 { parse($0, callback: &callback) }
-    }
-
-    @inlinable public init?<Source>(_ input: Source) where Source: StringProtocol {
-        var callback = IgnoreValidationErrors()
-        guard case .success(let parsedValue) = Self.parse(input, callback: &callback) else { return nil }
-        self = parsedValue
-    }
-}
-
-extension IPAddress.V4: CustomStringConvertible {
-
-    public var description: String {
+    public var serialized: String {
         // 15 bytes is the maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX"),
         // but is also happily the small-string size on 64-bit platforms.
         return String(_unsafeUninitializedCapacity: 15) { stringBuffer in
@@ -747,25 +786,5 @@ extension IPAddress.V4: CustomStringConvertible {
                 return stringBufferIdx
             }
         }
-    }
-}
-
-extension IPAddress.V4: Codable {
-
-    public init(from decoder: Decoder) throws {
-       let container = try decoder.singleValueContainer()
-       let string = try container.decode(String.self)
-    	guard let parsedValue = Self(string) else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Invalid IPv4 Address"
-            )
-        }
-        self = parsedValue
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(self.description)
     }
 }

@@ -258,7 +258,7 @@ extension WebURLParser.Components {
                 }
                 result.append("@")
             }
-            result.append(host.description)
+            result.append(host.serialized)
             if let port = self.port {
                 result.append(":")
                 result.append(String(port))

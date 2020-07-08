@@ -1,7 +1,7 @@
 
 extension WebURLParser {
     
-    public enum Host: Equatable, Hashable {
+    public enum Host {
         case domain(String)
         case ipv4Address(IPAddress.V4)
         case ipv6Address(IPAddress.V6)
@@ -23,6 +23,97 @@ extension WebURLParser.Host {
         }
     }
 }
+
+// Standard protocols.
+
+extension WebURLParser.Host: Equatable, Hashable, CustomStringConvertible {
+    
+    public var description: String {
+        return serialized
+    }
+}
+
+extension WebURLParser.Host: Codable {
+    
+    public enum Kind: String, Codable {
+        case domain
+        case ipv4Address
+        case ipv6Address
+        case opaque
+        case empty
+    }
+    
+    public var kind: Kind {
+       switch self {
+        case .empty:        return .empty
+        case .ipv4Address:  return .ipv4Address
+        case .ipv6Address:  return .ipv6Address
+        case .opaque:       return .opaque
+        case .domain:       return .domain
+       }
+    }
+
+    // When serialising/deserialising host objects, we need to include the kind.
+    // The string value is not enough (i.e. `Host` is not LosslessStringConvertible),
+    // because how the string is interpreted by the parser depends on the URL's scheme.
+    
+    enum CodingKeys: String, CodingKey {
+        case kind  = "kind"
+        case value = "value"
+    }
+    public init(from decoder: Decoder) throws {
+       let container = try decoder.container(keyedBy: CodingKeys.self)
+       let kind      = try container.decode(Kind.self, forKey: .kind)
+       switch kind {
+        case .empty:
+           self = .empty
+        case .ipv4Address:
+            self = .ipv4Address(try container.decode(IPAddress.V4.self, forKey: .value))
+        case .ipv6Address:
+            self = .ipv6Address(try container.decode(IPAddress.V6.self, forKey: .value))
+        case .opaque:
+            self = .opaque(try container.decode(OpaqueHost.self, forKey: .value))
+        case .domain:
+            self = .domain(try container.decode(String.self, forKey: .value))
+       }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+       var container = encoder.container(keyedBy: CodingKeys.self)
+       try container.encode(kind, forKey: .kind)
+       switch self {
+        case .empty:
+            break
+        case .ipv4Address(let addr):
+            try container.encode(addr, forKey: .value)
+        case .ipv6Address(let addr):
+            try container.encode(addr, forKey: .value)
+        case .opaque(let host):
+            try container.encode(host, forKey: .value)
+        case .domain(let host):
+            try container.encode(host, forKey: .value)
+       }
+    }
+}
+
+// Parsing initializers.
+
+extension WebURLParser.Host {
+
+    @inlinable public static func parse<Source, Callback>(
+        _ input: Source, isNotSpecial: Bool = false, callback: inout Callback
+    ) -> Self? where Source: StringProtocol, Callback: URLParserCallback {
+        return input._withUTF8 { Self.parse($0, isNotSpecial: isNotSpecial, callback: &callback) }
+    }
+
+    @inlinable public init?<S>(_ input: S, isNotSpecial: Bool = false) where S: StringProtocol {
+        var callback = IgnoreValidationErrors()
+        guard let parsed = Self.parse(input, isNotSpecial: isNotSpecial, callback: &callback) else { return nil }
+        self = parsed
+    }
+}
+
+// Parsing and serialization impl.
 
 extension WebURLParser.Host {
 
@@ -113,99 +204,21 @@ func fake_domain2ascii(_ domain: inout Array<UInt8>) -> WebURLParser.Host.Valida
 }
 
 extension WebURLParser.Host {
-
-    @inlinable public static func parse<Source, Callback>(
-        _ input: Source, isNotSpecial: Bool = false, callback: inout Callback
-    ) -> Self? where Source: StringProtocol, Callback: URLParserCallback {
-        return input._withUTF8 { Self.parse($0, isNotSpecial: isNotSpecial, callback: &callback) }
-    }
-
-    @inlinable public init?<S>(_ input: S, isNotSpecial: Bool = false) where S: StringProtocol {
-        var callback = IgnoreValidationErrors()
-        guard let parsed = Self.parse(input, isNotSpecial: isNotSpecial, callback: &callback) else { return nil }
-        self = parsed 
-    }
-}
-
-extension WebURLParser.Host: CustomStringConvertible {
-
+    
     /// Serialises the host, according to https://url.spec.whatwg.org/#host-serializing (as of 14.06.2020).
     ///
-    public var description: String {
+    public var serialized: String {
         switch self {
         case .ipv4Address(let address):
-            return address.description
+            return address.serialized
         case .ipv6Address(let address):
-            return "[\(address.description)]"
+            return "[\(address.serialized)]"
         case .opaque(let host):
-            return host.description
+            return host.serialized
         case .domain(let domain):
-            return domain.description
+            return domain
         case .empty:
             return ""
         }
-    }
-}
-
-extension WebURLParser.Host: Codable {
-    
-    public enum Kind: String, Codable {
-        case domain
-        case ipv4Address
-        case ipv6Address
-        case opaque
-        case empty
-    }
-    
-    public var kind: Kind {
-       switch self {
-        case .empty:        return .empty
-        case .ipv4Address:  return .ipv4Address
-        case .ipv6Address:  return .ipv6Address
-        case .opaque:       return .opaque
-        case .domain:       return .domain
-       }
-    }
-
-    // When serialising/deserialising host objects, we need to include the kind.
-    // The string value is not enough (i.e. `Host` is not LosslessStringConvertible),
-    // because how the string is interpreted by the parser depends on the URL's scheme.
-    
-    enum CodingKeys: String, CodingKey {
-        case kind  = "kind"
-        case value = "value"
-    } 
-    public init(from decoder: Decoder) throws {
-       let container = try decoder.container(keyedBy: CodingKeys.self)
-       let kind      = try container.decode(Kind.self, forKey: .kind)
-       switch kind {
-        case .empty: 
-           self = .empty
-        case .ipv4Address:
-            self = .ipv4Address(try container.decode(IPAddress.V4.self, forKey: .value))
-        case .ipv6Address:
-            self = .ipv6Address(try container.decode(IPAddress.V6.self, forKey: .value))
-        case .opaque:
-            self = .opaque(try container.decode(OpaqueHost.self, forKey: .value))
-        case .domain:
-            self = .domain(try container.decode(String.self, forKey: .value))
-       }
-    }
-
-    public func encode(to encoder: Encoder) throws {
-       var container = encoder.container(keyedBy: CodingKeys.self)
-       try container.encode(kind, forKey: .kind)
-       switch self {
-        case .empty: 
-            break
-        case .ipv4Address(let addr):
-            try container.encode(addr, forKey: .value)
-        case .ipv6Address(let addr):
-            try container.encode(addr, forKey: .value)
-        case .opaque(let host):
-            try container.encode(host, forKey: .value)
-        case .domain(let host):
-            try container.encode(host, forKey: .value)
-       }
     }
 }

@@ -47,11 +47,11 @@ final class HostParsing_IPv6: XCTestCase {
             }
             XCTAssertEqual(Array(fromIPv6Address: addr.rawAddress),     expectedRawAddress, "Raw address mismatch for: \(string)")
             XCTAssertEqual(Array(fromIPv6Address: addr.networkAddress), parse_pton(string), "Net address mismatch for: \(string)")
-            XCTAssertEqual(addr.description, expectedDescription)
-            if let reparsedAddr = IPAddress.V6(addr.description) {
-                XCTAssertEqual(addr, reparsedAddr, "Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.description)'")
+            XCTAssertEqual(addr.serialized, expectedDescription)
+            if let reparsedAddr = IPAddress.V6(addr.serialized) {
+                XCTAssertEqual(addr, reparsedAddr, "Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.serialized)'")
             } else {
-                XCTFail("Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.description)'")
+                XCTFail("Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.serialized)'")
             }
         }
     }
@@ -73,11 +73,11 @@ final class HostParsing_IPv6: XCTestCase {
             }
             XCTAssertEqual(Array(fromIPv6Address: addr.rawAddress),     expectedRawAddress, "Raw address mismatch for: \(string)")
             XCTAssertEqual(Array(fromIPv6Address: addr.networkAddress), parse_pton(string), "Net address mismatch for: \(string)")
-            XCTAssertEqual(addr.description, expectedDescription)
-            if let reparsedAddr = IPAddress.V6(addr.description) {
-                XCTAssertEqual(addr, reparsedAddr, "Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.description)'")
+            XCTAssertEqual(addr.serialized, expectedDescription)
+            if let reparsedAddr = IPAddress.V6(addr.serialized) {
+                XCTAssertEqual(addr, reparsedAddr, "Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.serialized)'")
             } else {
-                XCTFail("Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.description)'")
+                XCTFail("Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.serialized)'")
             }
         }
     }

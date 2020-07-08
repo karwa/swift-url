@@ -49,6 +49,15 @@ extension WebURLParser.Components {
     }
 }
 
+// Standard protocols.
+
+extension WebURLParser.Origin: CustomStringConvertible {
+    
+    public var description: String {
+        return serialized
+    }
+}
+
 // TODO: Investigate adding `Equatable` conformance.
 //
 // It's a bit tricky since `x.origin == x.origin` is false for opaque origins,
@@ -68,16 +77,17 @@ extension WebURLParser.Origin {
     }
 }
 
-extension WebURLParser.Origin: CustomStringConvertible {
+// Serialization impl.
+
+extension WebURLParser.Origin {
     
-    public var description: String {
+    public var serialized: String {
         guard case .tuple(let components) = kind else {
             return "null"
         }
         var result = components.scheme.rawValue + "://"
-        result += components.host.map { $0.description } ?? ""
+        result += components.host.map { $0.serialized } ?? ""
         result += components.port.map { ":\($0)" } ?? ""
         return result
     }
-    
 }

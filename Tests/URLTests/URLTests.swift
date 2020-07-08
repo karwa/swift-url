@@ -105,7 +105,7 @@ final class URLTests: XCTestCase {
         // ),
        ]
     
-        fileprivate func debugPrint(_ url: String, _ parsedComponents: WebURLParser.Components?) {
+        func debugPrint(_ url: String, _ parsedComponents: WebURLParser.Components?) {
             print("URL:\t|\(url)|")
             if let results = parsedComponents {
                 print("Results:\n\(WebURL(components: results).debugDescription)")

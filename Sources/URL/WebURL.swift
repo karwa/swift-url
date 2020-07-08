@@ -96,7 +96,7 @@ extension WebURL {
     public var host: String {
         get {
             guard let host = components.host else { return "" }
-            guard let port = components.port else { return host.description }
+            guard let port = components.port else { return host.serialized }
             return "\(host):\(port)"
         }
         set {
@@ -108,7 +108,7 @@ extension WebURL {
     /// A `String` containing the domain of the URL.
     ///
     public var hostname: String {
-        get { return components.host?.description ?? "" }
+        get { return components.host?.serialized ?? "" }
         set {
             guard components.cannotBeABaseURL == false else { return }
             components.modify(newValue, stateOverride: .hostname)
@@ -232,7 +232,9 @@ extension WebURL: Equatable, Hashable, Codable, LosslessStringConvertible {
     }
 }
 
-extension WebURL: CustomDebugStringConvertible {
+// Not `CustomDebugStringConvertible` because we never want `String(describing: someURL)` to return this String.
+
+extension WebURL {
 
     public var debugDescription: String {
         return """
@@ -244,7 +246,7 @@ extension WebURL: CustomDebugStringConvertible {
         \t.host:     \(host)
         \t.hostname: \(hostname)
         \t.origin:   \(origin)
-        \t.port:     \(port?.description ?? "<nil>")
+        \t.port:     \(port.map { String($0) } ?? "<nil>")
         \t.pathname: \(pathname)
         \t.search:   \(search)
         \t.fragment: \(fragment)
