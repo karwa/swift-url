@@ -6,6 +6,28 @@ class AlgorithmsTestCase: XCTestCase {}
 
 // Collection+Split.
 
+extension Collection {
+
+  /// This is an implementation detail of `Sequence.split(maxLength:)`.
+  /// It is also used as a secondary implementation to test the lazy version against.
+  ///
+  fileprivate  // @testable
+    func _eagerSplit(maxLength: Int) -> [SubSequence]
+  {
+    precondition(maxLength > 0, "Cannot split a Collection in to rows of 0 or negative length")
+    var results = [SubSequence]()
+    results.reserveCapacity((underestimatedCount / maxLength) + 1)
+    var sliceStart = startIndex
+    var sliceEnd = startIndex
+    while sliceEnd != endIndex {
+      sliceStart = sliceEnd
+      sliceEnd = index(sliceStart, offsetBy: maxLength, limitedBy: endIndex) ?? endIndex
+      results.append(self[sliceStart..<sliceEnd])
+    }
+    return results
+  }
+}
+
 extension AlgorithmsTestCase {
     
     public func testCollectionSplitExact() {
@@ -54,11 +76,11 @@ extension AlgorithmsTestCase {
         
         // Check content.
         XCTAssertEqual(lines.count, 8)
-        XCTAssertEqual(lines.last?.count, 2)
+        XCTAssertEqual(lines.dropFirst(7).first?.count, 2)
         XCTAssertEqual(lines.first, text.prefix(10))
         XCTAssertEqual(lines[lines.index(lines.startIndex, offsetBy: 3)], "ow my life")
         XCTAssertEqual(lines[lines.index(lines.endIndex, offsetBy: -3)], "ed, turned")
-        XCTAssertEqual(lines.last, "wn")
+        XCTAssertEqual(lines.dropFirst(7).first, "wn")
         for row in lines {
             XCTAssertLessThanOrEqual(row.count, 10)
         }
