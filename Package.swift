@@ -8,6 +8,7 @@ let package = Package(
     products: [
         .library(name: "Base", targets: ["Base"]),
         .library(name: "WebURL", targets: ["URL"]),
+        .executable(name: "URLBenchmarks", targets: ["URLBenchmarks"])
     ],
     dependencies: [
         .package( // Swift-checkit for testing protocol conformances.
@@ -22,6 +23,7 @@ let package = Package(
         .testTarget(name: "ConcurrencyTests", dependencies: ["Concurrency"]),
 
         .target(name: "URL", dependencies: ["Algorithms"]),
+        .target(name: "URLBenchmarks", dependencies: ["URL"]),
         .testTarget(name: "URLTests", dependencies: ["URL"]),
         
         .target(name: "Base", dependencies: ["Algorithms", "Concurrency", "URL"]),
