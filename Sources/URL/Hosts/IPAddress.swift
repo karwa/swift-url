@@ -16,7 +16,7 @@ public protocol IPv4ParserCallback {
 /// An object which is informed by the IPv6 parser if a validation error occurs.
 ///
 public protocol IPv6AddressParserCallback {
-  mutating func validationError(ipv6 error: IPAddress.V6.ValidationError)
+  mutating func validationError(ipv6 error: IPv6Address.ValidationError)
 }
 
 /// A view which allows an `IPv6AddressParserCallback` to accept IPv4 parser errors,
@@ -48,65 +48,62 @@ extension IPv6AddressParserCallback {
 
 // MARK: - IPv6
 
-extension IPAddress {
+/// A 128-bit numerical identifier assigned to a device on an 
+/// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
+///
+public struct IPv6Address {
+  public typealias AddressType = (UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16)
 
-  /// A 128-bit numerical identifier assigned to a device on an 
-  /// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
+  // Host byte order.
+
+  /// The raw address (i.e. in host byte order).
   ///
-  public struct V6 {
-    public typealias AddressType = (UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16)
+  public var rawAddress: AddressType
 
-    // Host byte order.
-
-    /// The raw address (i.e. in host byte order).
-    ///
-    public var rawAddress: AddressType
-
-    /// Creates a value with the given raw address.
-    ///
-    /// - parameters:
-    ///     - rawAddress:   The address value in host byte order.
-    ///
-    @inlinable
-    public init(rawAddress: AddressType = (0, 0, 0, 0, 0, 0, 0, 0)) {
-      self.rawAddress = rawAddress
-    }
-
-    // Network byte order.
-
-    /// The network address (i.e. in network byte order).
-    /// 
-    public var networkAddress: AddressType {
-      return (
-        rawAddress.0.bigEndian, rawAddress.1.bigEndian,
-        rawAddress.2.bigEndian, rawAddress.3.bigEndian,
-        rawAddress.4.bigEndian, rawAddress.5.bigEndian,
-        rawAddress.6.bigEndian, rawAddress.7.bigEndian
-      )
-    }
-
-    /// Creates a value with the given network address.
-    ///
-    /// - parameters:
-    ///     - networkAddress:   The address value in network byte order.
-    ///
-    @inlinable
-    public init(networkAddress: AddressType) {
-      self.init(
-        rawAddress: (
-          networkAddress.0.bigEndian, networkAddress.1.bigEndian,
-          networkAddress.2.bigEndian, networkAddress.3.bigEndian,
-          networkAddress.4.bigEndian, networkAddress.5.bigEndian,
-          networkAddress.6.bigEndian, networkAddress.7.bigEndian
-        ))
-    }
-
+  /// Creates a value with the given raw address.
+  ///
+  /// - parameters:
+  ///     - rawAddress:   The address value in host byte order.
+  ///
+  @inlinable
+  public init(rawAddress: AddressType = (0, 0, 0, 0, 0, 0, 0, 0)) {
+    self.rawAddress = rawAddress
   }
+
+  // Network byte order.
+
+  /// The network address (i.e. in network byte order).
+  /// 
+  public var networkAddress: AddressType {
+    return (
+      rawAddress.0.bigEndian, rawAddress.1.bigEndian,
+      rawAddress.2.bigEndian, rawAddress.3.bigEndian,
+      rawAddress.4.bigEndian, rawAddress.5.bigEndian,
+      rawAddress.6.bigEndian, rawAddress.7.bigEndian
+    )
+  }
+
+  /// Creates a value with the given network address.
+  ///
+  /// - parameters:
+  ///     - networkAddress:   The address value in network byte order.
+  ///
+  @inlinable
+  public init(networkAddress: AddressType) {
+    self.init(
+      rawAddress: (
+        networkAddress.0.bigEndian, networkAddress.1.bigEndian,
+        networkAddress.2.bigEndian, networkAddress.3.bigEndian,
+        networkAddress.4.bigEndian, networkAddress.5.bigEndian,
+        networkAddress.6.bigEndian, networkAddress.7.bigEndian
+      ))
+  }
+
 }
 
 // Standard protocols.
 
-extension IPAddress.V6: Equatable, Hashable, LosslessStringConvertible {
+extension IPv6Address: Equatable, Hashable, LosslessStringConvertible {
   @inlinable
   public static func == (lhs: Self, rhs: Self) -> Bool {
     return lhs.rawAddress.0 == rhs.rawAddress.0 && lhs.rawAddress.1 == rhs.rawAddress.1
@@ -126,12 +123,12 @@ extension IPAddress.V6: Equatable, Hashable, LosslessStringConvertible {
   }
 }
 
-extension IPAddress.V6: Codable {
+extension IPv6Address: Codable {
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
     let string = try container.decode(String.self)
-    guard let parsedValue = IPAddress.V6(string) else {
+    guard let parsedValue = IPv6Address(string) else {
       throw DecodingError.dataCorruptedError(
         in: container,
         debugDescription: "Invalid IPv6 Address"
@@ -148,7 +145,7 @@ extension IPAddress.V6: Codable {
 
 // Parsing initializers.
 
-extension IPAddress.V6 {
+extension IPv6Address {
 
   @inlinable public static func parse<Source, Callback>(
     _ input: Source, callback: inout Callback
@@ -165,7 +162,7 @@ extension IPAddress.V6 {
 
 // Parsing and serialization impl.
 
-extension IPAddress.V6 {
+extension IPv6Address {
 
   public struct ValidationError: Equatable, CustomStringConvertible {
     private let errorCode: UInt8
@@ -243,7 +240,7 @@ extension IPAddress.V6 {
       return nil
     }
 
-    var result: IPAddress.V6.AddressType = (0, 0, 0, 0, 0, 0, 0, 0)
+    var result: IPv6Address.AddressType = (0, 0, 0, 0, 0, 0, 0, 0)
     return withUnsafeMutableBytes(of: &result) { tuplePointer -> Self? in
       let addressBuffer = tuplePointer.bindMemory(to: UInt16.self)
       var pieceIndex = 0
@@ -356,16 +353,16 @@ extension IPAddress.V6 {
       }
 
       // Parsing successful.
-      return IPAddress.V6(
+      return IPv6Address(
         rawAddress:
           UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
-          .load(fromByteOffset: 0, as: IPAddress.V6.AddressType.self)
+          .load(fromByteOffset: 0, as: IPv6Address.AddressType.self)
       )
     }
   }
 }
 
-extension IPAddress.V6 {
+extension IPv6Address {
 
   public var serialized: String {
     // Maximum normalised length of an IPv6 address = 39 bytes

@@ -356,7 +356,7 @@ extension WebURLParser {
 
     enum AnyHostParserError: Equatable, CustomStringConvertible {
       case ipv4AddressError(IPAddress.V4.ValidationError)
-      case ipv6AddressError(IPAddress.V6.ValidationError)
+      case ipv6AddressError(IPv6Address.ValidationError)
       case opaqueHostError(OpaqueHost.ValidationError)
       case hostParserError(WebURLParser.Host.ValidationError)
 
@@ -394,7 +394,7 @@ extension URLParserCallback {
     let wrapped = WebURLParser.ValidationError.AnyHostParserError.ipv4AddressError(error)
     validationError(.hostParserError(wrapped))
   }
-  public mutating func validationError(ipv6 error: IPAddress.V6.ValidationError) {
+  public mutating func validationError(ipv6 error: IPv6Address.ValidationError) {
     let wrapped = WebURLParser.ValidationError.AnyHostParserError.ipv6AddressError(error)
     validationError(.hostParserError(wrapped))
   }
@@ -409,7 +409,7 @@ extension URLParserCallback {
   }
 }
 extension WebURLParser.ValidationError {
-  var ipv6Error: IPAddress.V6.ValidationError? {
+  var ipv6Error: IPv6Address.ValidationError? {
     guard case .some(.ipv6AddressError(let error)) = self.hostParserError else { return nil }
     return error
   }

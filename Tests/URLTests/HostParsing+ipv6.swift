@@ -11,7 +11,7 @@ import XCTest
 #endif
 
 extension Array where Element == UInt16 {
-  init(fromIPv6Address addr: IPAddress.V6.AddressType) {
+  init(fromIPv6Address addr: IPv6Address.AddressType) {
     self = [addr.0, addr.1, addr.2, addr.3, addr.4, addr.5, addr.6, addr.7]
   }
 }
@@ -48,7 +48,7 @@ final class HostParsing_IPv6: XCTestCase {
     ]
 
     for (string, expectedRawAddress, expectedDescription) in testData {
-      guard let addr = IPAddress.V6(string) else {
+      guard let addr = IPv6Address(string) else {
         XCTFail("Failed to parse valid address: \(string)")
         continue
       }
@@ -61,7 +61,7 @@ final class HostParsing_IPv6: XCTestCase {
         "Net address mismatch for: \(string)"
       )
       XCTAssertEqual(addr.serialized, expectedDescription)
-      if let reparsedAddr = IPAddress.V6(addr.serialized) {
+      if let reparsedAddr = IPv6Address(addr.serialized) {
         XCTAssertEqual(
           addr, reparsedAddr,
           "Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.serialized)'"
@@ -83,7 +83,7 @@ final class HostParsing_IPv6: XCTestCase {
     ]
 
     for (string, expectedRawAddress, expectedDescription) in testData {
-      guard let addr = IPAddress.V6(string) else {
+      guard let addr = IPv6Address(string) else {
         XCTFail("Failed to parse valid address: \(string)")
         continue
       }
@@ -96,7 +96,7 @@ final class HostParsing_IPv6: XCTestCase {
         "Net address mismatch for: \(string)"
       )
       XCTAssertEqual(addr.serialized, expectedDescription)
-      if let reparsedAddr = IPAddress.V6(addr.serialized) {
+      if let reparsedAddr = IPv6Address(addr.serialized) {
         XCTAssertEqual(
           addr, reparsedAddr,
           "Address failed to round-trip. Original: '\(string)'. Printed: '\(addr.serialized)'"
@@ -108,7 +108,7 @@ final class HostParsing_IPv6: XCTestCase {
   }
 
   func testInvalid() {
-    let invalidAddresses: [(String, IPAddress.V6.ValidationError)] = [
+    let invalidAddresses: [(String, IPv6Address.ValidationError)] = [
       // - Invalid piece.
       ("12345::", .unexpectedCharacter),
       ("FG::", .unexpectedCharacter),
@@ -140,7 +140,7 @@ final class HostParsing_IPv6: XCTestCase {
 
     for (string, expectedError) in invalidAddresses {
       var callback = LastValidationError()
-      if let addr = IPAddress.V6.parse(string, callback: &callback) {
+      if let addr = IPv6Address.parse(string, callback: &callback) {
         XCTFail("Invalid address '\(string)' was parsed as '\(addr.rawAddress)' (raw)")
       } else {
         XCTAssertEqual(callback.error?.ipv6Error, expectedError, "Unexpected error for invalid address '\(string)'")

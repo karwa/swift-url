@@ -71,7 +71,7 @@ final class URLTests: XCTestCase {
         "https://[::ffff:192.168.0.1]/aThing",
         WebURLParser.Components(
           scheme: .https,
-          username: "", password: "", host: .ipv6Address(IPAddress.V6("::ffff:c0a8:1")!), port: nil,
+          username: "", password: "", host: .ipv6Address(IPv6Address("::ffff:c0a8:1")!), port: nil,
           path: ["aThing"], query: nil, fragment: nil, cannotBeABaseURL: false)
       ),
 

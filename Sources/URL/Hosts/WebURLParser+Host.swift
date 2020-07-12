@@ -3,7 +3,7 @@ extension WebURLParser {
   public enum Host {
     case domain(String)
     case ipv4Address(IPAddress.V4)
-    case ipv6Address(IPAddress.V6)
+    case ipv6Address(IPv6Address)
     case opaque(OpaqueHost)
     case empty
   }
@@ -69,7 +69,7 @@ extension WebURLParser.Host: Codable {
     case .ipv4Address:
       self = .ipv4Address(try container.decode(IPAddress.V4.self, forKey: .value))
     case .ipv6Address:
-      self = .ipv6Address(try container.decode(IPAddress.V6.self, forKey: .value))
+      self = .ipv6Address(try container.decode(IPv6Address.self, forKey: .value))
     case .opaque:
       self = .opaque(try container.decode(OpaqueHost.self, forKey: .value))
     case .domain:
@@ -150,7 +150,7 @@ extension WebURLParser.Host {
         return nil
       }
       let slice = UnsafeBufferPointer(rebasing: input.dropFirst().dropLast())
-      return IPAddress.V6.parse(slice, callback: &callback).map { .ipv6Address($0) }
+      return IPv6Address.parse(slice, callback: &callback).map { .ipv6Address($0) }
     }
 
     if isNotSpecial {
