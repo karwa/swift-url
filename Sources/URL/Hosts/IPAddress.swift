@@ -1,7 +1,5 @@
 import Algorithms  // for Collection.longestSubrange.
 
-public enum IPAddress {}
-
 // MARK: - Callbacks
 
 // Note: IP Address parsers have their own callback protocol because they are
@@ -10,7 +8,7 @@ public enum IPAddress {}
 /// An object which is informed by the IPv4 parser if a validation error occurs.
 ///
 public protocol IPv4ParserCallback {
-  mutating func validationError(ipv4 error: IPAddress.V4.ValidationError)
+  mutating func validationError(ipv4 error: IPv4Address.ValidationError)
 }
 
 /// An object which is informed by the IPv6 parser if a validation error occurs.
@@ -28,7 +26,7 @@ public protocol IPv6AddressParserCallback {
 ///
 fileprivate struct IPParserCallbackv4Tov6<Base>: IPv4ParserCallback where Base: IPv6AddressParserCallback {
   var v6Handler: Base
-  public mutating func validationError(ipv4 error: IPAddress.V4.ValidationError) {
+  public mutating func validationError(ipv4 error: IPv4Address.ValidationError) {
     v6Handler.validationError(ipv6: .invalidIPv4Address(error))
   }
 }
@@ -188,7 +186,7 @@ extension IPv6Address {
     internal static var invalidPositionForIPv4Address: Self { Self(errorCode: 9) }
 
     internal static var invalidIPv4Address_errorCode: UInt8 = 10
-    internal static func invalidIPv4Address(_ err: IPAddress.V4.ValidationError) -> Self {
+    internal static func invalidIPv4Address(_ err: IPv4Address.ValidationError) -> Self {
       Self(errorCode: invalidIPv4Address_errorCode, context: err.packedAsInt)
     }
 
@@ -213,7 +211,7 @@ extension IPv6Address {
       case .invalidPositionForIPv4Address:
         return "Invalid position for IPv4 address segment"
       case _ where self.errorCode == Self.invalidIPv4Address_errorCode:
-        let wrappedError = IPAddress.V4.ValidationError(unpacking: context)
+        let wrappedError = IPv4Address.ValidationError(unpacking: context)
         return "Invalid IPv4 address: \(wrappedError)"
       default:
         assert(false, "Unrecognised error code: \(errorCode). Context: \(context)")
@@ -316,7 +314,7 @@ extension IPv6Address {
           }
 
           guard
-            let value = IPAddress.V4.parse_simple(
+            let value = IPv4Address.parse_simple(
               UnsafeBufferPointer(rebasing: input[pieceStartIndex...]),
               callback: &callback.wrappingIPv4Errors
             )
@@ -412,12 +410,10 @@ extension IPv6Address {
 
 // MARK: - IPv4
 
-extension IPAddress {
-
   /// A 32-bit numerical identifier assigned to a device on an 
   /// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.
   ///
-  public struct V4 {
+  public struct IPv4Address {
 
     // Host byte order.
 
@@ -453,18 +449,17 @@ extension IPAddress {
       self.init(rawAddress: networkAddress.bigEndian)
     }
   }
-}
 
 // Standard protocols.
 
-extension IPAddress.V4: Equatable, Hashable, LosslessStringConvertible {
+extension IPv4Address: Equatable, Hashable, LosslessStringConvertible {
 
   public var description: String {
     return serialized
   }
 }
 
-extension IPAddress.V4: Codable {
+extension IPv4Address: Codable {
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
@@ -486,7 +481,7 @@ extension IPAddress.V4: Codable {
 
 // Parsing initializers.
 
-extension IPAddress.V4 {
+extension IPv4Address {
 
   @inlinable public static func parse<Source, Callback>(
     _ input: Source, callback: inout Callback
@@ -503,10 +498,10 @@ extension IPAddress.V4 {
 
 // Parsing and serialization impl.
 
-extension IPAddress.V4 {
+extension IPv4Address {
 
   public enum ParseResult {
-    case success(IPAddress.V4)
+    case success(IPv4Address)
     case failure
     case notAnIPAddress
   }
@@ -709,7 +704,7 @@ extension IPAddress.V4 {
         fatalError("Internal error. pieceIndex has unexpected value.")
       }
       // Parsing successful.
-      return .success(IPAddress.V4(rawAddress: rawAddress))
+      return .success(IPv4Address(rawAddress: rawAddress))
     }
   }
 
@@ -779,11 +774,11 @@ extension IPAddress.V4 {
       callback.validationError(ipv4: .notEnoughPieces)
       return nil
     }
-    return IPAddress.V4(rawAddress: result)
+    return IPv4Address(rawAddress: result)
   }
 }
 
-extension IPAddress.V4 {
+extension IPv4Address {
 
   public var serialized: String {
     // 15 bytes is the maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX"),

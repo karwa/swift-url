@@ -2,7 +2,7 @@ extension WebURLParser {
 
   public enum Host {
     case domain(String)
-    case ipv4Address(IPAddress.V4)
+    case ipv4Address(IPv4Address)
     case ipv6Address(IPv6Address)
     case opaque(OpaqueHost)
     case empty
@@ -67,7 +67,7 @@ extension WebURLParser.Host: Codable {
     case .empty:
       self = .empty
     case .ipv4Address:
-      self = .ipv4Address(try container.decode(IPAddress.V4.self, forKey: .value))
+      self = .ipv4Address(try container.decode(IPv4Address.self, forKey: .value))
     case .ipv6Address:
       self = .ipv6Address(try container.decode(IPv6Address.self, forKey: .value))
     case .opaque:
@@ -177,7 +177,7 @@ extension WebURLParser.Host {
       }
 
       var ipv4Error = LastValidationError()
-      switch IPAddress.V4.parse(asciiDomain, callback: &ipv4Error) {
+      switch IPv4Address.parse(asciiDomain, callback: &ipv4Error) {
       case .success(let address):
         return .ipv4Address(address)
       case .failure:

@@ -355,7 +355,7 @@ extension WebURLParser {
     private var hostParserError: AnyHostParserError? = nil
 
     enum AnyHostParserError: Equatable, CustomStringConvertible {
-      case ipv4AddressError(IPAddress.V4.ValidationError)
+      case ipv4AddressError(IPv4Address.ValidationError)
       case ipv6AddressError(IPv6Address.ValidationError)
       case opaqueHostError(OpaqueHost.ValidationError)
       case hostParserError(WebURLParser.Host.ValidationError)
@@ -390,7 +390,7 @@ public protocol URLParserCallback: IPv6AddressParserCallback, IPv4ParserCallback
 // Wrap host-parser errors in an 'AnyHostParserError'.
 extension URLParserCallback {
   // IP address errors.
-  public mutating func validationError(ipv4 error: IPAddress.V4.ValidationError) {
+  public mutating func validationError(ipv4 error: IPv4Address.ValidationError) {
     let wrapped = WebURLParser.ValidationError.AnyHostParserError.ipv4AddressError(error)
     validationError(.hostParserError(wrapped))
   }

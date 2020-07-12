@@ -80,7 +80,7 @@ final class URLTests: XCTestCase {
         "https://192.168.0.1/aThing",
         WebURLParser.Components(
           scheme: .https,
-          username: "", password: "", host: .ipv4Address(IPAddress.V4("192.168.0.1")!), port: nil,
+          username: "", password: "", host: .ipv4Address(IPv4Address("192.168.0.1")!), port: nil,
           path: ["aThing"], query: nil, fragment: nil, cannotBeABaseURL: false)
       ),
 
