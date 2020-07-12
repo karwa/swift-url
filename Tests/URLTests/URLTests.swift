@@ -8,7 +8,7 @@ import XCTest
 // - hasNonURLCodePoints
 // - WebURLParser.Components.QueryParameters
 
-let testBasic_printResults = true
+let testBasic_printResults = false
 
 final class URLTests: XCTestCase {
 
@@ -179,10 +179,6 @@ extension URLTests {
       let decoded = PercentEscaping.decodeString(encoded)
 
       XCTAssertEqual(Array(string.utf8), Array(decoded.utf8))
-      print("--------------")
-      print("original: '\(string)'\t\tUTF8: \(Array(string.utf8))")
-      print("decoded : '\(decoded)'\t\tUTF8: \(Array(decoded.utf8))")
-      print("escaped:  '\(encoded)'\t\tUTF8: \(Array(encoded.utf8))")
     }
 
     do {
