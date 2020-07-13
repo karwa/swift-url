@@ -212,7 +212,7 @@ extension IPv6AddressTests {
       // Exception: if the address <= UInt32.max, libc prints this as an embedded IPv4 address
       // (e.g. it prints "::198.135.80.188", we print "::c687:50bc").
       if libcStr?.contains(".") == true {
-        XCTAssertTrue(expected.0 == 0 && expected.1 <= (UInt64.max - UInt64(UInt32.max)))
+        XCTAssertTrue(expected.0 == 0 && expected.1.bigEndian <= UInt64(UInt32.max))
         continue
       }
       XCTAssertEqual(libcStr, address.serialized, "\(String(expected.1, radix: 2))")
