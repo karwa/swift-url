@@ -16,7 +16,7 @@ extension Array where Element == UInt16 {
   }
 }
 
-final class HostParsing_IPv6: XCTestCase {
+final class IPv6AddressTests: XCTestCase {
 
   fileprivate func parse_pton(_ input: String) -> [UInt16]? {
     var result = in6_addr()

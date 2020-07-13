@@ -10,7 +10,7 @@ import XCTest
   #error("Unknown libc variant")
 #endif
 
-final class HostParsing_IPv4: XCTestCase {
+final class IPv4AddressTests: XCTestCase {
 
   fileprivate func parse_aton(_ straddr: String) -> UInt32? {
     var addr = in_addr()
@@ -185,7 +185,7 @@ final class HostParsing_IPv4: XCTestCase {
 
 // Randomized testing.
 
-extension HostParsing_IPv4 {
+extension IPv4AddressTests {
 
   /// Generate 1000 random IP addresses, serialise them via IPAddress, then
   /// parse the serialized version back via `aton`. Ensure that the same address
