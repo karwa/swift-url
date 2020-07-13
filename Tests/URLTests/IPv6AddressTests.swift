@@ -27,6 +27,26 @@ final class IPv6AddressTests: XCTestCase {
     }
   }
 
+  fileprivate func serialize_ntop(_ input: [UInt16]) -> String? {
+    var src = in6_addr()
+    src.__u6_addr.__u6_addr16.0 = input[0]
+    src.__u6_addr.__u6_addr16.1 = input[1]
+    src.__u6_addr.__u6_addr16.2 = input[2]
+    src.__u6_addr.__u6_addr16.3 = input[3]
+    src.__u6_addr.__u6_addr16.4 = input[4]
+    src.__u6_addr.__u6_addr16.5 = input[5]
+    src.__u6_addr.__u6_addr16.6 = input[6]
+    src.__u6_addr.__u6_addr16.7 = input[7]
+    let str = String(_unsafeUninitializedCapacity: 40) {
+      return $0.baseAddress!.withMemoryRebound(to: CChar.self, capacity: $0.count) {
+        let p = inet_ntop(AF_INET6, &src, $0, 40)
+        guard p != nil else { return 0 }
+        return strlen($0)
+      }
+    }
+    return str.isEmpty ? nil : str
+  }
+
   func testBasic() {
     let testData: [(String, [UInt16], String)] = [
       // Canonical
@@ -145,6 +165,61 @@ final class IPv6AddressTests: XCTestCase {
       } else {
         XCTAssertEqual(callback.error?.ipv6Error, expectedError, "Unexpected error for invalid address '\(string)'")
       }
+    }
+  }
+}
+
+extension IPv6AddressTests {
+
+  func generateRandomAddress() -> (address: IPv6Address, expected: (UInt64, UInt64), isCompressed: Bool) {
+    // Generate 128 random bits.
+    var randomAddress = (UInt64.random(in: .min ... .max), UInt64.random(in: .min ... .max))
+    let (address, isCompressed) = withUnsafeMutablePointer(to: &randomAddress) { intsPtr -> (IPv6Address, Bool) in
+      let rawPtr = UnsafeMutableRawBufferPointer(start: intsPtr, count: 16)
+      // Randomly compress some range by setting all those bytes to 0.
+      let isCompressed = Bool.random()
+      if isCompressed {
+        let compressStart = Int.random(in: 0..<6)
+        let compressEnd = Int.random(in: (compressStart + 2)..<9)
+        for x in (compressStart * 2)..<(compressEnd * 2) {
+          rawPtr[x] = 0
+        }
+      }
+      let address = intsPtr.withMemoryRebound(to: IPv6Address.AddressType.self, capacity: 1) {
+        IPv6Address(networkAddress: $0.pointee)
+      }
+      return (address, isCompressed)
+    }
+    return (address, randomAddress, isCompressed)
+  }
+
+  /// Generate 1000 random IP addresses, serialize them via IPAddress.
+  /// Then serialize the same addresss via `ntop`, and ensure it returns the same string.
+  /// Then parse our serialized version back via `pton`, and ensure it returns the same address.
+  ///
+  func testRandom_Serialization() {
+    for _ in 0..<1000 {
+      let (address, expected, isCompressed) = generateRandomAddress()
+      if isCompressed {
+        XCTAssertTrue(address.serialized.contains("::"))
+      }
+      // Serialize with libc. It should return the same String.
+      let libcStr = withUnsafePointer(to: expected) { intsPtr in
+        intsPtr.withMemoryRebound(to: UInt16.self, capacity: 8) { addrPtr in
+          return serialize_ntop(Array(UnsafeBufferPointer(start: addrPtr, count: 8)))
+        }
+      }
+      // Exception: if the address <= UInt32.max, libc prints this as an embedded IPv4 address
+      // (e.g. it prints "::198.135.80.188", we print "::c687:50bc").
+      if libcStr?.contains(".") == true {
+        XCTAssertTrue(expected.0 == 0 && expected.1 <= (UInt64.max - UInt64(UInt32.max)))
+        continue
+      }
+      XCTAssertEqual(libcStr, address.serialized, "\(String(expected.1, radix: 2))")
+
+      // Parse our serialized output with libc. It should return the same address.
+      let libcAddr = parse_pton(address.serialized)
+      XCTAssertEqual(libcAddr, Array(fromIPv6Address: address.networkAddress))
     }
   }
 }

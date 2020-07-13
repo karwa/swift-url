@@ -187,18 +187,24 @@ final class IPv4AddressTests: XCTestCase {
 
 extension IPv4AddressTests {
 
-  /// Generate 1000 random IP addresses, serialise them via IPAddress, then
-  /// parse the serialized version back via `aton`. Ensure that the same address
-  /// is returned.
+  /// Generate 1000 random IP addresses, serialize them via IPAddress.
+  /// Then serialize the same addresss via `ntoa`, and ensure it returns the same string.
+  /// Then parse our serialized version back via `aton`, and ensure it returns the same address.
   ///
   func testRandom_Serialisation() {
     for _ in 0..<1000 {
       let randomAddress = UInt32.random(in: .min ... .max)
       let randomIPString = IPv4Address(networkAddress: randomAddress).serialized
-      let atonAddress = parse_aton(randomIPString)
-      XCTAssert(
-        atonAddress == randomAddress,
-        "Mismatch detected for address \(randomIPString) (\(randomAddress))"
+
+      // Serialize with libc. It should return the same String.
+      let libcString = serialize_ntoa(randomAddress)
+      XCTAssertEqual(libcString, randomIPString)
+
+      // Parse our serialized output with libc. It should return the same address.
+      let libcAddress = parse_aton(randomIPString)
+      XCTAssertEqual(
+        libcAddress, randomAddress,
+        "Mismatch detected for address \(randomIPString)"
       )
     }
   }
