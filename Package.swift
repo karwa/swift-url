@@ -24,9 +24,10 @@ let package = Package(
 
     .target(name: "URL", dependencies: ["Algorithms"]),
     .target(name: "URLBenchmarks", dependencies: ["URL"]),
-    .testTarget(name: "URLTests", dependencies: ["URL"]),
+    .testTarget(name: "URLTests", dependencies: ["URL", "BaseTestUtils"]),
 
     .target(name: "Base", dependencies: ["Algorithms", "Concurrency", "URL"]),
+    .target(name: "BaseTestUtils", dependencies: ["Base"]),
     .testTarget(name: "BaseTests", dependencies: ["Base"]),
   ]
 )

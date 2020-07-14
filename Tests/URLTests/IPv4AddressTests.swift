@@ -1,3 +1,4 @@
+import BaseTestUtils
 import XCTest
 
 @testable import URL
@@ -193,7 +194,7 @@ extension IPv4AddressTests {
   ///
   func testRandom_Serialisation() {
     for _ in 0..<1000 {
-      let randomAddress = IPv4Utils.randomAddress()
+      let randomAddress = IPv4Address.Utils.randomAddress()
       let randomIPString = IPv4Address(networkAddress: randomAddress).serialized
 
       // Serialize with libc. It should return the same String.
@@ -215,8 +216,8 @@ extension IPv4AddressTests {
   ///
   func testRandom_Parsing() {
     for _ in 0..<1000 {
-      let randomAddress = IPv4Utils.randomAddress()
-      let randomAddressString = IPv4Utils.randomString(address: randomAddress)
+      let randomAddress = IPv4Address.Utils.randomAddress()
+      let randomAddressString = IPv4Address.Utils.randomString(address: randomAddress)
 
       guard let parsedAddress = IPv4Address(randomAddressString) else {
         XCTFail("Failed to parse address: \(randomAddressString); expected address: \(randomAddress)")
@@ -224,107 +225,6 @@ extension IPv4AddressTests {
       }
       XCTAssertEqual(parsedAddress.rawAddress, randomAddress)
       XCTAssertEqual(parsedAddress.networkAddress, parse_aton(randomAddressString))
-    }
-  }
-}
-
-enum IPv4Utils {
-
-  // Random addresses.
-
-  static func randomAddress() -> UInt32 {
-    var rng = SystemRandomNumberGenerator()
-    return randomAddress(using: &rng)
-  }
-
-  static func randomAddress<RNG: RandomNumberGenerator>(
-    using rng: inout RNG
-  ) -> UInt32 {
-    return .random(in: .min ... .max, using: &rng)
-  }
-
-  // Random strings.
-
-  enum Format: CaseIterable {
-    case a
-    case ab
-    case abc
-    case abcd
-  }
-
-  enum PieceRadix: CaseIterable {
-    case octal
-    case decimal
-    case hex
-  }
-
-  static func randomString(
-    address: UInt32,
-    allowedFormats: [Format] = Format.allCases,
-    allowedRadixes: [PieceRadix] = PieceRadix.allCases
-  ) -> String {
-    var rng = SystemRandomNumberGenerator()
-    return randomString(
-      address: address, allowedFormats: allowedFormats, allowedRadixes: allowedRadixes, using: &rng
-    )
-  }
-
-  /// Generates a random IP address string representing the given address.
-  ///
-  /// The string may randomly use any shorthand (a/a.b/a.b.c/a.b.c.d), and each piece may
-  /// randomly be written in octal, decimal, or hexadecimal notation.
-  ///
-  /// For example, printing the address `123456789`:
-  /// ```
-  /// 7.0x5b.0xcd.0x15  (dec/hex/hex/hex)
-  /// 07.0x5b.52501     (oct/hex/dec)
-  /// 7.0133.0146425    (dec/oct/oct)
-  /// 7.6016277         (dec/dec)
-  /// 07.0133.0315.025  (oct/oct/oct/oct)
-  /// 7.0x5b.205.21     (dec/hex/dec/dec)
-  /// 0726746425        (oct)
-  /// ```
-  ///
-  static func randomString<RNG: RandomNumberGenerator>(
-    address: UInt32,
-    allowedFormats: [Format] = Format.allCases,
-    allowedRadixes: [PieceRadix] = PieceRadix.allCases,
-    using rng: inout RNG
-  ) -> String {
-
-    func formatPiece<B: BinaryInteger>(piece: B, radix: PieceRadix) -> String {
-      switch radix {
-      case .octal: return "0" + String(piece, radix: 8)
-      case .decimal: return String(piece, radix: 10)
-      case .hex: return "0x" + String(piece, radix: 16)
-      }
-    }
-    // swift-format-ignore
-    switch allowedFormats.randomElement(using: &rng)! {
-    case .a:
-      let a = address
-      return formatPiece(piece: a, radix: allowedRadixes.randomElement(using: &rng)!)
-    case .ab:
-      let a =  UInt8((address & 0b11111111_00000000_00000000_00000000) >> 24)
-      let b = UInt32((address & 0b00000000_11111111_11111111_11111111))
-      return formatPiece(piece: a, radix: allowedRadixes.randomElement(using: &rng)!) + "." +
-             formatPiece(piece: b, radix: allowedRadixes.randomElement(using: &rng)!)
-    case .abc:
-      let a =  UInt8((address & 0b11111111_00000000_00000000_00000000) >> 24)
-      let b =  UInt8((address & 0b00000000_11111111_00000000_00000000) >> 16)
-      let c = UInt16((address & 0b00000000_00000000_11111111_11111111))
-      return formatPiece(piece: a, radix: allowedRadixes.randomElement(using: &rng)!) + "." +
-             formatPiece(piece: b, radix: allowedRadixes.randomElement(using: &rng)!) + "." +
-             formatPiece(piece: c, radix: allowedRadixes.randomElement(using: &rng)!)
-    case .abcd:
-      let a =  UInt8((address & 0b11111111_00000000_00000000_00000000) >> 24)
-      let b =  UInt8((address & 0b00000000_11111111_00000000_00000000) >> 16)
-      let c =  UInt8((address & 0b00000000_00000000_11111111_00000000) >> 8)
-      let d =  UInt8((address & 0b00000000_00000000_00000000_11111111))
-      return formatPiece(piece: a, radix: allowedRadixes.randomElement(using: &rng)!) + "." +
-             formatPiece(piece: b, radix: allowedRadixes.randomElement(using: &rng)!) + "." +
-             formatPiece(piece: c, radix: allowedRadixes.randomElement(using: &rng)!) + "." +
-             formatPiece(piece: d, radix: allowedRadixes.randomElement(using: &rng)!)
     }
   }
 }
