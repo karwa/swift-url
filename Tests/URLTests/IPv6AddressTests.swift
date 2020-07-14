@@ -171,35 +171,14 @@ final class IPv6AddressTests: XCTestCase {
 
 extension IPv6AddressTests {
 
-  func generateRandomAddress() -> (address: IPv6Address, expected: (UInt64, UInt64), isCompressed: Bool) {
-    // Generate 128 random bits.
-    var randomAddress = (UInt64.random(in: .min ... .max), UInt64.random(in: .min ... .max))
-    let (address, isCompressed) = withUnsafeMutablePointer(to: &randomAddress) { intsPtr -> (IPv6Address, Bool) in
-      let rawPtr = UnsafeMutableRawBufferPointer(start: intsPtr, count: 16)
-      // Randomly compress some range by setting all those bytes to 0.
-      let isCompressed = Bool.random()
-      if isCompressed {
-        let compressStart = Int.random(in: 0..<6)
-        let compressEnd = Int.random(in: (compressStart + 2)..<9)
-        for x in (compressStart * 2)..<(compressEnd * 2) {
-          rawPtr[x] = 0
-        }
-      }
-      let address = intsPtr.withMemoryRebound(to: IPv6Address.AddressType.self, capacity: 1) {
-        IPv6Address(networkAddress: $0.pointee)
-      }
-      return (address, isCompressed)
-    }
-    return (address, randomAddress, isCompressed)
-  }
-
   /// Generate 1000 random IP addresses, serialize them via IPAddress.
   /// Then serialize the same addresss via `ntop`, and ensure it returns the same string.
   /// Then parse our serialized version back via `pton`, and ensure it returns the same address.
   ///
   func testRandom_Serialization() {
     for _ in 0..<1000 {
-      let (address, expected, isCompressed) = generateRandomAddress()
+      let (expected, isCompressed) = IPv6Utils.randomAddress()
+      let address = IPv6Address(networkAddress: expected)
       if isCompressed {
         XCTAssertTrue(address.serialized.contains("::"))
       }
@@ -215,11 +194,175 @@ extension IPv6AddressTests {
         XCTAssertTrue(expected.0 == 0 && expected.1.bigEndian <= UInt64(UInt32.max))
         continue
       }
-      XCTAssertEqual(libcStr, address.serialized, "\(String(expected.1, radix: 2))")
+      XCTAssertEqual(libcStr, address.serialized)
 
       // Parse our serialized output with libc. It should return the same address.
       let libcAddr = parse_pton(address.serialized)
       XCTAssertEqual(libcAddr, Array(fromIPv6Address: address.networkAddress))
     }
   }
+
+  /// Generate 1000 random IP Address Strings, parse them via IPAddress,
+  /// check that the numerical value matches the expected network address,
+  /// and that `pton` gets the same result when parsing the same random String.
+  ///
+  func testRandom_Parsing() {
+    for _ in 0..<1000 {
+      let (randomAddress, randomAddressString) = IPv6Utils.randomString()
+      print(randomAddressString)
+      guard let parsedAddress = IPv6Address(randomAddressString) else {
+        XCTFail("Failed to parse address: \(randomAddressString); expected address: \(randomAddress)")
+        continue
+      }
+      XCTAssertEqual(Array(fromIPv6Address: parsedAddress.networkAddress), Array(fromIPv6Address: randomAddress))
+      XCTAssertEqual(Array(fromIPv6Address: parsedAddress.networkAddress), parse_pton(randomAddressString))
+    }
+  }
+}
+
+enum IPv6Utils {
+
+  // Random addresses.
+
+  static func randomAddress() -> (IPv6Address.AddressType, knownCompressed: Bool) {
+    var rng = SystemRandomNumberGenerator()
+    let injectCompression = Bool.random(using: &rng)
+    return (randomAddress(limitedToIPv4: false, injectCompression: injectCompression, using: &rng), injectCompression)
+  }
+
+  /// Generates a random 128-bit number, which may be interpreted as an IPv6 network address.
+  ///
+  /// - parameters:
+  ///   - limitedToIPv4:	   If `true`, the resulting addresses are limited to the IPv4 range.
+  ///   - injectCompression: If `true`, a random series of 16-bit pieces are set to 0, in order to prompt a compressed serialization format.
+  ///   - rng:               The `RandomNumberGenerator` to use.
+  ///
+  static func randomAddress<RNG: RandomNumberGenerator>(
+    limitedToIPv4: Bool,
+    injectCompression: Bool,
+    using rng: inout RNG
+  ) -> IPv6Address.AddressType {
+
+    switch limitedToIPv4 {
+    case true:
+      var randomBytes = (UInt64(0), UInt64.random(in: 0...UInt64(UInt32.max), using: &rng).bigEndian)
+      return withUnsafeBytes(of: &randomBytes) { $0.load(as: IPv6Address.AddressType.self) }
+
+    case false:
+      var randomBytes = (UInt64.random(in: 0 ... .max, using: &rng), UInt64.random(in: 0 ... .max, using: &rng))
+      return withUnsafeMutableBytes(of: &randomBytes) { rawPtr in
+        if injectCompression {
+          // Compress a random range by setting bytes to 0.
+          // The range should be aligned to a 16-bit piece, be a multiple of 16 bits in length,
+          // and be at least 2 pieces long to ensure it results in a compressed serialization format.
+          let compressStart = Int.random(in: 0..<6)
+          let compressEnd = Int.random(in: (compressStart + 2)..<9)
+          for x in (compressStart * 2)..<(compressEnd * 2) {
+            rawPtr[x] = 0
+          }
+        }
+        return rawPtr.load(as: IPv6Address.AddressType.self)
+      }
+    }
+  }
+
+  // Random strings.
+
+  /// Generates a random IPv6 address string.
+  ///
+  /// As a rough guide, assuming the RNG gives random Bools with 50:50 chance,
+  /// and that all UInt64s are generated with equal probability:
+  ///
+  /// - 50% chance to get an address in the IPv4 range
+  ///   - 25% chance that it gets formatted as an IPv4 address ("::192.168.0.1")
+  ///   - 25% chance that it gets formatted as an IPv6 address ("::c0a8:1")
+  /// - 50% chance to get an address beyond the IPv4 range
+  ///   - 25% chance that some region of it is compressed
+  ///     - 12.5% chance that it is actually formatted as a compressed address ("ff08::c80a")
+  ///     - 12.5% chance that it contains a string of zeroes ("ff08:0:0:0:0:0:0:c80a")
+  ///   - 25% chance that it is not compressed
+  ///
+  /// This may be skewed a bit - some generated addresses will already be compressed, regardless of our
+  /// randomised toggle to inject compressable pieces.
+  ///
+  static func randomString() -> (address: IPv6Address.AddressType, String) {
+    var rng = SystemRandomNumberGenerator()
+    let address = randomAddress(
+      limitedToIPv4: Bool.random(using: &rng),
+      injectCompression: Bool.random(using: &rng),
+      using: &rng
+    )
+    let string = randomString(
+      address: address,
+      allowIPv4Addresses: true,
+      mayCompress: true,
+      using: &rng
+    )
+    return (address, string)
+  }
+
+  /// Generates a random IPv6 address string.
+  /// If `compressed` is true, a random series of 16-bit pieces is set to 0, in order to prompt a compressed serialization format.
+  ///
+  static func randomString<RNG: RandomNumberGenerator>(
+    address: IPv6Address.AddressType,
+    allowIPv4Addresses: Bool,
+    mayCompress: Bool,
+    using rng: inout RNG
+  ) -> String {
+
+    // If the address can be represented as an IPv4 address, randomly decide to format it that way.
+
+    let ipv4Address = withUnsafeBytes(of: address) { rawAddress -> UInt32? in
+      let ptr = rawAddress.bindMemory(to: UInt64.self)
+      guard ptr[0] == 0, ptr[1].bigEndian <= UInt64(UInt32.max) else {
+        return nil
+      }
+      return UInt32(exactly: ptr[1].bigEndian)
+    }
+
+    if let ipv4Address = ipv4Address, allowIPv4Addresses && Bool.random(using: &rng) {
+      let ipv4Piece = IPv4Utils.randomString(
+        address: ipv4Address,
+        allowedFormats: [.abcd], allowedRadixes: [.decimal],
+        using: &rng
+      )
+      return "::" + ipv4Piece
+    }
+
+    // Otherwise, serialise as an IPv6 address. Randomly compressing pieces which can be compressed or not.
+
+    var addressString = ""
+
+    withUnsafeBytes(of: address) { addressBytes in
+      let pieces = addressBytes.bindMemory(to: UInt16.self)
+      let compressedRange: (subrange: Range<Int>, length: Int)
+      if mayCompress && Bool.random(using: &rng) {
+        compressedRange = pieces.longestSubrange(equalTo: 0)
+      } else {
+        compressedRange = (subrange: 0..<0, length: 0)
+      }
+
+      for i in pieces.startIndex..<compressedRange.subrange.startIndex {
+        addressString += String(pieces[i].bigEndian, radix: 16).lowercased()
+        addressString += ":"
+      }
+      if compressedRange.length > 0 {
+        if !addressString.isEmpty {
+          addressString.removeLast()
+        }
+        addressString += "::"
+      }
+      for i in compressedRange.subrange.endIndex..<pieces.endIndex {
+        addressString += String(pieces[i].bigEndian, radix: 16).lowercased()
+        addressString += ":"
+      }
+      if compressedRange.subrange.endIndex != pieces.endIndex {
+        addressString.removeLast()
+      }
+    }
+
+    return addressString
+  }
+
 }
