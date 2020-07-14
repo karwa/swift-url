@@ -1,7 +1,7 @@
 import BaseTestUtils
 import XCTest
 
-@testable import URL
+@testable import WebURL
 
 #if canImport(Glibc)
   import Glibc

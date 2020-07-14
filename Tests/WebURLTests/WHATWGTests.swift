@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import URL
+@testable import WebURL
 
 final class WHATWGTests: XCTestCase {}
 

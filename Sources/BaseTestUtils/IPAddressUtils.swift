@@ -1,4 +1,4 @@
-import URL
+import Base
 
 extension IPv4Address {
   public enum Utils {}
