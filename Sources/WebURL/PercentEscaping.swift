@@ -514,4 +514,13 @@ extension PercentEscaping.EscapeSet {
       }
     }
   }
+  
+  /// This escape set is not defined in the standard; it escapes all
+  /// characters which would otherwise not be allowed in a host string.
+  ///
+  static var url_host_forbidden: Self {
+    return Self { ascii in
+      return URLStringUtils.isForbiddenHostCodePoint(ascii)
+    }
+  }
 }

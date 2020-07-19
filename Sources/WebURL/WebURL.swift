@@ -254,3 +254,44 @@ extension WebURL {
       """
   }
 }
+
+// Extensions for async-http-client.
+
+extension StringProtocol {
+  
+  /// Returns a version of this String with any percent-encoded characters replaced by their
+  /// decoded counterparts.
+  ///
+  public var percentUnescaped: String {
+    return PercentEscaping.decodeString(self)
+  }
+}
+
+extension WebURL {
+  
+  /// Returns a version of the given String with all characters that are not allowed in URL hosts
+  /// replaced by their percent-escaped counterparts.
+  ///
+  public static func percentEscapeHostname(_ hostname: String) -> String {
+    var newHost = ""
+    PercentEscaping.encodeIterativelyAsString(
+      bytes: hostname.utf8,
+      escapeSet: .url_host_forbidden,
+      processChunk: { newHost.append($0) }
+    )
+    return newHost
+  }
+  
+  /// Returns the `Scheme` object representing this URL's `scheme`.
+  ///
+  public var schemeObject: Scheme {
+    return components.scheme
+  }
+  
+  /// Returns the `Host` object representing this URL's `hostname`.
+  ///
+  public var hostObject: Host? {
+    return components.host
+  }
+}
+
