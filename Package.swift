@@ -4,11 +4,10 @@
 import PackageDescription
 
 let package = Package(
-  name: "Base",
+  name: "swift-url",
   products: [
-    .library(name: "Base", targets: ["Base"]),
     .library(name: "WebURL", targets: ["WebURL"]),
-    .executable(name: "BaseBenchmarks", targets: ["BaseBenchmarks"]),
+    .executable(name: "URLBenchmarks", targets: ["URLBenchmarks"]),
   ],
   dependencies: [
     // Swift-checkit for testing protocol conformances.
@@ -18,16 +17,11 @@ let package = Package(
     .target(name: "Algorithms"),
     .testTarget(name: "AlgorithmsTests", dependencies: ["Algorithms", "Checkit"]),
 
-    .target(name: "Concurrency"),
-    .testTarget(name: "ConcurrencyTests", dependencies: ["Concurrency"]),
-
     .target(name: "WebURL", dependencies: ["Algorithms"]),
-    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "BaseTestUtils"]),
-
-    .target(name: "Base", dependencies: ["Algorithms", "Concurrency", "WebURL"]),
-    .target(name: "BaseTestUtils", dependencies: ["Base"]),
-    .testTarget(name: "BaseTests", dependencies: ["Base"]),
     
-    .target(name: "BaseBenchmarks", dependencies: ["Base"]),
+    .target(name: "URLTestUtils", dependencies: ["WebURL"]),
+    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "URLTestUtils"]),
+    
+    .target(name: "URLBenchmarks", dependencies: ["WebURL"]),
   ]
 )

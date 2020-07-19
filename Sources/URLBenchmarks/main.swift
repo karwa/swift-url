@@ -1,5 +1,5 @@
 import Foundation
-import Base
+import WebURL
 
 // This is a really simple benchmark.
 // Really, it should include more things like IP addresses and such, but

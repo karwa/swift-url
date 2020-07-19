@@ -1,4 +1,4 @@
-import BaseTestUtils
+import URLTestUtils
 import XCTest
 
 @testable import WebURL
