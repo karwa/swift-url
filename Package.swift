@@ -11,9 +11,8 @@ let package = Package(
     .executable(name: "BaseBenchmarks", targets: ["BaseBenchmarks"]),
   ],
   dependencies: [
-    .package(  // Swift-checkit for testing protocol conformances.
-      url: "https://github.com/karwa/swift-checkit.git",
-      .branch("master"))
+    // Swift-checkit for testing protocol conformances.
+    .package(url: "https://github.com/karwa/swift-checkit.git", from: "0.0.1"),
   ],
   targets: [
     .target(name: "Algorithms"),
