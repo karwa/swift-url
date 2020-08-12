@@ -410,9 +410,14 @@ extension URLScanner {
         }
         mapping.hostname.value = 0
       } else {
-        // TODO: Handle port here perhaps?
-        guard case .success = scanHost(authority[hostStartIndex...], scheme: scheme, &mapping) else {
+        guard case .success(let _nextComponent) = scanHostname(authority[hostStartIndex...], scheme: scheme, &mapping) else {
           return .failed
+        }
+        if let nextComponent = _nextComponent {
+          assert(nextComponent.0 == .port)
+          guard case .success = scanPort(authority[nextComponent.1...], scheme: scheme, &mapping) else {
+            return .failed
+          }
         }
       }
       
@@ -420,19 +425,75 @@ extension URLScanner {
       return .success(continueFrom: (.pathStart, authority.endIndex))
   }
   
-  static func scanHost(_ input: Input, scheme: Scheme, _ mapping: inout Mapping) -> ComponentParseResult {
-      // TODO: parse port.
-      
-      // swift-format-ignore
-      guard let parsedHost = Array(input).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
-        var fakecallback = IgnoreValidationErrors()
-        return WebURLParser.Host.parse(buffer, isNotSpecial: scheme.isSpecial == false, callback: &fakecallback)
-      }) else {
+  static func scanHostname(_ input: Input, scheme: Scheme, _ mapping: inout Mapping) -> ComponentParseResult {
+    
+    // 1. Find the extent of the hostname.
+    var hostnameEndIndex: Input.Index?
+    var inBracket = false
+    colonSearch: for idx in input.indices {
+      switch ASCII(input[idx]) {
+      case .leftSquareBracket?:
+        inBracket = true
+      case .rightSquareBracket?:
+        inBracket = false
+      case .colon? where inBracket == false:
+        hostnameEndIndex = idx
+        break colonSearch
+      default:
+        break
+      }
+    }
+    
+    // 2. Validate the hostname.
+    let hostname = input[..<(hostnameEndIndex ?? input.endIndex)]
+    // swift-format-ignore
+    guard let parsedHost = Array(hostname).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
+      var fakecallback = IgnoreValidationErrors()
+      return WebURLParser.Host.parse(buffer, isNotSpecial: scheme.isSpecial == false, callback: &fakecallback)
+    }) else {
+      return .failed
+    }
+    print("host: \(parsedHost)")
+    
+    // 3. Return the next component.
+    if let hostnameEnd = hostnameEndIndex {
+      return .success(continueFrom: (.port, input.index(after: hostnameEnd)))
+    } else {
+      return .success(continueFrom: nil)
+    }
+  }
+  
+  static func scanPort(_ input: Input, scheme: Scheme, _ mapping: inout Mapping) -> ComponentParseResult {
+    
+    // 1. Find the extent of the port string.
+    let portString = input.prefix {
+      ASCII($0).map { ASCII.ranges.digits.contains($0) } ?? false
+    }
+    // The only thing allowed after the numbers is an authority terminator character.
+    if portString.endIndex != input.endIndex {
+      switch ASCII(input[portString.endIndex]) {
+      case .forwardSlash?, .questionMark?, .numberSign?:
+        break
+      case .backslash? where scheme.isSpecial:
+        break
+      default:
+        // callback.validationError(.portInvalid)
         return .failed
       }
-      
-      print("host: \(parsedHost)")
-      return .success(continueFrom: nil) // ?
+    }
+    
+    // 2. Validate the port string.
+    if portString.isEmpty == false {
+      guard let parsedInteger = UInt16(String(decoding: portString, as: UTF8.self)) else {
+        // callback.validationError(.portOutOfRange)
+        return .failed
+      }
+      print("port: \(parsedInteger)")
+      // url.port = (parsedInteger == scheme.defaultPort) ? nil : parsedInteger
+    }
+ 
+    // 3. Return the next component.
+    return .success(continueFrom: (.pathStart, portString.endIndex))
   }
 
   /// Scans the URL string from the character immediately following the authority, and advises
