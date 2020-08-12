@@ -14,6 +14,10 @@ extension NewURLParser {
 }
 
 extension NewURLParser.Scheme {
+  
+  var isSpecial: Bool {
+    return self != .other
+  }
 
   /// Parses the scheme from a collection of ASCII bytes.
   ///

@@ -915,7 +915,7 @@ extension WebURLParser {
           buffer.removeAll(keepingCapacity: true)
           state = .port
           if stateOverride == .hostname { break inputLoop }
-        case .forwardSlash?, .questionMark?, .numberSign?,
+        case .forwardSlash?, .questionMark?, .numberSign?, /* or endIndex */
           .backslash? where url.scheme.isSpecial:
           if buffer.isEmpty {
             if url.scheme.isSpecial {
@@ -941,7 +941,7 @@ extension WebURLParser {
           flag_squareBracket = true
           buffer.append(ASCII.leftSquareBracket.codePoint)
         case .rightSquareBracket?:
-          flag_squareBracket = false
+          flag_squareBracket = false	
           buffer.append(ASCII.rightSquareBracket.codePoint)
         default:
           // This may be a non-ASCII codePoint. Append the whole thing to `buffer`.

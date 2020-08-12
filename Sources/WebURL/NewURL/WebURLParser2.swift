@@ -28,88 +28,15 @@ extension NewURL {
 
 
 
-enum Component {
+enum ParsableComponent {
    case scheme
+   case authority
    case host
    case port
+   case pathStart // better name?
    case path
    case query
    case fragment
- }
-
-protocol NewURLWalker {
-  associatedtype Input: Collection where Input.Element == UInt8
-  
-  mutating func markPossibleComponent(_ component: Component, startingAt index: Input.Index)
-  mutating func rejectPossibleComponent(_ component: Component) -> Input.Index
-  mutating func confirmPossibleComponent(_ component: Component, endingAt index: Input.Index)
-}
-
-extension NewURLWalker {
-  
-  mutating func confirmComponent(_ component: Component, range: Range<Input.Index>) {
-    markPossibleComponent(component, startingAt: range.lowerBound)
-    confirmPossibleComponent(component, endingAt: range.upperBound)
-  }
-}
-
-class StorageCopier<Input>: NewURLWalker where Input: Collection, Input.Element == UInt8 {
-  var input: Input
-  var storage: NewURL.Storage
-  
-
-  private var component: Component? = nil
-  private var componentStartIdx: Input.Index? = nil
-  
-  init(storage: NewURL.Storage, input: Input) {
-    self.storage = storage; self.input = input
-  }
-  
-  func markPossibleComponent(_ component: Component, startingAt index: Input.Index) {
-    assert(self.component == nil, "Already started a component")
-    self.component = component
-    
-    assert(componentStartIdx == nil, "componentStartIdx should be nil")
-    assert(input.indices.contains(index), "Invalid index")
-    componentStartIdx = index
-  }
-  
-  func rejectPossibleComponent(_ component: Component) -> Input.Index {
-    assert(self.component == component, "Incorrect component")
-    guard let rewindIndex = componentStartIdx else {
-      fatalError("No component started")
-    }
-    self.component = nil
-    self.componentStartIdx = nil
-    return rewindIndex
-  }
-  
-  func confirmPossibleComponent(_ component: Component, endingAt endIndex: Input.Index) {
-    assert(self.component == component, "Incorrect component")
-    assert(input.indices.contains(endIndex) || input.endIndex == endIndex, "Invalid index")
-    guard let startIndex = componentStartIdx else {
-      fatalError("No component started")
-    }
-    let inputRange = startIndex ..< endIndex
-    print("""
-    !!! COMPONENT CONFIRMED !!!
-    - Component: \(component)
-    - Data: |\(String(decoding: input[inputRange], as: UTF8.self))|
-    """)
-    switch component {
-    case .scheme:
-      confirmScheme(range: inputRange)
-    default:
-      fatalError("Unhandled component: \(component)")
-    }
-  }
-  
-  func confirmScheme(range: Range<Input.Index>) {
-  	// What we do here may be complex.
-    // - If the URL already has a scheme and is unique, we can modify in-place.
-    // - Otherwise, we need to create a new buffer containing these
-    storage.append(contentsOf: input[range])
-  }
 }
 
 /*
@@ -200,7 +127,7 @@ struct NewURLParser {
     // - Construction: Use the information from the scanning step, together with the base URL,
     //                 to transform and copy the pieces of each component in to a final result.
   
-    guard let scanResults = scan(rawInput: input, baseURL: baseURL, offsetType: Int16.self, stateOverride: nil) else {
+    guard let scanResults = URLScanner.scan(rawInput: input[...], baseURL: baseURL, offsetType: Int16.self, stateOverride: nil) else {
       return nil
     }
     return construct(url: scanResults, input: input, baseURL: baseURL)
@@ -214,19 +141,35 @@ struct NewURLParser {
     
     return nil
   }
-    
+}
+
+
+struct URLScanner<Input, Offset> where Input: BidirectionalCollection, Input.SubSequence == Input, Input.Element == UInt8,
+  Input.Index: FixedWidthInteger, Offset: FixedWidthInteger & SignedInteger {
+  
+  enum ComponentParseResult {
+    case failed
+    case success(continueFrom: (ParsableComponent, Input.Index)?)
+  }
+  
+  typealias Scheme = NewURLParser.Scheme
+  typealias Mapping = NewURLParser.Mapping<Offset>
+}
+
+extension URLScanner {
+  
   /// The first stage is scanning, where we want to build up a map of the resulting URL's components.
   /// This will tell us whether the URL is structurally invalid, although it may still fail to normalize if the domain name is nonsense.
   ///
-  func scan<Input, OffsetType>(
+  static func scan(
     rawInput: Input,
     baseURL: NewURL?,
-    offsetType: OffsetType.Type,
+    offsetType: Offset.Type,
     stateOverride: WebURLParser.ParserState? = nil
-  ) -> Mapping<OffsetType>? where Input: BidirectionalCollection, Input.Element == UInt8, Input.Index: FixedWidthInteger {
+  ) -> Mapping? {
     
     // Create the result object.
-    var scanResults = Mapping<OffsetType>()
+    var scanResults = Mapping()
     
     // 1. Trim leading/trailing C0 control characters and spaces.
     var trimmedSlice = rawInput[...]
@@ -248,6 +191,7 @@ struct NewURLParser {
 
     // TODO: 3. Skip to unicode code-point boundaries.
         
+    let success: Bool
     // 4. Try to parse a scheme.
     if let schemeEndIndex = tryParseScheme(input: input) {
       scanResults.scheme.value = numericCast(schemeEndIndex)
@@ -255,46 +199,7 @@ struct NewURLParser {
       let scheme = NewURLParser.Scheme.parse(asciiBytes: schemeNameBytes)
       print("Found scheme!", scheme)
       
-      let remaining = input[schemeEndIndex...]
-      switch scheme {
-      case .file:
-        if !URLStringUtils.hasDoubleSolidusPrefix(remaining) {
-//          callback.validationError(.fileSchemeMissingFollowingSolidus)
-        }
-        parseFileURL(remaining)
-      case .other:
-        if ASCII(flatMap: remaining.first) == .forwardSlash {
-          // state: "path or authority"
-          if ASCII(flatMap: remaining.dropFirst().first) == .forwardSlash {
-            parseAuthority(remaining.dropFirst(2), &scanResults)
-          } else {
-            parsePath(remaining.dropFirst(), &scanResults)
-          }
-          
-        } else {
-          scanResults.cannotBeABaseURL = true
-//          url.path.append("")
-          parseCannotBeABaseURLPath(remaining)
-        }
-      default:
-        if baseURL?.scheme == scheme {
-          // state: "special relative or authority"
-          if URLStringUtils.hasDoubleSolidusPrefix(remaining) {
-            parseSpecialAuthorityIgnoreSlashes(remaining.dropFirst(2), &scanResults)
-          } else {
-//            callback.validationError(.relativeURLMissingBeginningSolidus)
-            parseRelativeURL(remaining)
-          }
-        } else {
-          // state: "special authority slashes"
-          if URLStringUtils.hasDoubleSolidusPrefix(remaining) {
-            parseSpecialAuthorityIgnoreSlashes(remaining.dropFirst(2), &scanResults)
-          } else {
-//            callback.validationError(.missingSolidusBeforeAuthority)
-            parseSpecialAuthorityIgnoreSlashes(remaining, &scanResults)
-          }
-        }
-      }
+      success = URLScanner<LazyFilterSequence<Input>, Offset>.scanURLWithScheme(input[schemeEndIndex...], scheme: scheme, baseURLScheme: baseURL?.scheme, &scanResults)
       
     } else { // no scheme.
 
@@ -313,100 +218,354 @@ struct NewURLParser {
 //        url.query = base.query
 //        url.fragment = ""
 //        url.cannotBeABaseURL = true
-        parseFragment(input.dropFirst())
-        return scanResults // ?
+        if case .failed = URLScanner<LazyFilterSequence<Input>, Offset>.scanFragment(input.dropFirst(), &scanResults) {
+          success = false
+        } else {
+          success = true
+        }
+        return success ? scanResults : nil
       }
       if base.scheme == .file {
-        parseFileURL(input)
+        success = parseFileURL(input)
       } else {
-        parseRelativeURL(input)
+        success = parseRelativeURL(input)
       }
     }
     
     // End parse function.
-    return scanResults
+    return success ? scanResults : nil
   }
+}
+
+/// Returns the endIndex of the scheme (i.e. index of the scheme terminator ":") if one can be parsed from `input`.
+/// Otherwise returns `nil`.
+///
+private func tryParseScheme<Input>(
+  input: Input
+) -> Input.Index? where Input: Collection, Input.Element == UInt8 {
   
+  guard input.isEmpty == false else { return nil }
+  var cursor = input.startIndex
   
-  func parseSpecialAuthorityIgnoreSlashes<Input, Offset>(_ input: Input, _ mapping: inout Mapping<Offset>)
-    where Input: BidirectionalCollection, Input.Element == UInt8, Input.Index: FixedWidthInteger {
-      
-      let authorityStart = input.prefix {
-        return ASCII($0) == .forwardSlash || ASCII($0) == .backslash
-      }.endIndex
-      if authorityStart == input.startIndex {
-//        callback.validationError(.missingSolidusBeforeAuthority)
+  // schemeStart: must begin with an ASCII alpha.
+  guard ASCII(input[cursor])?.isAlpha == true else { return nil }
+  
+  // scheme: allow all ASCII { alphaNumeric, +, -, . } characters.
+  cursor = input.index(after: cursor)
+  let _schemeEnd = input[cursor...].firstIndex(where: { byte in
+    let c = ASCII(byte)
+    switch c {
+    case _ where c?.isAlphaNumeric == true, .plus?, .minus?, .period?:
+      return false
+    default:
+      // TODO: assert(c != ASCII.horizontalTab && c != ASCII.lineFeed)
+      return true
+    }
+  })
+  // schemes end with an ASCII colon.
+  guard let schemeEnd = _schemeEnd, input[schemeEnd] == ASCII.colon.codePoint else {
+    return nil
+  }
+  cursor = input.index(after: schemeEnd)
+  return cursor
+}
+
+// URLs with schemes.
+// ------------------
+// Broadly, the pattern is to look for an authority (host, etc), then path, query and fragment.
+
+extension URLScanner {
+  
+  /// Scans all components of the input string `input`, and builds up a map based on the URL's `scheme`.
+  ///
+  static func scanURLWithScheme(_ input: Input, scheme: NewURLParser.Scheme, baseURLScheme: NewURLParser.Scheme?, _ mapping: inout Mapping) -> Bool {
+
+    switch scheme {
+    case .file:
+      if !URLStringUtils.hasDoubleSolidusPrefix(input) {
+//          callback.validationError(.fileSchemeMissingFollowingSolidus)
       }
-      return parseAuthority(input[authorityStart...], &mapping)
+      return parseFileURL(input)
+      
+    case .other: // non-special.
+      var componentStartIdx = input.startIndex
+      guard componentStartIdx != input.endIndex, ASCII(input[componentStartIdx]) == .forwardSlash else {
+        mapping.cannotBeABaseURL = true
+        return parseCannotBeABaseURLPath(input)
+      }
+      // state: "path or authority"
+      componentStartIdx = input.index(after: componentStartIdx)
+      if componentStartIdx != input.endIndex, ASCII(input[componentStartIdx]) == .forwardSlash {
+        let authorityStart = input.index(after: componentStartIdx)
+        return scanComponents(from: .authority, input[authorityStart...], scheme: scheme, &mapping)
+      } else {
+        return scanComponents(from: .path, input[componentStartIdx...], scheme: scheme, &mapping)
+      }
+        
+    default: // special schemes other than 'file'.
+      if scheme == baseURLScheme, URLStringUtils.hasDoubleSolidusPrefix(input) == false {
+        // state: "special relative or authority"
+        // callback.validationError(.relativeURLMissingBeginningSolidus)
+        return parseRelativeURL(input)
+      }
+      // state: "special authority slashes"
+      var authorityStart = input.startIndex
+      if URLStringUtils.hasDoubleSolidusPrefix(input) {
+        authorityStart = input.index(authorityStart, offsetBy: 2)
+      } else {
+        // callback.validationError(.missingSolidusBeforeAuthority)
+      }
+      // state: "special authority ignore slashes"
+      authorityStart = input[authorityStart...].drop { ASCII($0) == .forwardSlash || ASCII($0) == .backslash }.startIndex
+      return scanComponents(from: .authority, input[authorityStart...], scheme: scheme, &mapping)
+    }
   }
   
-
-   
-  func parseAuthority<Input, Offset>(_ input: Input, _ mapping: inout Mapping<Offset>)
-    where Input: BidirectionalCollection, Input.Element == UInt8, Input.Index: FixedWidthInteger {
+  /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
+  ///
+  static func scanComponents(from: ParsableComponent, _ input: Input, scheme: NewURLParser.Scheme, _ mapping: inout Mapping) -> Bool {
+    var component = from
+    var remaining = input[...]
+    while true {
+      print("** Parsing component: \(component)")
+      print("** Data: \(String(decoding: remaining, as: UTF8.self))")
+      let componentResult: ComponentParseResult
+      switch component {
+      case .authority:
+        componentResult = scanAuthority(remaining, scheme: scheme, &mapping)
+      case .pathStart:
+        componentResult = scanPathStart(remaining, scheme: scheme, &mapping)
+      case .path:
+        componentResult = scanPath(remaining, scheme: scheme, &mapping)
+      case .query:
+        componentResult = scanQuery(remaining, scheme: scheme, &mapping)
+      case .fragment:
+        componentResult = scanFragment(remaining, &mapping)
+      case .scheme:
+          fatalError()
+      case .host:
+        fatalError()
+      case .port:
+        fatalError()
+      }
+      guard case .success(let _nextComponent) = componentResult else {
+        return false
+      }
+      guard let nextComponent = _nextComponent else {
+        break
+      }
+      component = nextComponent.0
+      remaining = remaining[nextComponent.1...]
+    }
+    return true
+  }
+  
+  /// Scans the "authority" component of a URL, containing:
+  ///  - Username
+  ///  - Password
+  ///  - Host
+  ///  - Port
+  ///
+  ///  If parsing doesn't fail, the next component is always `pathStart`.
+  ///
+  static func scanAuthority(_ input: Input, scheme: NewURLParser.Scheme,_ mapping: inout Mapping) -> ComponentParseResult {
      
-      print("Reached authority")
-      print(String(decoding: input, as: UTF8.self))
-   }
+      // 1. Find the extent of the authority (i.e. the terminator between host and path/query/fragment).
+      let authority = input.prefix {
+        switch ASCII($0) {
+        case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?:
+          return false
+        case ASCII.backslash? where scheme.isSpecial:
+          return false
+        default:
+          return true
+       }
+      }
 
-  func parsePath<Input, Offset>(_ input: Input, _ mapping: inout Mapping<Offset>)
-    where Input: BidirectionalCollection, Input.Element == UInt8, Input.Index: FixedWidthInteger {
+      var hostStartIndex = authority.startIndex
+      
+      // 2. Look for credentials.
+      if let credentialsEndIndex = authority.lastIndex(where: { ASCII($0) == .commercialAt }) {
+        hostStartIndex = input.index(after: credentialsEndIndex)
+        // callback.validationError(.unexpectedCommercialAt)
+        guard credentialsEndIndex != authority.startIndex else {
+          // callback.validationError(.missingCredentials)
+          return .failed
+        }
+
+        let credentials = authority[..<credentialsEndIndex]
+        let username = credentials.prefix { ASCII($0) != .colon }
+        let password = credentials.suffix(from: credentials.index(after: username.endIndex))
+        
+        print("username: ", String(decoding: username, as: UTF8.self))
+        print("password: ", String(decoding: password, as: UTF8.self))
+      }
+      
+      // 3. Parse the host.
+      if hostStartIndex == authority.endIndex {
+        // Host is empty.
+        if scheme.isSpecial {
+          // callback.validationError(.emptyHostSpecialScheme)
+          return .failed
+        }
+        mapping.hostname.value = 0
+      } else {
+        // TODO: Handle port here perhaps?
+        guard case .success = scanHost(authority[hostStartIndex...], scheme: scheme, &mapping) else {
+          return .failed
+        }
+      }
+      
+      // 4. Return the next component.
+      return .success(continueFrom: (.pathStart, authority.endIndex))
   }
   
-  func parseFragment<T>(_: T) {
-    
-  }
-  
-  func parseFileURL<T>(_: T) {
-    
+  static func scanHost(_ input: Input, scheme: Scheme, _ mapping: inout Mapping) -> ComponentParseResult {
+      // TODO: parse port.
+      
+      // swift-format-ignore
+      guard let parsedHost = Array(input).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
+        var fakecallback = IgnoreValidationErrors()
+        return WebURLParser.Host.parse(buffer, isNotSpecial: scheme.isSpecial == false, callback: &fakecallback)
+      }) else {
+        return .failed
+      }
+      
+      print("host: \(parsedHost)")
+      return .success(continueFrom: nil) // ?
   }
 
-  func parseCannotBeABaseURLPath<T>(_: T) {
-    
+  /// Scans the URL string from the character immediately following the authority, and advises
+  /// whether the remainder is a path, query or fragment.
+  ///
+  static func scanPathStart(_ input: Input, scheme: Scheme, _ mapping: inout Mapping) -> ComponentParseResult {
+      
+      guard input.isEmpty == false else {
+        return .success(continueFrom: scheme.isSpecial ? (.path, input.startIndex) : nil)
+      }
+      
+      let c: ASCII? = ASCII(input[input.startIndex])
+      switch c {
+      case .questionMark?:
+        return .success(continueFrom: (.query, input.index(after: input.startIndex)))
+        
+      case .numberSign?:
+        return .success(continueFrom: (.fragment, input.index(after: input.startIndex)))
+        
+      default:
+        if c == .forwardSlash || (scheme.isSpecial && c == .backslash) {
+          if c == .backslash {
+            // callback.validationError(.unexpectedReverseSolidus)
+          }
+          return .success(continueFrom: (.path, input.index(after: input.startIndex)))
+        } else {
+          return .success(continueFrom: (.path, input.startIndex))
+        }
+      }
+  }
+
+  /// Scans a URL path string from the given input, and advises whether there are any components following it.
+  ///
+  static func scanPath(_ input: Input, scheme: Scheme, _ mapping: inout Mapping) -> ComponentParseResult {
+      
+      // 1. Find the extent of the path.
+      let pathEndIndex = input.firstIndex { ASCII($0) == .questionMark || ASCII($0) == .numberSign }
+      
+      // 2. Validate the path's contents.
+      let path = input[..<(pathEndIndex ?? input.endIndex)]
+      
+      func isPathComponentTerminator(_ byte: UInt8) -> Bool {
+        return ASCII(byte) == .forwardSlash || (scheme.isSpecial && ASCII(byte) == .backslash)
+      }
+      func validatePathComponent(_ pathComponent: Input.SubSequence) {
+        if URLStringUtils.hasNonURLCodePoints(pathComponent, allowPercentSign: true) {
+          // callback.validationError(.invalidURLCodePoint)
+        }
+        // Validate percent escaping.
+        var percentSignSearchIdx = pathComponent.startIndex
+        while let percentSignIdx = pathComponent[percentSignSearchIdx...].firstIndex(where: { ASCII($0) == .percentSign }) {
+          percentSignSearchIdx = pathComponent.index(after: percentSignIdx)
+          let nextTwo = pathComponent[percentSignIdx...].prefix(2)
+          if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
+            // callback.validationError(.unescapedPercentSign)
+          }
+        }
+        print("path component: \(String(decoding: pathComponent, as: UTF8.self))")
+      }
+      
+      var componentStartIdx = path.startIndex
+      while let componentEndIndex = path[componentStartIdx...].firstIndex(where: isPathComponentTerminator) {
+        if ASCII(path[componentEndIndex]) == .backslash {
+          //  callback.validationError(.unexpectedReverseSolidus)
+        }
+        validatePathComponent(path[componentStartIdx..<componentEndIndex])
+        componentStartIdx = path.index(after: componentEndIndex)
+      }
+      validatePathComponent(path[componentStartIdx..<path.endIndex])
+        
+      // 3. Return the next component.
+      if let pathEnd = pathEndIndex {
+        return .success(continueFrom: (ASCII(input[pathEnd]) == .questionMark ? .query : .fragment,
+                                       input.index(after: pathEnd)))
+      } else {
+        return .success(continueFrom: nil)
+      }
   }
   
-  func parseRelativeURL<T>(_: T) {
-    
+  /// Scans a URL query string from the given input, and advises whether there are any components following it.
+  ///
+  static func scanQuery(_ input: Input, scheme: Scheme, _ mapping: inout Mapping) -> ComponentParseResult {
+      
+    // 1. Find the extent of the query
+    let queryEndIndex = input.firstIndex { ASCII($0) == .numberSign }
+      
+    // 2. Validate the query components.
+      
+    // 3. Return the next component.
+    if let queryEnd = queryEndIndex {
+      return .success(continueFrom: ASCII(input[queryEnd]) == .numberSign ? (.fragment, input.index(after: queryEnd)) : nil)
+    } else {
+      return .success(continueFrom: nil)
+    }
+  }
+  
+  /// Scans a URL fragment string from the given input. There are never any components following it.
+  ///
+  static func scanFragment(_ input: Input, _ mapping: inout Mapping) -> ComponentParseResult {
+        
+    return .success(continueFrom: nil)
+  }
+}
+
+// File URLs.
+// ---------
+
+extension URLScanner {
+  
+  static func parseFileURL<T>(_: T) -> Bool {
+    print("Reached file URL")
+    return true
+  }
+}
+
+// Relative and "cannot-base-a-base" URLs.
+// --------------------------------------
+
+extension URLScanner {
+
+  static func parseCannotBeABaseURLPath<T>(_: T) -> Bool {
+    print("Reached cannot-be-a-base-url-path")
+    return true
+  }
+  
+  static func parseRelativeURL<T>(_: T) -> Bool {
+    print("Reached relative URL")
+    return true
   }
 }
 
 // Component parsing.
 
-extension NewURLParser {
-  
- 	/// Attempts to parse a scheme from the UTF8-encoded bytes in `input`.
-  /// If a scheme can be parsed, the given `walker` object will be notified of its location. `input` must not contain any ASCII tabs or newlines.
-  ///
-  func tryParseScheme<Input>(
-    input: Input
-  ) -> Input.Index? where Input: Collection, Input.Element == UInt8 {
-    
-    guard input.isEmpty == false else { return nil }
-    var cursor = input.startIndex
-    
-    // schemeStart: must begin with an ASCII alpha.
-    guard ASCII(input[cursor])?.isAlpha == true else { return nil }
-    
-    // scheme: allow all ASCII { alphaNumeric, +, -, . } characters.
-    cursor = input.index(after: cursor)
-    let _schemeEnd = input[cursor...].firstIndex(where: { byte in
-      let c = ASCII(byte)
-      switch c {
-      case _ where c?.isAlphaNumeric == true, .plus?, .minus?, .period?:
-        return false
-      default:
-        // TODO: assert(c != ASCII.horizontalTab && c != ASCII.lineFeed)
-        return true
-      }
-    })
-    // schemes end with an ASCII colon.
-    guard let schemeEnd = _schemeEnd, input[schemeEnd] == ASCII.colon.codePoint else {
-      return nil
-    }
-    cursor = input.index(after: schemeEnd)
-    return cursor
-  }
-}
 
 
 
