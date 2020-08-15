@@ -9,10 +9,12 @@ class URL2Tests: XCTestCase {
     var a = NewURLParser()
 //    var str = """
 //
+//
+//
 //    ht
-//    tp+unix++++99898saasa://www.google.com
+//    tp+unix+asdawe://www.google.com
 //    """
-//    var str = #"https+o://///\\\\/user:name:password@thisIsNotTheHost@www.google.com"#
+//    var str = #"https://///\\\\/user:name:password@thisIsNotTheHost@www.google.com/p1/p2#fragout!"#
     var str = #"https:////\\user:name:password@thisIsNotTheHost@www.google.com:8080/path1/path2/../path3?queryydsfoih#fraggymentalis"#
 //    var str = #"https+o:///user:name:password@thisIsNotTheHost@www.google.com"#
     let storage = str.withUTF8 { a.constructURL(input: $0, baseURL: nil) }
