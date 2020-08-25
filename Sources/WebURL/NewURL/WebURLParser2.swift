@@ -519,7 +519,10 @@ extension URLScanner {
       var componentStartIdx = input.startIndex
       guard componentStartIdx != input.endIndex, ASCII(input[componentStartIdx]) == .forwardSlash else {
         mapping.cannotBeABaseURL = true
-        return parseCannotBeABaseURLPath(input)
+        if case .failed = scanCannotBeABaseURLPath(input, &mapping, callback: &callback) {
+          return false
+        }
+        return true
       }
       // state: "path or authority"
       componentStartIdx = input.index(after: componentStartIdx)
@@ -1044,23 +1047,55 @@ extension URLScanner {
   }
 }
 
-// Relative and "cannot-base-a-base" URLs.
-// --------------------------------------
+// "cannot-base-a-base" URLs.
+// --------------------------
 
 extension URLScanner {
 
-  static func parseCannotBeABaseURLPath<T>(_: T) -> Bool {
-    print("Reached cannot-be-a-base-url-path")
-    return true
+  static func scanCannotBeABaseURLPath(_ input: Input, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+    
+    // 1. Validate the mapping.
+    assert(mapping.authorityStartPosition.get() == nil)
+    assert(mapping.hostnameEndIndex.get() == nil)
+    assert(mapping.portEndIndex.get() == nil)
+    assert(mapping.path.get() == nil)
+    assert(mapping.query.get() == nil)
+    assert(mapping.fragment.get() == nil)
+    
+    // 2. Find the extent of the path.
+    let pathEndIndex = input.firstIndex { byte in
+      switch ASCII(byte) {
+      case .questionMark?, .numberSign?: return true
+      default: return false
+      }
+    }
+    let path = input[..<(pathEndIndex ?? input.endIndex)]
+    
+    // 3. Validate the path.
+    validateURLCodePointsAndPercentEncoding(path, callback: &callback)
+        
+    // 4. Return the next component.
+    if let pathEnd = pathEndIndex {
+      mapping.path.set(to: pathEnd)
+      return .success(continueFrom: (ASCII(input[pathEnd]) == .questionMark ? .query : .fragment,
+                                     input.index(after: pathEnd)))
+    } else {
+      mapping.path.set(to: input.endIndex)
+      return .success(continueFrom: nil)
+    }
   }
+}
+
+// Relative URLs.
+// --------------
+
+extension URLScanner {
   
   static func parseRelativeURL<T>(_: T) -> Bool {
     print("Reached relative URL")
     return true
   }
 }
-
-// Component parsing.
 
 
 

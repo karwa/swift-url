@@ -18,7 +18,9 @@ class URL2Tests: XCTestCase {
 //    var str = #"https:////\\user:name:password@thisIsNotTheHost@www.google.com:8080/path1/path2/../path3?queryydsfoih#fraggymentalis"#
 //    var str = #"https+o:///user:name:password@thisIsNotTheHost@www.google.com"#
     
-    var str = #"file://usr/lib/Swift?something"#
+//    var str = #"file://usr/lib/Swift?something"#
+    
+    var str = #"javascript:alert("hello, world!");"#
     
     
     let storage = str.withUTF8 { a.constructURL(input: $0, baseURL: nil) }
