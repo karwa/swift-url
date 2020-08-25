@@ -137,19 +137,40 @@ struct Mapping<IndexStorage: CompressedOptional> {
   var cannotBeABaseURL = false
   
   var scheme: NewURLParser.Scheme? = nil
+  // This is the index of the scheme terminator (":"), if one exists.
   var schemeTerminator = IndexStorage.none
   
+  // This is the index of the first character of the authority segment, if one exists.
+  // The scheme and authority may be separated by an arbitrary amount of trivia.
+  // The authority ends at the "*EndIndex" of the last of its components.
   var authorityStartPosition = IndexStorage.none
-  var usernameEndIndex = IndexStorage.none
-  // If passwordEndIndex != nil, there is assumed to be 1 filtered byte (":") between username and password.
-  var passwordEndIndex = IndexStorage.none
-  // If (usernameEndIndex != nil || passwordEndIndex != nil), there is assumed to be 1 filtered byte (":" or "@")
-  // between the last one of them and hostname start.
-  var hostnameEndIndex = IndexStorage.none
   
-  // ??? for these.
-  var port = IndexStorage.none
+    // This is the endIndex of the authority's username component, if one exists.
+    // The username starts at the authorityStartPosition.
+    var usernameEndIndex = IndexStorage.none
+  
+    // This is the endIndex of the password, if one exists.
+    // If a password exists, a username must also exist, and usernameEndIndex must be the ":" character.
+    // The password starts at the index after usernameEndIndex.
+    var passwordEndIndex = IndexStorage.none
+
+// TODO (hostname): What if there is no authorityStartPosition? Is it guaranteed to be set?
+  
+    // This is the endIndex of the hostname, if one exists.
+    // The hostname starts at the index after (username/password)EndIndex,
+    // or from authorityStartPosition if there are no credentials.
+    var hostnameEndIndex = IndexStorage.none
+  
+    // This is the endIndex of the port-string, if one exists.
+    // If a port-string exists, a hostname must also exist, and hostnameEndIndex must be the ":" character.
+    // The port-string starts at the index after hostnameEndIndex.
+    var portEndIndex = IndexStorage.none
+  
+  // This is the endIndex of the path, if one exists.
+  // If an authority segment exists, the path starts at the index after the end of the authority.
+  // Otherwise, it starts at the index 2 places after 'schemeTerminator' (":" + "/" or "\").
   var path = IndexStorage.none
+  
   var query = IndexStorage.none
   var fragment = IndexStorage.none
 }
@@ -210,32 +231,47 @@ struct NewURLParser {
   ) -> NewURL? where Mapping<T>.Index == Input.Index, Callback: URLParserCallback {
     
     let schemeRange = url.schemeTerminator.get().map { input.startIndex..<$0 }
-
-    // Offset to authority start.
-    var cursor = url.authorityStartPosition.get().map { $0 } ?? input.startIndex
-    let usernameRange = url.usernameEndIndex.get().map { usernameEndIndex in
-      cursor..<usernameEndIndex
-    }
-    cursor = usernameRange.map { input.index(after: $0.upperBound) } ?? cursor // ":" or "@" username separator.
-    let passwordRange = url.passwordEndIndex.get().map { passwordEndIndex in
-      cursor..<passwordEndIndex
-    }
-    cursor = passwordRange.map { input.index(after: $0.upperBound) } ?? cursor // "@" password separator.
-    let hostnameRange = url.hostnameEndIndex.get().map { hostnameEndIndex in
-      cursor..<hostnameEndIndex
-    }
-    cursor = hostnameRange.map { $0.upperBound } ?? cursor
+    var usernameRange: Range<Input.Index>?
+    var passwordRange: Range<Input.Index>?
+    var hostnameRange: Range<Input.Index>?
     var port: UInt16?
-    if let portStringEndIndex = url.port.get() {
-      cursor = input.index(after: cursor) // ":" hostname separator.
-      if portStringEndIndex != cursor {
-        guard let parsedInteger = UInt16(String(decoding: input[cursor..<portStringEndIndex], as: UTF8.self)) else {
-          callback.validationError(.portOutOfRange)
-          return nil
+
+    var cursor = schemeRange?.upperBound ?? input.startIndex
+    
+    if let authorityStart = url.authorityStartPosition.get() {
+      cursor = authorityStart
+      if let usernameEnd = url.usernameEndIndex.get() {
+        usernameRange = cursor..<usernameEnd
+        cursor = input.index(after: usernameEnd)
+        
+        if let passwordEnd = url.passwordEndIndex.get() {
+          assert(input[usernameEnd] == ASCII.colon.codePoint)
+          passwordRange = cursor..<passwordEnd
+          cursor = input.index(after: passwordEnd)
+          assert(input[passwordEnd] == ASCII.commercialAt.codePoint)
+        } else {
+          assert(input[usernameEnd] == ASCII.commercialAt.codePoint)
         }
-        port = parsedInteger
-        cursor = portStringEndIndex
       }
+      
+      hostnameRange = url.hostnameEndIndex.get().map { hostnameEndIndex in
+        cursor..<hostnameEndIndex
+      }
+      cursor = hostnameRange.map { $0.upperBound } ?? cursor
+      
+      if let portStringEndIndex = url.portEndIndex.get() {
+        cursor = input.index(after: cursor) // ":" hostname separator.
+        if portStringEndIndex != cursor {
+          guard let parsedInteger = UInt16(String(decoding: input[cursor..<portStringEndIndex], as: UTF8.self)) else {
+            callback.validationError(.portOutOfRange)
+            return nil
+          }
+          port = parsedInteger
+          cursor = portStringEndIndex
+        }
+      }
+    } else {
+      print("NO AUTHORITY!!! 🤟")
     }
     
     let pathRange = url.path.get().map { pathEndIndex -> Range<Input.Index> in
@@ -381,7 +417,7 @@ func scanURL<Input, T, Callback>(
     let scheme = NewURLParser.Scheme.parse(asciiBytes: schemeNameBytes)
     
     scanResults.scheme = scheme
-    scanResults.schemeTerminator.set(to: schemeEndIndex)
+    scanResults.schemeTerminator.set(to: input.index(before: schemeEndIndex))
     success = URLScanner.scanURLWithScheme(input[schemeEndIndex...], scheme: scheme, baseURLScheme: baseURL?.scheme, &scanResults, callback: &callback)
     
   } else {
@@ -409,7 +445,7 @@ func scanURL<Input, T, Callback>(
       return success ? scanResults : nil
     }
     if base.scheme == .file {
-      success = URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.parseFileURL(input[...])
+      success = URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.scanAllFileURLComponents(input[...], baseScheme: base.scheme, &scanResults, callback: &callback)
     } else {
       success = URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.parseRelativeURL(input[...])
     }
@@ -477,7 +513,7 @@ extension URLScanner {
       if !URLStringUtils.hasDoubleSolidusPrefix(input) {
       	callback.validationError(.fileSchemeMissingFollowingSolidus)
       }
-      return parseFileURL(input)
+      return scanAllFileURLComponents(input, baseScheme: baseURLScheme, &mapping, callback: &callback)
       
     case .other: // non-special.
       var componentStartIdx = input.startIndex
@@ -567,7 +603,7 @@ extension URLScanner {
     assert(mapping.usernameEndIndex.get() == nil)
     assert(mapping.passwordEndIndex.get() == nil)
     assert(mapping.hostnameEndIndex.get() == nil)
-    assert(mapping.port.get() == nil)
+    assert(mapping.portEndIndex.get() == nil)
     assert(mapping.path.get() == nil)
     assert(mapping.query.get() == nil)
     assert(mapping.fragment.get() == nil)
@@ -634,7 +670,7 @@ extension URLScanner {
     
     // 1. Validate the mapping.
     assert(mapping.hostnameEndIndex.get() == nil)
-    assert(mapping.port.get() == nil)
+    assert(mapping.portEndIndex.get() == nil)
     assert(mapping.path.get() == nil)
     assert(mapping.query.get() == nil)
     assert(mapping.fragment.get() == nil)
@@ -659,7 +695,7 @@ extension URLScanner {
     
     // 3. Validate the hostname.
     // swift-format-ignore
-    guard let parsedHost = Array(hostname).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
+    guard let _ = Array(hostname).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
       return WebURLParser.Host.parse(buffer, isNotSpecial: scheme.isSpecial == false, callback: &callback)
     }) else {
       return .failed
@@ -677,7 +713,7 @@ extension URLScanner {
   static func scanPort(_ input: Input, scheme: Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
-    assert(mapping.port.get() == nil)
+    assert(mapping.portEndIndex.get() == nil)
     assert(mapping.path.get() == nil)
     assert(mapping.query.get() == nil)
     assert(mapping.fragment.get() == nil)
@@ -700,7 +736,7 @@ extension URLScanner {
     }
  
     // 4. Return the next component.
-    mapping.port.set(to: portString.endIndex)
+    mapping.portEndIndex.set(to: portString.endIndex)
     return .success(continueFrom: (.pathStart, portString.endIndex))
   }
 
@@ -842,9 +878,169 @@ extension URLScanner {
 
 extension URLScanner {
   
-  static func parseFileURL<T>(_: T) -> Bool {
-    print("Reached file URL")
+  /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
+  ///
+  static func scanAllFileURLComponents(_ input: Input, baseScheme: NewURLParser.Scheme?, _ mapping: inout Mapping<T>, callback: inout Callback) -> Bool {
+    var remaining = input[...]
+    
+    guard case .success(let _component) = parseFileURLStart(remaining, baseScheme: baseScheme, &mapping, callback: &callback) else {
+      return false
+    }
+    guard var component = _component else {
+      return true
+    }
+    remaining = input.suffix(from: component.1)
+    while true {
+      print("** [FILEURL] Parsing component: \(component)")
+      print("** [FILEURL] Data: \(String(decoding: remaining, as: UTF8.self))")
+      let componentResult: ComponentParseResult
+      switch component.0 {
+      case .authority:
+        componentResult = scanAuthority(remaining, scheme: .file, &mapping, callback: &callback)
+      case .pathStart:
+        componentResult = scanPathStart(remaining, scheme: .file, &mapping, callback: &callback)
+      case .path:
+        componentResult = scanPath(remaining, scheme: .file, &mapping, callback: &callback)
+      case .query:
+        componentResult = scanQuery(remaining, scheme: .file, &mapping, callback: &callback)
+      case .fragment:
+        componentResult = scanFragment(remaining, &mapping, callback: &callback)
+      case .scheme:
+          fatalError()
+      case .host:
+        fatalError()
+      case .port:
+        fatalError()
+      }
+      guard case .success(let _nextComponent) = componentResult else {
+        return false
+      }
+      guard let nextComponent = _nextComponent else {
+        break
+      }
+      component = nextComponent
+      remaining = remaining.suffix(from: component.1)
+    }
     return true
+  }
+  
+  static func parseFileURLStart(_ input: Input, baseScheme: NewURLParser.Scheme?, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+    print("Reached file URL")
+    
+//    guard input.isEmpty == false else {
+//      return .success(continueFrom: nil)
+//    }
+    
+    // After "file:"
+    // - 0 slashes:  copy base host, append path to base path.
+    // - 1 slash:    copy base host, parse own path.
+    // - 2 slashes:  parse own host, parse own path.
+    // - 3 slahses:  empty host, parse own path.
+    // - 4+ slashes: invalid.
+    
+    var cursor = input.startIndex
+    guard cursor != input.endIndex, let c0 = ASCII(input[cursor]), (c0 == .forwardSlash || c0 == .backslash) else {
+      // No slashes. e.g. "file:usr/lib/Swift" or "file:?someQuery".
+      guard baseScheme == .file else {
+        return .success(continueFrom: (.path, cursor))
+      }
+      // TODO: Propagate this to construction phase.
+//      url.host = base.host
+//      url.path = base.path
+//      url.query = base.query
+      guard cursor != input.endIndex else {
+        return .success(continueFrom: nil)
+      }
+      switch ASCII(input[cursor]) {
+      case .questionMark?:
+        return .success(continueFrom: (.query, input.index(after: cursor)))
+      case .numberSign?:
+        return .success(continueFrom: (.fragment, input.index(after: cursor)))
+      default:
+        if URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
+          callback.validationError(.unexpectedWindowsDriveLetter)
+        } else {
+          // TODO: Propagate this to construction phase.
+          // shortenURLPath(&url.path, isFileScheme: true)
+        }
+        return .success(continueFrom: (.path, cursor))
+      }
+    }
+    cursor = input.index(after: cursor)
+    if c0 == .backslash {
+      callback.validationError(.unexpectedReverseSolidus)
+    }
+    
+    guard cursor != input.endIndex, let c1 = ASCII(input[cursor]), (c1 == .forwardSlash || c1 == .backslash) else {
+      // 1 slash. e.g. "file:/usr/lib/Swift".
+      
+      // If the base path starts with a Windows drive letter and we *dont't*, the path is relative
+      // to the base URL's Windows drive:
+      // ("file:/Users", base: "file:///C/Windows")     -> "file:///Users"
+      // ("file:/Users", base: "file:///C:/Windows")    -> "file:///C:/Users"
+      // ("file:/D:/Users", base: "file:///C:/Windows") -> "file:///D:/Users"
+      if baseScheme == .file, URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) == false {
+//        if let basePathStart = base.path.first, URLStringUtils.isNormalisedWindowsDriveLetter(basePathStart.utf8) {
+//          url.path.append(basePathStart)
+//        } else {
+//          url.host = base.host
+//        }
+      }
+      return scanPath(input[cursor...], scheme: .file, &mapping, callback: &callback)
+    }
+    
+    cursor = input.index(after: cursor)
+    if c1 == .backslash {
+      callback.validationError(.unexpectedReverseSolidus)
+    }
+    
+    // 2+ slashes. e.g. "file://localhost/usr/lib/Swift" or "file:///usr/lib/Swift".
+    return scanFileHost(input[cursor...], &mapping, callback: &callback)
+  }
+  
+  
+  static func scanFileHost(_ input: Input, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+   
+    // 1. Validate the mapping.
+    assert(mapping.authorityStartPosition.get() == nil)
+    assert(mapping.hostnameEndIndex.get() == nil)
+    assert(mapping.portEndIndex.get() == nil)
+    assert(mapping.path.get() == nil)
+    assert(mapping.query.get() == nil)
+    assert(mapping.fragment.get() == nil)
+    
+    // 2. Find the extent of the hostname.
+    let hostnameEndIndex = input.firstIndex { byte in
+      switch ASCII(byte) {
+      case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: return true
+      default: return false
+      }
+    } ?? input.endIndex
+    
+    let hostname = input[..<hostnameEndIndex]
+    
+    // 3. Validate the hostname.
+    if URLStringUtils.isWindowsDriveLetter(hostname) {
+      // TODO: Only if not in setter-mode.
+      callback.validationError(.unexpectedWindowsDriveLetterHost)
+      return .success(continueFrom: (.path, input.startIndex))
+    }
+    if hostname.isEmpty {
+      return .success(continueFrom: (.pathStart, input.startIndex))
+    }
+    // swift-format-ignore
+    guard let parsedHost = Array(hostname).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
+      return WebURLParser.Host.parse(buffer, isNotSpecial: false, callback: &callback)
+    }) else {
+      return .failed
+    }
+    
+    // 4. Return the next component.
+    mapping.authorityStartPosition.set(to: input.startIndex)
+    if parsedHost != .domain("localhost") {
+      mapping.hostnameEndIndex.set(to: hostnameEndIndex)
+    }
+    return .success(continueFrom: (.pathStart, hostnameEndIndex))
   }
 }
 
