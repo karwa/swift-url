@@ -119,12 +119,29 @@ extension ArrayWithInlineHeader {
     knownUnique_setCount(preAppendCount + numAdded)
   }
   
+  mutating func append(_ element: Element) {
+    append(contentsOf: CollectionOfOne(element))
+  }
+  
+  mutating func append(repeated element: Element, count: Int) {
+    append(contentsOf: repeatElement(element, count: count))
+  }
+  
   func withElements<T>(range: Range<Index>, _ block: (UnsafeBufferPointer<Element>) throws -> T) rethrows -> T {
     precondition(range.startIndex >= startIndex, "Invalid startIndex")
     precondition(range.endIndex <= endIndex, "Invalid endIndex")
     return try buffer.withUnsafeMutablePointerToElements { elements in
       let slice = UnsafeBufferPointer(start: elements + range.startIndex, count: range.count)
       return try block(slice)
+    }
+  }
+}
+
+extension ArrayWithInlineHeader where Element == UInt8 {
+  
+  func asUTF8String() -> String {
+    return withElements(range: startIndex..<endIndex) {
+      return String(decoding: $0, as: UTF8.self)
     }
   }
 }

@@ -39,6 +39,21 @@ enum ParsableComponent {
    case fragment
 }
 
+struct ComponentsToCopy: OptionSet {
+  typealias RawValue = UInt8
+  
+  var rawValue: RawValue
+  init(rawValue: RawValue) {
+    self.rawValue = rawValue
+  }
+  
+  static var scheme: Self    { Self(rawValue: 1 << 0) }
+  static var authority: Self { Self(rawValue: 1 << 1) }
+  static var path: Self      { Self(rawValue: 1 << 2) }
+  static var query: Self     { Self(rawValue: 1 << 3) }
+  static var fragment: Self  { Self(rawValue: 1 << 4) }
+}
+
 /*
  
  Notes about parser implementation
@@ -135,6 +150,7 @@ struct Mapping<IndexStorage: CompressedOptional> {
   typealias Index = IndexStorage.Wrapped
   
   var cannotBeABaseURL = false
+  var componentsToCopyFromBase: ComponentsToCopy = []
   
   var scheme: NewURLParser.Scheme? = nil
   // This is the index of the scheme terminator (":"), if one exists.
@@ -289,7 +305,123 @@ struct NewURLParser {
       defer { cursor = fragmentEndIndex }
       return cursor..<fragmentEndIndex
     }
-        
+    
+    var newstorage = NewURL.Storage(capacity: 10, initialHeader: .init())
+    // Scheme.
+    if let scheme = schemeRange {
+      // Scheme must be lowercased.
+      newstorage.append(contentsOf: input[scheme].lazy.map {
+        ASCII($0)?.lowercased.codePoint ?? $0
+      })
+    } else {
+      assert(url.componentsToCopyFromBase.contains(.scheme))
+      baseURL!.withSchemeBytes { newstorage.append(contentsOf: $0) }
+    }
+    // Scheme separator.
+    newstorage.append(ASCII.colon.codePoint)
+    
+    // Write authority.
+    if let host = hostnameRange {
+      newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
+      // Write username.
+      if let username = usernameRange {
+        PercentEscaping.encodeIterativelyAsBuffer(
+          bytes: input[username],
+          escapeSet: .url_userInfo,
+          processChunk: { piece in newstorage.append(contentsOf: piece) }
+        )
+        if passwordRange != nil {
+          newstorage.append(ASCII.colon.codePoint)
+        }
+      }
+      // Write password.
+      if let password = passwordRange {
+        PercentEscaping.encodeIterativelyAsBuffer(
+          bytes: input[password],
+          escapeSet: .url_userInfo,
+          processChunk: { piece in newstorage.append(contentsOf: piece) }
+        )
+      }
+      // Credentials separator.
+      if usernameRange != nil {
+        newstorage.append(ASCII.commercialAt.codePoint)
+      }
+      
+      // Write hostname.
+      let _hostnameString = Array(input[host]).withUnsafeBufferPointer { bytes -> String? in
+        let isNotSpecial = !(url.scheme?.isSpecial ?? true)
+        return WebURLParser.Host.parse(bytes, isNotSpecial: isNotSpecial, callback: &callback)?.serialized
+      }
+      guard let hostnameString = _hostnameString else { return nil }
+      newstorage.append(contentsOf: hostnameString.utf8)
+      
+      // Write port.
+      if let port = port {
+        newstorage.append(ASCII.colon.codePoint)
+        newstorage.append(contentsOf: String(port).utf8)
+      }
+    } else if (url.scheme == .file) || (url.componentsToCopyFromBase.contains(.scheme) && baseURL?.scheme == .file) {
+      newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
+    }
+    
+    
+    // Write path.
+    if let path = pathRange {
+      switch url.cannotBeABaseURL {
+      case true:
+        PercentEscaping.encodeIterativelyAsBuffer(
+          bytes: input[path],
+          escapeSet: .url_c0,
+          processChunk: { piece in newstorage.append(contentsOf: piece) }
+        )
+      case false:
+        URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.iteratePathComponents(input[path], schemeIsSpecial: url.scheme?.isSpecial ?? false) {
+          pathComponent in
+          newstorage.append(ASCII.forwardSlash.codePoint)
+          PercentEscaping.encodeIterativelyAsBuffer(
+            bytes: pathComponent,
+            escapeSet: .url_path,
+            processChunk: { piece in newstorage.append(contentsOf: piece) }
+          )
+        }
+      }
+      
+    // Special URLs always have a '/' following the authority, even if they have no path.
+    } else if url.scheme?.isSpecial == true {
+      newstorage.append(ASCII.forwardSlash.codePoint)
+    }
+    
+    // Write query.
+    if let query = queryRange {
+      newstorage.append(ASCII.questionMark.codePoint)
+      
+      let urlIsSpecial = url.scheme?.isSpecial ?? false
+      let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
+        switch asciiChar {
+        case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
+          _ where asciiChar.codePoint < ASCII.exclamationMark.codePoint,
+          _ where asciiChar.codePoint > ASCII.tilde.codePoint, .apostrophe where urlIsSpecial:
+          return true
+        default: return false
+        }
+      })
+      PercentEscaping.encodeIterativelyAsBuffer(
+        bytes: input[query],
+        escapeSet: escapeSet,
+        processChunk: { piece in newstorage.append(contentsOf: piece) }
+      )
+    }
+    
+    // Write fragment.
+    if let fragment = fragmentRange {
+      newstorage.append(ASCII.numberSign.codePoint)
+      PercentEscaping.encodeIterativelyAsBuffer(
+        bytes: input[fragment],
+        escapeSet: .url_fragment,
+        processChunk: { piece in newstorage.append(contentsOf: piece) }
+      )
+    }
+    
     print("""
       scheme object: \(url.scheme as Any?)
       
@@ -306,7 +438,7 @@ struct NewURLParser {
       remaining: \( String(decoding: input[cursor...], as: UTF8.self) )
     """)
     
-    return nil
+    return NewURL(storage: newstorage)
   }
 }
 
@@ -447,7 +579,7 @@ func scanURL<Input, T, Callback>(
     if base.scheme == .file {
       success = URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.scanAllFileURLComponents(input[...], baseScheme: base.scheme, &scanResults, callback: &callback)
     } else {
-      success = URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.parseRelativeURL(input[...])
+      success = URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.scanAllRelativeURLComponents(input[...], baseScheme: base.scheme, &scanResults, callback: &callback)
     }
   }
   
@@ -533,11 +665,13 @@ extension URLScanner {
         return scanAllComponents(from: .path, input[componentStartIdx...], scheme: scheme, &mapping, callback: &callback)
       }
         
+    // !!!! FIXME: We actually need to check that the *content* of `scheme` is the same as `baseURLScheme` !!!!
+      
     default: // special schemes other than 'file'.
       if scheme == baseURLScheme, URLStringUtils.hasDoubleSolidusPrefix(input) == false {
         // state: "special relative or authority"
         callback.validationError(.relativeURLMissingBeginningSolidus)
-        return parseRelativeURL(input)
+        return scanAllRelativeURLComponents(input, baseScheme: scheme, &mapping, callback: &callback)
       }
       // state: "special authority slashes"
       var authorityStart = input.startIndex
@@ -652,8 +786,8 @@ extension URLScanner {
         callback.validationError(.emptyHostSpecialScheme)
         return .failed
       }
-      mapping.hostnameEndIndex.set(to: authority.endIndex)
-      return .success(continueFrom: (.pathStart, authority.endIndex))
+      mapping.hostnameEndIndex.set(to: hostStartIndex)
+      return .success(continueFrom: (.pathStart, hostStartIndex))
     }
     
     guard case .success(let postHost) = scanHostname(hostname, scheme: scheme, &mapping, callback: &callback) else {
@@ -795,6 +929,25 @@ extension URLScanner {
       }
     }
   }
+  
+  static func iteratePathComponents(_ input: Input, schemeIsSpecial: Bool, _ block: (Input.SubSequence)->Void) {
+    func isPathComponentTerminator(_ byte: UInt8) -> Bool {
+      return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
+    }
+      
+    var componentStartIdx = input.startIndex
+    while let componentTerminatorIndex = input[componentStartIdx...].firstIndex(where: isPathComponentTerminator) {
+      if ASCII(input[componentTerminatorIndex]) == .backslash {
+        //callback.validationError(.unexpectedReverseSolidus)
+      }
+      let pathComponent = input[componentStartIdx..<componentTerminatorIndex]
+      block(pathComponent)
+      componentStartIdx = input.index(after: componentTerminatorIndex)
+    }
+    if componentStartIdx != input.endIndex {
+      block(input[componentStartIdx...])
+    }
+  }
 
   /// Scans a URL path string from the given input, and advises whether there are any components following it.
   ///
@@ -810,23 +963,16 @@ extension URLScanner {
     let path = input[..<(pathEndIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    func isPathComponentTerminator(_ byte: UInt8) -> Bool {
-      return ASCII(byte) == .forwardSlash || (scheme.isSpecial && ASCII(byte) == .backslash)
+    guard path.isEmpty == false else {
+      return .success(continueFrom: nil)
     }
-    
-    var componentStartIdx = path.startIndex
-    while let componentTerminatorIndex = path[componentStartIdx...].firstIndex(where: isPathComponentTerminator) {
-      if ASCII(path[componentTerminatorIndex]) == .backslash {
+    iteratePathComponents(path, schemeIsSpecial: scheme.isSpecial) { pathComponent in
+      if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
         callback.validationError(.unexpectedReverseSolidus)
       }
-      let pathComponent = path[componentStartIdx..<componentTerminatorIndex]
       validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
-      componentStartIdx = path.index(after: componentTerminatorIndex)
-      
       print("path component: \(String(decoding: pathComponent, as: UTF8.self))")
     }
-    validateURLCodePointsAndPercentEncoding(path[componentStartIdx...], callback: &callback)
-    print("path component: \(String(decoding: path[componentStartIdx...], as: UTF8.self))")
       
     // 4. Return the next component.
     mapping.path.set(to: path.endIndex)
@@ -947,10 +1093,10 @@ extension URLScanner {
       guard baseScheme == .file else {
         return .success(continueFrom: (.path, cursor))
       }
-      // TODO: Propagate this to construction phase.
-//      url.host = base.host
-//      url.path = base.path
-//      url.query = base.query
+      
+      assert(mapping.componentsToCopyFromBase.isEmpty)
+      mapping.componentsToCopyFromBase = [.authority, .path, .query]
+
       guard cursor != input.endIndex else {
         return .success(continueFrom: nil)
       }
@@ -1091,9 +1237,109 @@ extension URLScanner {
 
 extension URLScanner {
   
-  static func parseRelativeURL<T>(_: T) -> Bool {
-    print("Reached relative URL")
+  /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
+  ///
+  static func scanAllRelativeURLComponents(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> Bool {
+    var remaining = input[...]
+    
+    guard case .success(let _component) = parseRelativeURLStart(remaining, baseScheme: baseScheme, &mapping, callback: &callback) else {
+      return false
+    }
+    guard var component = _component else {
+      return true
+    }
+    remaining = input.suffix(from: component.1)
+    while true {
+      print("** [RELATIVE URL] Parsing component: \(component)")
+      print("** [RELATIVE URL] Data: \(String(decoding: remaining, as: UTF8.self))")
+      let componentResult: ComponentParseResult
+      switch component.0 {
+      case .path:
+        componentResult = scanPath(remaining, scheme: baseScheme, &mapping, callback: &callback)
+      case .query:
+        componentResult = scanQuery(remaining, scheme: baseScheme, &mapping, callback: &callback)
+      case .fragment:
+        componentResult = scanFragment(remaining, &mapping, callback: &callback)
+      case .pathStart:
+        fatalError()
+//        componentResult = scanPathStart(remaining, scheme: scheme, &mapping, callback: &callback)
+      case .authority:
+        fatalError()
+      case .scheme:
+        fatalError()
+      case .host:
+        fatalError()
+      case .port:
+        fatalError()
+      }
+      guard case .success(let _nextComponent) = componentResult else {
+        return false
+      }
+      guard let nextComponent = _nextComponent else {
+        break
+      }
+      component = nextComponent
+      remaining = remaining.suffix(from: component.1)
+    }
     return true
+  }
+  
+  static func parseRelativeURLStart(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+    print("Reached relative URL")
+    
+    mapping.componentsToCopyFromBase = [.scheme]
+    
+    guard let firstByte = input.first else {
+      mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
+      return .success(continueFrom: nil)
+    }
+    
+    switch ASCII(firstByte) {
+    case .backslash? where baseScheme.isSpecial:
+      callback.validationError(.unexpectedReverseSolidus)
+      fatalError("Relative slash")
+    case .forwardSlash?:
+      fatalError("Relative slash")
+    case .questionMark?:
+      mapping.componentsToCopyFromBase.formUnion([.authority, .path])
+      return .success(continueFrom: (.query, input.index(after: input.startIndex)))
+    case .numberSign?:
+      mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
+      return .success(continueFrom: (.fragment, input.index(after: input.startIndex)))
+    default:
+      // FIXME: Construction needs to drop the last base path component.
+      mapping.componentsToCopyFromBase.formUnion([.authority, .path])
+      return .success(continueFrom: (.path, input.startIndex))
+    }
+    
+    // RELATIVE SLASH:
+    
+    // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
+//     let c: ASCII = (idx != endIndex) ? ASCII(input[idx]) ?? .null : .null
+//     switch c {
+//     case .forwardSlash:
+//       if url.scheme.isSpecial {
+//         state = .specialAuthorityIgnoreSlashes
+//       } else {
+//         state = .authority
+//       }
+//     case .backslash where url.scheme.isSpecial:
+//       callback.validationError(.unexpectedReverseSolidus)
+//       state = .specialAuthorityIgnoreSlashes
+    
+    // This happens for the first non-slash character.
+    
+//     default:
+//       guard let base = base else {
+//         callback.validationError(._baseURLRequired)
+//         return false
+//       }
+//       url.copyAuthority(from: base._storage)
+//       state = .path
+//       continue  // Do not increment index. Non-ASCII characters go through this path.
+//     }
+    
+    
   }
 }
 
