@@ -86,7 +86,9 @@ extension NewURL {
   }
   
   public var port: String {
-    return stringForComponent(.port)
+    var string = stringForComponent(.port)
+    assert(string.isEmpty || string.removeFirst() == ":")
+    return string
   }
   
   public var path: String {
@@ -181,12 +183,10 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   var hostnameStart: SizeType {
     return passwordStart
       + passwordLength /* password */
-      + (usernameLength == 0 && passwordLength == 0 ? 0 : 1) /* : or @ */
+      + (usernameLength == 0 && passwordLength == 0 ? 0 : 1) /* @ */
   }
   var portStart: SizeType {
-    return hostnameStart
-      + hostnameLength
-      + (portLength == 0 ? 0 : 1) /* : */
+    return hostnameStart + hostnameLength
   }
   var authorityEnd: SizeType {
     if cannotBeABaseURL {
@@ -525,7 +525,7 @@ struct NewURLParser {
         newstorage.append(ASCII.colon.codePoint) // Hostname-port separator.
         let portStringBytes = String(port).utf8
         newstorage.append(contentsOf: portStringBytes)
-        newstorage.header.portLength = portStringBytes.count
+        newstorage.header.portLength = 1 + portStringBytes.count
       }
       
     } else if url.componentsToCopyFromBase.contains(.authority) {
@@ -834,10 +834,7 @@ extension URLScanner {
       var componentStartIdx = input.startIndex
       guard componentStartIdx != input.endIndex, ASCII(input[componentStartIdx]) == .forwardSlash else {
         mapping.cannotBeABaseURL = true
-        if case .failed = scanCannotBeABaseURLPath(input, &mapping, callback: &callback) {
-          return false
-        }
-        return true
+        return scanAllCannotBeABaseURLComponents(input, scheme: scheme, &mapping, callback: &callback)
       }
       // state: "path or authority"
       componentStartIdx = input.index(after: componentStartIdx)
@@ -1148,9 +1145,6 @@ extension URLScanner {
     let path = input[..<(pathEndIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    guard path.isEmpty == false else {
-      return .success(continueFrom: nil)
-    }
     iteratePathComponents(path, schemeIsSpecial: scheme.isSpecial) { pathComponent in
       if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
         callback.validationError(.unexpectedReverseSolidus)
@@ -1160,11 +1154,12 @@ extension URLScanner {
     }
       
     // 4. Return the next component.
-    mapping.path.set(to: path.endIndex)
     if let pathEnd = pathEndIndex {
+      mapping.path.set(to: pathEnd)
       return .success(continueFrom: (ASCII(input[pathEnd]) == .questionMark ? .query : .fragment,
                                      input.index(after: pathEnd)))
     } else {
+      mapping.path.set(to: path.isEmpty ? nil : input.endIndex)
       return .success(continueFrom: nil)
     }
   }
@@ -1382,6 +1377,52 @@ extension URLScanner {
 // --------------------------
 
 extension URLScanner {
+  
+  /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
+    ///
+    static func scanAllCannotBeABaseURLComponents(_ input: Input, scheme: NewURLParser.Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> Bool {
+      var remaining = input[...]
+      
+      guard case .success(let _component) = scanCannotBeABaseURLPath(remaining, &mapping, callback: &callback) else {
+        return false
+      }
+      guard var component = _component else {
+        return true
+      }
+      remaining = input.suffix(from: component.1)
+      while true {
+        print("** [CANNOTBEABASE URL] Parsing component: \(component)")
+        print("** [CANNOTBEABASE URL] Data: \(String(decoding: remaining, as: UTF8.self))")
+        let componentResult: ComponentParseResult
+        switch component.0 {
+        case .query:
+          componentResult = scanQuery(remaining, scheme: scheme, &mapping, callback: &callback)
+        case .fragment:
+          componentResult = scanFragment(remaining, &mapping, callback: &callback)
+        case .path:
+          fatalError()
+        case .pathStart:
+          fatalError()
+        case .authority:
+          fatalError()
+        case .scheme:
+          fatalError()
+        case .host:
+          fatalError()
+        case .port:
+          fatalError()
+        }
+        guard case .success(let _nextComponent) = componentResult else {
+          return false
+        }
+        guard let nextComponent = _nextComponent else {
+          break
+        }
+        component = nextComponent
+        remaining = remaining.suffix(from: component.1)
+      }
+      return true
+    }
 
   static func scanCannotBeABaseURLPath(_ input: Input, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
     
