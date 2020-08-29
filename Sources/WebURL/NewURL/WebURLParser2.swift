@@ -87,7 +87,10 @@ extension NewURL {
   
   public var port: String {
     var string = stringForComponent(.port)
-    assert(string.isEmpty || string.removeFirst() == ":")
+    if !string.isEmpty {
+      let separator = string.removeFirst()
+      assert(separator == ":")
+    }
     return string
   }
   
@@ -95,12 +98,20 @@ extension NewURL {
     return stringForComponent(.path)
   }
   
+  // Erase empty query/fragment strings to the empty string.
+  
+  // TODO: We may want to revisit the distinction between not-present and empty components later.
+  
   public var query: String {
-    return stringForComponent(.query)
+    let string = stringForComponent(.query)
+    guard string != "?" else { return "" }
+    return string
   }
   
   public var fragment: String {
-    return stringForComponent(.fragment)
+    let string = stringForComponent(.fragment)
+    guard string != "#" else { return "" }
+    return string
   }
   
   public var cannotBeABaseURL: Bool {
