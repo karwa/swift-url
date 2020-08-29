@@ -1008,6 +1008,10 @@ extension URLScanner {
     let hostname = input[..<(hostnameEndIndex ?? input.endIndex)]
     
     // 3. Validate the hostname.
+    if let portStartIndex = hostnameEndIndex, portStartIndex == input.startIndex {
+      callback.validationError(.unexpectedPortWithoutHost)
+      return .failed
+    }
     // swift-format-ignore
     guard let _ = Array(hostname).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
       return WebURLParser.Host.parse(buffer, isNotSpecial: scheme.isSpecial == false, callback: &callback)
