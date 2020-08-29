@@ -874,7 +874,7 @@ extension WebURLParser {
         case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?,
           ASCII.backslash? where url.scheme.isSpecial:
           if flag_at, buffer.isEmpty {
-            callback.validationError(.missingCredentials)
+            callback.validationError(.unexpectedCredentialsWithoutHost)
             return false
           }
           idx = input.index(idx, offsetBy: -1 * buffer.count)
@@ -1365,7 +1365,7 @@ extension WebURLParser.ValidationError: CustomStringConvertible {
   internal static var unexpectedReverseSolidus:           Self { Self(code: 7) }
   internal static var missingSolidusBeforeAuthority:      Self { Self(code: 8) }
   internal static var unexpectedCommercialAt:             Self { Self(code: 9) }
-  internal static var missingCredentials:                 Self { Self(code: 10) }
+  internal static var unexpectedCredentialsWithoutHost:   Self { Self(code: 10) }
   internal static var unexpectedPortWithoutHost:          Self { Self(code: 11) }
   internal static var emptyHostSpecialScheme:             Self { Self(code: 12) }
   internal static var hostInvalid:                        Self { Self(code: 13) }
@@ -1462,7 +1462,7 @@ extension WebURLParser.ValidationError: CustomStringConvertible {
 
         Example: "https://user@example.org"
         """#
-    case .missingCredentials:
+    case .unexpectedCredentialsWithoutHost:
       return #"""
         A U+0040 (@) is found between the URL’s scheme and host, but the URL does not include credentials.
 

@@ -125,7 +125,7 @@ extension WebURLParser.Host {
       switch self {
       case .expectedClosingSquareBracket:
         return "Invalid IPv6 Address - expected closing ']'"
-      case .expectedClosingSquareBracket:
+      case .containsForbiddenHostCodePoint:
         return "Host contains forbidden codepoint"
       default:
         assert(false, "Unrecognised error code: \(errorCode)")

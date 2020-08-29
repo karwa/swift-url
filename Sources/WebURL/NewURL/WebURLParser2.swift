@@ -1,29 +1,221 @@
 
-struct NewURL {
+public struct NewURL {
   var storage: Storage = .init(capacity: 0, initialHeader: .init())
+  
+  init(storage: Storage) {
+    self.storage = storage
+  }
+  
+  public init?(_ input: String, base: String?) {
+    var baseURL: NewURL?
+    if let baseString = base {
+      baseURL = NewURLParser().constructURL(input: baseString.utf8, baseURL: nil)
+    }
+    guard let url = NewURLParser().constructURL(input: input.utf8, baseURL: baseURL) else {
+      return nil
+    }
+    self = url
+  }
 }
 
 extension NewURL {
   
-  struct Header: InlineArrayHeader {
-    var count: UInt16 = 0
-    var schemeLength: UInt16 = 0
-    
-    @_implements(InlineArrayHeader, count)
-    var _count: Int {
-      get { return Int(count as UInt16) }
-      set { count = UInt16(newValue) }
-    }
+  typealias Storage = ArrayWithInlineHeader<URLHeader<Int>, UInt8>
+  
+  enum Component {
+    case scheme, username, password, hostname, port, path, query, fragment
+    case authority
   }
   
-  typealias Storage = ArrayWithInlineHeader<Header, UInt8>
+  func withComponentBytes<T>(_ component: Component, _ block: (UnsafeBufferPointer<UInt8>) -> T) -> T {
+    let start: Int
+    let length: Int
+    switch component {
+    case .scheme:
+      start = self.storage.header.schemeStart
+      length = self.storage.header.schemeLength
+    case .username:
+      start = self.storage.header.usernameStart
+      length = self.storage.header.usernameLength
+    case .password:
+      start = self.storage.header.passwordStart
+      length = self.storage.header.passwordLength
+    case .hostname:
+      start = self.storage.header.hostnameStart
+      length = self.storage.header.hostnameLength
+    case .port:
+      start = self.storage.header.portStart
+      length = self.storage.header.portLength
+    case .path:
+      start = self.storage.header.pathStart
+      length = self.storage.header.pathLength
+    case .query:
+      start = self.storage.header.queryStart
+      length = self.storage.header.queryLength
+    case .fragment:
+      start = self.storage.header.fragmentStart
+      length = self.storage.header.fragmentLength
+    case .authority:
+      return self.storage.withElements(range: storage.header.authorityStart ..< storage.header.authorityEnd) { block($0) }
+    }
+    return self.storage.withElements(range: start ..< (start + length)) { block($0) }
+  }
   
-  func withSchemeBytes<T>(_ perform: (UnsafeBufferPointer<UInt8>)->T) -> T {
-    let schemeLength = Int(storage.header.schemeLength)
-    return storage.withElements(range: 0..<schemeLength) { perform($0) }
+  func stringForComponent(_ component: Component) -> String {
+    return withComponentBytes(component) { String(decoding: $0, as: UTF8.self) }
+  }
+
+  var schemeKind: NewURLParser.Scheme {
+    return storage.header.schemeKind
+  }
+  
+  public var scheme: String {
+    return stringForComponent(.scheme)
+  }
+  
+  public var username: String {
+    return stringForComponent(.username)
+  }
+  
+  public var password: String {
+    return stringForComponent(.password)
+  }
+  
+  public var hostname: String {
+    return stringForComponent(.hostname)
+  }
+  
+  public var port: String {
+    return stringForComponent(.port)
+  }
+  
+  public var path: String {
+    return stringForComponent(.path)
+  }
+  
+  public var query: String {
+    return stringForComponent(.query)
+  }
+  
+  public var fragment: String {
+    return stringForComponent(.fragment)
+  }
+  
+  public var cannotBeABaseURL: Bool {
+    return storage.header.cannotBeABaseURL
+  }
+  
+  public var href: String {
+    return storage.asUTF8String()
   }
 }
 
+extension NewURL: CustomStringConvertible {
+  
+  public var description: String {
+    return
+      """
+      URL Constructor output:
+      
+      Href: \(href)
+      
+      Scheme: \(scheme) (\(schemeKind))
+      Username: \(username)
+      Password: \(password)
+      Hostname: \(hostname)
+      Port: \(port)
+      Path: \(path)
+      Query: \(query)
+      Fragment: \(fragment)
+      CannotBeABaseURL: \(cannotBeABaseURL)
+      """
+  }
+}
+
+struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
+  var _count: SizeType = 0
+  
+  var schemeKind: NewURLParser.Scheme = .other
+  var schemeLength: SizeType = 0
+  var usernameLength: SizeType = 0
+  var passwordLength: SizeType = 0
+  var hostnameLength: SizeType = 0
+  var portLength: SizeType = 0
+  // if path, query or fragment are not 0, they must contain their leading separators ('/', '?', '#').
+  var pathLength: SizeType = 0
+  var queryLength: SizeType = 0
+  var fragmentLength: SizeType = 0
+  var cannotBeABaseURL: Bool = false
+  
+  var count: Int {
+    get { return Int(_count) }
+    set { _count = SizeType(newValue) }
+  }
+  
+  // Scheme is always present and starts at byte 0.
+  
+  var schemeStart: SizeType {
+    return 0
+  }
+  
+  // The start of the authority, if one is present.
+  //
+  // An authority may not be present if:
+  // - cannotBeABaseURL is true.
+  // - The scheme is not special ("pop:/hello" is a valid URL, with no host and path "/hello")
+  
+  var authorityStart: SizeType {
+    return schemeStart
+      + schemeLength /* scheme */
+      + 1 /* : */
+      + (hostnameLength == 0 ? 0 : 2) /* // */
+  }
+  var usernameStart: SizeType {
+    return authorityStart
+  }
+  var passwordStart: SizeType {
+    return usernameStart
+      + usernameLength /* username */
+      + (passwordLength == 0 ? 0 : 1) /* : */
+  }
+  var hostnameStart: SizeType {
+    return passwordStart
+      + passwordLength /* password */
+      + (usernameLength == 0 && passwordLength == 0 ? 0 : 1) /* : or @ */
+  }
+  var portStart: SizeType {
+    return hostnameStart
+      + hostnameLength
+      + (portLength == 0 ? 0 : 1) /* : */
+  }
+  var authorityEnd: SizeType {
+    if cannotBeABaseURL {
+      return schemeStart + schemeLength + 1 /* : */
+    }
+    return portStart + portLength
+  }
+  
+  /// Returns the position of the leading '/' in the path, if one is present. Otherwise, returns the position after the authority.
+  /// All paths start with a '/'.
+  ///
+  var pathStart: SizeType {
+    return authorityEnd
+  }
+  
+  /// Returns the position of the leading '?' in the query-string, if one is present. Otherwise, returns the position after the path.
+  /// All query strings start with a '?'.
+  ///
+  var queryStart: SizeType {
+    return pathStart + pathLength
+  }
+  
+  /// Returns the position of the leading '#' in the fragment, if one is present. Otherwise, returns the position after the query-string.
+  /// All fragments start with a '#'.
+  ///
+  var fragmentStart: SizeType {
+    return queryStart + queryLength
+  }
+}
 
 
 
@@ -53,44 +245,6 @@ struct ComponentsToCopy: OptionSet {
   static var query: Self     { Self(rawValue: 1 << 3) }
   static var fragment: Self  { Self(rawValue: 1 << 4) }
 }
-
-/*
- 
- Notes about parser implementation
- =================================
- 
- - The WHATWG parser has 4 main inputs:
-   - The input string
-   - A base URL object
-   - An existing URL object
-   - An optional setter we wish to call (stateOverride).
- 
- - What we *would like* to do, is to move the last 2 of these to the construction step.
-   
-   - Parsing the structure of the input string and only depends on the scheme. We do not need to read/write the entire object.
-   - *EXCEPT* Paths. 
- 
- - Original idea: split parsing up in to scan & construction steps.
- 
-    1. Scan. Discover the portions of the input string/base URL/existing URL required to build each piece of the result.
-       For example:
-       {
-         scheme   = baseURL { 0..<5 }
-         hostname = baseURL { 5..<20 }
-         path     = input   { 0..<20 }
-       }
-       or (for a '.query' setter):
-       {
-         scheme   = existing URL { 0..<5 }
-         hostname = existing URL { 5..<20 }
-         query    = input   { 0..<20 }
-       }
- 
-    2. Construction. Use the information from the scan phase to build the resulting URL. There are two cases to consider:
-       
-       - In-place mutation. When the
- 
- */
 
 // --------------------------------
 // Compressed optionals
@@ -152,7 +306,7 @@ struct Mapping<IndexStorage: CompressedOptional> {
   var cannotBeABaseURL = false
   var componentsToCopyFromBase: ComponentsToCopy = []
   
-  var scheme: NewURLParser.Scheme? = nil
+  var schemeKind: NewURLParser.Scheme? = nil
   // This is the index of the scheme terminator (":"), if one exists.
   var schemeTerminator = IndexStorage.none
   
@@ -246,6 +400,8 @@ struct NewURLParser {
     callback: inout Callback
   ) -> NewURL? where Mapping<T>.Index == Input.Index, Callback: URLParserCallback {
     
+    // Extract full ranges from the data in the mapping.
+    
     let schemeRange = url.schemeTerminator.get().map { input.startIndex..<$0 }
     var usernameRange: Range<Input.Index>?
     var passwordRange: Range<Input.Index>?
@@ -258,23 +414,26 @@ struct NewURLParser {
       cursor = authorityStart
       if let usernameEnd = url.usernameEndIndex.get() {
         usernameRange = cursor..<usernameEnd
-        cursor = input.index(after: usernameEnd)
+        cursor = usernameEnd
         
         if let passwordEnd = url.passwordEndIndex.get() {
-          assert(input[usernameEnd] == ASCII.colon.codePoint)
+          assert(input[cursor] == ASCII.colon.codePoint)
+          cursor = input.index(after: cursor)
+          
           passwordRange = cursor..<passwordEnd
-          cursor = input.index(after: passwordEnd)
-          assert(input[passwordEnd] == ASCII.commercialAt.codePoint)
+          cursor = passwordEnd
+          assert(input[cursor] == ASCII.commercialAt.codePoint)
+          cursor = input.index(after: cursor)
         } else {
-          assert(input[usernameEnd] == ASCII.commercialAt.codePoint)
+          assert(input[cursor] == ASCII.commercialAt.codePoint) // "https://test:@test"
+          cursor = input.index(after: cursor)
         }
       }
-      
       hostnameRange = url.hostnameEndIndex.get().map { hostnameEndIndex in
         cursor..<hostnameEndIndex
       }
       cursor = hostnameRange.map { $0.upperBound } ?? cursor
-      
+      // Port: Validate that the number doesn't overflow a UInt16.
       if let portStringEndIndex = url.portEndIndex.get() {
         cursor = input.index(after: cursor) // ":" hostname separator.
         if portStringEndIndex != cursor {
@@ -286,10 +445,7 @@ struct NewURLParser {
           cursor = portStringEndIndex
         }
       }
-    } else {
-      print("NO AUTHORITY!!! 🤟")
     }
-    
     let pathRange = url.path.get().map { pathEndIndex -> Range<Input.Index> in
       cursor = input.index(after: cursor) // "/" or "\" path separator.
       defer { cursor = pathEndIndex }
@@ -305,62 +461,87 @@ struct NewURLParser {
       defer { cursor = fragmentEndIndex }
       return cursor..<fragmentEndIndex
     }
+//    assert(cursor == input.endIndex)
+    
+    // Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
     
     var newstorage = NewURL.Storage(capacity: 10, initialHeader: .init())
-    // Scheme.
+    newstorage.header.cannotBeABaseURL = url.cannotBeABaseURL
+    
+    // We *must* have a scheme.
     if let scheme = schemeRange {
       // Scheme must be lowercased.
       newstorage.append(contentsOf: input[scheme].lazy.map {
         ASCII($0)?.lowercased.codePoint ?? $0
       })
+      newstorage.header.schemeLength = newstorage.count
+      newstorage.header.schemeKind = url.schemeKind!
     } else {
-      assert(url.componentsToCopyFromBase.contains(.scheme))
-      baseURL!.withSchemeBytes { newstorage.append(contentsOf: $0) }
+      guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
+      	preconditionFailure("Cannot construct a URL without a scheme")
+      }
+      baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0) }
+      newstorage.header.schemeLength = newstorage.count
+      newstorage.header.schemeKind = baseURL.schemeKind
     }
-    // Scheme separator.
-    newstorage.append(ASCII.colon.codePoint)
     
-    // Write authority.
+    newstorage.append(ASCII.colon.codePoint) // Scheme separator (':').
+    
     if let host = hostnameRange {
-      newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
-      // Write username.
-      if let username = usernameRange {
+      newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
+      
+      var hasCredentials = false
+      if let username = usernameRange, username.isEmpty == false {
         PercentEscaping.encodeIterativelyAsBuffer(
           bytes: input[username],
           escapeSet: .url_userInfo,
-          processChunk: { piece in newstorage.append(contentsOf: piece) }
+          processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.usernameLength += piece.count }
         )
-        if passwordRange != nil {
-          newstorage.append(ASCII.colon.codePoint)
-        }
+        hasCredentials = true
       }
-      // Write password.
-      if let password = passwordRange {
+      if let password = passwordRange, password.isEmpty == false {
+        newstorage.append(ASCII.colon.codePoint) // Username-password separator (':').
         PercentEscaping.encodeIterativelyAsBuffer(
           bytes: input[password],
           escapeSet: .url_userInfo,
-          processChunk: { piece in newstorage.append(contentsOf: piece) }
+          processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.passwordLength += piece.count }
         )
+        hasCredentials = true
       }
-      // Credentials separator.
-      if usernameRange != nil {
-        newstorage.append(ASCII.commercialAt.codePoint)
+      if hasCredentials {
+        newstorage.append(ASCII.commercialAt.codePoint) // Credentials separator.
       }
-      
-      // Write hostname.
+    
+      // FIXME: Hostname needs improving.
       let _hostnameString = Array(input[host]).withUnsafeBufferPointer { bytes -> String? in
-        let isNotSpecial = !(url.scheme?.isSpecial ?? true)
+        let isNotSpecial = !(url.schemeKind?.isSpecial ?? true)
         return WebURLParser.Host.parse(bytes, isNotSpecial: isNotSpecial, callback: &callback)?.serialized
       }
       guard let hostnameString = _hostnameString else { return nil }
       newstorage.append(contentsOf: hostnameString.utf8)
+      newstorage.header.hostnameLength = hostnameString.utf8.count
       
-      // Write port.
       if let port = port {
-        newstorage.append(ASCII.colon.codePoint)
-        newstorage.append(contentsOf: String(port).utf8)
+        newstorage.append(ASCII.colon.codePoint) // Hostname-port separator.
+        let portStringBytes = String(port).utf8
+        newstorage.append(contentsOf: portStringBytes)
+        newstorage.header.portLength = portStringBytes.count
       }
-    } else if (url.scheme == .file) || (url.componentsToCopyFromBase.contains(.scheme) && baseURL?.scheme == .file) {
+      
+    } else if url.componentsToCopyFromBase.contains(.authority) {
+      guard let baseURL = baseURL else {
+        preconditionFailure("")
+      }
+      baseURL.withComponentBytes(.authority) {
+        newstorage.append(contentsOf: $0)
+        newstorage.header.usernameLength = baseURL.storage.header.usernameLength
+        newstorage.header.passwordLength = baseURL.storage.header.passwordLength
+        newstorage.header.hostnameLength = baseURL.storage.header.hostnameLength
+        newstorage.header.portLength = baseURL.storage.header.portLength
+      }
+    } else if (url.schemeKind == .file) || (url.componentsToCopyFromBase.contains(.scheme) && baseURL?.schemeKind == .file) {
+      // - 'file:' URLs get an implicit authority.
+      // -
       newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
     }
     
@@ -372,30 +553,37 @@ struct NewURLParser {
         PercentEscaping.encodeIterativelyAsBuffer(
           bytes: input[path],
           escapeSet: .url_c0,
-          processChunk: { piece in newstorage.append(contentsOf: piece) }
+          processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.pathLength += piece.count }
         )
       case false:
-        URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.iteratePathComponents(input[path], schemeIsSpecial: url.scheme?.isSpecial ?? false) {
+        URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.iteratePathComponents(input[path], schemeIsSpecial: url.schemeKind?.isSpecial ?? false) {
           pathComponent in
           newstorage.append(ASCII.forwardSlash.codePoint)
+          newstorage.header.pathLength += 1
           PercentEscaping.encodeIterativelyAsBuffer(
             bytes: pathComponent,
             escapeSet: .url_path,
-            processChunk: { piece in newstorage.append(contentsOf: piece) }
+            processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.pathLength += piece.count }
           )
         }
       }
       
-    // Special URLs always have a '/' following the authority, even if they have no path.
-    } else if url.scheme?.isSpecial == true {
+    } else if url.componentsToCopyFromBase.contains(.path) {
+      guard let baseURL = baseURL else { preconditionFailure("") }
+      baseURL.withComponentBytes(.path) { newstorage.append(contentsOf: $0) }
+      newstorage.header.pathLength = baseURL.storage.header.pathLength
+    } else if url.schemeKind?.isSpecial == true {
+      // Special URLs always have a '/' following the authority, even if they have no path.
       newstorage.append(ASCII.forwardSlash.codePoint)
+      newstorage.header.pathLength = 1
     }
     
     // Write query.
     if let query = queryRange {
       newstorage.append(ASCII.questionMark.codePoint)
+      newstorage.header.queryLength = 1
       
-      let urlIsSpecial = url.scheme?.isSpecial ?? false
+      let urlIsSpecial = url.schemeKind?.isSpecial ?? false
       let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
         switch asciiChar {
         case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
@@ -408,35 +596,28 @@ struct NewURLParser {
       PercentEscaping.encodeIterativelyAsBuffer(
         bytes: input[query],
         escapeSet: escapeSet,
-        processChunk: { piece in newstorage.append(contentsOf: piece) }
+        processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.queryLength += piece.count }
       )
+    } else if url.componentsToCopyFromBase.contains(.path) {
+      guard let baseURL = baseURL else { preconditionFailure("") }
+      baseURL.withComponentBytes(.query) { newstorage.append(contentsOf: $0) }
+      newstorage.header.queryLength = baseURL.storage.header.queryLength
     }
     
     // Write fragment.
     if let fragment = fragmentRange {
       newstorage.append(ASCII.numberSign.codePoint)
+      newstorage.header.fragmentLength = 1
       PercentEscaping.encodeIterativelyAsBuffer(
         bytes: input[fragment],
         escapeSet: .url_fragment,
-        processChunk: { piece in newstorage.append(contentsOf: piece) }
+        processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.fragmentLength += piece.count }
       )
+    } else if url.componentsToCopyFromBase.contains(.fragment) {
+      guard let baseURL = baseURL else { preconditionFailure("") }
+      baseURL.withComponentBytes(.fragment) { newstorage.append(contentsOf: $0) }
+      newstorage.header.fragmentLength = baseURL.storage.header.fragmentLength
     }
-    
-    print("""
-      scheme object: \(url.scheme as Any?)
-      
-      scheme: \( schemeRange.map { String(decoding: input[$0], as: UTF8.self) } ?? "<nil>" )
-      username: \( usernameRange.map { String(decoding: input[$0], as: UTF8.self) } ?? "<nil>" )
-      password: \( passwordRange.map { String(decoding: input[$0], as: UTF8.self) } ?? "<nil>" )
-      hostname: \( hostnameRange.map { String(decoding: input[$0], as: UTF8.self) } ?? "<nil>" )
-      port: \( port.map { String($0) } ?? "<nil>" )
-      
-      path: \( pathRange.map { String(decoding: input[$0], as: UTF8.self) } ?? "<nil>" )
-      query: \( queryRange.map { String(decoding: input[$0], as: UTF8.self) } ?? "<nil>" )
-      fragment: \( fragmentRange.map { String(decoding: input[$0], as: UTF8.self) } ?? "<nil>" )
-      
-      remaining: \( String(decoding: input[cursor...], as: UTF8.self) )
-    """)
     
     return NewURL(storage: newstorage)
   }
@@ -543,32 +724,29 @@ func scanURL<Input, T, Callback>(
   var scanResults = Mapping<T>()
   let success: Bool
   
-  // Try to parse a scheme.
   if let schemeEndIndex = findScheme(input) {
+    
     let schemeNameBytes = input[..<schemeEndIndex].dropLast() // dropLast() to remove the ":" terminator.
     let scheme = NewURLParser.Scheme.parse(asciiBytes: schemeNameBytes)
     
-    scanResults.scheme = scheme
+    scanResults.schemeKind = scheme
     scanResults.schemeTerminator.set(to: input.index(before: schemeEndIndex))
-    success = URLScanner.scanURLWithScheme(input[schemeEndIndex...], scheme: scheme, baseURLScheme: baseURL?.scheme, &scanResults, callback: &callback)
+    success = URLScanner.scanURLWithScheme(input[schemeEndIndex...], scheme: scheme, baseURLScheme: baseURL?.schemeKind, &scanResults, callback: &callback)
     
   } else {
-
+		// If we don't have a scheme, we'll need to copy from the baseURL.
     guard let base = baseURL else {
-//        callback.validationError(.missingSchemeNonRelativeURL)
+      callback.validationError(.missingSchemeNonRelativeURL)
       return nil
     }
+    // If base `cannotBeABaseURL`, the only thing we can do is set the fragment.
     guard base.cannotBeABaseURL == false else {
       guard ASCII(flatMap: input.first) == .numberSign else {
-//          callback.validationError(.missingSchemeNonRelativeURL)
+        callback.validationError(.missingSchemeNonRelativeURL)
         return nil
       }
-      // FIXME: We need to communicate this to the 'construction' stage.
-//        url.scheme = base.scheme
-//        url.path = base.path
-//        url.query = base.query
-//        url.fragment = ""
-//        url.cannotBeABaseURL = true
+      scanResults.componentsToCopyFromBase = [.scheme, .path, .query]
+      scanResults.cannotBeABaseURL = true
       if case .failed = URLScanner.scanFragment(input.dropFirst(), &scanResults, callback: &callback) {
         success = false
       } else {
@@ -576,10 +754,11 @@ func scanURL<Input, T, Callback>(
       }
       return success ? scanResults : nil
     }
-    if base.scheme == .file {
-      success = URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.scanAllFileURLComponents(input[...], baseScheme: base.scheme, &scanResults, callback: &callback)
+    // (No scheme + valid base URL) = some kind of relative-ish URL.
+    if base.schemeKind == .file {
+      success = URLScanner.scanAllFileURLComponents(input[...], baseScheme: base.schemeKind, &scanResults, callback: &callback)
     } else {
-      success = URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.scanAllRelativeURLComponents(input[...], baseScheme: base.scheme, &scanResults, callback: &callback)
+      success = URLScanner.scanAllRelativeURLComponents(input[...], baseScheme: base.schemeKind, &scanResults, callback: &callback)
     }
   }
   
@@ -764,18 +943,16 @@ extension URLScanner {
     if let credentialsEndIndex = authority.lastIndex(where: { ASCII($0) == .commercialAt }) {
       hostStartIndex = input.index(after: credentialsEndIndex)
       callback.validationError(.unexpectedCommercialAt)
-      guard credentialsEndIndex != authority.startIndex else {
-        callback.validationError(.missingCredentials)
+      guard hostStartIndex != authority.endIndex else {
+        callback.validationError(.unexpectedCredentialsWithoutHost)
         return .failed
       }
 
       let credentials = authority[..<credentialsEndIndex]
       let username = credentials.prefix { ASCII($0) != .colon }
-      let password = credentials.suffix(from: credentials.index(after: username.endIndex))
-  
       mapping.usernameEndIndex.set(to: username.endIndex)
-      if password.isEmpty == false {
-        mapping.passwordEndIndex.set(to: password.endIndex)
+      if username.endIndex != credentials.endIndex {
+        mapping.passwordEndIndex.set(to: credentials.endIndex)
       }
     }
     
@@ -1356,13 +1533,3 @@ extension URLScanner {
 
 
 
-extension NewURL {
-  
-  var scheme: NewURLParser.Scheme {
-    return .other
-  }
-  
-  var cannotBeABaseURL: Bool {
-    return false
-  }
-}
