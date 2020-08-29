@@ -663,7 +663,11 @@ struct FilteredURLInput<Base> where Base: BidirectionalCollection, Base.Element 
     }
     
     // 2. Filter all ASCII newlines and tabs.
-    let input = trimmedSlice.lazy.filter { ASCII($0) != .horizontalTab && ASCII($0) != .lineFeed }
+    let input = trimmedSlice.lazy.filter {
+      ASCII($0) != .horizontalTab
+      && ASCII($0) != .carriageReturn
+      && ASCII($0) != .lineFeed
+    }
 
     // TODO: 3. Skip to unicode code-point boundaries.
     
