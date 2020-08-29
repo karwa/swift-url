@@ -79,3 +79,15 @@ extension NewURLParser.Scheme {
     }
   }
 }
+
+extension NewURLParser.Scheme {
+  
+  var defaultPort: UInt16? {
+    switch self {
+    case .http, .ws:   return 80
+    case .https, .wss: return 443
+    case .ftp:         return 21
+    default:           return nil
+    }
+  }
+}

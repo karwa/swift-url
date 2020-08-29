@@ -521,7 +521,7 @@ struct NewURLParser {
       newstorage.append(contentsOf: hostnameString.utf8)
       newstorage.header.hostnameLength = hostnameString.utf8.count
       
-      if let port = port {
+      if let port = port, port != url.schemeKind?.defaultPort {
         newstorage.append(ASCII.colon.codePoint) // Hostname-port separator.
         let portStringBytes = String(port).utf8
         newstorage.append(contentsOf: portStringBytes)

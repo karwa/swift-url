@@ -167,7 +167,7 @@ extension WHATWGTests_NewURL {
 //          report.expectEqual(parserResult.href, expected.href)
 //          report.expectEqual(parserResult.host, expected.host)
 //          report.expectEqual(parserResult.hostname, expected.hostname)
-//          report.expectEqual(parserResult.port.map { Int($0) }, expected.port)
+          report.expectEqual(Int(parserResult.port), expected.port)
           report.expectEqual(parserResult.username, expected.username)
           report.expectEqual(parserResult.password, expected.password)
 //          report.expectEqual(parserResult.path, expected.pathname)
