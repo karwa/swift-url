@@ -148,6 +148,7 @@ extension NewURL: CustomStringConvertible {
 struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   var _count: SizeType = 0
   
+  var components: ComponentsToCopy = [] // TODO: Rename type.
   var schemeKind: NewURLParser.Scheme = .other
   var schemeLength: SizeType = 0
   var usernameLength: SizeType = 0
@@ -168,21 +169,33 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   // Scheme is always present and starts at byte 0.
   
   var schemeStart: SizeType {
+    assert(components.contains(.scheme), "URLs must always have a scheme")
     return 0
   }
   
-  // The start of the authority, if one is present.
+  var schemeEnd: SizeType {
+    schemeStart + schemeLength /* scheme */ + 1 /* : */
+  }
+  
+  // Authority may or may not be present.
+  
+  // - If present, it starts at schemeEnd + 2 ('//').
+  //   - It may be an empty string for non-special URLs ("pop://?hello").
+  // - If not present, do not add double solidus ("pop:?hello").
   //
-  // An authority may not be present if:
-  // - cannotBeABaseURL is true.
-  // - The scheme is not special ("pop:/hello" is a valid URL, with no host and path "/hello")
+  // The difference is that "pop://?hello" has an empty authority, and "pop:?hello" has a nil authority.
+  // The output of the URL parser preserves that, so we need to factor that in to our component offset calculations.
   
   var authorityStart: SizeType {
-    return schemeStart
-      + schemeLength /* scheme */
-      + 1 /* : */
-      + (hostnameLength == 0 ? 0 : 2) /* // */
+    return schemeEnd + (components.contains(.authority) ? 2 : 0 /* // */)
   }
+  
+  /// Returns the end of the authority section, if one is present.
+  /// Any trailing components (path, query, fragment) start from here.
+  var authorityEnd: SizeType {
+    return components.contains(.authority) ? (portStart + portLength) : schemeEnd
+  }
+
   var usernameStart: SizeType {
     return authorityStart
   }
@@ -199,13 +212,16 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   var portStart: SizeType {
     return hostnameStart + hostnameLength
   }
-  var authorityEnd: SizeType {
-    if cannotBeABaseURL {
-      return schemeStart + schemeLength + 1 /* : */
-    }
-    return portStart + portLength
-  }
   
+  // Components with leading separators.
+  // The 'start' position is the offset of the separator character ('/','?','#'), and
+  // this additional character is included in the component's length.
+  // Non-present components have a length of 0.
+  
+  // For example, "pop://example.com" has a queryLength of 0, but "pop://example.com?" has a queryLength of 1.
+  // The former has an empty query component, the latter has a 'nil' query component.
+  // The parser has to preserve the separator, even if the component is empty.
+    
   /// Returns the position of the leading '/' in the path, if one is present. Otherwise, returns the position after the authority.
   /// All paths start with a '/'.
   ///
@@ -487,6 +503,7 @@ struct NewURLParser {
       })
       newstorage.header.schemeLength = newstorage.count
       newstorage.header.schemeKind = url.schemeKind!
+      newstorage.header.components = [.scheme]
     } else {
       guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
       	preconditionFailure("Cannot construct a URL without a scheme")
@@ -494,12 +511,14 @@ struct NewURLParser {
       baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0) }
       newstorage.header.schemeLength = newstorage.count
       newstorage.header.schemeKind = baseURL.schemeKind
+      newstorage.header.components = [.scheme]
     }
     
     newstorage.append(ASCII.colon.codePoint) // Scheme separator (':').
     
     if let host = hostnameRange {
       newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
+      newstorage.header.components.insert(.authority)
       
       var hasCredentials = false
       if let username = usernameRange, username.isEmpty == false {
@@ -549,16 +568,19 @@ struct NewURLParser {
         newstorage.header.passwordLength = baseURL.storage.header.passwordLength
         newstorage.header.hostnameLength = baseURL.storage.header.hostnameLength
         newstorage.header.portLength = baseURL.storage.header.portLength
+        newstorage.header.components.insert(.authority)
       }
     } else if (url.schemeKind == .file) || (url.componentsToCopyFromBase.contains(.scheme) && baseURL?.schemeKind == .file) {
       // - 'file:' URLs get an implicit authority.
       // -
       newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
+      newstorage.header.components.insert(.authority)
     }
     
     
     // Write path.
     if let path = pathRange {
+      newstorage.header.components.insert(.path)
       switch url.cannotBeABaseURL {
       case true:
         PercentEscaping.encodeIterativelyAsBuffer(
@@ -583,16 +605,19 @@ struct NewURLParser {
       guard let baseURL = baseURL else { preconditionFailure("") }
       baseURL.withComponentBytes(.path) { newstorage.append(contentsOf: $0) }
       newstorage.header.pathLength = baseURL.storage.header.pathLength
+      newstorage.header.components.insert(.path)
     } else if url.schemeKind?.isSpecial == true {
       // Special URLs always have a '/' following the authority, even if they have no path.
       newstorage.append(ASCII.forwardSlash.codePoint)
       newstorage.header.pathLength = 1
+      newstorage.header.components.insert(.path)
     }
     
     // Write query.
     if let query = queryRange {
       newstorage.append(ASCII.questionMark.codePoint)
       newstorage.header.queryLength = 1
+      newstorage.header.components.insert(.query)
       
       let urlIsSpecial = url.schemeKind?.isSpecial ?? false
       let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
@@ -613,12 +638,14 @@ struct NewURLParser {
       guard let baseURL = baseURL else { preconditionFailure("") }
       baseURL.withComponentBytes(.query) { newstorage.append(contentsOf: $0) }
       newstorage.header.queryLength = baseURL.storage.header.queryLength
+      newstorage.header.components.insert(.query)
     }
     
     // Write fragment.
     if let fragment = fragmentRange {
       newstorage.append(ASCII.numberSign.codePoint)
       newstorage.header.fragmentLength = 1
+      newstorage.header.components.insert(.fragment)
       PercentEscaping.encodeIterativelyAsBuffer(
         bytes: input[fragment],
         escapeSet: .url_fragment,
@@ -628,6 +655,7 @@ struct NewURLParser {
       guard let baseURL = baseURL else { preconditionFailure("") }
       baseURL.withComponentBytes(.fragment) { newstorage.append(contentsOf: $0) }
       newstorage.header.fragmentLength = baseURL.storage.header.fragmentLength
+      newstorage.header.components.insert(.fragment)
     }
     
     return NewURL(storage: newstorage)
