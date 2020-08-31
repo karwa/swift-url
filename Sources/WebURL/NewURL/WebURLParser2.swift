@@ -457,7 +457,7 @@ struct NewURLParser {
   ) -> NewURL? where Mapping<T>.Index == Input.Index, Callback: URLParserCallback {
     
     // Extract full ranges from the data in the mapping.
-    
+    var url = url
     let schemeRange = url.schemeTerminator.get().map { input.startIndex..<$0 }
     var usernameRange: Range<Input.Index>?
     var passwordRange: Range<Input.Index>?
@@ -512,6 +512,7 @@ struct NewURLParser {
           callback.validationError(.unexpectedHostFileScheme)
           hostnameRange = nil // file URLs turn 'nil' in to an implicit, empty host.
         }
+        url.componentsToCopyFromBase.remove(.authority)
       }
       return cursor..<pathEndIndex
     }
@@ -599,6 +600,7 @@ struct NewURLParser {
       guard let baseURL = baseURL else {
         preconditionFailure("")
       }
+      newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
       baseURL.withComponentBytes(.authority) {
         newstorage.append(contentsOf: $0!)
         newstorage.header.usernameLength = baseURL.storage.header.usernameLength
@@ -634,6 +636,7 @@ struct NewURLParser {
           if i == 0, URLStringUtils.isWindowsDriveLetter(pathComponent) {
             newstorage.append(pathComponent[pathComponent.startIndex])
             newstorage.append(ASCII.colon.codePoint)
+            newstorage.header.pathLength += 2
             return
           }
           PercentEscaping.encodeIterativelyAsBuffer(
