@@ -6,7 +6,7 @@ import XCTest
 class URL2Tests: XCTestCase {
   
   func testStorage() {
-    var a = NewURLParser()
+    
 //    var str = """
 //
 //
@@ -16,25 +16,28 @@ class URL2Tests: XCTestCase {
 //    """
 //    var str = #"https://///\\\\/user:name:password@thisIsNotTheHost@www.google.com/p1/p2#fragout!"#
 //    var str = #"https:////\\user:name:password@thisIsNotTheHost@www.google.com:8080/path1/path2/../😸\path3/?query!=foo&🙌=55#fraggymentalis"#
-    var str = #"https://user:name:password@thisIsNotTheHost@www.google.com?hello"#
-    
 //    var str = #"file://usr/lib/Swift?something"#
-    
 //    var str = #"javascript:alert("hello, world! 😻");"#
-//
-    let storage = str.withUTF8 { a.constructURL(input: $0, baseURL: nil) }
-    
 //    var str = #"some/relative/path"#
-//    var base = NewURL()
+    
+//    let str = #"http://example.com/a1/b2/../b3/../../a0/c2/../c1"#   // "http://example.com/a0/c1"
+    let str = #"http://example.com/foo/bar/.."#                      // "http://example.com/foo/"
+//    let str = #"http://example.com/foo/../../.."#                    // "http://example.com/"
+//    let str = #"http://example.com////../.."#                        // "http://example.com//"
+    
+
+    
+    let base: String? = nil
+//    let base = "file://host.com/some/base/path"
+
+    let url = NewURL(str, base: base)
 //
 //    let storage = str.withUTF8 { a.constructURL(input: $0, baseURL: base) }
     
-    print(storage?.storage.count)
-    print(storage?.storage.asUTF8String())
+    print(url?.storage.count)
+    print(url?.storage.asUTF8String())
     
-    let newurl = storage!
-    
-    print(newurl.description)
+    print(url?.description ?? "<NIL>")
     
 //    print(storage.withElements(range: 0..<storage.count) { Array($0) })
 //    print(storage.withElements(range: 0..<storage.count) { String(decoding: $0, as: UTF8.self) })

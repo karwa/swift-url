@@ -894,7 +894,7 @@ private func findScheme<Input>(_ input: FilteredURLInput<Input>) -> Input.Index?
 }
 
 func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileScheme: Bool, _ block: (Int, Input.SubSequence)->Void)
-  where Input: Collection, Input.Element == UInt8 {
+  where Input: BidirectionalCollection, Input.Element == UInt8 {
     
     func isPathComponentTerminator(_ byte: UInt8) -> Bool {
       return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
@@ -918,18 +918,47 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
         componentNumber &+= 1
       }
     }
+    // We want to iterate the path components in reverse, so we can skip
+    // components which later get popped.
+    var path = input[componentStartIdx...]
+    var popcount = 0
+    
+    // FIXME: Change this method to iterate the components in reverse, and remove this Array.
+    var components = [Input.SubSequence]()
+    
     // Consume components separated by terminators.
-    while let componentTerminatorIndex = input[componentStartIdx...].firstIndex(where: isPathComponentTerminator) {
+    while let componentTerminatorIndex = path.lastIndex(where: isPathComponentTerminator) {
       if ASCII(input[componentTerminatorIndex]) == .backslash {
         //callback.validationError(.unexpectedReverseSolidus)
       }
-      let pathComponent = input[componentStartIdx..<componentTerminatorIndex]
-      block(componentNumber, pathComponent)
-      componentStartIdx = input.index(after: componentTerminatorIndex)
-      componentNumber &+= 1
+      let pathComponent = input[path.index(after: componentTerminatorIndex)..<path.endIndex]
+      
+      defer {
+        path = path.prefix(upTo: componentTerminatorIndex)
+      }
+      if URLStringUtils.isDoubleDotPathSegment(pathComponent) {
+        popcount += 1
+        continue
+      } else if popcount > 0 {
+        popcount -= 1
+        continue
+      }
+      if URLStringUtils.isSingleDotPathSegment(pathComponent) {
+        continue
+      }
+      guard popcount == 0 else {
+        continue
+      }
+      components.append(pathComponent)
     }
-    // Consume trailing content (or the first component, if there were no terminators).
-    block(componentNumber, input[componentStartIdx...])
+    if popcount == 0, URLStringUtils.isSingleDotPathSegment(path) == false {
+      components.append(path)
+    }
+
+    
+    for (number, component) in components.reversed().enumerated() {
+      block(number, component)
+    }
 }
 
 struct URLScanner<Input, T, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input,
