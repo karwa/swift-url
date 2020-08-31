@@ -170,7 +170,7 @@ extension WHATWGTests_NewURL {
           report.expectEqual(Int(parserResult.port), expected.port)
           report.expectEqual(parserResult.username, expected.username)
           report.expectEqual(parserResult.password, expected.password)
-//          report.expectEqual(parserResult.path, expected.pathname)
+          report.expectEqual(parserResult.path, expected.pathname)
           report.expectEqual(parserResult.query, expected.search)
           report.expectEqual(parserResult.fragment, expected.hash)
           // The test file doesn't include expected `origin` values for all entries.

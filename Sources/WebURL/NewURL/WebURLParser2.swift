@@ -464,7 +464,7 @@ struct NewURLParser {
     var hostnameRange: Range<Input.Index>?
     var port: UInt16?
 
-    var cursor = schemeRange?.upperBound ?? input.startIndex
+    var cursor: Input.Index
     
     if let authorityStart = url.authorityStartPosition.get() {
       cursor = authorityStart
@@ -501,8 +501,15 @@ struct NewURLParser {
           cursor = portStringEndIndex
         }
       }
+    } else if let schemeRange = schemeRange {
+      cursor = input.index(after: schemeRange.upperBound) // ":" scheme separator.
+    } else {
+      cursor = input.startIndex
     }
+    
+    
     let pathRange = url.path.get().map { pathEndIndex -> Range<Input.Index> in
+      let pathStart = cursor
       cursor = input.index(after: cursor) // "/" or "\" path separator.
       defer { cursor = pathEndIndex }
      
@@ -514,7 +521,7 @@ struct NewURLParser {
         }
         url.componentsToCopyFromBase.remove(.authority)
       }
-      return cursor..<pathEndIndex
+      return pathStart..<pathEndIndex
     }
     let queryRange = url.query.get().map { queryEndIndex -> Range<Input.Index> in
       cursor = input.index(after: cursor) // "?" query separator.
@@ -628,7 +635,7 @@ struct NewURLParser {
           processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.pathLength += piece.count }
         )
       case false:
-        iteratePathComponents(input[path], schemeIsSpecial: url.schemeKind?.isSpecial ?? false) { i, pathComponent in
+        iteratePathComponents(input[path], schemeIsSpecial: url.schemeKind?.isSpecial ?? false, isFileScheme: url.schemeKind == .file) { i, pathComponent in
           newstorage.append(ASCII.forwardSlash.codePoint)
           newstorage.header.pathLength += 1
           
@@ -886,27 +893,43 @@ private func findScheme<Input>(_ input: FilteredURLInput<Input>) -> Input.Index?
   return cursor
 }
 
-func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, _ block: (Int, Input.SubSequence)->Void)
+func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileScheme: Bool, _ block: (Int, Input.SubSequence)->Void)
   where Input: Collection, Input.Element == UInt8 {
-  func isPathComponentTerminator(_ byte: UInt8) -> Bool {
-    return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
-  }
     
-  var componentStartIdx = input.startIndex
-  var componentNumber = 0
-  while let componentTerminatorIndex = input[componentStartIdx...].firstIndex(where: isPathComponentTerminator) {
-    if ASCII(input[componentTerminatorIndex]) == .backslash {
-      //callback.validationError(.unexpectedReverseSolidus)
+    func isPathComponentTerminator(_ byte: UInt8) -> Bool {
+      return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
     }
-    let pathComponent = input[componentStartIdx..<componentTerminatorIndex]
-    block(componentNumber, pathComponent)
-    componentStartIdx = input.index(after: componentTerminatorIndex)
-    componentNumber &+= 1
-  }
-  if componentStartIdx != input.endIndex {
-    componentNumber &+= 1
+    guard input.isEmpty == false else {
+      return // empty input.
+    }
+    
+    var componentNumber = 0
+    var componentStartIdx = input.startIndex
+    
+    // Drop the initial separator slash if the input includes it.
+    if isPathComponentTerminator(input[componentStartIdx]) {
+      componentStartIdx = input.index(after: componentStartIdx)
+    }
+    // For file URLs, also drop any other leading slashes.
+    if isFileScheme {
+      while componentStartIdx != input.endIndex, isPathComponentTerminator(input[componentStartIdx]) {
+        // callback.validationError(.unexpectedEmptyPath)
+        componentStartIdx = input.index(after: componentStartIdx)
+        componentNumber &+= 1
+      }
+    }
+    // Consume components separated by terminators.
+    while let componentTerminatorIndex = input[componentStartIdx...].firstIndex(where: isPathComponentTerminator) {
+      if ASCII(input[componentTerminatorIndex]) == .backslash {
+        //callback.validationError(.unexpectedReverseSolidus)
+      }
+      let pathComponent = input[componentStartIdx..<componentTerminatorIndex]
+      block(componentNumber, pathComponent)
+      componentStartIdx = input.index(after: componentTerminatorIndex)
+      componentNumber &+= 1
+    }
+    // Consume trailing content (or the first component, if there were no terminators).
     block(componentNumber, input[componentStartIdx...])
-  }
 }
 
 struct URLScanner<Input, T, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input,
@@ -939,18 +962,18 @@ extension URLScanner {
       return scanAllFileURLComponents(input, baseScheme: baseURLScheme, &mapping, callback: &callback)
       
     case .other: // non-special.
-      var componentStartIdx = input.startIndex
-      guard componentStartIdx != input.endIndex, ASCII(input[componentStartIdx]) == .forwardSlash else {
+      let firstIndex = input.startIndex
+      guard firstIndex != input.endIndex, ASCII(input[firstIndex]) == .forwardSlash else {
         mapping.cannotBeABaseURL = true
         return scanAllCannotBeABaseURLComponents(input, scheme: scheme, &mapping, callback: &callback)
       }
       // state: "path or authority"
-      componentStartIdx = input.index(after: componentStartIdx)
-      if componentStartIdx != input.endIndex, ASCII(input[componentStartIdx]) == .forwardSlash {
-        let authorityStart = input.index(after: componentStartIdx)
+      let secondIndex = input.index(after: firstIndex)
+      if secondIndex != input.endIndex, ASCII(input[secondIndex]) == .forwardSlash {
+        let authorityStart = input.index(after: secondIndex)
         return scanAllComponents(from: .authority, input[authorityStart...], scheme: scheme, &mapping, callback: &callback)
       } else {
-        return scanAllComponents(from: .path, input[componentStartIdx...], scheme: scheme, &mapping, callback: &callback)
+        return scanAllComponents(from: .path, input[firstIndex...], scheme: scheme, &mapping, callback: &callback)
       }
         
     // !!!! FIXME: We actually need to check that the *content* of `scheme` is the same as `baseURLScheme` !!!!
@@ -1191,14 +1214,7 @@ extension URLScanner {
       return .success(continueFrom: (.fragment, input.index(after: input.startIndex)))
       
     default:
-      if c == .forwardSlash || (scheme.isSpecial && c == .backslash) {
-        if c == .backslash {
-          callback.validationError(.unexpectedReverseSolidus)
-        }
-        return .success(continueFrom: (.path, input.index(after: input.startIndex)))
-      } else {
-        return .success(continueFrom: (.path, input.startIndex))
-      }
+      return .success(continueFrom: (.path, input.startIndex))
     }
   }
   
@@ -1234,7 +1250,7 @@ extension URLScanner {
     let path = input[..<(pathEndIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    iteratePathComponents(path, schemeIsSpecial: scheme.isSpecial) { _, pathComponent in
+    iteratePathComponents(path, schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file) { _, pathComponent in
       if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
         callback.validationError(.unexpectedReverseSolidus)
       }
