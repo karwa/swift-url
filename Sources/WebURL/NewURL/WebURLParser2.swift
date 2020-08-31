@@ -27,42 +27,15 @@ extension NewURL {
     case authority
   }
   
-  func withComponentBytes<T>(_ component: Component, _ block: (UnsafeBufferPointer<UInt8>) -> T) -> T {
-    let start: Int
-    let length: Int
-    switch component {
-    case .scheme:
-      start = self.storage.header.schemeStart
-      length = self.storage.header.schemeLength
-    case .username:
-      start = self.storage.header.usernameStart
-      length = self.storage.header.usernameLength
-    case .password:
-      start = self.storage.header.passwordStart
-      length = self.storage.header.passwordLength
-    case .hostname:
-      start = self.storage.header.hostnameStart
-      length = self.storage.header.hostnameLength
-    case .port:
-      start = self.storage.header.portStart
-      length = self.storage.header.portLength
-    case .path:
-      start = self.storage.header.pathStart
-      length = self.storage.header.pathLength
-    case .query:
-      start = self.storage.header.queryStart
-      length = self.storage.header.queryLength
-    case .fragment:
-      start = self.storage.header.fragmentStart
-      length = self.storage.header.fragmentLength
-    case .authority:
-      return self.storage.withElements(range: storage.header.authorityStart ..< storage.header.authorityEnd) { block($0) }
-    }
-    return self.storage.withElements(range: start ..< (start + length)) { block($0) }
+  func withComponentBytes<T>(_ component: Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
+    guard let range = storage.header.rangeOfComponent(component) else { return block(nil) }
+    return storage.withElements(range: range) { buffer in block(buffer) }
   }
   
-  func stringForComponent(_ component: Component) -> String {
-    return withComponentBytes(component) { String(decoding: $0, as: UTF8.self) }
+  func stringForComponent(_ component: Component) -> String? {
+    return withComponentBytes(component) { maybeBuffer in
+      return maybeBuffer.map { buffer in String(decoding: buffer, as: UTF8.self) }
+    }
   }
 
   var schemeKind: NewURLParser.Scheme {
@@ -70,48 +43,46 @@ extension NewURL {
   }
   
   public var scheme: String {
-    return stringForComponent(.scheme)
+    return stringForComponent(.scheme)!
   }
   
+  // Note: erasure to empty strings is done to fit the Javascript model for WHATWG tests.
+  
   public var username: String {
-    return stringForComponent(.username)
+    return stringForComponent(.username) ?? ""
   }
   
   public var password: String {
-    return stringForComponent(.password)
+    return stringForComponent(.password) ?? ""
   }
   
   public var hostname: String {
-    return stringForComponent(.hostname)
+    return stringForComponent(.hostname) ?? ""
   }
   
   public var port: String {
     var string = stringForComponent(.port)
-    if !string.isEmpty {
-      let separator = string.removeFirst()
+    if !(string?.isEmpty ?? true) {
+      let separator = string?.removeFirst()
       assert(separator == ":")
     }
-    return string
+    return string ?? ""
   }
   
   public var path: String {
-    return stringForComponent(.path)
+    return stringForComponent(.path) ?? ""
   }
-  
-  // Erase empty query/fragment strings to the empty string.
-  
-  // TODO: We may want to revisit the distinction between not-present and empty components later.
   
   public var query: String {
     let string = stringForComponent(.query)
     guard string != "?" else { return "" }
-    return string
+    return string ?? ""
   }
   
   public var fragment: String {
     let string = stringForComponent(.fragment)
     guard string != "#" else { return "" }
-    return string
+    return string ?? ""
   }
   
   public var cannotBeABaseURL: Bool {
@@ -145,6 +116,11 @@ extension NewURL: CustomStringConvertible {
   }
 }
 
+/// A header for storing a generic absolute URL.
+///
+/// The stored URL must be of the format:
+///  [scheme + ":"] + ["//"]? + [username]? + [":" + password] + ["@"]? + [hostname]? + [":" + port]? + ["/" + path]? + ["?" + query]? + ["#" + fragment]?
+///
 struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   var _count: SizeType = 0
   
@@ -241,6 +217,59 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   ///
   var fragmentStart: SizeType {
     return queryStart + queryLength
+  }
+  
+  func rangeOfComponent(_ component: NewURL.Component) -> Range<SizeType>? {
+    let start: SizeType
+    let length: SizeType
+    switch component {
+    case .scheme:
+      return Range(uncheckedBounds: (schemeStart, schemeEnd))
+      
+    case .hostname:
+      guard components.contains(.authority) else { return nil }
+      start = hostnameStart
+      length = hostnameLength
+      
+    // FIXME: Move this to its own function instead of making it a fake component.
+    // Convenience component for copying a URL's entire authority string.
+    case .authority:
+      guard components.contains(.authority) else { return nil }
+      return authorityStart ..< authorityEnd
+    
+    // Optional authority details.
+    // These have no distinction between empty and nil values, because lone separators are not preserved.
+    // e.g. "http://:@test.com" -> "http://test.com".
+    case .username:
+      guard components.contains(.authority), usernameLength != 0 else { return nil }
+      start = usernameStart
+      length = usernameLength
+    case .password:
+      guard components.contains(.authority), passwordLength != 0 else { return nil }
+      start = passwordStart
+      length = passwordLength
+    case .port:
+      guard components.contains(.authority), portLength != 0 else { return nil }
+      start = portStart
+      length = portLength
+
+    // Components with leading separators.
+    // Lone separators are preserved in some cases, which is marked by a length of 1.
+    // A length of 0 means a nil value.
+    case .path:
+      guard components.contains(.path), pathLength != 0 else { return nil }
+      start = pathStart
+      length = pathLength
+    case .query:
+      guard components.contains(.query), queryLength != 0 else { return nil }
+      start = queryStart
+      length = queryLength
+    case .fragment:
+      guard components.contains(.fragment), fragmentLength != 0 else { return nil }
+      start = fragmentStart
+      length = fragmentLength
+    }
+    return start ..< (start + length)
   }
 }
 
@@ -508,7 +537,7 @@ struct NewURLParser {
       guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
       	preconditionFailure("Cannot construct a URL without a scheme")
       }
-      baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0) }
+      baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0!.dropLast()) }
       newstorage.header.schemeLength = newstorage.count
       newstorage.header.schemeKind = baseURL.schemeKind
       newstorage.header.components = [.scheme]
@@ -563,7 +592,7 @@ struct NewURLParser {
         preconditionFailure("")
       }
       baseURL.withComponentBytes(.authority) {
-        newstorage.append(contentsOf: $0)
+        newstorage.append(contentsOf: $0!)
         newstorage.header.usernameLength = baseURL.storage.header.usernameLength
         newstorage.header.passwordLength = baseURL.storage.header.passwordLength
         newstorage.header.hostnameLength = baseURL.storage.header.hostnameLength
@@ -603,7 +632,7 @@ struct NewURLParser {
       
     } else if url.componentsToCopyFromBase.contains(.path) {
       guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.path) { newstorage.append(contentsOf: $0) }
+      baseURL.withComponentBytes(.path) { newstorage.append(contentsOf: $0!) }
       newstorage.header.pathLength = baseURL.storage.header.pathLength
       newstorage.header.components.insert(.path)
     } else if url.schemeKind?.isSpecial == true {
@@ -634,9 +663,9 @@ struct NewURLParser {
         escapeSet: escapeSet,
         processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.queryLength += piece.count }
       )
-    } else if url.componentsToCopyFromBase.contains(.path) {
+    } else if url.componentsToCopyFromBase.contains(.query) {
       guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.query) { newstorage.append(contentsOf: $0) }
+      baseURL.withComponentBytes(.query) { newstorage.append(contentsOf: $0 ?? UnsafeBufferPointer(start: nil, count: 0)) }
       newstorage.header.queryLength = baseURL.storage.header.queryLength
       newstorage.header.components.insert(.query)
     }
@@ -653,7 +682,7 @@ struct NewURLParser {
       )
     } else if url.componentsToCopyFromBase.contains(.fragment) {
       guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.fragment) { newstorage.append(contentsOf: $0) }
+      baseURL.withComponentBytes(.fragment) { newstorage.append(contentsOf: $0!) }
       newstorage.header.fragmentLength = baseURL.storage.header.fragmentLength
       newstorage.header.components.insert(.fragment)
     }

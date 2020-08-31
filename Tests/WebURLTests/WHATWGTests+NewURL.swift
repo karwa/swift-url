@@ -163,7 +163,7 @@ extension WHATWGTests_NewURL {
             return
           }
           report.expectFalse(expected.failure == true)
-          report.expectEqual(parserResult.scheme + ":", expected.protocol)
+          report.expectEqual(parserResult.scheme, expected.protocol)
 //          report.expectEqual(parserResult.href, expected.href)
 //          report.expectEqual(parserResult.host, expected.host)
 //          report.expectEqual(parserResult.hostname, expected.hostname) <-- Next
