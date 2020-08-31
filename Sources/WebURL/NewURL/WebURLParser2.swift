@@ -505,6 +505,14 @@ struct NewURLParser {
     let pathRange = url.path.get().map { pathEndIndex -> Range<Input.Index> in
       cursor = input.index(after: cursor) // "/" or "\" path separator.
       defer { cursor = pathEndIndex }
+     
+      // For file URLs whose paths begin with a Windows drive letter, discard the host.
+      if url.schemeKind == .file, URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
+        if !(hostnameRange == nil || hostnameRange?.isEmpty == true) {
+          callback.validationError(.unexpectedHostFileScheme)
+          hostnameRange = nil // file URLs turn 'nil' in to an implicit, empty host.
+        }
+      }
       return cursor..<pathEndIndex
     }
     let queryRange = url.query.get().map { queryEndIndex -> Range<Input.Index> in
@@ -618,10 +626,16 @@ struct NewURLParser {
           processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.pathLength += piece.count }
         )
       case false:
-        URLScanner<Slice<FilteredURLInput<Input>>, T, Callback>.iteratePathComponents(input[path], schemeIsSpecial: url.schemeKind?.isSpecial ?? false) {
-          pathComponent in
+        iteratePathComponents(input[path], schemeIsSpecial: url.schemeKind?.isSpecial ?? false) { i, pathComponent in
           newstorage.append(ASCII.forwardSlash.codePoint)
           newstorage.header.pathLength += 1
+          
+          // If the first path component is a Windows drive letter, normalise the second character to ":".
+          if i == 0, URLStringUtils.isWindowsDriveLetter(pathComponent) {
+            newstorage.append(pathComponent[pathComponent.startIndex])
+            newstorage.append(ASCII.colon.codePoint)
+            return
+          }
           PercentEscaping.encodeIterativelyAsBuffer(
             bytes: pathComponent,
             escapeSet: .url_path,
@@ -867,6 +881,29 @@ private func findScheme<Input>(_ input: FilteredURLInput<Input>) -> Input.Index?
   }
   cursor = input.index(after: schemeEnd)
   return cursor
+}
+
+func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, _ block: (Int, Input.SubSequence)->Void)
+  where Input: Collection, Input.Element == UInt8 {
+  func isPathComponentTerminator(_ byte: UInt8) -> Bool {
+    return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
+  }
+    
+  var componentStartIdx = input.startIndex
+  var componentNumber = 0
+  while let componentTerminatorIndex = input[componentStartIdx...].firstIndex(where: isPathComponentTerminator) {
+    if ASCII(input[componentTerminatorIndex]) == .backslash {
+      //callback.validationError(.unexpectedReverseSolidus)
+    }
+    let pathComponent = input[componentStartIdx..<componentTerminatorIndex]
+    block(componentNumber, pathComponent)
+    componentStartIdx = input.index(after: componentTerminatorIndex)
+    componentNumber &+= 1
+  }
+  if componentStartIdx != input.endIndex {
+    componentNumber &+= 1
+    block(componentNumber, input[componentStartIdx...])
+  }
 }
 
 struct URLScanner<Input, T, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input,
@@ -1179,25 +1216,6 @@ extension URLScanner {
       }
     }
   }
-  
-  static func iteratePathComponents(_ input: Input, schemeIsSpecial: Bool, _ block: (Input.SubSequence)->Void) {
-    func isPathComponentTerminator(_ byte: UInt8) -> Bool {
-      return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
-    }
-      
-    var componentStartIdx = input.startIndex
-    while let componentTerminatorIndex = input[componentStartIdx...].firstIndex(where: isPathComponentTerminator) {
-      if ASCII(input[componentTerminatorIndex]) == .backslash {
-        //callback.validationError(.unexpectedReverseSolidus)
-      }
-      let pathComponent = input[componentStartIdx..<componentTerminatorIndex]
-      block(pathComponent)
-      componentStartIdx = input.index(after: componentTerminatorIndex)
-    }
-    if componentStartIdx != input.endIndex {
-      block(input[componentStartIdx...])
-    }
-  }
 
   /// Scans a URL path string from the given input, and advises whether there are any components following it.
   ///
@@ -1213,7 +1231,7 @@ extension URLScanner {
     let path = input[..<(pathEndIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    iteratePathComponents(path, schemeIsSpecial: scheme.isSpecial) { pathComponent in
+    iteratePathComponents(path, schemeIsSpecial: scheme.isSpecial) { _, pathComponent in
       if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
         callback.validationError(.unexpectedReverseSolidus)
       }
