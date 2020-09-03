@@ -63,6 +63,34 @@ extension PercentEscaping {
       processChunk(UnsafeMutableBufferPointer(rebasing: buffer[..<i]))
     }
   }
+  
+  /// A version of `encodeIterativelyAsBuffer` which encodes the given bytes in a sliding window starting at the end and iterating towards the beginning.
+  /// Within a window, the bytes are given in their original order.
+  ///
+  static func encodeReverseIterativelyAsBuffer<S>(
+    bytes: S, escapeSet: EscapeSet,
+    processChunk: (UnsafeMutableBufferPointer<UInt8>) -> Void
+  ) where S: BidirectionalCollection, S.Element == UInt8 {
+    withSmallStringSizedStackBuffer { buffer in
+      var i = buffer.endIndex
+      for byte in bytes.reversed() {
+        // If the buffer can't hold an escaped byte, flush it.
+        if i &- 3 < 0 {
+          processChunk(UnsafeMutableBufferPointer(rebasing: buffer[i...]))
+          i = buffer.endIndex
+        }
+        if let asciiChar = ASCII(byte), escapeSet.shouldEscape(asciiChar) == false {
+          i &-= 1
+          buffer[i] = byte
+        } else {
+          i &-= 3
+          _escape(byte: byte, into: UnsafeMutableBufferPointer(rebasing: buffer[i...]))
+        }
+      }
+      // Flush the buffer.
+      processChunk(UnsafeMutableBufferPointer(rebasing: buffer[i...]))
+    }
+  }
 
   /// See `encodeIterativelyAsBuffer<C>(bytes: escapeSet: processChunk:)`
   ///

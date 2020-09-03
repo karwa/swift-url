@@ -396,6 +396,7 @@ struct Mapping<IndexStorage: CompressedOptional> {
   // If an authority segment exists, the path starts at the index after the end of the authority.
   // Otherwise, it starts at the index 2 places after 'schemeTerminator' (":" + "/" or "\").
   var path = IndexStorage.none
+  var precalculatedPathLength = 0
   
   var query = IndexStorage.none
   var fragment = IndexStorage.none
@@ -593,8 +594,10 @@ struct NewURLParser {
         return WebURLParser.Host.parse(bytes, isNotSpecial: isNotSpecial, callback: &callback)?.serialized
       }
       guard let hostnameString = _hostnameString else { return nil }
-      newstorage.append(contentsOf: hostnameString.utf8)
-      newstorage.header.hostnameLength = hostnameString.utf8.count
+      if !(url.schemeKind == .file && hostnameString == "localhost") {
+        newstorage.append(contentsOf: hostnameString.utf8)
+        newstorage.header.hostnameLength = hostnameString.utf8.count
+      }
       
       if let port = port, port != url.schemeKind?.defaultPort {
         newstorage.append(ASCII.colon.codePoint) // Hostname-port separator.
@@ -635,23 +638,52 @@ struct NewURLParser {
           processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.pathLength += piece.count }
         )
       case false:
-        iteratePathComponents(input[path], schemeIsSpecial: url.schemeKind?.isSpecial ?? false, isFileScheme: url.schemeKind == .file) { i, pathComponent in
+        guard path.isEmpty == false else {
+          assert(url.precalculatedPathLength == 0)
           newstorage.append(ASCII.forwardSlash.codePoint)
-          newstorage.header.pathLength += 1
-          
-          // If the first path component is a Windows drive letter, normalise the second character to ":".
-          if i == 0, URLStringUtils.isWindowsDriveLetter(pathComponent) {
-            newstorage.append(pathComponent[pathComponent.startIndex])
-            newstorage.append(ASCII.colon.codePoint)
-            newstorage.header.pathLength += 2
-            return
-          }
-          PercentEscaping.encodeIterativelyAsBuffer(
-            bytes: pathComponent,
-            escapeSet: .url_path,
-            processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.pathLength += piece.count }
-          )
+          newstorage.header.pathLength = 1
+          break
         }
+        assert(url.precalculatedPathLength > 0)
+        var buffer = [UInt8](repeatElement(0, count: url.precalculatedPathLength))
+        buffer.withUnsafeMutableBufferPointer { mutBuffer in
+          
+          var front = mutBuffer.endIndex
+          iteratePathComponents(input[path], schemeIsSpecial: url.schemeKind?.isSpecial ?? false, isFileScheme: url.schemeKind == .file) {
+            isFirstComponent, pathComponent in
+            
+            if pathComponent.isEmpty {
+              front = mutBuffer.index(before: front)
+              mutBuffer[front] = ASCII.forwardSlash.codePoint
+              newstorage.header.pathLength += 1
+              return
+            }
+            
+            if isFirstComponent, URLStringUtils.isWindowsDriveLetter(pathComponent) {
+              front = mutBuffer.index(before: front)
+              mutBuffer[front] = ASCII.colon.codePoint
+              front = mutBuffer.index(before: front)
+              mutBuffer[front] = pathComponent[pathComponent.startIndex]
+              newstorage.header.pathLength += 2
+            } else {
+              PercentEscaping.encodeReverseIterativelyAsBuffer(
+                bytes: pathComponent,
+                escapeSet: .url_path,
+                processChunk: { piece in
+                  let newFront = mutBuffer.index(front, offsetBy: -1 * piece.count)
+                  _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[newFront...]).initialize(from: piece)
+                  front = newFront
+                  newstorage.header.pathLength += piece.count
+              })
+            }
+            front = mutBuffer.index(before: front)
+            mutBuffer[front] = ASCII.forwardSlash.codePoint
+            newstorage.header.pathLength += 1
+          }
+        }
+        assert(buffer.count == url.precalculatedPathLength)
+        newstorage.append(contentsOf: buffer.suffix(url.precalculatedPathLength))
+        newstorage.header.pathLength = url.precalculatedPathLength
       }
       
     } else if url.componentsToCopyFromBase.contains(.path) {
@@ -893,7 +925,7 @@ private func findScheme<Input>(_ input: FilteredURLInput<Input>) -> Input.Index?
   return cursor
 }
 
-func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileScheme: Bool, _ block: (Int, Input.SubSequence)->Void)
+func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileScheme: Bool, _ block: (Bool, Input.SubSequence)->Void)
   where Input: BidirectionalCollection, Input.Element == UInt8 {
     
     func isPathComponentTerminator(_ byte: UInt8) -> Bool {
@@ -903,61 +935,73 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
       return // empty input.
     }
     
-    var componentNumber = 0
-    var componentStartIdx = input.startIndex
+    //    "foo/bar/.."    = "http://example.com/foo/" = ["", "foo"]
+    //    "foo/bar/../"   = "http://example.com/foo/" = ["", "foo"]
+    //    "foo/"          = "http://example.com/foo/" = ["", "foo"]
+    //    "foo"           = "http://example.com/foo"  = ["foo"]
+    
+    //    "foo/../../.."    = "http://example.com/"     = [""]
+    //    "///../.."        = "http://example.com//"    = ["", ""]
+
+    var contentStartIdx = input.startIndex
     
     // Drop the initial separator slash if the input includes it.
-    if isPathComponentTerminator(input[componentStartIdx]) {
-      componentStartIdx = input.index(after: componentStartIdx)
+    if isPathComponentTerminator(input[contentStartIdx]) {
+      contentStartIdx = input.index(after: contentStartIdx)
     }
     // For file URLs, also drop any other leading slashes.
     if isFileScheme {
-      while componentStartIdx != input.endIndex, isPathComponentTerminator(input[componentStartIdx]) {
+      while contentStartIdx != input.endIndex, isPathComponentTerminator(input[contentStartIdx]) {
         // callback.validationError(.unexpectedEmptyPath)
-        componentStartIdx = input.index(after: componentStartIdx)
-        componentNumber &+= 1
+        contentStartIdx = input.index(after: contentStartIdx)
       }
+      // FIXME: Also skip single dot components.
     }
-    // We want to iterate the path components in reverse, so we can skip
-    // components which later get popped.
-    var path = input[componentStartIdx...]
+    
+    // Iterate the path components in reverse, so we can skip components which later get popped.
+    var path = input[contentStartIdx...]
     var popcount = 0
     
-    // FIXME: Change this method to iterate the components in reverse, and remove this Array.
-    var components = [Input.SubSequence]()
-    
+    var shouldPop = false
+    var didPop = false
+    let firstComponentStart = contentStartIdx
+        
     // Consume components separated by terminators.
     while let componentTerminatorIndex = path.lastIndex(where: isPathComponentTerminator) {
       if ASCII(input[componentTerminatorIndex]) == .backslash {
         //callback.validationError(.unexpectedReverseSolidus)
       }
-      let pathComponent = input[path.index(after: componentTerminatorIndex)..<path.endIndex]
       
-      defer {
-        path = path.prefix(upTo: componentTerminatorIndex)
-      }
-      if URLStringUtils.isDoubleDotPathSegment(pathComponent) {
+      let pathComponent = input[path.index(after: componentTerminatorIndex)..<path.endIndex]
+      defer { path = path.prefix(upTo: componentTerminatorIndex) }
+      
+      guard URLStringUtils.isDoubleDotPathSegment(pathComponent) == false else {
         popcount += 1
-        continue
-      } else if popcount > 0 {
-        popcount -= 1
-        continue
-      }
-      if URLStringUtils.isSingleDotPathSegment(pathComponent) {
+        shouldPop = true
         continue
       }
       guard popcount == 0 else {
+        popcount -= 1
         continue
       }
-      components.append(pathComponent)
+      
+      if URLStringUtils.isSingleDotPathSegment(pathComponent) {
+        shouldPop = true
+        continue
+      }
+      if shouldPop, didPop == false {
+        block(false, pathComponent.prefix(0))
+      }
+      didPop = true
+      
+      block(false, pathComponent)
     }
+    if shouldPop, didPop == false {
+      block(false, path.suffix(0))
+    }
+    // FIXME: Include the first path component if it is a normalized Windows drive letter, even if popped out.
     if popcount == 0, URLStringUtils.isSingleDotPathSegment(path) == false {
-      components.append(path)
-    }
-
-    
-    for (number, component) in components.reversed().enumerated() {
-      block(number, component)
+      block(true, path)
     }
 }
 
@@ -1284,8 +1328,15 @@ extension URLScanner {
         callback.validationError(.unexpectedReverseSolidus)
       }
       validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
+      
+      mapping.precalculatedPathLength += 1
+      PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) {
+        mapping.precalculatedPathLength += $0.count
+      }
+      
       print("path component: \(String(decoding: pathComponent, as: UTF8.self))")
     }
+    print("calculated path length: \(mapping.precalculatedPathLength)")
       
     // 4. Return the next component.
     if let pathEnd = pathEndIndex {
@@ -1500,9 +1551,7 @@ extension URLScanner {
     
     // 4. Return the next component.
     mapping.authorityStartPosition.set(to: input.startIndex)
-    if parsedHost != .domain("localhost") {
-      mapping.hostnameEndIndex.set(to: hostnameEndIndex)
-    }
+    mapping.hostnameEndIndex.set(to: hostnameEndIndex)
     return .success(continueFrom: (.pathStart, hostnameEndIndex))
   }
 }
