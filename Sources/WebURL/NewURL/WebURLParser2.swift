@@ -53,7 +53,12 @@ extension NewURL {
   }
   
   public var password: String {
-    return stringForComponent(.password) ?? ""
+    var string = stringForComponent(.password)
+    if !(string?.isEmpty ?? true) {
+      let separator = string?.removeFirst()
+      assert(separator == ":")
+    }
+    return string ?? ""
   }
   
   public var hostname: String {
@@ -148,9 +153,9 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
     assert(components.contains(.scheme), "URLs must always have a scheme")
     return 0
   }
-  
+    
   var schemeEnd: SizeType {
-    schemeStart + schemeLength /* scheme */ + 1 /* : */
+    schemeStart + schemeLength
   }
   
   // Authority may or may not be present.
@@ -166,23 +171,14 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
     return schemeEnd + (components.contains(.authority) ? 2 : 0 /* // */)
   }
   
-  /// Returns the end of the authority section, if one is present.
-  /// Any trailing components (path, query, fragment) start from here.
-  var authorityEnd: SizeType {
-    return components.contains(.authority) ? (portStart + portLength) : schemeEnd
-  }
-
   var usernameStart: SizeType {
     return authorityStart
   }
   var passwordStart: SizeType {
-    return usernameStart
-      + usernameLength /* username */
-      + (passwordLength == 0 ? 0 : 1) /* : */
+    return usernameStart + usernameLength
   }
   var hostnameStart: SizeType {
-    return passwordStart
-      + passwordLength /* password */
+    return passwordStart + passwordLength
       + (usernameLength == 0 && passwordLength == 0 ? 0 : 1) /* @ */
   }
   var portStart: SizeType {
@@ -197,12 +193,12 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   // For example, "pop://example.com" has a queryLength of 0, but "pop://example.com?" has a queryLength of 1.
   // The former has an empty query component, the latter has a 'nil' query component.
   // The parser has to preserve the separator, even if the component is empty.
-    
-  /// Returns the position of the leading '/' in the path, if one is present. Otherwise, returns the position after the authority.
-  /// All paths start with a '/'.
+  
+  /// Returns the end of the authority section, if one is present.
+  /// Any trailing components (path, query, fragment) start from here.
   ///
   var pathStart: SizeType {
-    return authorityEnd
+    return components.contains(.authority) ? (portStart + portLength) : schemeEnd
   }
   
   /// Returns the position of the leading '?' in the query-string, if one is present. Otherwise, returns the position after the path.
@@ -224,6 +220,7 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
     let length: SizeType
     switch component {
     case .scheme:
+      assert(schemeLength > 1)
       return Range(uncheckedBounds: (schemeStart, schemeEnd))
       
     case .hostname:
@@ -235,7 +232,7 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
     // Convenience component for copying a URL's entire authority string.
     case .authority:
       guard components.contains(.authority) else { return nil }
-      return authorityStart ..< authorityEnd
+      return authorityStart ..< pathStart
     
     // Optional authority details.
     // These have no distinction between empty and nil values, because lone separators are not preserved.
@@ -244,12 +241,15 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
       guard components.contains(.authority), usernameLength != 0 else { return nil }
       start = usernameStart
       length = usernameLength
+    // Password and port have leading separators, but lone separators should never exist.
     case .password:
-      guard components.contains(.authority), passwordLength != 0 else { return nil }
+      assert(passwordLength != 1)
+      guard components.contains(.authority), passwordLength > 1 else { return nil }
       start = passwordStart
       length = passwordLength
     case .port:
-      guard components.contains(.authority), portLength != 0 else { return nil }
+      assert(portLength != 1)
+      guard components.contains(.authority), portLength > 1 else { return nil }
       start = portStart
       length = portLength
 
@@ -547,6 +547,7 @@ struct NewURLParser {
       newstorage.append(contentsOf: input[scheme].lazy.map {
         ASCII($0)?.lowercased.codePoint ?? $0
       })
+      newstorage.append(ASCII.colon.codePoint) // Scheme separator (':').
       newstorage.header.schemeLength = newstorage.count
       newstorage.header.schemeKind = url.schemeKind!
       newstorage.header.components = [.scheme]
@@ -554,13 +555,12 @@ struct NewURLParser {
       guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
       	preconditionFailure("Cannot construct a URL without a scheme")
       }
-      baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0!.dropLast()) }
+      baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0!) }
       newstorage.header.schemeLength = newstorage.count
       newstorage.header.schemeKind = baseURL.schemeKind
       newstorage.header.components = [.scheme]
     }
     
-    newstorage.append(ASCII.colon.codePoint) // Scheme separator (':').
     
     if let host = hostnameRange {
       newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
@@ -577,6 +577,7 @@ struct NewURLParser {
       }
       if let password = passwordRange, password.isEmpty == false {
         newstorage.append(ASCII.colon.codePoint) // Username-password separator (':').
+        newstorage.header.passwordLength = 1
         PercentEscaping.encodeIterativelyAsBuffer(
           bytes: input[password],
           escapeSet: .url_userInfo,
