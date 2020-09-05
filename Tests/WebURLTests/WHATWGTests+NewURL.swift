@@ -164,7 +164,7 @@ extension WHATWGTests_NewURL {
           }
           report.expectFalse(expected.failure == true)
           report.expectEqual(parserResult.scheme, expected.protocol)
-//          report.expectEqual(parserResult.href, expected.href)
+          report.expectEqual(parserResult.href, expected.href)
 //          report.expectEqual(parserResult.host, expected.host)
           report.expectEqual(parserResult.hostname, expected.hostname)
           report.expectEqual(Int(parserResult.port), expected.port)
@@ -177,6 +177,7 @@ extension WHATWGTests_NewURL {
 //          if let expectedOrigin = expected.origin {
 //            report.expectEqual(parserResult.origin.serialized, expectedOrigin)
 //          }
+          
         }
       } else {
         assertionFailure("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")

@@ -650,7 +650,7 @@ struct NewURLParser {
         buffer.withUnsafeMutableBufferPointer { mutBuffer in
           
           var front = mutBuffer.endIndex
-          iteratePathComponents(input[path], schemeIsSpecial: url.schemeKind?.isSpecial ?? false, isFileScheme: url.schemeKind == .file) {
+          iteratePathComponents(input[path], schemeIsSpecial: newstorage.header.schemeKind.isSpecial, isFileScheme: newstorage.header.schemeKind == .file) {
             isFirstComponent, pathComponent in
             
             if pathComponent.isEmpty {
@@ -660,7 +660,7 @@ struct NewURLParser {
               return
             }
             
-            if isFirstComponent, URLStringUtils.isWindowsDriveLetter(pathComponent) {
+            if isFirstComponent, newstorage.header.schemeKind == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
               front = mutBuffer.index(before: front)
               mutBuffer[front] = ASCII.colon.codePoint
               front = mutBuffer.index(before: front)
@@ -965,12 +965,14 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
     var path = input[contentStartIdx...]
     var popcount = 0
     var trailingEmptyCount = 0
+    var didYieldComponent = false
     
     func flushTrailingEmpties() {
       if trailingEmptyCount != 0 {
         for _ in 0 ..< trailingEmptyCount {
           block(false, input.suffix(0))
         }
+        didYieldComponent = true
         trailingEmptyCount = 0
       }
     }
@@ -1014,7 +1016,11 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
         continue
       }
       flushTrailingEmpties()
+      // FIXME: If we don't strip leading slashes (e.g. for non-file URLs), this may indeed be the first component.
+      //        As in, we may never yield another component after this (e.g. "file://C|/").
+      //        Luckily this only matters for file URLs, where we *do* strip the leading slashes.
       block(false, pathComponent)
+      didYieldComponent = true
     }
     
     print("trailing empties: \(trailingEmptyCount)")
@@ -1034,7 +1040,7 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
       if !isFileScheme {
         flushTrailingEmpties()
       }
-      if path.endIndex == input.endIndex {
+      if didYieldComponent == false {
         block(true, input.prefix(0))
       }
       return
@@ -1047,17 +1053,18 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
       if !isFileScheme {
         flushTrailingEmpties()
       }
-      if path.endIndex == input.endIndex {
+      if didYieldComponent == false {
         block(true, input.prefix(0))
       }
       return
     }
         
-    if path.isEmpty {
-      if !isFileScheme {
-        flushTrailingEmpties()
+    if path.isEmpty && isFileScheme {
+      // This means we have a leading empty component in a file URL (e.g. "file://somehost//foo/").
+      // Discard trailing empties and only yield
+      if didYieldComponent == false {
+        block(true, path)
       }
-      block(true, input.prefix(0))
       return
     }
     
