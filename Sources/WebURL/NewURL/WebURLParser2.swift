@@ -611,14 +611,16 @@ struct NewURLParser {
       guard let baseURL = baseURL else {
         preconditionFailure("")
       }
-      newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
       baseURL.withComponentBytes(.authority) {
-        newstorage.append(contentsOf: $0!)
-        newstorage.header.usernameLength = baseURL.storage.header.usernameLength
-        newstorage.header.passwordLength = baseURL.storage.header.passwordLength
-        newstorage.header.hostnameLength = baseURL.storage.header.hostnameLength
-        newstorage.header.portLength = baseURL.storage.header.portLength
-        newstorage.header.components.insert(.authority)
+        if let baseAuth = $0 {
+          newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
+          newstorage.append(contentsOf: baseAuth)
+          newstorage.header.usernameLength = baseURL.storage.header.usernameLength
+          newstorage.header.passwordLength = baseURL.storage.header.passwordLength
+          newstorage.header.hostnameLength = baseURL.storage.header.hostnameLength
+          newstorage.header.portLength = baseURL.storage.header.portLength
+          newstorage.header.components.insert(.authority)
+        }
       }
     } else if (url.schemeKind == .file) || (url.componentsToCopyFromBase.contains(.scheme) && baseURL?.schemeKind == .file) {
       // - 'file:' URLs get an implicit authority.
@@ -689,9 +691,13 @@ struct NewURLParser {
       
     } else if url.componentsToCopyFromBase.contains(.path) {
       guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.path) { newstorage.append(contentsOf: $0!) }
-      newstorage.header.pathLength = baseURL.storage.header.pathLength
-      newstorage.header.components.insert(.path)
+      baseURL.withComponentBytes(.path) {
+        if let basePath = $0 {
+          newstorage.append(contentsOf: basePath)
+          newstorage.header.pathLength = baseURL.storage.header.pathLength
+          newstorage.header.components.insert(.path)
+        }
+      }
     } else if url.schemeKind?.isSpecial == true {
       // Special URLs always have a '/' following the authority, even if they have no path.
       newstorage.append(ASCII.forwardSlash.codePoint)
@@ -885,6 +891,7 @@ func scanURL<Input, T, Callback>(
     }
     // (No scheme + valid base URL) = some kind of relative-ish URL.
     if base.schemeKind == .file {
+      scanResults.componentsToCopyFromBase = [.scheme]
       success = URLScanner.scanAllFileURLComponents(input[...], baseScheme: base.schemeKind, &scanResults, callback: &callback)
     } else {
       success = URLScanner.scanAllRelativeURLComponents(input[...], baseScheme: base.schemeKind, &scanResults, callback: &callback)
@@ -1526,8 +1533,8 @@ extension URLScanner {
         return .success(continueFrom: (.path, cursor))
       }
       
-      assert(mapping.componentsToCopyFromBase.isEmpty)
-      mapping.componentsToCopyFromBase = [.authority, .path, .query]
+      assert(mapping.componentsToCopyFromBase.isEmpty || mapping.componentsToCopyFromBase == [.scheme])
+      mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
 
       guard cursor != input.endIndex else {
         return .success(continueFrom: nil)
@@ -1702,7 +1709,7 @@ extension URLScanner {
       return .success(continueFrom: (ASCII(input[pathEnd]) == .questionMark ? .query : .fragment,
                                      input.index(after: pathEnd)))
     } else {
-      mapping.path.set(to: input.endIndex)
+      mapping.path.set(to: path.isEmpty ? nil : input.endIndex)
       return .success(continueFrom: nil)
     }
   }
@@ -1783,6 +1790,7 @@ extension URLScanner {
       mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
       return .success(continueFrom: (.fragment, input.index(after: input.startIndex)))
     default:
+      guard input.isEmpty == false else { return .success(continueFrom: nil) }
       // FIXME: Construction needs to drop the last base path component.
       mapping.componentsToCopyFromBase.formUnion([.authority, .path])
       return .success(continueFrom: (.path, input.startIndex))
