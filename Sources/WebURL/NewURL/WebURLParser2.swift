@@ -935,14 +935,6 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
     guard input.isEmpty == false else {
       return // empty input.
     }
-    
-    //    "foo/bar/.."    = "http://example.com/foo/" = ["", "foo"]
-    //    "foo/bar/../"   = "http://example.com/foo/" = ["", "foo"]
-    //    "foo/"          = "http://example.com/foo/" = ["", "foo"]
-    //    "foo"           = "http://example.com/foo"  = ["foo"]
-    
-    //    "foo/../../.."    = "http://example.com/"     = [""]
-    //    "///../.."        = "http://example.com//"    = ["", ""]
 
     var contentStartIdx = input.startIndex
     
@@ -956,54 +948,121 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
         // callback.validationError(.unexpectedEmptyPath)
         contentStartIdx = input.index(after: contentStartIdx)
       }
-      // FIXME: Also skip single dot components.
+      // FIXME: Also skip leading single, double dot components.
     }
+    
+    // Path component special cases:
+    //
+    // - Single dot ('.') components get skipped.
+    //   - If at the end of the path, they force a trailing slash.
+    // - Double dot ('..') components pop previous components from the path.
+    //   - For file URLs, they do not pop the last component if it is a Windows drive letter.
+    //   - If at the end of the path, they force a trailing slash.
+    //     (even if they have popped all other components, the result is an empty path, not a nil path)
+    // - Sequential empty components at the start of a file URL get collapsed.
     
     // Iterate the path components in reverse, so we can skip components which later get popped.
     var path = input[contentStartIdx...]
     var popcount = 0
+    var trailingEmptyCount = 0
     
-    var shouldPop = false
-    var didPop = false
-    let firstComponentStart = contentStartIdx
+    func flushTrailingEmpties() {
+      if trailingEmptyCount != 0 {
+        for _ in 0 ..< trailingEmptyCount {
+          block(false, input.suffix(0))
+        }
+        trailingEmptyCount = 0
+      }
+    }
         
     // Consume components separated by terminators.
     while let componentTerminatorIndex = path.lastIndex(where: isPathComponentTerminator) {
+      // Since we stripped the initial slash, we always have a multi-component path here.
+      
       if ASCII(input[componentTerminatorIndex]) == .backslash {
         //callback.validationError(.unexpectedReverseSolidus)
       }
       
       let pathComponent = input[path.index(after: componentTerminatorIndex)..<path.endIndex]
       defer { path = path.prefix(upTo: componentTerminatorIndex) }
-      
+ 
+      // If this is a '..' component, skip it and increase the popcount.
+      // If at the end of the path, mark it as a trailing empty.
       guard URLStringUtils.isDoubleDotPathSegment(pathComponent) == false else {
         popcount += 1
-        shouldPop = true
+        if pathComponent.endIndex == input.endIndex {
+					trailingEmptyCount += 1
+        }
         continue
       }
+      // If the popcount is not 0, this component can be ignored because of a subsequent '..'.
       guard popcount == 0 else {
         popcount -= 1
         continue
       }
-      
+			// If this is a '.' component, skip it.
+      // If at the end of the path, mark it as a trailing empty.
       if URLStringUtils.isSingleDotPathSegment(pathComponent) {
-        shouldPop = true
+        if pathComponent.endIndex == input.endIndex {
+          trailingEmptyCount += 1
+        }
         continue
       }
-      if shouldPop, didPop == false {
-        block(false, pathComponent.prefix(0))
+      // If this component is empty, defer it until we process later components.
+      if pathComponent.isEmpty {
+        trailingEmptyCount += 1
+        continue
       }
-      didPop = true
-      
+      flushTrailingEmpties()
       block(false, pathComponent)
     }
-    if shouldPop, didPop == false {
-      block(false, path.suffix(0))
+    
+    print("trailing empties: \(trailingEmptyCount)")
+    
+    if URLStringUtils.isDoubleDotPathSegment(path) {
+      popcount += 1
     }
-    // FIXME: Include the first path component if it is a normalized Windows drive letter, even if popped out.
-    if popcount == 0, URLStringUtils.isSingleDotPathSegment(path) == false {
-      block(true, path)
+    
+    guard popcount == 0 else {
+      // This component has been popped-out.
+      
+      // If the first path component is a Windows drive letter, it can't be popped-out.
+      if isFileScheme, URLStringUtils.isWindowsDriveLetter(path) {
+        block(true, path)
+        return
+      }
+      if !isFileScheme {
+        flushTrailingEmpties()
+      }
+      if path.endIndex == input.endIndex {
+        block(true, input.prefix(0))
+      }
+      return
     }
+
+    if URLStringUtils.isSingleDotPathSegment(path) {
+      // This is a single-dot component which does not contribute to the final path,
+      // other than to force an empty component if no other components were yielded.
+
+      if !isFileScheme {
+        flushTrailingEmpties()
+      }
+      if path.endIndex == input.endIndex {
+        block(true, input.prefix(0))
+      }
+      return
+    }
+        
+    if path.isEmpty {
+      if !isFileScheme {
+        flushTrailingEmpties()
+      }
+      block(true, input.prefix(0))
+      return
+    }
+    
+    flushTrailingEmpties()
+    block(true, path)
 }
 
 struct URLScanner<Input, T, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input,
@@ -1320,8 +1379,8 @@ extension URLScanner {
     assert(mapping.fragment.get() == nil)
     
     // 2. Find the extent of the path.
-    let pathEndIndex = input.firstIndex { ASCII($0) == .questionMark || ASCII($0) == .numberSign }
-    let path = input[..<(pathEndIndex ?? input.endIndex)]
+    let nextComponentStartIndex = input.firstIndex { ASCII($0) == .questionMark || ASCII($0) == .numberSign }
+    let path = input[..<(nextComponentStartIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
     iteratePathComponents(path, schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file) { _, pathComponent in
@@ -1340,7 +1399,7 @@ extension URLScanner {
     print("calculated path length: \(mapping.precalculatedPathLength)")
       
     // 4. Return the next component.
-    if let pathEnd = pathEndIndex {
+    if let pathEnd = nextComponentStartIndex {
       mapping.path.set(to: pathEnd)
       return .success(continueFrom: (ASCII(input[pathEnd]) == .questionMark ? .query : .fragment,
                                      input.index(after: pathEnd)))
