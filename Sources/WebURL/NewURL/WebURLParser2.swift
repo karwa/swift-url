@@ -396,7 +396,6 @@ struct Mapping<IndexStorage: CompressedOptional> {
   // If an authority segment exists, the path starts at the index after the end of the authority.
   // Otherwise, it starts at the index 2 places after 'schemeTerminator' (":" + "/" or "\").
   var path = IndexStorage.none
-  var precalculatedPathLength = 0
   
   var query = IndexStorage.none
   var fragment = IndexStorage.none
@@ -642,14 +641,23 @@ struct NewURLParser {
           processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.pathLength += piece.count }
         )
       case false:
+        
+        var pathLength = 0
+        iteratePathComponents(input[path], schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file) { _, pathComponent in
+          pathLength += 1
+         PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) {
+           pathLength += $0.count
+         }
+        }
+        
         guard path.isEmpty == false else {
-          assert(url.precalculatedPathLength == 0)
+          assert(pathLength == 0)
           newstorage.append(ASCII.forwardSlash.codePoint)
           newstorage.header.pathLength = 1
           break
         }
-        assert(url.precalculatedPathLength > 0)
-        var buffer = [UInt8](repeatElement(0, count: url.precalculatedPathLength))
+        assert(pathLength > 0)
+        var buffer = [UInt8](repeatElement(0, count: pathLength))
         buffer.withUnsafeMutableBufferPointer { mutBuffer in
           
           var front = mutBuffer.endIndex
@@ -685,9 +693,9 @@ struct NewURLParser {
             newstorage.header.pathLength += 1
           }
         }
-        assert(buffer.count == url.precalculatedPathLength)
-        newstorage.append(contentsOf: buffer.suffix(url.precalculatedPathLength))
-        newstorage.header.pathLength = url.precalculatedPathLength
+        assert(buffer.count == pathLength)
+        newstorage.append(contentsOf: buffer.suffix(pathLength))
+        newstorage.header.pathLength = pathLength
       }
       
     } else if url.componentsToCopyFromBase.contains(.path) {
@@ -1403,15 +1411,8 @@ extension URLScanner {
         callback.validationError(.unexpectedReverseSolidus)
       }
       validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
-      
-      mapping.precalculatedPathLength += 1
-      PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) {
-        mapping.precalculatedPathLength += $0.count
-      }
-      
       print("path component: \(String(decoding: pathComponent, as: UTF8.self))")
     }
-    print("calculated path length: \(mapping.precalculatedPathLength)")
       
     // 4. Return the next component.
     if let pathEnd = nextComponentStartIndex {
