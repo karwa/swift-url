@@ -1574,7 +1574,7 @@ extension URLScanner {
 //          url.host = base.host
 //        }
       }
-      return scanPath(input[cursor...], scheme: .file, &mapping, callback: &callback)
+      return scanPath(input, scheme: .file, &mapping, callback: &callback)
     }
     
     cursor = input.index(after: cursor)
@@ -1744,10 +1744,9 @@ extension URLScanner {
       case .fragment:
         componentResult = scanFragment(remaining, &mapping, callback: &callback)
       case .pathStart:
-        fatalError()
-//        componentResult = scanPathStart(remaining, scheme: scheme, &mapping, callback: &callback)
+        componentResult = scanPathStart(remaining, scheme: baseScheme, &mapping, callback: &callback)
       case .authority:
-        fatalError()
+        componentResult = scanAuthority(remaining, scheme: baseScheme, &mapping, callback: &callback)
       case .scheme:
         fatalError()
       case .host:
@@ -1772,58 +1771,54 @@ extension URLScanner {
     
     mapping.componentsToCopyFromBase = [.scheme]
     
-    guard let firstByte = input.first else {
+    guard input.isEmpty == false else {
       mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
       return .success(continueFrom: nil)
     }
     
-    switch ASCII(firstByte) {
+    switch ASCII(input[input.startIndex]) {
+    // Initial slash. Inspect the rest and parse as either a path or authority.
     case .backslash? where baseScheme.isSpecial:
       callback.validationError(.unexpectedReverseSolidus)
-      fatalError("Relative slash")
+      fallthrough
     case .forwardSlash?:
-      fatalError("Relative slash")
+      var cursor = input.index(after: input.startIndex)
+      guard cursor != input.endIndex else {
+        mapping.componentsToCopyFromBase.formUnion([.authority])
+        return .success(continueFrom: (.path, cursor))
+      }
+      switch ASCII(input[cursor]) {
+      // Second character is also a slash. Parse as an authority.
+      case .backslash? where baseScheme.isSpecial:
+        callback.validationError(.unexpectedReverseSolidus)
+        fallthrough
+      case .forwardSlash?:
+        if baseScheme.isSpecial {
+          cursor = input[cursor...].dropFirst().drop { ASCII($0) == .forwardSlash || ASCII($0) == .backslash }.startIndex
+        } else {
+          cursor = input.index(after: cursor)
+        }
+        return .success(continueFrom: (.authority, cursor))
+      // Otherwise, copy the base authority. Parse as a (absolute) path.
+      default:
+        mapping.componentsToCopyFromBase.formUnion([.authority])
+        return .success(continueFrom: (.path, cursor))
+      }
+    
+    // Initial query/fragment markers.
     case .questionMark?:
       mapping.componentsToCopyFromBase.formUnion([.authority, .path])
       return .success(continueFrom: (.query, input.index(after: input.startIndex)))
     case .numberSign?:
       mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
       return .success(continueFrom: (.fragment, input.index(after: input.startIndex)))
+      
+    // Some other character. Parse as a relative path.
     default:
-      guard input.isEmpty == false else { return .success(continueFrom: nil) }
       // FIXME: Construction needs to drop the last base path component.
       mapping.componentsToCopyFromBase.formUnion([.authority, .path])
       return .success(continueFrom: (.path, input.startIndex))
     }
-    
-    // RELATIVE SLASH:
-    
-    // Erase 'endIndex' and non-ASCII characters to `ASCII.null`.
-//     let c: ASCII = (idx != endIndex) ? ASCII(input[idx]) ?? .null : .null
-//     switch c {
-//     case .forwardSlash:
-//       if url.scheme.isSpecial {
-//         state = .specialAuthorityIgnoreSlashes
-//       } else {
-//         state = .authority
-//       }
-//     case .backslash where url.scheme.isSpecial:
-//       callback.validationError(.unexpectedReverseSolidus)
-//       state = .specialAuthorityIgnoreSlashes
-    
-    // This happens for the first non-slash character.
-    
-//     default:
-//       guard let base = base else {
-//         callback.validationError(._baseURLRequired)
-//         return false
-//       }
-//       url.copyAuthority(from: base._storage)
-//       state = .path
-//       continue  // Do not increment index. Non-ASCII characters go through this path.
-//     }
-    
-    
   }
 }
 
