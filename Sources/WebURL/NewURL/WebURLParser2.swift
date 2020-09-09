@@ -456,15 +456,31 @@ struct NewURLParser {
     callback: inout Callback
   ) -> NewURL? where Mapping<T>.Index == Input.Index, Callback: URLParserCallback {
     
-    // Extract full ranges from the data in the mapping.
     var url = url
+    
+    // The mapping does not contain full ranges. They must be inferred using our knowledge of URL structure.
+    // Some components require additional validation (e.g. the port), and others require adjustments based on
+    // full knowledge of the URL string (e.g. if a file URL whose path starts with a Windows drive, clear the host).
+    
     let schemeRange = url.schemeTerminator.get().map { input.startIndex..<$0 }
     var usernameRange: Range<Input.Index>?
     var passwordRange: Range<Input.Index>?
     var hostnameRange: Range<Input.Index>?
     var port: UInt16?
+    let pathRange: Range<Input.Index>?
+    let queryRange: Range<Input.Index>?
+    let fragmentRange: Range<Input.Index>?
 
     var cursor: Input.Index
+    
+    let schemeKind: NewURLParser.Scheme
+    if let scannedSchemeKind = url.schemeKind {
+      schemeKind = scannedSchemeKind
+    } else if url.componentsToCopyFromBase.contains(.scheme), let baseURL = baseURL {
+      schemeKind = baseURL.schemeKind
+    } else {
+      preconditionFailure("We must have a scheme")
+    }
     
     if let authorityStart = url.authorityStartPosition.get() {
       cursor = authorityStart
@@ -507,33 +523,40 @@ struct NewURLParser {
       cursor = input.startIndex
     }
     
-    
-    let pathRange = url.path.get().map { pathEndIndex -> Range<Input.Index> in
-      let pathStart = cursor
-      cursor = input.index(after: cursor) // "/" or "\" path separator.
+    pathRange = url.path.get().map { pathEndIndex -> Range<Input.Index> in
       defer { cursor = pathEndIndex }
-     
+      
       // For file URLs whose paths begin with a Windows drive letter, discard the host.
-      if url.schemeKind == .file, URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
+      if cursor != input.endIndex {
+        // The path may or may not be prefixed with a leading slash.
+      	// Strip it so we can detect the Windows drive letter.
+        switch ASCII(input[cursor]) {
+        case .forwardSlash?: fallthrough
+        case .backslash? where schemeKind.isSpecial:
+          cursor = input.index(after: cursor)
+        default:
+          break
+        }
+      }
+      if schemeKind == .file, URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
         if !(hostnameRange == nil || hostnameRange?.isEmpty == true) {
           callback.validationError(.unexpectedHostFileScheme)
           hostnameRange = nil // file URLs turn 'nil' in to an implicit, empty host.
         }
         url.componentsToCopyFromBase.remove(.authority)
       }
-      return pathStart..<pathEndIndex
+      return cursor..<pathEndIndex
     }
-    let queryRange = url.query.get().map { queryEndIndex -> Range<Input.Index> in
+    queryRange = url.query.get().map { queryEndIndex -> Range<Input.Index> in
       cursor = input.index(after: cursor) // "?" query separator.
       defer { cursor = queryEndIndex }
       return cursor..<queryEndIndex
     }
-    let fragmentRange = url.fragment.get().map { fragmentEndIndex -> Range<Input.Index> in
+    fragmentRange = url.fragment.get().map { fragmentEndIndex -> Range<Input.Index> in
       cursor = input.index(after: cursor) // "#" fragment separator.
       defer { cursor = fragmentEndIndex }
       return cursor..<fragmentEndIndex
     }
-//    assert(cursor == input.endIndex)
     
     // Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
     
@@ -541,9 +564,8 @@ struct NewURLParser {
     newstorage.header.cannotBeABaseURL = url.cannotBeABaseURL
     
     // We *must* have a scheme.
-    let scheme: NewURLParser.Scheme
     if let inputScheme = schemeRange {
-      scheme = url.schemeKind!
+      assert(schemeKind == url.schemeKind)
       // Scheme must be lowercased.
       newstorage.append(contentsOf: input[inputScheme].lazy.map {
         ASCII($0)?.lowercased.codePoint ?? $0
@@ -555,12 +577,12 @@ struct NewURLParser {
       guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
       	preconditionFailure("Cannot construct a URL without a scheme")
       }
-      scheme = baseURL.schemeKind
+      assert(schemeKind == baseURL.schemeKind)
       baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0!) }
       newstorage.header.schemeLength = baseURL.storage.header.schemeLength
       newstorage.header.components = [.scheme]
     }
-    newstorage.header.schemeKind = scheme
+    newstorage.header.schemeKind = schemeKind
     
     
     if let host = hostnameRange {
@@ -592,15 +614,15 @@ struct NewURLParser {
     
       // FIXME: Hostname needs improving.
       let _hostnameString = Array(input[host]).withUnsafeBufferPointer { bytes -> String? in
-        return WebURLParser.Host.parse(bytes, isNotSpecial: scheme.isSpecial == false, callback: &callback)?.serialized
+        return WebURLParser.Host.parse(bytes, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)?.serialized
       }
       guard let hostnameString = _hostnameString else { return nil }
-      if !(scheme == .file && hostnameString == "localhost") {
+      if !(schemeKind == .file && hostnameString == "localhost") {
         newstorage.append(contentsOf: hostnameString.utf8)
         newstorage.header.hostnameLength = hostnameString.utf8.count
       }
       
-      if let port = port, port != scheme.defaultPort {
+      if let port = port, port != schemeKind.defaultPort {
         newstorage.append(ASCII.colon.codePoint) // Hostname-port separator.
         let portStringBytes = String(port).utf8
         newstorage.append(contentsOf: portStringBytes)
@@ -622,7 +644,7 @@ struct NewURLParser {
           newstorage.header.components.insert(.authority)
         }
       }
-    } else if scheme == .file {
+    } else if schemeKind == .file {
       // - 'file:' URLs get an implicit authority.
       // -
       newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
@@ -643,7 +665,7 @@ struct NewURLParser {
       case false:
         
         var pathLength = 0
-        iteratePathComponents(input[path], schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file) { _, pathComponent in
+        iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
           pathLength += 1
          PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) {
            pathLength += $0.count
@@ -661,7 +683,7 @@ struct NewURLParser {
         buffer.withUnsafeMutableBufferPointer { mutBuffer in
           
           var front = mutBuffer.endIndex
-          iteratePathComponents(input[path], schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file) {
+          iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) {
             isFirstComponent, pathComponent in
             
             if pathComponent.isEmpty {
@@ -671,7 +693,7 @@ struct NewURLParser {
               return
             }
             
-            if isFirstComponent, scheme == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
+            if isFirstComponent, schemeKind == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
               front = mutBuffer.index(before: front)
               mutBuffer[front] = ASCII.colon.codePoint
               front = mutBuffer.index(before: front)
@@ -707,7 +729,7 @@ struct NewURLParser {
           newstorage.header.components.insert(.path)
         }
       }
-    } else if scheme.isSpecial {
+    } else if schemeKind.isSpecial {
       // Special URLs always have a '/' following the authority, even if they have no path.
       newstorage.append(ASCII.forwardSlash.codePoint)
       newstorage.header.pathLength = 1
@@ -720,7 +742,7 @@ struct NewURLParser {
       newstorage.header.queryLength = 1
       newstorage.header.components.insert(.query)
       
-      let urlIsSpecial = scheme.isSpecial
+      let urlIsSpecial = schemeKind.isSpecial
       let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
         switch asciiChar {
         case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
@@ -1570,6 +1592,16 @@ extension URLScanner {
       // ("file:/Users", base: "file:///C:/Windows")    -> "file:///C:/Users"
       // ("file:/D:/Users", base: "file:///C:/Windows") -> "file:///D:/Users"
       if baseScheme == .file, URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) == false {
+        
+        // FIXME:
+        // We are a path.
+        // + If the base path starts with a Windows drive letter, we are relative to that drive letter.
+        //    - Path iteration needs to include that component from the base.
+        // + Otherwise we are relative to the host.
+        //    - Copy the host from the base.
+        
+        mapping.componentsToCopyFromBase.formUnion([.authority])
+
 //        if let basePathStart = base.path.first, URLStringUtils.isNormalisedWindowsDriveLetter(basePathStart.utf8) {
 //          url.path.append(basePathStart)
 //        } else {
