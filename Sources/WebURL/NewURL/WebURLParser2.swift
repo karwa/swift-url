@@ -542,24 +542,26 @@ struct NewURLParser {
     newstorage.header.cannotBeABaseURL = url.cannotBeABaseURL
     
     // We *must* have a scheme.
-    if let scheme = schemeRange {
+    let scheme: NewURLParser.Scheme
+    if let inputScheme = schemeRange {
+      scheme = url.schemeKind!
       // Scheme must be lowercased.
-      newstorage.append(contentsOf: input[scheme].lazy.map {
+      newstorage.append(contentsOf: input[inputScheme].lazy.map {
         ASCII($0)?.lowercased.codePoint ?? $0
       })
       newstorage.append(ASCII.colon.codePoint) // Scheme separator (':').
       newstorage.header.schemeLength = newstorage.count
-      newstorage.header.schemeKind = url.schemeKind!
       newstorage.header.components = [.scheme]
     } else {
       guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
       	preconditionFailure("Cannot construct a URL without a scheme")
       }
+      scheme = baseURL.schemeKind
       baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0!) }
-      newstorage.header.schemeLength = newstorage.count
-      newstorage.header.schemeKind = baseURL.schemeKind
+      newstorage.header.schemeLength = baseURL.storage.header.schemeLength
       newstorage.header.components = [.scheme]
     }
+    newstorage.header.schemeKind = scheme
     
     
     if let host = hostnameRange {
@@ -591,16 +593,15 @@ struct NewURLParser {
     
       // FIXME: Hostname needs improving.
       let _hostnameString = Array(input[host]).withUnsafeBufferPointer { bytes -> String? in
-        let isNotSpecial = !(url.schemeKind?.isSpecial ?? true)
-        return WebURLParser.Host.parse(bytes, isNotSpecial: isNotSpecial, callback: &callback)?.serialized
+        return WebURLParser.Host.parse(bytes, isNotSpecial: scheme.isSpecial == false, callback: &callback)?.serialized
       }
       guard let hostnameString = _hostnameString else { return nil }
-      if !(url.schemeKind == .file && hostnameString == "localhost") {
+      if !(scheme == .file && hostnameString == "localhost") {
         newstorage.append(contentsOf: hostnameString.utf8)
         newstorage.header.hostnameLength = hostnameString.utf8.count
       }
       
-      if let port = port, port != url.schemeKind?.defaultPort {
+      if let port = port, port != scheme.defaultPort {
         newstorage.append(ASCII.colon.codePoint) // Hostname-port separator.
         let portStringBytes = String(port).utf8
         newstorage.append(contentsOf: portStringBytes)
@@ -622,7 +623,7 @@ struct NewURLParser {
           newstorage.header.components.insert(.authority)
         }
       }
-    } else if (url.schemeKind == .file) || (url.componentsToCopyFromBase.contains(.scheme) && baseURL?.schemeKind == .file) {
+    } else if scheme == .file {
       // - 'file:' URLs get an implicit authority.
       // -
       newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
@@ -652,7 +653,7 @@ struct NewURLParser {
         buffer.withUnsafeMutableBufferPointer { mutBuffer in
           
           var front = mutBuffer.endIndex
-          iteratePathComponents(input[path], schemeIsSpecial: newstorage.header.schemeKind.isSpecial, isFileScheme: newstorage.header.schemeKind == .file) {
+          iteratePathComponents(input[path], schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file) {
             isFirstComponent, pathComponent in
             
             if pathComponent.isEmpty {
@@ -662,7 +663,7 @@ struct NewURLParser {
               return
             }
             
-            if isFirstComponent, newstorage.header.schemeKind == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
+            if isFirstComponent, scheme == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
               front = mutBuffer.index(before: front)
               mutBuffer[front] = ASCII.colon.codePoint
               front = mutBuffer.index(before: front)
@@ -698,7 +699,7 @@ struct NewURLParser {
           newstorage.header.components.insert(.path)
         }
       }
-    } else if url.schemeKind?.isSpecial == true {
+    } else if scheme.isSpecial {
       // Special URLs always have a '/' following the authority, even if they have no path.
       newstorage.append(ASCII.forwardSlash.codePoint)
       newstorage.header.pathLength = 1
@@ -711,7 +712,7 @@ struct NewURLParser {
       newstorage.header.queryLength = 1
       newstorage.header.components.insert(.query)
       
-      let urlIsSpecial = url.schemeKind?.isSpecial ?? false
+      let urlIsSpecial = scheme.isSpecial
       let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
         switch asciiChar {
         case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
