@@ -35,11 +35,9 @@ extension NewURLParser.Scheme {
       // https://bugs.swift.org/browse/SR-13063
       return .other
     }
-    // We use ASCII.init(_unchecked:) because we're only checking equality for specific ASCII sequences.
-    // We don't actually care if the byte is ASCII, or use any algorithms which rely on that.
-    //
-    // But we *really* want to make sure that we don't pay for optionals - this parser is invoked *a lot*.
-    var iter = asciiBytes.lazy.map { ASCII(_unchecked: $0) }.makeIterator()
+    
+    // Lowercase characters, erase non-ASCII bytes to ":" (a character which we know isn't in any special scheme).
+    var iter = asciiBytes.lazy.map { ASCII($0)?.lowercased ?? .colon }.makeIterator()
     switch iter.next() {
     case .h?:
       guard iter.next() == .t, iter.next() == .t, iter.next() == .p else { return notRecognised() }
