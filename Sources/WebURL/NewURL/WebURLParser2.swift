@@ -305,7 +305,7 @@ struct ComponentsToCopy: OptionSet {
 // --------------------------------
 // Compressed optionals
 // --------------------------------
-// Unused right now, but the idea is that instead of having Mapping<Input.Index>, we'd
+// Unused right now, but the idea is that instead of having ScannedURL<Input.Index>, we'd
 // have some overridden entrypoints which can, for example, compress an Optional<Int> (9 bytes on x86_64)
 // in to something like an Optional<UInt15>, where the high bit is reserved to indicate nil, and we have 5 bits of
 // magnitude (allowing indexing up to 32,768 bytes - which ought to be enough for most URLs).
@@ -333,30 +333,32 @@ extension Optional: CompressedOptional {
   }
 }
 
-struct CompressedOptionalUnsignedInteger<Base: SignedInteger & BinaryInteger & FixedWidthInteger>: CompressedOptional {
+struct CompressedOptionalUnsignedInteger<Base: SignedInteger & FixedWidthInteger>: CompressedOptional {
+  typealias Wrapped = Base.Magnitude
+
   private var base: Base
+  
   init() {
     self.base = -1
   }
   
-  typealias Wrapped = Base
   static var none: Self {
     return Self()
   }
   func get() -> Wrapped? {
-    return base >= 0 ? base : nil
+    return base >= 0 ? base.magnitude : nil
   }
   mutating func set(to newValue: Wrapped?) {
     guard let newValue = newValue else {
       self.base = -1
       return
     }
-    precondition(newValue.magnitude <= Base.Magnitude(1 << (Base.Magnitude.bitWidth - 1)))
-    self.base = newValue
+    precondition(newValue <= Base.Magnitude.max)
+    self.base = Base(newValue)
   }
 }
 
-struct Mapping<IndexStorage: CompressedOptional> {
+struct ScannedURL<IndexStorage: CompressedOptional> {
   typealias Index = IndexStorage.Wrapped
   
   var cannotBeABaseURL = false
@@ -424,7 +426,7 @@ struct NewURLParser {
     var callback = CollectValidationErrors()
   
     guard let scanResults = scanURL(filteredInput, baseURL: baseURL,
-                                    mappingType: Mapping<Optional<Input.Index>>.self, stateOverride: nil,
+                                    mappingType: ScannedURL<Optional<Input.Index>>.self, stateOverride: nil,
                                     callback: &callback) else {
       return nil
     }
@@ -450,11 +452,11 @@ struct NewURLParser {
   }
   
   func construct<Input, T, Callback>(
-    url: Mapping<T>,
+    url: ScannedURL<T>,
     input: FilteredURLInput<Input>,
     baseURL: NewURL?,
     callback: inout Callback
-  ) -> NewURL? where Mapping<T>.Index == Input.Index, Callback: URLParserCallback {
+  ) -> NewURL? where ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
     
     var url = url
     
@@ -889,12 +891,12 @@ extension FilteredURLInput: BidirectionalCollection {
 func scanURL<Input, T, Callback>(
   _ input: FilteredURLInput<Input>,
   baseURL: NewURL?,
-  mappingType: Mapping<T>.Type,
+  mappingType: ScannedURL<T>.Type,
   stateOverride: WebURLParser.ParserState? = nil,
   callback: inout Callback
-) -> Mapping<T>? where Mapping<T>.Index == Input.Index, Callback: URLParserCallback {
+) -> ScannedURL<T>? where ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
   
-  var scanResults = Mapping<T>()
+  var scanResults = ScannedURL<T>()
   let success: Bool
   
   if let schemeEndIndex = findScheme(input) {
@@ -1378,7 +1380,7 @@ func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schem
 }
 
 struct URLScanner<Input, T, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input,
-Mapping<T>.Index == Input.Index, Callback: URLParserCallback {
+ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
   
   enum ComponentParseResult {
     case failed
@@ -1396,7 +1398,7 @@ extension URLScanner {
   
   /// Scans all components of the input string `input`, and builds up a map based on the URL's `scheme`.
   ///
-  static func scanURLWithScheme(_ input: Input, scheme: NewURLParser.Scheme, baseURL: NewURL?, _ mapping: inout Mapping<T>,
+  static func scanURLWithScheme(_ input: Input, scheme: NewURLParser.Scheme, baseURL: NewURL?, _ mapping: inout ScannedURL<T>,
                                 callback: inout Callback) -> Bool {
 
     switch scheme {
@@ -1444,7 +1446,7 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
-  static func scanAllComponents(from: ParsableComponent, _ input: Input, scheme: NewURLParser.Scheme, _ mapping: inout Mapping<T>,
+  static func scanAllComponents(from: ParsableComponent, _ input: Input, scheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>,
                                 callback: inout Callback) -> Bool {
     var component = from
     var remaining = input[...]
@@ -1490,7 +1492,7 @@ extension URLScanner {
   ///
   ///  If parsing doesn't fail, the next component is always `pathStart`.
   ///
-  static func scanAuthority(_ input: Input, scheme: NewURLParser.Scheme,_ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanAuthority(_ input: Input, scheme: NewURLParser.Scheme,_ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
      
     // 1. Validate the mapping.
     assert(mapping.usernameEndIndex.get() == nil)
@@ -1557,7 +1559,7 @@ extension URLScanner {
     return .success(continueFrom: postPort)
   }
   
-  static func scanHostname(_ input: Input, scheme: Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanHostname(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.hostnameEndIndex.get() == nil)
@@ -1605,7 +1607,7 @@ extension URLScanner {
     }
   }
   
-  static func scanPort(_ input: Input, scheme: Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanPort(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.portEndIndex.get() == nil)
@@ -1638,7 +1640,7 @@ extension URLScanner {
   /// Scans the URL string from the character immediately following the authority, and advises
   /// whether the remainder is a path, query or fragment.
   ///
-  static func scanPathStart(_ input: Input, scheme: Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanPathStart(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
       
     // 1. Validate the mapping.
     assert(mapping.path.get() == nil)
@@ -1683,7 +1685,7 @@ extension URLScanner {
 
   /// Scans a URL path string from the given input, and advises whether there are any components following it.
   ///
-  static func scanPath(_ input: Input, scheme: Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanPath(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.path.get() == nil)
@@ -1719,7 +1721,7 @@ extension URLScanner {
   
   /// Scans a URL query string from the given input, and advises whether there are any components following it.
   ///
-  static func scanQuery(_ input: Input, scheme: Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanQuery(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.query.get() == nil)
@@ -1742,7 +1744,7 @@ extension URLScanner {
   
   /// Scans a URL fragment string from the given input. There are never any components following it.
   ///
-  static func scanFragment(_ input: Input, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanFragment(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.fragment.get() == nil)
@@ -1762,7 +1764,7 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
-  static func scanAllFileURLComponents(_ input: Input, baseURL: NewURL?, _ mapping: inout Mapping<T>, callback: inout Callback) -> Bool {
+  static func scanAllFileURLComponents(_ input: Input, baseURL: NewURL?, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> Bool {
     var remaining = input[...]
     
     guard case .success(let _component) = parseFileURLStart(remaining, baseURL: baseURL, &mapping, callback: &callback) else {
@@ -1806,7 +1808,7 @@ extension URLScanner {
     return true
   }
   
-  static func parseFileURLStart(_ input: Input, baseURL: NewURL?, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func parseFileURLStart(_ input: Input, baseURL: NewURL?, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // Note that file URLs may also be relative URLs. It all depends on what comes after "file:".
     // - 0 slashes:  copy base host, parse as path relative to base path.
@@ -1882,7 +1884,7 @@ extension URLScanner {
   }
   
   
-  static func scanFileHost(_ input: Input, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanFileHost(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
    
     // 1. Validate the mapping.
     assert(mapping.authorityStartPosition.get() == nil)
@@ -1932,7 +1934,7 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
     ///
-    static func scanAllCannotBeABaseURLComponents(_ input: Input, scheme: NewURLParser.Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> Bool {
+    static func scanAllCannotBeABaseURLComponents(_ input: Input, scheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> Bool {
       var remaining = input[...]
       
       guard case .success(let _component) = scanCannotBeABaseURLPath(remaining, &mapping, callback: &callback) else {
@@ -1976,7 +1978,7 @@ extension URLScanner {
       return true
     }
 
-  static func scanCannotBeABaseURLPath(_ input: Input, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanCannotBeABaseURLPath(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.authorityStartPosition.get() == nil)
@@ -2017,7 +2019,7 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
-  static func scanAllRelativeURLComponents(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> Bool {
+  static func scanAllRelativeURLComponents(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> Bool {
     var remaining = input[...]
     
     guard case .success(let _component) = parseRelativeURLStart(remaining, baseScheme: baseScheme, &mapping, callback: &callback) else {
@@ -2061,7 +2063,7 @@ extension URLScanner {
     return true
   }
   
-  static func parseRelativeURLStart(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
+  static func parseRelativeURLStart(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     print("Reached relative URL")
     
     mapping.componentsToCopyFromBase = [.scheme]
