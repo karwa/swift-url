@@ -287,20 +287,7 @@ enum ParsableComponent {
    case fragment
 }
 
-struct ComponentsToCopy: OptionSet {
-  typealias RawValue = UInt8
-  
-  var rawValue: RawValue
-  init(rawValue: RawValue) {
-    self.rawValue = rawValue
-  }
-  
-  static var scheme: Self    { Self(rawValue: 1 << 0) }
-  static var authority: Self { Self(rawValue: 1 << 1) }
-  static var path: Self      { Self(rawValue: 1 << 2) }
-  static var query: Self     { Self(rawValue: 1 << 3) }
-  static var fragment: Self  { Self(rawValue: 1 << 4) }
-}
+
 
 // --------------------------------
 // Compressed optionals
@@ -358,49 +345,123 @@ struct CompressedOptionalUnsignedInteger<Base: SignedInteger & FixedWidthInteger
   }
 }
 
+/// A set of components to be copied from a URL.
+///
+/// - seealso: `ScannedURL.componentsToCopyFromBase`
+///
+struct ComponentsToCopy: OptionSet {
+  typealias RawValue = UInt8
+  
+  var rawValue: RawValue
+  init(rawValue: RawValue) {
+    self.rawValue = rawValue
+  }
+  
+  static var scheme: Self    { Self(rawValue: 1 << 0) }
+  static var authority: Self { Self(rawValue: 1 << 1) }
+  static var path: Self      { Self(rawValue: 1 << 2) }
+  static var query: Self     { Self(rawValue: 1 << 3) }
+  static var fragment: Self  { Self(rawValue: 1 << 4) }
+}
+
+/// A summary of information obtained by scanning a string as a URL.
+///
+/// This summary contains information such as which components are present and where they are located, as well as any components
+/// which must be copied from a base URL. Typically, these are mutually-exclusive: a component comes _either_ from the input string _or_ the base URL.
+/// However, there is one important exception: constructing a final path can sometimes require _both_ the input string _and_ the base URL.
+/// This is the only case when a component is marked as present from both data sources.
+///
 struct ScannedURL<IndexStorage: CompressedOptional> {
   typealias Index = IndexStorage.Wrapped
+
+  // - Flags and data.
   
   var cannotBeABaseURL = false
   var componentsToCopyFromBase: ComponentsToCopy = []
-  
   var schemeKind: NewURLParser.Scheme? = nil
+  
+  // - Indexes.
+  
   // This is the index of the scheme terminator (":"), if one exists.
-  var schemeTerminator = IndexStorage.none
+  var schemeTerminatorIndex = IndexStorage.none
   
   // This is the index of the first character of the authority segment, if one exists.
   // The scheme and authority may be separated by an arbitrary amount of trivia.
   // The authority ends at the "*EndIndex" of the last of its components.
-  var authorityStartPosition = IndexStorage.none
+  var authorityStartIndex = IndexStorage.none
   
     // This is the endIndex of the authority's username component, if one exists.
-    // The username starts at the authorityStartPosition.
+    // The username starts at the authorityStartIndex.
     var usernameEndIndex = IndexStorage.none
   
     // This is the endIndex of the password, if one exists.
     // If a password exists, a username must also exist, and usernameEndIndex must be the ":" character.
     // The password starts at the index after usernameEndIndex.
     var passwordEndIndex = IndexStorage.none
-
-// TODO (hostname): What if there is no authorityStartPosition? Is it guaranteed to be set?
   
     // This is the endIndex of the hostname, if one exists.
-    // The hostname starts at the index after (username/password)EndIndex,
-    // or from authorityStartPosition if there are no credentials.
+    // The hostname starts at (username/password)EndIndex, or from authorityStartIndex if there are no credentials.
+    // If a hostname exists, authorityStartIndex must be set.
     var hostnameEndIndex = IndexStorage.none
   
-    // This is the endIndex of the port-string, if one exists.
-    // If a port-string exists, a hostname must also exist, and hostnameEndIndex must be the ":" character.
-    // The port-string starts at the index after hostnameEndIndex.
+    // This is the endIndex of the port-string, if one exists. If a port exists, a hostname must also exist.
+    // If it exists, the port-string starts at hostnameEndIndex and includes a leading ':' character.
     var portEndIndex = IndexStorage.none
   
   // This is the endIndex of the path, if one exists.
-  // If an authority segment exists, the path starts at the index after the end of the authority.
-  // Otherwise, it starts at the index 2 places after 'schemeTerminator' (":" + "/" or "\").
-  var path = IndexStorage.none
+  // If an authority segment exists, the path starts at the end of the authority and includes a leading slash.
+  // Otherwise, it starts at the index after 'schemeTerminatorIndex' (if it exists) and may/may not include leading slashes.
+  // If there is also no scheme, the path starts at the start of the string and may/may not include leading slashes.
+  var pathEndIndex = IndexStorage.none
   
-  var query = IndexStorage.none
-  var fragment = IndexStorage.none
+  // This is the endIndex of the query-string, if one exists.
+  // If it exists, the query starts at the end of the last component and includes a leading '?' character.
+  var queryEndIndex = IndexStorage.none
+  
+  // This is the endIndex of the fragment-string, if one exists.
+  // If it exists, the fragment starts at the end of the last component and includes a leading '#' character.
+  var fragmentEndIndex = IndexStorage.none
+}
+
+extension ScannedURL {
+  
+  /// Performs some basic invariant checks on the scanned URL data.
+  ///
+  func checkStructuralInvariants() -> Bool {
+    
+    // We must have a scheme from somewhere.
+    if schemeTerminatorIndex.get() == nil {
+      guard componentsToCopyFromBase.contains(.scheme) else { return false }
+    }
+    // Authority components imply the presence of an authorityStartIndex.
+    if usernameEndIndex.get() != nil || passwordEndIndex.get() != nil || hostnameEndIndex.get() != nil || portEndIndex.get() != nil {
+      guard authorityStartIndex.get() != nil else { return false }
+    }
+    // A password implies the presence of a username.
+    if passwordEndIndex.get() != nil {
+      guard usernameEndIndex.get() != nil else { return false }
+    }
+    // A port implies the presence of a hostname.
+    if portEndIndex.get() != nil {
+      guard hostnameEndIndex.get() != nil else { return false }
+    }
+    
+    // Ensure components from input string do not overlap with 'componentsToCopyFromBase' (except path).
+    if schemeTerminatorIndex.get() != nil {
+      // FIXME: Scheme can overlap in relative URLs, but we already test the string and base schemes for equality.
+      // guard componentsToCopyFromBase.contains(.scheme) == false else { return false }
+    }
+    if authorityStartIndex.get() != nil {
+      guard componentsToCopyFromBase.contains(.authority) == false else { return false }
+    }
+    if queryEndIndex.get() != nil {
+      guard componentsToCopyFromBase.contains(.query) == false else { return false }
+    }
+    if fragmentEndIndex.get() != nil {
+      guard componentsToCopyFromBase.contains(.fragment) == false else { return false }
+    }
+    return true
+  }
 }
 
 struct NewURLParser {
@@ -430,6 +491,8 @@ struct NewURLParser {
                                     callback: &callback) else {
       return nil
     }
+    
+    assert(scanResults.checkStructuralInvariants())
     
     print("")
     print("Scanning Errors:")
@@ -464,7 +527,7 @@ struct NewURLParser {
     // Some components require additional validation (e.g. the port), and others require adjustments based on
     // full knowledge of the URL string (e.g. if a file URL whose path starts with a Windows drive, clear the host).
     
-    let schemeRange = url.schemeTerminator.get().map { input.startIndex..<$0 }
+    let schemeRange = url.schemeTerminatorIndex.get().map { input.startIndex..<$0 }
     var usernameRange: Range<Input.Index>?
     var passwordRange: Range<Input.Index>?
     var hostnameRange: Range<Input.Index>?
@@ -484,7 +547,7 @@ struct NewURLParser {
       preconditionFailure("We must have a scheme")
     }
     
-    if let authorityStart = url.authorityStartPosition.get() {
+    if let authorityStart = url.authorityStartIndex.get() {
       cursor = authorityStart
       if let usernameEnd = url.usernameEndIndex.get() {
         usernameRange = cursor..<usernameEnd
@@ -525,7 +588,7 @@ struct NewURLParser {
       cursor = input.startIndex
     }
     
-    pathRange = url.path.get().map { pathEndIndex -> Range<Input.Index> in
+    pathRange = url.pathEndIndex.get().map { pathEndIndex -> Range<Input.Index> in
       defer { cursor = pathEndIndex }
       let pathStart = cursor
       // For file URLs whose paths begin with a Windows drive letter, discard the host.
@@ -549,12 +612,12 @@ struct NewURLParser {
       }
       return pathStart..<pathEndIndex
     }
-    queryRange = url.query.get().map { queryEndIndex -> Range<Input.Index> in
+    queryRange = url.queryEndIndex.get().map { queryEndIndex -> Range<Input.Index> in
       cursor = input.index(after: cursor) // "?" query separator.
       defer { cursor = queryEndIndex }
       return cursor..<queryEndIndex
     }
-    fragmentRange = url.fragment.get().map { fragmentEndIndex -> Range<Input.Index> in
+    fragmentRange = url.fragmentEndIndex.get().map { fragmentEndIndex -> Range<Input.Index> in
       cursor = input.index(after: cursor) // "#" fragment separator.
       defer { cursor = fragmentEndIndex }
       return cursor..<fragmentEndIndex
@@ -905,7 +968,7 @@ func scanURL<Input, T, Callback>(
     let scheme = NewURLParser.Scheme.parse(asciiBytes: schemeNameBytes)
     
     scanResults.schemeKind = scheme
-    scanResults.schemeTerminator.set(to: input.index(before: schemeEndIndex))
+    scanResults.schemeTerminatorIndex.set(to: input.index(before: schemeEndIndex))
     success = URLScanner.scanURLWithScheme(input[schemeEndIndex...], scheme: scheme, baseURL: baseURL, &scanResults, callback: &callback)
     
   } else {
@@ -1499,9 +1562,9 @@ extension URLScanner {
     assert(mapping.passwordEndIndex.get() == nil)
     assert(mapping.hostnameEndIndex.get() == nil)
     assert(mapping.portEndIndex.get() == nil)
-    assert(mapping.path.get() == nil)
-    assert(mapping.query.get() == nil)
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.pathEndIndex.get() == nil)
+    assert(mapping.queryEndIndex.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Find the extent of the authority (i.e. the terminator between host and path/query/fragment).
     let authority = input.prefix {
@@ -1514,7 +1577,7 @@ extension URLScanner {
         return true
      }
     }
-    mapping.authorityStartPosition.set(to: authority.startIndex)
+    mapping.authorityStartIndex.set(to: authority.startIndex)
 
     var hostStartIndex = authority.startIndex
     
@@ -1564,9 +1627,9 @@ extension URLScanner {
     // 1. Validate the mapping.
     assert(mapping.hostnameEndIndex.get() == nil)
     assert(mapping.portEndIndex.get() == nil)
-    assert(mapping.path.get() == nil)
-    assert(mapping.query.get() == nil)
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.pathEndIndex.get() == nil)
+    assert(mapping.queryEndIndex.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Find the extent of the hostname.
     var hostnameEndIndex: Input.Index?
@@ -1611,9 +1674,9 @@ extension URLScanner {
     
     // 1. Validate the mapping.
     assert(mapping.portEndIndex.get() == nil)
-    assert(mapping.path.get() == nil)
-    assert(mapping.query.get() == nil)
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.pathEndIndex.get() == nil)
+    assert(mapping.queryEndIndex.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Find the extent of the port string.
     let portString = input.prefix { ASCII($0).map { ASCII.ranges.digits.contains($0) } ?? false }
@@ -1643,9 +1706,9 @@ extension URLScanner {
   static func scanPathStart(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
       
     // 1. Validate the mapping.
-    assert(mapping.path.get() == nil)
-    assert(mapping.query.get() == nil)
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.pathEndIndex.get() == nil)
+    assert(mapping.queryEndIndex.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Return the component to parse based on input.
     guard input.isEmpty == false else {
@@ -1688,9 +1751,9 @@ extension URLScanner {
   static func scanPath(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
-    assert(mapping.path.get() == nil)
-    assert(mapping.query.get() == nil)
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.pathEndIndex.get() == nil)
+    assert(mapping.queryEndIndex.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Find the extent of the path.
     let nextComponentStartIndex = input.firstIndex { ASCII($0) == .questionMark || ASCII($0) == .numberSign }
@@ -1707,9 +1770,9 @@ extension URLScanner {
       
     // 4. Return the next component.
     if path.isEmpty && scheme.isSpecial == false {
-       mapping.path.set(to: nil)
+       mapping.pathEndIndex.set(to: nil)
     } else {
-      mapping.path.set(to: path.endIndex)
+      mapping.pathEndIndex.set(to: path.endIndex)
     }
     if let pathEnd = nextComponentStartIndex {
       return .success(continueFrom: (ASCII(input[pathEnd]) == .questionMark ? .query : .fragment,
@@ -1724,8 +1787,8 @@ extension URLScanner {
   static func scanQuery(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
-    assert(mapping.query.get() == nil)
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.queryEndIndex.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Find the extent of the query
     let queryEndIndex = input.firstIndex { ASCII($0) == .numberSign }
@@ -1734,7 +1797,7 @@ extension URLScanner {
     validateURLCodePointsAndPercentEncoding(input.prefix(upTo: queryEndIndex ?? input.endIndex), callback: &callback)
       
     // 3. Return the next component.
-    mapping.query.set(to: queryEndIndex ?? input.endIndex)
+    mapping.queryEndIndex.set(to: queryEndIndex ?? input.endIndex)
     if let queryEnd = queryEndIndex {
       return .success(continueFrom: ASCII(input[queryEnd]) == .numberSign ? (.fragment, input.index(after: queryEnd)) : nil)
     } else {
@@ -1747,12 +1810,12 @@ extension URLScanner {
   static func scanFragment(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Validate the fragment string.
     validateURLCodePointsAndPercentEncoding(input, callback: &callback)
     
-    mapping.fragment.set(to: input.endIndex)
+    mapping.fragmentEndIndex.set(to: input.endIndex)
     return .success(continueFrom: nil)
   }
 }
@@ -1826,16 +1889,17 @@ extension URLScanner {
         return .success(continueFrom: (.path, cursor))
       }
       assert(mapping.componentsToCopyFromBase.isEmpty || mapping.componentsToCopyFromBase == [.scheme])
-      mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
+      mapping.componentsToCopyFromBase.formUnion([.authority, .path])
 
       guard cursor != input.endIndex else {
+        mapping.componentsToCopyFromBase.insert(.query)
         return .success(continueFrom: nil)
       }
       switch ASCII(input[cursor]) {
       case .questionMark?:
-        mapping.componentsToCopyFromBase.remove(.query)
         return .success(continueFrom: (.query, input.index(after: cursor)))
       case .numberSign?:
+        mapping.componentsToCopyFromBase.insert(.query)
         return .success(continueFrom: (.fragment, input.index(after: cursor)))
       default:
         if URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
@@ -1887,12 +1951,12 @@ extension URLScanner {
   static func scanFileHost(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
    
     // 1. Validate the mapping.
-    assert(mapping.authorityStartPosition.get() == nil)
+    assert(mapping.authorityStartIndex.get() == nil)
     assert(mapping.hostnameEndIndex.get() == nil)
     assert(mapping.portEndIndex.get() == nil)
-    assert(mapping.path.get() == nil)
-    assert(mapping.query.get() == nil)
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.pathEndIndex.get() == nil)
+    assert(mapping.queryEndIndex.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Find the extent of the hostname.
     let hostnameEndIndex = input.firstIndex { byte in
@@ -1921,7 +1985,7 @@ extension URLScanner {
     }
     
     // 4. Return the next component.
-    mapping.authorityStartPosition.set(to: input.startIndex)
+    mapping.authorityStartIndex.set(to: input.startIndex)
     mapping.hostnameEndIndex.set(to: hostnameEndIndex)
     return .success(continueFrom: (.pathStart, hostnameEndIndex))
   }
@@ -1981,12 +2045,12 @@ extension URLScanner {
   static func scanCannotBeABaseURLPath(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
-    assert(mapping.authorityStartPosition.get() == nil)
+    assert(mapping.authorityStartIndex.get() == nil)
     assert(mapping.hostnameEndIndex.get() == nil)
     assert(mapping.portEndIndex.get() == nil)
-    assert(mapping.path.get() == nil)
-    assert(mapping.query.get() == nil)
-    assert(mapping.fragment.get() == nil)
+    assert(mapping.pathEndIndex.get() == nil)
+    assert(mapping.queryEndIndex.get() == nil)
+    assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Find the extent of the path.
     let pathEndIndex = input.firstIndex { byte in
@@ -2002,11 +2066,11 @@ extension URLScanner {
         
     // 4. Return the next component.
     if let pathEnd = pathEndIndex {
-      mapping.path.set(to: pathEnd)
+      mapping.pathEndIndex.set(to: pathEnd)
       return .success(continueFrom: (ASCII(input[pathEnd]) == .questionMark ? .query : .fragment,
                                      input.index(after: pathEnd)))
     } else {
-      mapping.path.set(to: path.isEmpty ? nil : input.endIndex)
+      mapping.pathEndIndex.set(to: path.isEmpty ? nil : input.endIndex)
       return .success(continueFrom: nil)
     }
   }
