@@ -164,13 +164,13 @@ extension WHATWGTests_NewURL {
           }
           report.expectFalse(expected.failure == true)
           report.expectEqual(parserResult.scheme, expected.protocol)
-//          report.expectEqual(parserResult.href, expected.href)
+          report.expectEqual(parserResult.href, expected.href)
 //          report.expectEqual(parserResult.host, expected.host)
           report.expectEqual(parserResult.hostname, expected.hostname)
           report.expectEqual(Int(parserResult.port), expected.port)
           report.expectEqual(parserResult.username, expected.username)
           report.expectEqual(parserResult.password, expected.password)
-//          report.expectEqual(parserResult.path, expected.pathname)
+          report.expectEqual(parserResult.path, expected.pathname)
           report.expectEqual(parserResult.query, expected.search)
           report.expectEqual(parserResult.fragment, expected.hash)
           // The test file doesn't include expected `origin` values for all entries.
@@ -189,6 +189,155 @@ extension WHATWGTests_NewURL {
       "url_whatwg_constructor_report.txt")
     try reportString.data(using: .utf8)!.write(to: reportPath)
     print("ℹ️ Report written to \(reportPath)")
+    
+    testAdditional()
+  }
+}
+
+struct AdditionalTest {
+  let input: String
+  let base: String
+  
+  let ex_href: String
+  let ex_scheme: String
+  var ex_hostname: String? = nil
+  var ex_port: String? = nil
+  var ex_path: String? = nil
+  var ex_query: String? = nil
+  var ex_fragment: String? = nil
+}
+
+let additionalTests: [AdditionalTest] = [
+  
+  .init(input: ".", base: "file:///a/b/",
+        ex_href: "file:///a/b/",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/a/b/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "..", base: "file:///a/b/c",
+        ex_href: "file:///a/",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/a/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "...", base: "file:///a/b/...",
+        ex_href: "file:///a/b/...",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/a/b/...",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "./.", base: "file:///a/b/",
+        ex_href: "file:///a/b/",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/a/b/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "../", base: "http://example.com",
+        ex_href: "http://example.com/",
+        ex_scheme: "http:",
+        ex_hostname: "example.com",
+        ex_port: nil,
+        ex_path: "/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "..///", base: "http://example.com",
+        ex_href: "http://example.com///",
+        ex_scheme: "http:",
+        ex_hostname: "example.com",
+        ex_port: nil,
+        ex_path: "///",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "./.", base: "non-special:///a/b/",
+        ex_href: "non-special:///a/b/",
+        ex_scheme: "non-special:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/a/b/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "./../1/2/../", base: "non-special:///a/b/c/d",
+        ex_href: "non-special:///a/b/1/",
+        ex_scheme: "non-special:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/a/b/1/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "/", base: "non-special://somehost",
+        ex_href: "non-special://somehost/",
+        ex_scheme: "non-special:",
+        ex_hostname: "somehost",
+        ex_port: nil,
+        ex_path: "/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "a/../../../../", base: "http://example.com/1/2/3/4/5/6",
+        ex_href: "http://example.com/1/2/",
+        ex_scheme: "http:",
+        ex_hostname: "example.com",
+        ex_port: nil,
+        ex_path: "/1/2/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "file:/./.././../C:/../1/2/../", base: "about:blank",
+        ex_href: "file:///C:/1/",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/C:/1/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  .init(input: "pile:/./.././../C:/../1/2/../", base: "about:blank",
+        ex_href: "pile:/1/",
+        ex_scheme: "pile:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/1/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+]
+
+extension WHATWGTests_NewURL {
+
+  func testAdditional() {
+    
+    for test in additionalTests {
+      guard let result = NewURL(test.input, base: test.base) else {
+        XCTFail("Test failed: \(test)")
+        continue
+      }
+      XCTAssertEqual(test.ex_href, result.href)
+      XCTAssertEqual(test.ex_scheme, result.scheme)
+      XCTAssertEqual(test.ex_hostname ?? "", result.hostname)
+      XCTAssertEqual(test.ex_port ?? "", result.port)
+      XCTAssertEqual(test.ex_path ?? "", result.path)
+      XCTAssertEqual(test.ex_query ?? "", result.query)
+      XCTAssertEqual(test.ex_fragment ?? "", result.fragment)
+    }
+    
+    
   }
 }
 

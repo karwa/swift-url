@@ -525,7 +525,7 @@ struct NewURLParser {
     
     pathRange = url.path.get().map { pathEndIndex -> Range<Input.Index> in
       defer { cursor = pathEndIndex }
-      
+      let pathStart = cursor
       // For file URLs whose paths begin with a Windows drive letter, discard the host.
       if cursor != input.endIndex {
         // The path may or may not be prefixed with a leading slash.
@@ -545,7 +545,7 @@ struct NewURLParser {
         }
         url.componentsToCopyFromBase.remove(.authority)
       }
-      return cursor..<pathEndIndex
+      return pathStart..<pathEndIndex
     }
     queryRange = url.query.get().map { queryEndIndex -> Range<Input.Index> in
       cursor = input.index(after: cursor) // "?" query separator.
@@ -665,27 +665,25 @@ struct NewURLParser {
       case false:
         
         var pathLength = 0
-        iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
-          pathLength += 1
-         PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) {
-           pathLength += $0.count
-         }
+        if url.componentsToCopyFromBase.contains(.path) {
+          // FIXME: We are double-escaping the base-URL's path.
+          iterateAppendedPathComponents(input[path], baseURL: baseURL!, schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
+            pathLength += 1
+            PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
+          }
+        } else {
+          iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
+            pathLength += 1
+            PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
+          }
         }
         
-        guard path.isEmpty == false else {
-          assert(pathLength == 0)
-          newstorage.append(ASCII.forwardSlash.codePoint)
-          newstorage.header.pathLength = 1
-          break
-        }
         assert(pathLength > 0)
         var buffer = [UInt8](repeatElement(0, count: pathLength))
         buffer.withUnsafeMutableBufferPointer { mutBuffer in
           
           var front = mutBuffer.endIndex
-          iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) {
-            isFirstComponent, pathComponent in
-            
+          func handlePathComponent(_ isFirstComponent: Bool, _ pathComponent: AnyBidirectionalCollection<UInt8>) {
             if pathComponent.isEmpty {
               front = mutBuffer.index(before: front)
               mutBuffer[front] = ASCII.forwardSlash.codePoint
@@ -713,6 +711,15 @@ struct NewURLParser {
             front = mutBuffer.index(before: front)
             mutBuffer[front] = ASCII.forwardSlash.codePoint
             newstorage.header.pathLength += 1
+          }
+          
+          if url.componentsToCopyFromBase.contains(.path) {
+            iterateAppendedPathComponents(input[path], baseURL: baseURL!, schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file,
+                                          handlePathComponent)
+          } else {
+            iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) {
+              handlePathComponent($0, AnyBidirectionalCollection($1))
+            }
           }
         }
         assert(buffer.count == pathLength)
@@ -897,7 +904,7 @@ func scanURL<Input, T, Callback>(
     
     scanResults.schemeKind = scheme
     scanResults.schemeTerminator.set(to: input.index(before: schemeEndIndex))
-    success = URLScanner.scanURLWithScheme(input[schemeEndIndex...], scheme: scheme, baseURLScheme: baseURL?.schemeKind, &scanResults, callback: &callback)
+    success = URLScanner.scanURLWithScheme(input[schemeEndIndex...], scheme: scheme, baseURL: baseURL, &scanResults, callback: &callback)
     
   } else {
 		// If we don't have a scheme, we'll need to copy from the baseURL.
@@ -923,7 +930,7 @@ func scanURL<Input, T, Callback>(
     // (No scheme + valid base URL) = some kind of relative-ish URL.
     if base.schemeKind == .file {
       scanResults.componentsToCopyFromBase = [.scheme]
-      success = URLScanner.scanAllFileURLComponents(input[...], baseScheme: base.schemeKind, &scanResults, callback: &callback)
+      success = URLScanner.scanAllFileURLComponents(input[...], baseURL: baseURL, &scanResults, callback: &callback)
     } else {
       success = URLScanner.scanAllRelativeURLComponents(input[...], baseScheme: base.schemeKind, &scanResults, callback: &callback)
     }
@@ -970,8 +977,12 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
     func isPathComponentTerminator(_ byte: UInt8) -> Bool {
       return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
     }
+    
     guard input.isEmpty == false else {
-      return // empty input.
+      if schemeIsSpecial {
+        block(true, input.prefix(0))
+      }
+      return
     }
 
     var contentStartIdx = input.startIndex
@@ -980,13 +991,25 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
     if isPathComponentTerminator(input[contentStartIdx]) {
       contentStartIdx = input.index(after: contentStartIdx)
     }
-    // For file URLs, also drop any other leading slashes.
+    // For file URLs, also drop any other leading slashes, single- or double-dot path components.
     if isFileScheme {
       while contentStartIdx != input.endIndex, isPathComponentTerminator(input[contentStartIdx]) {
         // callback.validationError(.unexpectedEmptyPath)
         contentStartIdx = input.index(after: contentStartIdx)
       }
-      // FIXME: Also skip leading single, double dot components.
+      while let terminator = input[contentStartIdx...].firstIndex(where: isPathComponentTerminator) {
+        let component = input[contentStartIdx..<terminator]
+        guard URLStringUtils.isSingleDotPathSegment(component) || URLStringUtils.isDoubleDotPathSegment(component) else {
+          break
+        }
+        contentStartIdx = input.index(after: terminator)
+      }
+    }
+    
+    guard contentStartIdx != input.endIndex else {
+      // If the path (after trimming) is empty, we
+      block(false, input[contentStartIdx..<contentStartIdx])
+      return
     }
     
     // Path component special cases:
@@ -1072,6 +1095,7 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
       
       // If the first path component is a Windows drive letter, it can't be popped-out.
       if isFileScheme, URLStringUtils.isWindowsDriveLetter(path) {
+        flushTrailingEmpties()
         block(true, path)
         return
       }
@@ -1110,6 +1134,249 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
     block(true, path)
 }
 
+
+func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schemeIsSpecial: Bool, isFileScheme: Bool, _ realblock: (Bool, AnyBidirectionalCollection<UInt8>)->Void)
+  where Input: BidirectionalCollection, Input.Element == UInt8 {
+    
+    func block<T>(_ isFirst: Bool, _ slice: T) where T: BidirectionalCollection, T.Element == UInt8 {
+      realblock(isFirst, AnyBidirectionalCollection(slice))
+    }
+    func isPathComponentTerminator(_ byte: UInt8) -> Bool {
+      return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
+    }
+    
+    var contentStartIdx = input.startIndex
+    
+    // Special URLs have an implicit, empty path.
+    guard input.isEmpty == false else {
+      if schemeIsSpecial {
+        block(true, input[...])
+      }
+      return
+    }
+
+    // Trim leading slash if present.
+    if isPathComponentTerminator(input[contentStartIdx]) {
+      contentStartIdx = input.index(after: contentStartIdx)
+    }
+    // File paths trim _all_ leading slashes, single- and double-dot path components.
+    if isFileScheme {
+      while contentStartIdx != input.endIndex, isPathComponentTerminator(input[contentStartIdx]) {
+        // callback.validationError(.unexpectedEmptyPath)
+        contentStartIdx = input.index(after: contentStartIdx)
+      }
+      while let terminator = input[contentStartIdx...].firstIndex(where: isPathComponentTerminator) {
+        let component = input[contentStartIdx..<terminator]
+        guard URLStringUtils.isSingleDotPathSegment(component) || URLStringUtils.isDoubleDotPathSegment(component) else {
+          break
+        }
+        contentStartIdx = input.index(after: terminator)
+      }
+    }
+    
+    // If the path wasn't empty before, but is now, the path is a lone slash (non-file) or string of slashes (file).
+    // A path of "/" always resolves to "/", and is not relative to the base path...
+    //  - Except: if this is a file URL and the base path starts with a Windows drive letter (X). Then the resolved path is just "X:/"
+    guard contentStartIdx != input.endIndex else {
+      assert(isFileScheme, "Only file URLs seem to hit this path")
+      
+      var didYield = false
+      if isFileScheme {
+        baseURL.withComponentBytes(.path) {
+          guard let basePath = $0?.dropFirst() else { return } // dropFirst() due to the leading slash.
+          if URLStringUtils.hasWindowsDriveLetterPrefix(basePath) {
+            block(false, input[contentStartIdx..<contentStartIdx])
+            block(true, basePath.prefix(2))
+            didYield = true
+          }
+        }
+      }
+      if !didYield {
+        block(true, input[contentStartIdx..<contentStartIdx])
+      }
+      return
+    }
+    
+    // Path component special cases:
+    //
+    // - Single dot ('.') components get skipped.
+    //   - If at the end of the path, they force a trailing slash.
+    // - Double dot ('..') components pop previous components from the path.
+    //   - For file URLs, they do not pop the last component if it is a Windows drive letter.
+    //   - If at the end of the path, they force a trailing slash.
+    //     (even if they have popped all other components, the result is an empty path, not a nil path)
+    // - Consecutive empty components at the start of a file URL get collapsed.
+    
+    // Iterate the path components in reverse, so we can skip components which later get popped.
+    var path = input[contentStartIdx...]
+    var popcount = 0
+    var trailingEmptyCount = 0
+    var didYieldComponent = false
+    
+    func flushTrailingEmpties() {
+      if trailingEmptyCount != 0 {
+        for _ in 0 ..< trailingEmptyCount {
+          block(false, input.suffix(0))
+        }
+        didYieldComponent = true
+        trailingEmptyCount = 0
+      }
+    }
+        
+    // Consume components separated by terminators.
+    while let componentTerminatorIndex = path.lastIndex(where: isPathComponentTerminator) {
+      // Since we stripped the initial slash, we always have a multi-component path here.
+      
+      if ASCII(input[componentTerminatorIndex]) == .backslash {
+        //callback.validationError(.unexpectedReverseSolidus)
+      }
+      
+      let pathComponent = input[path.index(after: componentTerminatorIndex)..<path.endIndex]
+      defer { path = path.prefix(upTo: componentTerminatorIndex) }
+ 
+      // If this is a '..' component, skip it and increase the popcount.
+      // If at the end of the path, mark it as a trailing empty.
+      guard URLStringUtils.isDoubleDotPathSegment(pathComponent) == false else {
+        popcount += 1
+        if pathComponent.endIndex == input.endIndex {
+          // FIXME: Never executed in tests.
+          trailingEmptyCount += 1
+        }
+        continue
+      }
+      // If the popcount is not 0, this component can be ignored because of a subsequent '..'.
+      guard popcount == 0 else {
+        popcount -= 1
+        continue
+      }
+      // If this is a '.' component, skip it.
+      // If at the end of the path, mark it as a trailing empty.
+      if URLStringUtils.isSingleDotPathSegment(pathComponent) {
+        if pathComponent.endIndex == input.endIndex {
+          trailingEmptyCount += 1
+        }
+        continue
+      }
+      // If this component is empty, defer it until we process later components.
+      if pathComponent.isEmpty {
+        trailingEmptyCount += 1
+        continue
+      }
+      flushTrailingEmpties()
+      // FIXME: If we don't strip leading slashes (e.g. for non-file URLs), this may indeed be the first component.
+      //        As in, we may never yield another component after this (e.g. "file://C|/").
+      //        Luckily this only matters for file URLs, where we *do* strip the leading slashes.
+      block(false, pathComponent)
+      didYieldComponent = true
+    }
+    
+    assert(path.isEmpty == false)
+    print("Input string trailing empties: \(trailingEmptyCount)")
+    
+    switch path {
+    // Process '..' and '.'. If this is the first component, ensure we have a trailing slash.
+    case _ where URLStringUtils.isDoubleDotPathSegment(path):
+      popcount += 1
+      fallthrough
+    case _ where URLStringUtils.isSingleDotPathSegment(path):
+      if !didYieldComponent {
+        trailingEmptyCount = max(trailingEmptyCount, 1)
+      }
+      
+    // If the first path component is a Windows drive letter, it can't be popped-out,
+    // and we don't care about the base URL.
+    case _ where URLStringUtils.isWindowsDriveLetter(path) && isFileScheme:
+      flushTrailingEmpties()
+      block(true, path)
+      return
+
+    case _ where popcount == 0:
+    	flushTrailingEmpties()
+      block(true, path) // FIXME: May not actually be the first component.
+      didYieldComponent = true
+      
+    default:
+      popcount -= 1
+      break // Popped out.
+    }
+    
+    // Okay, let's check out the base path now.
+    baseURL.withComponentBytes(.path) {
+      guard var basePath = $0?[...] else {
+        return
+      }
+      // Trim the leading slash.
+      if basePath.first == ASCII.forwardSlash.codePoint {
+        basePath = basePath.dropFirst()
+      }
+      // Drop the last path component.y
+      if basePath.last == ASCII.forwardSlash.codePoint {
+        basePath = basePath.dropLast()
+      } else {
+       	basePath = basePath[..<(basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex)]
+      }
+      // Consume all other components. Process them like we do for the input string.
+      while let componentTerminatorIndex = basePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
+        let pathComponent = basePath[basePath.index(after: componentTerminatorIndex)..<basePath.endIndex]
+        defer { basePath = basePath.prefix(upTo: componentTerminatorIndex) }
+        
+        assert(URLStringUtils.isDoubleDotPathSegment(pathComponent) == false)
+        assert(URLStringUtils.isSingleDotPathSegment(pathComponent) == false)
+        // If the popcount is not 0, this component can be ignored because of a subsequent '..'.
+        guard popcount == 0 else {
+          popcount -= 1
+          continue
+        }
+        // If this component is empty, defer it until we process later components.
+        if pathComponent.isEmpty {
+          trailingEmptyCount += 1
+          continue
+        }
+        flushTrailingEmpties()
+        block(false, pathComponent)
+        didYieldComponent = true
+      }
+      
+      guard popcount == 0 else {
+        // This component has been popped-out.
+        
+        // If the first path component is a Windows drive letter, it can't be popped-out.
+        if isFileScheme, URLStringUtils.isWindowsDriveLetter(basePath) {
+          trailingEmptyCount = max(1, trailingEmptyCount)
+          flushTrailingEmpties()
+          block(true, basePath)
+          return
+        }
+        if !isFileScheme {
+          flushTrailingEmpties()
+        }
+        if didYieldComponent == false {
+          block(true, input.prefix(0))
+        }
+        return
+      }
+      
+      assert(URLStringUtils.isDoubleDotPathSegment(basePath) == false)
+      assert(URLStringUtils.isSingleDotPathSegment(basePath) == false)
+      
+      if basePath.isEmpty {
+        if !isFileScheme {
+          flushTrailingEmpties()
+        }
+        // This means we have a leading empty component in a file URL (e.g. "file://somehost//foo/").
+        // Discard trailing empties and only yield
+        if didYieldComponent == false {
+          // FIXME: Never executed in tests.
+          block(true, basePath)
+        }
+        return
+      }
+      
+      flushTrailingEmpties()
+      block(true, basePath)
+    }
+}
+
 struct URLScanner<Input, T, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input,
 Mapping<T>.Index == Input.Index, Callback: URLParserCallback {
   
@@ -1129,7 +1396,7 @@ extension URLScanner {
   
   /// Scans all components of the input string `input`, and builds up a map based on the URL's `scheme`.
   ///
-  static func scanURLWithScheme(_ input: Input, scheme: NewURLParser.Scheme, baseURLScheme: NewURLParser.Scheme?, _ mapping: inout Mapping<T>,
+  static func scanURLWithScheme(_ input: Input, scheme: NewURLParser.Scheme, baseURL: NewURL?, _ mapping: inout Mapping<T>,
                                 callback: inout Callback) -> Bool {
 
     switch scheme {
@@ -1137,7 +1404,7 @@ extension URLScanner {
       if !URLStringUtils.hasDoubleSolidusPrefix(input) {
       	callback.validationError(.fileSchemeMissingFollowingSolidus)
       }
-      return scanAllFileURLComponents(input, baseScheme: baseURLScheme, &mapping, callback: &callback)
+      return scanAllFileURLComponents(input, baseURL: baseURL, &mapping, callback: &callback)
       
     case .other: // non-special.
       let firstIndex = input.startIndex
@@ -1157,7 +1424,7 @@ extension URLScanner {
     // !!!! FIXME: We actually need to check that the *content* of `scheme` is the same as `baseURLScheme` !!!!
       
     default: // special schemes other than 'file'.
-      if scheme == baseURLScheme, URLStringUtils.hasDoubleSolidusPrefix(input) == false {
+      if scheme == baseURL?.schemeKind, URLStringUtils.hasDoubleSolidusPrefix(input) == false {
         // state: "special relative or authority"
         callback.validationError(.relativeURLMissingBeginningSolidus)
         return scanAllRelativeURLComponents(input, baseScheme: scheme, &mapping, callback: &callback)
@@ -1380,7 +1647,7 @@ extension URLScanner {
     
     // 2. Return the component to parse based on input.
     guard input.isEmpty == false else {
-      return .success(continueFrom: scheme.isSpecial ? (.path, input.startIndex) : nil)
+      return .success(continueFrom: (.path, input.startIndex))
     }
     
     let c: ASCII? = ASCII(input[input.startIndex])
@@ -1437,12 +1704,15 @@ extension URLScanner {
     }
       
     // 4. Return the next component.
+    if path.isEmpty && scheme.isSpecial == false {
+       mapping.path.set(to: nil)
+    } else {
+      mapping.path.set(to: path.endIndex)
+    }
     if let pathEnd = nextComponentStartIndex {
-      mapping.path.set(to: pathEnd)
       return .success(continueFrom: (ASCII(input[pathEnd]) == .questionMark ? .query : .fragment,
                                      input.index(after: pathEnd)))
     } else {
-      mapping.path.set(to: path.isEmpty ? nil : input.endIndex)
       return .success(continueFrom: nil)
     }
   }
@@ -1492,10 +1762,10 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
-  static func scanAllFileURLComponents(_ input: Input, baseScheme: NewURLParser.Scheme?, _ mapping: inout Mapping<T>, callback: inout Callback) -> Bool {
+  static func scanAllFileURLComponents(_ input: Input, baseURL: NewURL?, _ mapping: inout Mapping<T>, callback: inout Callback) -> Bool {
     var remaining = input[...]
     
-    guard case .success(let _component) = parseFileURLStart(remaining, baseScheme: baseScheme, &mapping, callback: &callback) else {
+    guard case .success(let _component) = parseFileURLStart(remaining, baseURL: baseURL, &mapping, callback: &callback) else {
       return false
     }
     guard var component = _component else {
@@ -1536,27 +1806,23 @@ extension URLScanner {
     return true
   }
   
-  static func parseFileURLStart(_ input: Input, baseScheme: NewURLParser.Scheme?, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
-    print("Reached file URL")
+  static func parseFileURLStart(_ input: Input, baseURL: NewURL?, _ mapping: inout Mapping<T>, callback: inout Callback) -> ComponentParseResult {
     
-//    guard input.isEmpty == false else {
-//      return .success(continueFrom: nil)
-//    }
-    
-    // After "file:"
-    // - 0 slashes:  copy base host, append path to base path.
-    // - 1 slash:    copy base host, parse own path.
-    // - 2 slashes:  parse own host, parse own path.
-    // - 3 slahses:  empty host, parse own path.
+    // Note that file URLs may also be relative URLs. It all depends on what comes after "file:".
+    // - 0 slashes:  copy base host, parse as path relative to base path.
+    // - 1 slash:    copy base host, parse as absolute path.
+    // - 2 slashes:  parse own host, parse absolute path.
+    // - 3 slahses:  empty host, parse as absolute path.
     // - 4+ slashes: invalid.
+    
+    let baseScheme = baseURL?.schemeKind
     
     var cursor = input.startIndex
     guard cursor != input.endIndex, let c0 = ASCII(input[cursor]), (c0 == .forwardSlash || c0 == .backslash) else {
-      // No slashes. e.g. "file:usr/lib/Swift" or "file:?someQuery".
+      // No slashes. May be a relative path ("file:usr/lib/Swift") or no path ("file:?someQuery").
       guard baseScheme == .file else {
         return .success(continueFrom: (.path, cursor))
       }
-      
       assert(mapping.componentsToCopyFromBase.isEmpty || mapping.componentsToCopyFromBase == [.scheme])
       mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
 
@@ -1565,15 +1831,13 @@ extension URLScanner {
       }
       switch ASCII(input[cursor]) {
       case .questionMark?:
+        mapping.componentsToCopyFromBase.remove(.query)
         return .success(continueFrom: (.query, input.index(after: cursor)))
       case .numberSign?:
         return .success(continueFrom: (.fragment, input.index(after: cursor)))
       default:
         if URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
           callback.validationError(.unexpectedWindowsDriveLetter)
-        } else {
-          // TODO: Propagate this to construction phase.
-          // shortenURLPath(&url.path, isFileScheme: true)
         }
         return .success(continueFrom: (.path, cursor))
       }
@@ -1584,29 +1848,26 @@ extension URLScanner {
     }
     
     guard cursor != input.endIndex, let c1 = ASCII(input[cursor]), (c1 == .forwardSlash || c1 == .backslash) else {
-      // 1 slash. e.g. "file:/usr/lib/Swift".
+      // 1 slash. e.g. "file:/usr/lib/Swift". Absolute path.
       
-      // If the base path starts with a Windows drive letter and we *dont't*, the path is relative
-      // to the base URL's Windows drive:
-      // ("file:/Users", base: "file:///C/Windows")     -> "file:///Users"
-      // ("file:/Users", base: "file:///C:/Windows")    -> "file:///C:/Users"
-      // ("file:/D:/Users", base: "file:///C:/Windows") -> "file:///D:/Users"
       if baseScheme == .file, URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) == false {
-        
-        // FIXME:
-        // We are a path.
-        // + If the base path starts with a Windows drive letter, we are relative to that drive letter.
-        //    - Path iteration needs to include that component from the base.
-        // + Otherwise we are relative to the host.
-        //    - Copy the host from the base.
-        
-        mapping.componentsToCopyFromBase.formUnion([.authority])
-
-//        if let basePathStart = base.path.first, URLStringUtils.isNormalisedWindowsDriveLetter(basePathStart.utf8) {
-//          url.path.append(basePathStart)
-//        } else {
-//          url.host = base.host
-//        }
+        // This string does not begin with a Windows drive letter.
+        // If baseURL's path *does*, we are relative to it, rather than being absolute.
+        // The appended-path-iteration function handles this case for us, which we opt-in to
+        // by having a non-empty path in a special-scheme URL (meaning a guaranteed non-nil path) and
+        // including 'path' in 'componentsToCopyFromBase'.
+        let basePathStartsWithWindowsDriveLetter: Bool = baseURL.map {
+          $0.withComponentBytes(.path) {
+            guard let basePath = $0 else { return false }
+            return URLStringUtils.hasWindowsDriveLetterPrefix(basePath.dropFirst())
+          }
+        } ?? false
+        if basePathStartsWithWindowsDriveLetter {
+          mapping.componentsToCopyFromBase.formUnion([.path])
+        } else {
+          // No Windows drive letters anywhere. Copy the host and parse our path normally.
+          mapping.componentsToCopyFromBase.formUnion([.authority])
+        }
       }
       return scanPath(input, scheme: .file, &mapping, callback: &callback)
     }
@@ -1819,7 +2080,7 @@ extension URLScanner {
       var cursor = input.index(after: input.startIndex)
       guard cursor != input.endIndex else {
         mapping.componentsToCopyFromBase.formUnion([.authority])
-        return .success(continueFrom: (.path, cursor))
+        return .success(continueFrom: (.path, input.startIndex))
       }
       switch ASCII(input[cursor]) {
       // Second character is also a slash. Parse as an authority.
@@ -1836,7 +2097,7 @@ extension URLScanner {
       // Otherwise, copy the base authority. Parse as a (absolute) path.
       default:
         mapping.componentsToCopyFromBase.formUnion([.authority])
-        return .success(continueFrom: (.path, cursor))
+        return .success(continueFrom: (.path, input.startIndex))
       }
     
     // Initial query/fragment markers.
@@ -1849,7 +2110,10 @@ extension URLScanner {
       
     // Some other character. Parse as a relative path.
     default:
-      // FIXME: Construction needs to drop the last base path component.
+      // Since we have a non-empty input string with characters before any query/fragment terminators,
+      // path-scanning will always produce a mapping with a non-nil pathLength.
+      // Construction knows that if a path is found in the input string *and* we ask to copy from the base,
+      // that the paths should be combined by stripping the base's last path component.
       mapping.componentsToCopyFromBase.formUnion([.authority, .path])
       return .success(continueFrom: (.path, input.startIndex))
     }
