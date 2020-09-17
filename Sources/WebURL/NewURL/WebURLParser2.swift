@@ -464,83 +464,134 @@ extension ScannedURL {
 
 protocol URLWriter {
   
-  func writeCannotBeABaseURL(_ cannotBeABaseURL: Bool)
-  func writeSchemeKind(_ schemeKind: NewURLParser.Scheme)
- 
-  func writeScheme<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8
+  init(schemeKind: NewURLParser.Scheme, cannotBeABaseURL: Bool)
+  mutating func buildURL() -> NewURL
   
-  func writeAuthorityHeader()
-  
+  /// A function which appends the given bytes to storage.
+  ///
+  /// Functions using this pattern typically look like the following:
+  /// ```swift
+  /// func writeUsername<T>(_ usernameWriter: (WriterFunc<T>)->Void)
+  /// ```
+  ///
+  /// Callers typically use this as shown:
+  /// ```swift
+  /// writeUsername { writePiece in
+  ///   PercentEncoding.encodeIteratively(..., handlePiece: { writePiece($0) })
+  /// }
+  /// ```
+  /// in this example, `writePiece` is a `WriterFunc`, and its type is inferred by the call to `PercentEncoding.encodeIteratively(...)`.
+  ///
   typealias WriterFunc<T> = (T)->Void
-  func writeUsernameComponent<T>(_ username: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
-  func writePasswordComponent<T>(_ password: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
-  func writeCredentialsTerminator()
-  func writeHostname<T>(_ hostname: T) where T: RandomAccessCollection, T.Element == UInt8
-  func writePort(_ port: UInt16)
+ 
+  /// Appends the given bytes to storage, followed by the scheme separator character (`:`).
+  /// This is always the first call to the writer.
+  mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8
   
-  func writeKnownAuthorityString(_ authority: UnsafeBufferPointer<UInt8>,
-                                 usernameLength: Int, passwordLength: Int,
-                                 hostnameLength: Int, portLength: Int)
+  /// Appends the authority header (`//`) to storage.
+  /// If called, this must always be the immediate successor to `writeSchemeContents`.
+  mutating func writeAuthorityHeader()
   
+  /// Appends the bytes provided by `usernameWriter`.
+  /// The content must already be percent-encoded and not include any separators.
+  /// If called, this must always be the immediate successor to `writeAuthorityHeader`.
+  mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
   
-  func writePathSimple<T>(_ path: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
-  func writePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Void)
+  /// Appends the password separator character (`:`), followed by the bytes provided by `passwordWriter`.
+  /// The content must already be percent-encoded and not include any separators.
+  /// If called, this must always be the immediate successor to `writeUsernameContents`.
+  mutating func writePasswordContents<T>(_ passwordWriter: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
   
-  func writeQuery<T>(_ query: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
-  func writeFragment<T>(_ query: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
+  /// Appends the credential terminator byte (`@`).
+  /// If called, this must always be the immediate successor to either `writeUsernameContents` or `writePasswordContents`.
+  mutating func writeCredentialsTerminator()
   
-  func getStorage() -> NewURL.Storage
+  /// Appends the given bytes to storage.
+  /// The content must already be percent-encoded/IDNA-transformed and not include any separators.
+  /// If called, this must always have been preceded by a call to `writeAuthorityHeader`.
+  mutating func writeHostname<T>(_ hostname: T) where T: RandomAccessCollection, T.Element == UInt8
+  
+  /// Appends the port separator character (`:`), followed by the textual representation of the given port number to storage.
+  /// If called, this must always be the immediate successor to `writeHostname`.
+  mutating func writePort(_ port: UInt16)
+  
+  /// Appends an entire authority string (username + password + hostname + port) to storage.
+  /// The content must already be percent-encoded/IDNA-transformed.
+  /// If called, this must always be the immediate successor to `writeAuthorityHeader`.
+  /// - important: `passwordLength` and `portLength` include their required leading separators (so a port component of `:8080` has a length of 5).
+  mutating func writeKnownAuthorityString(_ authority: UnsafeBufferPointer<UInt8>,
+                                           usernameLength: Int, passwordLength: Int,
+                                           hostnameLength: Int, portLength: Int)
+  
+  /// Appends the bytes given by `pathWriter`.
+  /// The content must already be percent-encoded. No separators are added before or after the content.
+  mutating func writePathSimple<T>(_ pathWriter: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
+  
+  /// Appends an uninitialized space of size `length` and calls the given closure to allow for the path content to be written out of order.
+  /// The `writer` closure must return the number of bytes written (`bytesWritten`), and all bytes from `0..<bytesWritten` must be initialized.
+  /// Content written in to the buffer must already be percent-encoded. No separators are added before or after the content.
+  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int)
+  
+  /// Appends the query separator character (`?`), followed by the bytes provided by `queryWriter`.
+  /// The content must already be percent-encoded.
+  mutating func writeQueryContents<T>(_ queryWriter: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
+  
+  /// Appends the fragment separator character (`#`), followed by the bytes provided by `fragmentWriter`
+  /// The content must already be percent-encoded.
+  mutating func writeFragmentContents<T>(_ fragmentWriter: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
 }
 
-final class DummyWriter: URLWriter {
-  var storage: NewURL.Storage = .init(capacity: 10, initialHeader: .init())
+struct GenericURLStorageWriter: URLWriter {
+  var storage: NewURL.Storage
   
-  func writeCannotBeABaseURL(_ cannotBeABaseURL: Bool) {
+  init(schemeKind: NewURLParser.Scheme, cannotBeABaseURL: Bool) {
+    storage = .init(capacity: 10, initialHeader: .init())
+    storage.header.schemeKind = schemeKind
     storage.header.cannotBeABaseURL = cannotBeABaseURL
   }
   
-  func writeSchemeKind(_ schemeKind: NewURLParser.Scheme) {
-    storage.header.schemeKind = schemeKind
+  mutating func buildURL() -> NewURL {
+    return NewURL(storage: storage)
   }
   
-  func writeScheme<T>(_ schemeBytes: T, countIfKnown: Int?) where T : Collection, T.Element == UInt8 {
+  mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T : Collection, T.Element == UInt8 {
     storage.append(contentsOf: schemeBytes)
     storage.append(ASCII.colon.codePoint)
     storage.header.schemeLength = countIfKnown.map { $0 + 1 } ?? storage.header.count
     storage.header.components = [.scheme]
   }
   
-  func writeAuthorityHeader() {
+  mutating func writeAuthorityHeader() {
     storage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
     storage.header.components.insert(.authority)
   }
   
-  func writeUsernameComponent<T>(_ username: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
-    username { piece in
+  mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    usernameWriter { piece in
       storage.append(contentsOf: piece)
       storage.header.usernameLength += piece.count
     }
   }
   
-  func writePasswordComponent<T>(_ password: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+  mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
     storage.append(ASCII.colon.codePoint)
     storage.header.passwordLength = 1
-    password { piece in
+    passwordWriter { piece in
       storage.append(contentsOf: piece)
       storage.header.passwordLength += piece.count
     }
   }
   
-  func writeCredentialsTerminator() {
+  mutating func writeCredentialsTerminator() {
     storage.append(ASCII.commercialAt.codePoint)
   }
   
-  func writeHostname<T>(_ hostname: T) where T : RandomAccessCollection, T.Element == UInt8 {
+  mutating func writeHostname<T>(_ hostname: T) where T : RandomAccessCollection, T.Element == UInt8 {
     storage.append(contentsOf: hostname)
     storage.header.hostnameLength = hostname.count
   }
   
-  func writePort(_ port: UInt16) {
+  mutating func writePort(_ port: UInt16) {
     storage.append(ASCII.colon.codePoint)
     var portString = String(port)
     portString.withUTF8 {
@@ -549,7 +600,7 @@ final class DummyWriter: URLWriter {
     }
   }
   
-  func writeKnownAuthorityString(_ authority: UnsafeBufferPointer<UInt8>, usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int) {
+  mutating func writeKnownAuthorityString(_ authority: UnsafeBufferPointer<UInt8>, usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int) {
     storage.append(contentsOf: authority)
     storage.header.usernameLength = usernameLength
     storage.header.passwordLength = passwordLength
@@ -557,46 +608,40 @@ final class DummyWriter: URLWriter {
     storage.header.portLength = portLength
   }
   
-  func writePathSimple<T>(_ path: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+  mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
     storage.header.components.insert(.path)
-    path {
+    pathWriter {
       storage.append(contentsOf: $0)
       storage.header.pathLength += $0.count
     }
   }
   
-  func writePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Void) {
+  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
     storage.header.components.insert(.path)
     storage.append(uninitializedCapacity: length) { buffer in
-      writer(buffer)
-      return length
+      return writer(buffer)
     }
     storage.header.pathLength = length
   }
   
-  func writeQuery<T>(_ query: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+  mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
     storage.header.components.insert(.query)
     storage.append(ASCII.questionMark.codePoint)
     storage.header.queryLength = 1
-    query {
+    queryWriter {
       storage.append(contentsOf: $0)
       storage.header.queryLength += $0.count
     }
   }
   
-  func writeFragment<T>(_ fragment: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+  mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
     storage.header.components.insert(.fragment)
     storage.append(ASCII.numberSign.codePoint)
     storage.header.fragmentLength = 1
-    fragment {
+    fragmentWriter {
       storage.append(contentsOf: $0)
       storage.header.fragmentLength += $0.count
     }
-  }
-  
-  
-  func getStorage() -> NewURL.Storage {
-    return storage
   }
 }
 
@@ -638,8 +683,7 @@ struct NewURLParser {
 //    print("-----------------------------------------")
 //    print("")
 //    callback.errors.removeAll(keepingCapacity: true)
-    var writer = DummyWriter()
-    let result = construct(url: scanResults, input: filteredInput, baseURL: baseURL, writer: writer, callback: &callback)
+    let result = construct(url: scanResults, input: filteredInput, baseURL: baseURL, callback: &callback)
     
 //    print("")
 //    print("Construction Errors:")
@@ -655,7 +699,6 @@ struct NewURLParser {
     url: ScannedURL<T>,
     input: FilteredURLInput<Input>,
     baseURL: NewURL?,
-    writer: URLWriter,
     callback: inout Callback
   ) -> NewURL? where ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
     
@@ -785,217 +828,224 @@ struct NewURLParser {
     
     // Step 3: Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
     
-    writer.writeCannotBeABaseURL(url.cannotBeABaseURL)
-    writer.writeSchemeKind(schemeKind)
+    func writeURL<WriterType: URLWriter>(using writerType: WriterType.Type) -> NewURL {
     
-    // 3.1: Write scheme
-    // We *must* have a scheme.
-    if let inputScheme = schemeRange {
-      assert(schemeKind == url.schemeKind)
-      // Scheme must be lowercased.
-      writer.writeScheme(input[inputScheme].lazy.map {
-        ASCII($0)?.lowercased.codePoint ?? $0
-      }, countIfKnown: nil)
-      
-    } else {
-      guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
-      	preconditionFailure("Cannot construct a URL without a scheme")
-      }
-      assert(schemeKind == baseURL.schemeKind)
-      baseURL.withComponentBytes(.scheme) {
-        let bytes = $0!.dropLast() // drop terminator.
-        writer.writeScheme(bytes, countIfKnown: bytes.count)
-      }
-    }
+      var writer = WriterType(schemeKind: schemeKind, cannotBeABaseURL: url.cannotBeABaseURL)
+    
+      // 3.1: Write scheme
+      // We *must* have a scheme.
+      if let inputScheme = schemeRange {
+        assert(schemeKind == url.schemeKind)
+        // Scheme must be lowercased.
+        writer.writeSchemeContents(input[inputScheme].lazy.map {
+          ASCII($0)?.lowercased.codePoint ?? $0
+        }, countIfKnown: nil)
         
-    if var hostnameString = hostnameString {
-      writer.writeAuthorityHeader()
-      
-      var hasCredentials = false
-      if let username = usernameRange, username.isEmpty == false {
-        writer.writeUsernameComponent { writePiece in
-          PercentEscaping.encodeIterativelyAsBuffer(
-            bytes: input[username],
-            escapeSet: .url_userInfo,
-            processChunk: { piece in writePiece(piece) }
-          )
+      } else {
+        guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
+          preconditionFailure("Cannot construct a URL without a scheme")
         }
-        hasCredentials = true
-      }
-      if let password = passwordRange, password.isEmpty == false {
-        writer.writePasswordComponent { writePiece in
-          PercentEscaping.encodeIterativelyAsBuffer(
-            bytes: input[password],
-            escapeSet: .url_userInfo,
-            processChunk: { piece in writePiece(piece) }
-          )
+        assert(schemeKind == baseURL.schemeKind)
+        baseURL.withComponentBytes(.scheme) {
+          let bytes = $0!.dropLast() // drop terminator.
+          writer.writeSchemeContents(bytes, countIfKnown: bytes.count)
         }
-        hasCredentials = true
       }
-      if hasCredentials {
-        writer.writeCredentialsTerminator()
-      }
-      hostnameString.withUTF8 {
-        writer.writeHostname($0)
-      }
-      if let port = port, port != schemeKind.defaultPort {
-        writer.writePort(port)
-      }
+          
+      if var hostnameString = hostnameString {
+        writer.writeAuthorityHeader()
+        
+        var hasCredentials = false
+        if let username = usernameRange, username.isEmpty == false {
+          writer.writeUsernameContents { writePiece in
+            PercentEscaping.encodeIterativelyAsBuffer(
+              bytes: input[username],
+              escapeSet: .url_userInfo,
+              processChunk: { piece in writePiece(piece) }
+            )
+          }
+          hasCredentials = true
+        }
+        if let password = passwordRange, password.isEmpty == false {
+          writer.writePasswordContents { writePiece in
+            PercentEscaping.encodeIterativelyAsBuffer(
+              bytes: input[password],
+              escapeSet: .url_userInfo,
+              processChunk: { piece in writePiece(piece) }
+            )
+          }
+          hasCredentials = true
+        }
+        if hasCredentials {
+          writer.writeCredentialsTerminator()
+        }
+        hostnameString.withUTF8 {
+          writer.writeHostname($0)
+        }
+        if let port = port, port != schemeKind.defaultPort {
+          writer.writePort(port)
+        }
 
-    } else if url.componentsToCopyFromBase.contains(.authority) {
-      guard let baseURL = baseURL else {
-        preconditionFailure("")
-      }
-      baseURL.withComponentBytes(.authority) {
-        if let baseAuth = $0 {
-          writer.writeAuthorityHeader()
-          writer.writeKnownAuthorityString(
-            baseAuth,
-            usernameLength: baseURL.storage.header.usernameLength,
-            passwordLength: baseURL.storage.header.passwordLength,
-            hostnameLength: baseURL.storage.header.hostnameLength,
-            portLength: baseURL.storage.header.portLength
-          )
+      } else if url.componentsToCopyFromBase.contains(.authority) {
+        guard let baseURL = baseURL else {
+          preconditionFailure("")
         }
-      }
-    } else if schemeKind == .file {
-      // - 'file:' URLs get an implicit authority.
-      writer.writeAuthorityHeader()
-    }
-        
-    // Write path.
-    if let path = pathRange {
-      switch url.cannotBeABaseURL {
-      case true:
-        writer.writePathSimple { writePiece in
-          PercentEscaping.encodeIterativelyAsBuffer(
-            bytes: input[path],
-            escapeSet: .url_c0,
-            processChunk: { piece in writePiece(piece) }
-          )
-        }
-        
-      case false:
-        var pathLength = 0
-        if url.componentsToCopyFromBase.contains(.path) {
-          // FIXME: We are double-escaping the base-URL's path.
-          iterateAppendedPathComponents(input[path], baseURL: baseURL!, schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
-            pathLength += 1
-            PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
-          }
-        } else {
-          iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
-            pathLength += 1
-            PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
+        baseURL.withComponentBytes(.authority) {
+          if let baseAuth = $0 {
+            writer.writeAuthorityHeader()
+            writer.writeKnownAuthorityString(
+              baseAuth,
+              usernameLength: baseURL.storage.header.usernameLength,
+              passwordLength: baseURL.storage.header.passwordLength,
+              hostnameLength: baseURL.storage.header.hostnameLength,
+              portLength: baseURL.storage.header.portLength
+            )
           }
         }
-        
-        assert(pathLength > 0)
-        writer.writePathInPreallocatedBuffer(length: pathLength) { mutBuffer in
-                    
-          var front = mutBuffer.endIndex
-          func handlePathComponent(_ isFirstComponent: Bool, _ pathComponent: AnyBidirectionalCollection<UInt8>) {
-            // Fast-path. Does not change length.
-            if pathComponent.isEmpty {
-              front = mutBuffer.index(before: front)
-              mutBuffer[front] = ASCII.forwardSlash.codePoint
-              return
-            }
-            // Normalize the 2nd character of a Windows drive letter to ':'. Again, doesn't change length.
-            if isFirstComponent, schemeKind == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
-              front = mutBuffer.index(before: front)
-              mutBuffer[front] = ASCII.colon.codePoint
-              front = mutBuffer.index(before: front)
-              mutBuffer[front] = pathComponent[pathComponent.startIndex]
-              front = mutBuffer.index(before: front)
-              mutBuffer[front] = ASCII.forwardSlash.codePoint
-              return
-            }
-            PercentEscaping.encodeReverseIterativelyAsBuffer(
-              bytes: pathComponent,
-              escapeSet: .url_path,
-              processChunk: { piece in
-                let newFront = mutBuffer.index(front, offsetBy: -1 * piece.count)
-                _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[newFront...]).initialize(from: piece)
-                front = newFront
-            })
-            front = mutBuffer.index(before: front)
-            mutBuffer[front] = ASCII.forwardSlash.codePoint
+      } else if schemeKind == .file {
+        // - 'file:' URLs get an implicit authority.
+        writer.writeAuthorityHeader()
+      }
+          
+      // Write path.
+      if let path = pathRange {
+        switch url.cannotBeABaseURL {
+        case true:
+          writer.writePathSimple { writePiece in
+            PercentEscaping.encodeIterativelyAsBuffer(
+              bytes: input[path],
+              escapeSet: .url_c0,
+              processChunk: { piece in writePiece(piece) }
+            )
           }
           
+        case false:
+          var pathLength = 0
           if url.componentsToCopyFromBase.contains(.path) {
-            iterateAppendedPathComponents(input[path], baseURL: baseURL!, schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file,
-                                          handlePathComponent)
-          } else {
-            iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) {
-              handlePathComponent($0, AnyBidirectionalCollection($1))
+            // FIXME: We are double-escaping the base-URL's path.
+            iterateAppendedPathComponents(input[path], baseURL: baseURL!, schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
+              pathLength += 1
+              PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
             }
+          } else {
+            iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
+              pathLength += 1
+              PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
+            }
+          }
+          
+          assert(pathLength > 0)
+          writer.writeUnsafePathInPreallocatedBuffer(length: pathLength) { mutBuffer in
+                      
+            var front = mutBuffer.endIndex
+            func handlePathComponent(_ isFirstComponent: Bool, _ pathComponent: AnyBidirectionalCollection<UInt8>) {
+              // Fast-path. Does not change length.
+              if pathComponent.isEmpty {
+                front = mutBuffer.index(before: front)
+                mutBuffer[front] = ASCII.forwardSlash.codePoint
+                return
+              }
+              // Normalize the 2nd character of a Windows drive letter to ':'. Again, doesn't change length.
+              if isFirstComponent, schemeKind == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
+                front = mutBuffer.index(before: front)
+                mutBuffer[front] = ASCII.colon.codePoint
+                front = mutBuffer.index(before: front)
+                mutBuffer[front] = pathComponent[pathComponent.startIndex]
+                front = mutBuffer.index(before: front)
+                mutBuffer[front] = ASCII.forwardSlash.codePoint
+                return
+              }
+              PercentEscaping.encodeReverseIterativelyAsBuffer(
+                bytes: pathComponent,
+                escapeSet: .url_path,
+                processChunk: { piece in
+                  let newFront = mutBuffer.index(front, offsetBy: -1 * piece.count)
+                  _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[newFront...]).initialize(from: piece)
+                  front = newFront
+              })
+              front = mutBuffer.index(before: front)
+              mutBuffer[front] = ASCII.forwardSlash.codePoint
+            }
+            
+            if url.componentsToCopyFromBase.contains(.path) {
+              iterateAppendedPathComponents(input[path], baseURL: baseURL!, schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file,
+                                            handlePathComponent)
+            } else {
+              iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) {
+                handlePathComponent($0, AnyBidirectionalCollection($1))
+              }
+            }
+            // Because we fill the buffer in reverse, we *must* initialise the entire buffer.
+            precondition(front == mutBuffer.startIndex, "Failed to initialise path contents")
+            return pathLength
+          }
+        }
+        
+      } else if url.componentsToCopyFromBase.contains(.path) {
+        guard let baseURL = baseURL else { preconditionFailure("") }
+        baseURL.withComponentBytes(.path) {
+          if let basePath = $0 {
+            writer.writePathSimple { writePiece in writePiece(basePath) }
+          }
+        }
+      } else if schemeKind.isSpecial {
+        // Special URLs always have a '/' following the authority, even if they have no path.
+        writer.writePathSimple { writePiece in
+          writePiece(CollectionOfOne(ASCII.forwardSlash.codePoint))
+        }
+      }
+          
+      // Write query.
+      if let query = queryRange {
+        let urlIsSpecial = schemeKind.isSpecial
+        let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
+          switch asciiChar {
+          case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
+            _ where asciiChar.codePoint < ASCII.exclamationMark.codePoint,
+            _ where asciiChar.codePoint > ASCII.tilde.codePoint, .apostrophe where urlIsSpecial:
+            return true
+          default: return false
+          }
+        })
+        writer.writeQueryContents { writePiece in
+          PercentEscaping.encodeIterativelyAsBuffer(
+            bytes: input[query],
+            escapeSet: escapeSet,
+            processChunk: { piece in writePiece(piece) }
+          )
+        }
+              
+      } else if url.componentsToCopyFromBase.contains(.query) {
+        guard let baseURL = baseURL else { preconditionFailure("") }
+        baseURL.withComponentBytes(.query) {
+          if let baseQuery = $0?.dropFirst() { // '?' separator.
+            writer.writeQueryContents { writePiece in writePiece(baseQuery) }
           }
         }
       }
       
-    } else if url.componentsToCopyFromBase.contains(.path) {
-      guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.path) {
-        if let basePath = $0 {
-          writer.writePathSimple { writePiece in writePiece(basePath) }
+      // Write fragment.
+      if let fragment = fragmentRange {
+        writer.writeFragmentContents { writePiece in
+          PercentEscaping.encodeIterativelyAsBuffer(
+            bytes: input[fragment],
+            escapeSet: .url_fragment,
+            processChunk: { piece in writePiece(piece) }
+          )
+        }
+      } else if url.componentsToCopyFromBase.contains(.fragment) {
+        guard let baseURL = baseURL else { preconditionFailure("") }
+        baseURL.withComponentBytes(.fragment) {
+          if let baseFragment = $0?.dropFirst() { // '#' separator.
+            writer.writeFragmentContents { writePiece in writePiece(baseFragment) }
+          }
         }
       }
-    } else if schemeKind.isSpecial {
-      // Special URLs always have a '/' following the authority, even if they have no path.
-      writer.writePathSimple { writePiece in
-        writePiece(CollectionOfOne(ASCII.forwardSlash.codePoint))
-      }
-    }
-        
-    // Write query.
-    if let query = queryRange {
-      let urlIsSpecial = schemeKind.isSpecial
-      let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
-        switch asciiChar {
-        case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
-          _ where asciiChar.codePoint < ASCII.exclamationMark.codePoint,
-          _ where asciiChar.codePoint > ASCII.tilde.codePoint, .apostrophe where urlIsSpecial:
-          return true
-        default: return false
-        }
-      })
-      writer.writeQuery { writePiece in
-        PercentEscaping.encodeIterativelyAsBuffer(
-          bytes: input[query],
-          escapeSet: escapeSet,
-          processChunk: { piece in writePiece(piece) }
-        )
-      }
-            
-    } else if url.componentsToCopyFromBase.contains(.query) {
-      guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.query) {
-        if let baseQuery = $0?.dropFirst() { // '?' separator.
-          writer.writeQuery { writePiece in writePiece(baseQuery) }
-        }
-      }
+      
+      return writer.buildURL()
     }
     
-    // Write fragment.
-    if let fragment = fragmentRange {
-      writer.writeFragment { writePiece in
-        PercentEscaping.encodeIterativelyAsBuffer(
-          bytes: input[fragment],
-          escapeSet: .url_fragment,
-          processChunk: { piece in writePiece(piece) }
-        )
-      }
-    } else if url.componentsToCopyFromBase.contains(.fragment) {
-      guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.fragment) {
-        if let baseFragment = $0?.dropFirst() { // '#' separator.
-          writer.writeFragment { writePiece in writePiece(baseFragment) }
-        }
-      }
-    }
-    
-    return NewURL(storage: writer.getStorage())
+    return writeURL(using: GenericURLStorageWriter.self)
   }
 }
 
