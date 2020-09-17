@@ -469,6 +469,19 @@ protocol URLWriter {
  
   func writeScheme<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8
   
+  func writeAuthorityHeader()
+  
+  typealias WriterFunc<T> = (T)->Void
+  func writeUsernameComponent<T>(_ username: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
+  func writePasswordComponent<T>(_ password: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
+  func writeCredentialsTerminator()
+  func writeHostname<T>(_ hostname: T) where T: RandomAccessCollection, T.Element == UInt8
+  func writePort(_ port: UInt16)
+  
+  func writeKnownAuthorityString(_ authority: UnsafeBufferPointer<UInt8>,
+                                 usernameLength: Int, passwordLength: Int,
+                                 hostnameLength: Int, portLength: Int)
+  
   func getStorage() -> NewURL.Storage
 }
 
@@ -489,6 +502,55 @@ final class DummyWriter: URLWriter {
     storage.header.schemeLength = countIfKnown.map { $0 + 1 } ?? storage.header.count
     storage.header.components = [.scheme]
   }
+  
+  func writeAuthorityHeader() {
+    storage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
+    storage.header.components.insert(.authority)
+  }
+
+  
+  func writeUsernameComponent<T>(_ username: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    username { piece in
+      storage.append(contentsOf: piece)
+      storage.header.usernameLength += piece.count
+    }
+  }
+  
+  func writePasswordComponent<T>(_ password: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    storage.append(ASCII.colon.codePoint)
+    storage.header.passwordLength = 1
+    password { piece in
+      storage.append(contentsOf: piece)
+      storage.header.passwordLength += piece.count
+    }
+  }
+  
+  func writeCredentialsTerminator() {
+    storage.append(ASCII.commercialAt.codePoint)
+  }
+  
+  func writeHostname<T>(_ hostname: T) where T : RandomAccessCollection, T.Element == UInt8 {
+    storage.append(contentsOf: hostname)
+    storage.header.hostnameLength = hostname.count
+  }
+  
+  func writePort(_ port: UInt16) {
+    storage.append(ASCII.colon.codePoint)
+    var portString = String(port)
+    portString.withUTF8 {
+      storage.append(contentsOf: $0)
+      storage.header.portLength = 1 + $0.count
+    }
+  }
+  
+  func writeKnownAuthorityString(_ authority: UnsafeBufferPointer<UInt8>, usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int) {
+    storage.append(contentsOf: authority)
+    storage.header.usernameLength = usernameLength
+    storage.header.passwordLength = passwordLength
+    storage.header.hostnameLength = hostnameLength
+    storage.header.portLength = portLength
+  }
+  
   
   func getStorage() -> NewURL.Storage {
     return storage
@@ -703,69 +765,64 @@ struct NewURLParser {
       }
     }
     
-    var newstorage = writer.getStorage()
+//    var newstorage = writer.getStorage()
     
     if var hostnameString = hostnameString {
-      newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
-      newstorage.header.components.insert(.authority)
+      writer.writeAuthorityHeader()
       
       var hasCredentials = false
       if let username = usernameRange, username.isEmpty == false {
-        PercentEscaping.encodeIterativelyAsBuffer(
-          bytes: input[username],
-          escapeSet: .url_userInfo,
-          processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.usernameLength += piece.count }
-        )
+        writer.writeUsernameComponent { writePiece in
+          PercentEscaping.encodeIterativelyAsBuffer(
+            bytes: input[username],
+            escapeSet: .url_userInfo,
+            processChunk: { piece in writePiece(piece) }
+          )
+        }
         hasCredentials = true
       }
       if let password = passwordRange, password.isEmpty == false {
-        newstorage.append(ASCII.colon.codePoint) // Username-password separator (':').
-        newstorage.header.passwordLength = 1
-        PercentEscaping.encodeIterativelyAsBuffer(
-          bytes: input[password],
-          escapeSet: .url_userInfo,
-          processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.passwordLength += piece.count }
-        )
+        writer.writePasswordComponent { writePiece in
+          PercentEscaping.encodeIterativelyAsBuffer(
+            bytes: input[password],
+            escapeSet: .url_userInfo,
+            processChunk: { piece in writePiece(piece) }
+          )
+        }
         hasCredentials = true
       }
       if hasCredentials {
-        newstorage.append(ASCII.commercialAt.codePoint) // Credentials separator.
+        writer.writeCredentialsTerminator()
       }
-    
       hostnameString.withUTF8 {
-        newstorage.append(contentsOf: $0)
-        newstorage.header.hostnameLength = $0.count
+        writer.writeHostname($0)
       }
-      
       if let port = port, port != schemeKind.defaultPort {
-        newstorage.append(ASCII.colon.codePoint) // Hostname-port separator.
-        let portStringBytes = String(port).utf8
-        newstorage.append(contentsOf: portStringBytes)
-        newstorage.header.portLength = 1 + portStringBytes.count
+        writer.writePort(port)
       }
-      
+
     } else if url.componentsToCopyFromBase.contains(.authority) {
       guard let baseURL = baseURL else {
         preconditionFailure("")
       }
       baseURL.withComponentBytes(.authority) {
         if let baseAuth = $0 {
-          newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
-          newstorage.append(contentsOf: baseAuth)
-          newstorage.header.usernameLength = baseURL.storage.header.usernameLength
-          newstorage.header.passwordLength = baseURL.storage.header.passwordLength
-          newstorage.header.hostnameLength = baseURL.storage.header.hostnameLength
-          newstorage.header.portLength = baseURL.storage.header.portLength
-          newstorage.header.components.insert(.authority)
+          writer.writeAuthorityHeader()
+          writer.writeKnownAuthorityString(
+            baseAuth,
+            usernameLength: baseURL.storage.header.usernameLength,
+            passwordLength: baseURL.storage.header.passwordLength,
+            hostnameLength: baseURL.storage.header.hostnameLength,
+            portLength: baseURL.storage.header.portLength
+          )
         }
       }
     } else if schemeKind == .file {
       // - 'file:' URLs get an implicit authority.
-      // -
-      newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
-      newstorage.header.components.insert(.authority)
+      writer.writeAuthorityHeader()
     }
     
+    var newstorage = writer.getStorage()
     
     // Write path.
     if let path = pathRange {
