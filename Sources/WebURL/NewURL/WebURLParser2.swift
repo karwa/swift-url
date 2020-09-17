@@ -462,6 +462,39 @@ extension ScannedURL {
   }
 }
 
+protocol URLWriter {
+  
+  func writeCannotBeABaseURL(_ cannotBeABaseURL: Bool)
+  func writeSchemeKind(_ schemeKind: NewURLParser.Scheme)
+ 
+  func writeScheme<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8
+  
+  func getStorage() -> NewURL.Storage
+}
+
+final class DummyWriter: URLWriter {
+  var storage: NewURL.Storage = .init(capacity: 10, initialHeader: .init())
+  
+  func writeCannotBeABaseURL(_ cannotBeABaseURL: Bool) {
+    storage.header.cannotBeABaseURL = cannotBeABaseURL
+  }
+  
+  func writeSchemeKind(_ schemeKind: NewURLParser.Scheme) {
+    storage.header.schemeKind = schemeKind
+  }
+  
+  func writeScheme<T>(_ schemeBytes: T, countIfKnown: Int?) where T : Collection, T.Element == UInt8 {
+    storage.append(contentsOf: schemeBytes)
+    storage.append(ASCII.colon.codePoint)
+    storage.header.schemeLength = countIfKnown.map { $0 + 1 } ?? storage.header.count
+    storage.header.components = [.scheme]
+  }
+  
+  func getStorage() -> NewURL.Storage {
+    return storage
+  }
+}
+
 struct NewURLParser {
   
   init() {}
@@ -500,8 +533,8 @@ struct NewURLParser {
 //    print("-----------------------------------------")
 //    print("")
 //    callback.errors.removeAll(keepingCapacity: true)
-    
-    let result = construct(url: scanResults, input: filteredInput, baseURL: baseURL, callback: &callback)
+    var writer = DummyWriter()
+    let result = construct(url: scanResults, input: filteredInput, baseURL: baseURL, writer: writer, callback: &callback)
     
 //    print("")
 //    print("Construction Errors:")
@@ -517,6 +550,7 @@ struct NewURLParser {
     url: ScannedURL<T>,
     input: FilteredURLInput<Input>,
     baseURL: NewURL?,
+    writer: URLWriter,
     callback: inout Callback
   ) -> NewURL? where ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
     
@@ -646,30 +680,30 @@ struct NewURLParser {
     
     // Step 3: Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
     
-    var newstorage = NewURL.Storage(capacity: 10, initialHeader: .init())
-    newstorage.header.cannotBeABaseURL = url.cannotBeABaseURL
+    writer.writeCannotBeABaseURL(url.cannotBeABaseURL)
+    writer.writeSchemeKind(schemeKind)
     
+    // 3.1: Write scheme
     // We *must* have a scheme.
     if let inputScheme = schemeRange {
       assert(schemeKind == url.schemeKind)
       // Scheme must be lowercased.
-      newstorage.append(contentsOf: input[inputScheme].lazy.map {
+      writer.writeScheme(input[inputScheme].lazy.map {
         ASCII($0)?.lowercased.codePoint ?? $0
-      })
-      newstorage.append(ASCII.colon.codePoint) // Scheme separator (':').
-      newstorage.header.schemeLength = newstorage.count
-      newstorage.header.components = [.scheme]
+      }, countIfKnown: nil)
+      
     } else {
       guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
       	preconditionFailure("Cannot construct a URL without a scheme")
       }
       assert(schemeKind == baseURL.schemeKind)
-      baseURL.withComponentBytes(.scheme) { newstorage.append(contentsOf: $0!) }
-      newstorage.header.schemeLength = baseURL.storage.header.schemeLength
-      newstorage.header.components = [.scheme]
+      baseURL.withComponentBytes(.scheme) {
+        let bytes = $0!.dropLast() // drop terminator.
+        writer.writeScheme(bytes, countIfKnown: bytes.count)
+      }
     }
-    newstorage.header.schemeKind = schemeKind
     
+    var newstorage = writer.getStorage()
     
     if var hostnameString = hostnameString {
       newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
