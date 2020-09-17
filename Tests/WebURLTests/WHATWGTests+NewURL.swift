@@ -196,15 +196,17 @@ extension WHATWGTests_NewURL {
 
 struct AdditionalTest {
   let input: String
-  let base: String
+  var base: String? = nil
   
-  let ex_href: String
-  let ex_scheme: String
+  var ex_href: String? = nil
+  var ex_scheme: String? = nil
   var ex_hostname: String? = nil
   var ex_port: String? = nil
   var ex_path: String? = nil
   var ex_query: String? = nil
   var ex_fragment: String? = nil
+  
+  var ex_fail: Bool = false
 }
 
 let additionalTests: [AdditionalTest] = [
@@ -367,6 +369,9 @@ let additionalTests: [AdditionalTest] = [
         ex_path: "/pop",
         ex_query: nil,
         ex_fragment: nil),
+  
+  // File URLs with invalid hostnames should fail to parse, even if the path begins with a Windows drive letter.
+  .init(input: "file://^/C:/hello", ex_fail: true),
         
 ]
 
@@ -376,7 +381,7 @@ extension WHATWGTests_NewURL {
     
     for test in additionalTests {
       guard let result = NewURL(test.input, base: test.base) else {
-        XCTFail("Test failed: \(test)")
+        XCTAssertTrue(test.ex_fail, "Test failed: \(test)")
         continue
       }
       XCTAssertEqual(test.ex_href, result.href)

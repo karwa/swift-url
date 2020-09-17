@@ -434,17 +434,14 @@ extension ScannedURL {
     if schemeTerminatorIndex.get() == nil {
       guard componentsToCopyFromBase.contains(.scheme) else { return false }
     }
-    // Authority components imply the presence of an authorityStartIndex.
+    // Authority components imply the presence of an authorityStartIndex and hostname.
     if usernameEndIndex.get() != nil || passwordEndIndex.get() != nil || hostnameEndIndex.get() != nil || portEndIndex.get() != nil {
+      guard hostnameEndIndex.get() != nil else { return false }
       guard authorityStartIndex.get() != nil else { return false }
     }
     // A password implies the presence of a username.
     if passwordEndIndex.get() != nil {
       guard usernameEndIndex.get() != nil else { return false }
-    }
-    // A port implies the presence of a hostname.
-    if portEndIndex.get() != nil {
-      guard hostnameEndIndex.get() != nil else { return false }
     }
     
     // Ensure components from input string do not overlap with 'componentsToCopyFromBase' (except path).
@@ -614,7 +611,20 @@ struct NewURLParser {
       }
       port = parsedInteger
     }
-    // 2.2: For file URLs whose paths begin with a Windows drive letter, discard the host.
+    // 2.2 Process hostname.
+    // Even though it may be discarded later by certain file URLs, we still need to do this now to reject invalid hostnames.
+    // FIXME: Improve this in the following ways:
+    // - Remove the copying to Array
+    // - For non-special schemes: calculate the final length and lazily percent-encode in to the new storage.
+    // - For ascii hostnames: communicate known final length and lazily lowercase characters
+    var hostnameString: String?
+    if let hostname = hostnameRange.map({ input[$0] }) {
+      hostnameString = Array(hostname).withUnsafeBufferPointer { bytes -> String? in
+        return WebURLParser.Host.parse(bytes, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)?.serialized
+      }
+      guard hostnameString != nil else { return nil }
+    }
+    // 2.3: For file URLs whose paths begin with a Windows drive letter, discard the host.
     if schemeKind == .file, var pathContents = pathRange.map({ input[$0] }) {
       // The path may or may not be prefixed with a leading slash.
       // Strip it so we can detect the Windows drive letter.
@@ -622,12 +632,16 @@ struct NewURLParser {
         pathContents = pathContents.dropFirst()
       }
       if URLStringUtils.hasWindowsDriveLetterPrefix(pathContents) {
-        if !(hostnameRange == nil || hostnameRange?.isEmpty == true) {
+        if !(hostnameString == nil || hostnameString?.isEmpty == true) {
           callback.validationError(.unexpectedHostFileScheme)
         }
-        hostnameRange = nil // file URLs turn 'nil' in to an implicit, empty host.
+        hostnameString = nil // file URLs turn 'nil' in to an implicit, empty host.
         url.componentsToCopyFromBase.remove(.authority)
       }
+    }
+    // 2.4: For file URLs, replace 'localhost' with an empty/nil host.
+    if schemeKind == .file && hostnameString == "localhost" {
+      hostnameString = nil // file URLs turn 'nil' in to an implicit, empty host.
     }
     
     // Step 3: Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
@@ -657,7 +671,7 @@ struct NewURLParser {
     newstorage.header.schemeKind = schemeKind
     
     
-    if let host = hostnameRange {
+    if var hostnameString = hostnameString {
       newstorage.append(repeated: ASCII.forwardSlash.codePoint, count: 2) // Authority marker ('//').
       newstorage.header.components.insert(.authority)
       
@@ -684,14 +698,9 @@ struct NewURLParser {
         newstorage.append(ASCII.commercialAt.codePoint) // Credentials separator.
       }
     
-      // FIXME: Hostname needs improving.
-      let _hostnameString = Array(input[host]).withUnsafeBufferPointer { bytes -> String? in
-        return WebURLParser.Host.parse(bytes, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)?.serialized
-      }
-      guard let hostnameString = _hostnameString else { return nil }
-      if !(schemeKind == .file && hostnameString == "localhost") {
-        newstorage.append(contentsOf: hostnameString.utf8)
-        newstorage.header.hostnameLength = hostnameString.utf8.count
+      hostnameString.withUTF8 {
+        newstorage.append(contentsOf: $0)
+        newstorage.header.hostnameLength = $0.count
       }
       
       if let port = port, port != schemeKind.defaultPort {
@@ -1651,15 +1660,9 @@ extension URLScanner {
     }
     let hostname = input[..<(hostnameEndIndex ?? input.endIndex)]
     
-    // 3. Validate the hostname.
+    // 3. Validate the structure.
     if let portStartIndex = hostnameEndIndex, portStartIndex == input.startIndex {
       callback.validationError(.unexpectedPortWithoutHost)
-      return .failed
-    }
-    // swift-format-ignore
-    guard let _ = Array(hostname).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
-      return WebURLParser.Host.parse(buffer, isNotSpecial: scheme.isSpecial == false, callback: &callback)
-    }) else {
       return .failed
     }
     
@@ -1967,7 +1970,7 @@ extension URLScanner {
     
     let hostname = input[..<hostnameEndIndex]
     
-    // 3. Validate the hostname.
+    // 3. Brief validation of the hostname. Will be fully validated at construction time.
     if URLStringUtils.isWindowsDriveLetter(hostname) {
       // TODO: Only if not in setter-mode.
       callback.validationError(.unexpectedWindowsDriveLetterHost)
@@ -1975,12 +1978,6 @@ extension URLScanner {
     }
     if hostname.isEmpty {
       return .success(continueFrom: (.pathStart, input.startIndex))
-    }
-    // swift-format-ignore
-    guard let parsedHost = Array(hostname).withUnsafeBufferPointer({ buffer -> WebURLParser.Host? in
-      return WebURLParser.Host.parse(buffer, isNotSpecial: false, callback: &callback)
-    }) else {
-      return .failed
     }
     
     // 4. Return the next component.
