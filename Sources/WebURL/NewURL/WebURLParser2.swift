@@ -8,10 +8,11 @@ public struct NewURL {
   
   public init?(_ input: String, base: String?) {
     var baseURL: NewURL?
-    if let baseString = base {
-      baseURL = NewURLParser().constructURL(input: baseString.utf8, baseURL: nil)
+    var input = input
+    if var baseString = base {
+      baseURL = baseString.withUTF8 { NewURLParser().constructURL(input: $0, baseURL: nil) }
     }
-    guard let url = NewURLParser().constructURL(input: input.utf8, baseURL: baseURL) else {
+    guard let url = input.withUTF8({ NewURLParser().constructURL(input: $0, baseURL: baseURL) }) else {
       return nil
     }
     self = url
@@ -484,7 +485,8 @@ struct NewURLParser {
     
     let filteredInput = FilteredURLInput(input, isSetterMode: false)
     
-    var callback = CollectValidationErrors()
+//    var callback = CollectValidationErrors()
+    var callback = IgnoreValidationErrors()
   
     guard let scanResults = scanURL(filteredInput, baseURL: baseURL,
                                     mappingType: ScannedURL<Optional<Input.Index>>.self, stateOverride: nil,
@@ -494,22 +496,22 @@ struct NewURLParser {
     
     assert(scanResults.checkStructuralInvariants())
     
-    print("")
-    print("Scanning Errors:")
-    print("-----------------------------------------")
-    callback.errors.forEach { print($0.description); print("---") }
-    print("-----------------------------------------")
-    print("")
-    callback.errors.removeAll(keepingCapacity: true)
+//    print("")
+//    print("Scanning Errors:")
+//    print("-----------------------------------------")
+//    callback.errors.forEach { print($0.description); print("---") }
+//    print("-----------------------------------------")
+//    print("")
+//    callback.errors.removeAll(keepingCapacity: true)
     
     let result = construct(url: scanResults, input: filteredInput, baseURL: baseURL, callback: &callback)
     
-    print("")
-    print("Construction Errors:")
-    print("-----------------------------------------")
-    callback.errors.forEach { print($0.description); print("---") }
-    print("-----------------------------------------")
-    print("")
+//    print("")
+//    print("Construction Errors:")
+//    print("-----------------------------------------")
+//    callback.errors.forEach { print($0.description); print("---") }
+//    print("-----------------------------------------")
+//    print("")
     
     return result
   }
@@ -522,22 +524,7 @@ struct NewURLParser {
   ) -> NewURL? where ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
     
     var url = url
-    
-    // The mapping does not contain full ranges. They must be inferred using our knowledge of URL structure.
-    // Some components require additional validation (e.g. the port), and others require adjustments based on
-    // full knowledge of the URL string (e.g. if a file URL whose path starts with a Windows drive, clear the host).
-    
-    let schemeRange = url.schemeTerminatorIndex.get().map { input.startIndex..<$0 }
-    var usernameRange: Range<Input.Index>?
-    var passwordRange: Range<Input.Index>?
-    var hostnameRange: Range<Input.Index>?
-    var port: UInt16?
-    let pathRange: Range<Input.Index>?
-    let queryRange: Range<Input.Index>?
-    let fragmentRange: Range<Input.Index>?
 
-    var cursor: Input.Index
-    
     let schemeKind: NewURLParser.Scheme
     if let scannedSchemeKind = url.schemeKind {
       schemeKind = scannedSchemeKind
@@ -546,84 +533,104 @@ struct NewURLParser {
     } else {
       preconditionFailure("We must have a scheme")
     }
+
+    // The mapping does not contain full ranges. They must be inferred using our knowledge of URL structure.
+    // Some components require additional validation (e.g. the port), and others require adjustments based on
+    // full knowledge of the URL string (e.g. if a file URL whose path starts with a Windows drive, clear the host).
+    
+    let schemeRange = url.schemeTerminatorIndex.get().map { input.startIndex..<$0 }
+    var usernameRange: Range<Input.Index>?
+    var passwordRange: Range<Input.Index>?
+    var hostnameRange: Range<Input.Index>?
+    var portRange: Range<Input.Index>?
+    let pathRange: Range<Input.Index>?
+    let queryRange: Range<Input.Index>?
+    let fragmentRange: Range<Input.Index>?
+
+    // Step 1: Extract full ranges.
+    
+    var cursor: Input.Index
     
     if let authorityStart = url.authorityStartIndex.get() {
       cursor = authorityStart
       if let usernameEnd = url.usernameEndIndex.get() {
         usernameRange = cursor..<usernameEnd
         cursor = usernameEnd
-        
         if let passwordEnd = url.passwordEndIndex.get() {
           assert(input[cursor] == ASCII.colon.codePoint)
           cursor = input.index(after: cursor)
-          
           passwordRange = cursor..<passwordEnd
           cursor = passwordEnd
-          assert(input[cursor] == ASCII.commercialAt.codePoint)
-          cursor = input.index(after: cursor)
-        } else {
-          assert(input[cursor] == ASCII.commercialAt.codePoint) // "https://test:@test"
-          cursor = input.index(after: cursor)
         }
+        assert(input[cursor] == ASCII.commercialAt.codePoint)
+        cursor = input.index(after: cursor)
       }
-      hostnameRange = url.hostnameEndIndex.get().map { hostnameEndIndex in
-        cursor..<hostnameEndIndex
+      if let hostnameEnd = url.hostnameEndIndex.get() {
+        hostnameRange = cursor..<hostnameEnd
+        cursor = hostnameEnd
       }
-      cursor = hostnameRange.map { $0.upperBound } ?? cursor
-      // Port: Validate that the number doesn't overflow a UInt16.
-      if let portStringEndIndex = url.portEndIndex.get() {
-        cursor = input.index(after: cursor) // ":" hostname separator.
-        if portStringEndIndex != cursor {
-          guard let parsedInteger = UInt16(String(decoding: input[cursor..<portStringEndIndex], as: UTF8.self)) else {
-            callback.validationError(.portOutOfRange)
-            return nil
-          }
-          port = parsedInteger
-          cursor = portStringEndIndex
-        }
+      if let portEndIndex = url.portEndIndex.get() {
+        assert(input[cursor] == ASCII.colon.codePoint)
+        cursor = input.index(after: cursor)
+        portRange = cursor..<portEndIndex
+        cursor = portEndIndex
       }
     } else if let schemeRange = schemeRange {
       cursor = input.index(after: schemeRange.upperBound) // ":" scheme separator.
     } else {
       cursor = input.startIndex
     }
+    if let pathEnd = url.pathEndIndex.get() {
+      pathRange = cursor..<pathEnd
+      cursor = pathEnd
+    } else {
+      pathRange = nil
+    }
+    if let queryEnd = url.queryEndIndex.get() {
+      assert(input[cursor] == ASCII.questionMark.codePoint)
+      cursor = input.index(after: cursor) // "?" query separator not included in range.
+      queryRange = cursor..<queryEnd
+      cursor = queryEnd
+    } else {
+      queryRange = nil
+    }
+    if let fragmentEnd = url.fragmentEndIndex.get() {
+      assert(input[cursor] == ASCII.numberSign.codePoint)
+      cursor = input.index(after: cursor) // "#" fragment separator not included in range.
+      fragmentRange = cursor..<fragmentEnd
+      cursor = fragmentEnd
+    }  else {
+      fragmentRange = nil
+    }
     
-    pathRange = url.pathEndIndex.get().map { pathEndIndex -> Range<Input.Index> in
-      defer { cursor = pathEndIndex }
-      let pathStart = cursor
-      // For file URLs whose paths begin with a Windows drive letter, discard the host.
-      if cursor != input.endIndex {
-        // The path may or may not be prefixed with a leading slash.
-      	// Strip it so we can detect the Windows drive letter.
-        switch ASCII(input[cursor]) {
-        case .forwardSlash?: fallthrough
-        case .backslash? where schemeKind.isSpecial:
-          cursor = input.index(after: cursor)
-        default:
-          break
-        }
+    // Step 2: Process the input string, now that we have full knowledge of its contents.
+    
+    // 2.1: Parse port string.
+    var port: UInt16?
+    if let portRange = portRange, portRange.isEmpty == false {
+      guard let parsedInteger = UInt16(String(decoding: input[portRange], as: UTF8.self)) else {
+        callback.validationError(.portOutOfRange)
+        return nil
       }
-      if schemeKind == .file, URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
+      port = parsedInteger
+    }
+    // 2.2: For file URLs whose paths begin with a Windows drive letter, discard the host.
+    if schemeKind == .file, var pathContents = pathRange.map({ input[$0] }) {
+      // The path may or may not be prefixed with a leading slash.
+      // Strip it so we can detect the Windows drive letter.
+      if let firstChar = pathContents.first, (ASCII(firstChar) == .forwardSlash || ASCII(firstChar) == .backslash) {
+        pathContents = pathContents.dropFirst()
+      }
+      if URLStringUtils.hasWindowsDriveLetterPrefix(pathContents) {
         if !(hostnameRange == nil || hostnameRange?.isEmpty == true) {
           callback.validationError(.unexpectedHostFileScheme)
-          hostnameRange = nil // file URLs turn 'nil' in to an implicit, empty host.
         }
+        hostnameRange = nil // file URLs turn 'nil' in to an implicit, empty host.
         url.componentsToCopyFromBase.remove(.authority)
       }
-      return pathStart..<pathEndIndex
-    }
-    queryRange = url.queryEndIndex.get().map { queryEndIndex -> Range<Input.Index> in
-      cursor = input.index(after: cursor) // "?" query separator.
-      defer { cursor = queryEndIndex }
-      return cursor..<queryEndIndex
-    }
-    fragmentRange = url.fragmentEndIndex.get().map { fragmentEndIndex -> Range<Input.Index> in
-      cursor = input.index(after: cursor) // "#" fragment separator.
-      defer { cursor = fragmentEndIndex }
-      return cursor..<fragmentEndIndex
     }
     
-    // Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
+    // Step 3: Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
     
     var newstorage = NewURL.Storage(capacity: 10, initialHeader: .init())
     newstorage.header.cannotBeABaseURL = url.cannotBeABaseURL
@@ -1148,9 +1155,7 @@ func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileS
       block(false, pathComponent)
       didYieldComponent = true
     }
-    
-    print("trailing empties: \(trailingEmptyCount)")
-    
+        
     if URLStringUtils.isDoubleDotPathSegment(path) {
       popcount += 1
     }
@@ -1336,7 +1341,6 @@ func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schem
     }
     
     assert(path.isEmpty == false)
-    print("Input string trailing empties: \(trailingEmptyCount)")
     
     switch path {
     // Process '..' and '.'. If this is the first component, ensure we have a trailing slash.
@@ -1514,8 +1518,6 @@ extension URLScanner {
     var component = from
     var remaining = input[...]
     while true {
-      print("** Parsing component: \(component)")
-      print("** Data: \(String(decoding: remaining, as: UTF8.self))")
       let componentResult: ComponentParseResult
       switch component {
       case .authority:
@@ -1765,7 +1767,6 @@ extension URLScanner {
         callback.validationError(.unexpectedReverseSolidus)
       }
       validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
-      print("path component: \(String(decoding: pathComponent, as: UTF8.self))")
     }
       
     // 4. Return the next component.
@@ -1838,8 +1839,6 @@ extension URLScanner {
     }
     remaining = input.suffix(from: component.1)
     while true {
-      print("** [FILEURL] Parsing component: \(component)")
-      print("** [FILEURL] Data: \(String(decoding: remaining, as: UTF8.self))")
       let componentResult: ComponentParseResult
       switch component.0 {
       case .authority:
@@ -2009,8 +2008,6 @@ extension URLScanner {
       }
       remaining = input.suffix(from: component.1)
       while true {
-        print("** [CANNOTBEABASE URL] Parsing component: \(component)")
-        print("** [CANNOTBEABASE URL] Data: \(String(decoding: remaining, as: UTF8.self))")
         let componentResult: ComponentParseResult
         switch component.0 {
         case .query:
@@ -2094,8 +2091,6 @@ extension URLScanner {
     }
     remaining = input.suffix(from: component.1)
     while true {
-      print("** [RELATIVE URL] Parsing component: \(component)")
-      print("** [RELATIVE URL] Data: \(String(decoding: remaining, as: UTF8.self))")
       let componentResult: ComponentParseResult
       switch component.0 {
       case .path:
@@ -2128,7 +2123,6 @@ extension URLScanner {
   }
   
   static func parseRelativeURLStart(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
-    print("Reached relative URL")
     
     mapping.componentsToCopyFromBase = [.scheme]
     
