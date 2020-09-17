@@ -482,6 +482,13 @@ protocol URLWriter {
                                  usernameLength: Int, passwordLength: Int,
                                  hostnameLength: Int, portLength: Int)
   
+  
+  func writePathSimple<T>(_ path: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
+  func writePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Void)
+  
+  func writeQuery<T>(_ query: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
+  func writeFragment<T>(_ query: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
+  
   func getStorage() -> NewURL.Storage
 }
 
@@ -507,7 +514,6 @@ final class DummyWriter: URLWriter {
     storage.append(repeated: ASCII.forwardSlash.codePoint, count: 2)
     storage.header.components.insert(.authority)
   }
-
   
   func writeUsernameComponent<T>(_ username: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
     username { piece in
@@ -549,6 +555,43 @@ final class DummyWriter: URLWriter {
     storage.header.passwordLength = passwordLength
     storage.header.hostnameLength = hostnameLength
     storage.header.portLength = portLength
+  }
+  
+  func writePathSimple<T>(_ path: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    storage.header.components.insert(.path)
+    path {
+      storage.append(contentsOf: $0)
+      storage.header.pathLength += $0.count
+    }
+  }
+  
+  func writePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Void) {
+    storage.header.components.insert(.path)
+    storage.append(uninitializedCapacity: length) { buffer in
+      writer(buffer)
+      return length
+    }
+    storage.header.pathLength = length
+  }
+  
+  func writeQuery<T>(_ query: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    storage.header.components.insert(.query)
+    storage.append(ASCII.questionMark.codePoint)
+    storage.header.queryLength = 1
+    query {
+      storage.append(contentsOf: $0)
+      storage.header.queryLength += $0.count
+    }
+  }
+  
+  func writeFragment<T>(_ fragment: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    storage.header.components.insert(.fragment)
+    storage.append(ASCII.numberSign.codePoint)
+    storage.header.fragmentLength = 1
+    fragment {
+      storage.append(contentsOf: $0)
+      storage.header.fragmentLength += $0.count
+    }
   }
   
   
@@ -764,9 +807,7 @@ struct NewURLParser {
         writer.writeScheme(bytes, countIfKnown: bytes.count)
       }
     }
-    
-//    var newstorage = writer.getStorage()
-    
+        
     if var hostnameString = hostnameString {
       writer.writeAuthorityHeader()
       
@@ -821,21 +862,20 @@ struct NewURLParser {
       // - 'file:' URLs get an implicit authority.
       writer.writeAuthorityHeader()
     }
-    
-    var newstorage = writer.getStorage()
-    
+        
     // Write path.
     if let path = pathRange {
-      newstorage.header.components.insert(.path)
       switch url.cannotBeABaseURL {
       case true:
-        PercentEscaping.encodeIterativelyAsBuffer(
-          bytes: input[path],
-          escapeSet: .url_c0,
-          processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.pathLength += piece.count }
-        )
-      case false:
+        writer.writePathSimple { writePiece in
+          PercentEscaping.encodeIterativelyAsBuffer(
+            bytes: input[path],
+            escapeSet: .url_c0,
+            processChunk: { piece in writePiece(piece) }
+          )
+        }
         
+      case false:
         var pathLength = 0
         if url.componentsToCopyFromBase.contains(.path) {
           // FIXME: We are double-escaping the base-URL's path.
@@ -851,38 +891,36 @@ struct NewURLParser {
         }
         
         assert(pathLength > 0)
-        var buffer = [UInt8](repeatElement(0, count: pathLength))
-        buffer.withUnsafeMutableBufferPointer { mutBuffer in
-          
+        writer.writePathInPreallocatedBuffer(length: pathLength) { mutBuffer in
+                    
           var front = mutBuffer.endIndex
           func handlePathComponent(_ isFirstComponent: Bool, _ pathComponent: AnyBidirectionalCollection<UInt8>) {
+            // Fast-path. Does not change length.
             if pathComponent.isEmpty {
               front = mutBuffer.index(before: front)
               mutBuffer[front] = ASCII.forwardSlash.codePoint
-              newstorage.header.pathLength += 1
               return
             }
-            
+            // Normalize the 2nd character of a Windows drive letter to ':'. Again, doesn't change length.
             if isFirstComponent, schemeKind == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
               front = mutBuffer.index(before: front)
               mutBuffer[front] = ASCII.colon.codePoint
               front = mutBuffer.index(before: front)
               mutBuffer[front] = pathComponent[pathComponent.startIndex]
-              newstorage.header.pathLength += 2
-            } else {
-              PercentEscaping.encodeReverseIterativelyAsBuffer(
-                bytes: pathComponent,
-                escapeSet: .url_path,
-                processChunk: { piece in
-                  let newFront = mutBuffer.index(front, offsetBy: -1 * piece.count)
-                  _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[newFront...]).initialize(from: piece)
-                  front = newFront
-                  newstorage.header.pathLength += piece.count
-              })
+              front = mutBuffer.index(before: front)
+              mutBuffer[front] = ASCII.forwardSlash.codePoint
+              return
             }
+            PercentEscaping.encodeReverseIterativelyAsBuffer(
+              bytes: pathComponent,
+              escapeSet: .url_path,
+              processChunk: { piece in
+                let newFront = mutBuffer.index(front, offsetBy: -1 * piece.count)
+                _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[newFront...]).initialize(from: piece)
+                front = newFront
+            })
             front = mutBuffer.index(before: front)
             mutBuffer[front] = ASCII.forwardSlash.codePoint
-            newstorage.header.pathLength += 1
           }
           
           if url.componentsToCopyFromBase.contains(.path) {
@@ -894,33 +932,24 @@ struct NewURLParser {
             }
           }
         }
-        assert(buffer.count == pathLength)
-        newstorage.append(contentsOf: buffer.suffix(pathLength))
-        newstorage.header.pathLength = pathLength
       }
       
     } else if url.componentsToCopyFromBase.contains(.path) {
       guard let baseURL = baseURL else { preconditionFailure("") }
       baseURL.withComponentBytes(.path) {
         if let basePath = $0 {
-          newstorage.append(contentsOf: basePath)
-          newstorage.header.pathLength = baseURL.storage.header.pathLength
-          newstorage.header.components.insert(.path)
+          writer.writePathSimple { writePiece in writePiece(basePath) }
         }
       }
     } else if schemeKind.isSpecial {
       // Special URLs always have a '/' following the authority, even if they have no path.
-      newstorage.append(ASCII.forwardSlash.codePoint)
-      newstorage.header.pathLength = 1
-      newstorage.header.components.insert(.path)
+      writer.writePathSimple { writePiece in
+        writePiece(CollectionOfOne(ASCII.forwardSlash.codePoint))
+      }
     }
-    
+        
     // Write query.
     if let query = queryRange {
-      newstorage.append(ASCII.questionMark.codePoint)
-      newstorage.header.queryLength = 1
-      newstorage.header.components.insert(.query)
-      
       let urlIsSpecial = schemeKind.isSpecial
       let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
         switch asciiChar {
@@ -931,36 +960,42 @@ struct NewURLParser {
         default: return false
         }
       })
-      PercentEscaping.encodeIterativelyAsBuffer(
-        bytes: input[query],
-        escapeSet: escapeSet,
-        processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.queryLength += piece.count }
-      )
+      writer.writeQuery { writePiece in
+        PercentEscaping.encodeIterativelyAsBuffer(
+          bytes: input[query],
+          escapeSet: escapeSet,
+          processChunk: { piece in writePiece(piece) }
+        )
+      }
+            
     } else if url.componentsToCopyFromBase.contains(.query) {
       guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.query) { newstorage.append(contentsOf: $0 ?? UnsafeBufferPointer(start: nil, count: 0)) }
-      newstorage.header.queryLength = baseURL.storage.header.queryLength
-      newstorage.header.components.insert(.query)
+      baseURL.withComponentBytes(.query) {
+        if let baseQuery = $0?.dropFirst() { // '?' separator.
+          writer.writeQuery { writePiece in writePiece(baseQuery) }
+        }
+      }
     }
     
     // Write fragment.
     if let fragment = fragmentRange {
-      newstorage.append(ASCII.numberSign.codePoint)
-      newstorage.header.fragmentLength = 1
-      newstorage.header.components.insert(.fragment)
-      PercentEscaping.encodeIterativelyAsBuffer(
-        bytes: input[fragment],
-        escapeSet: .url_fragment,
-        processChunk: { piece in newstorage.append(contentsOf: piece); newstorage.header.fragmentLength += piece.count }
-      )
+      writer.writeFragment { writePiece in
+        PercentEscaping.encodeIterativelyAsBuffer(
+          bytes: input[fragment],
+          escapeSet: .url_fragment,
+          processChunk: { piece in writePiece(piece) }
+        )
+      }
     } else if url.componentsToCopyFromBase.contains(.fragment) {
       guard let baseURL = baseURL else { preconditionFailure("") }
-      baseURL.withComponentBytes(.fragment) { newstorage.append(contentsOf: $0!) }
-      newstorage.header.fragmentLength = baseURL.storage.header.fragmentLength
-      newstorage.header.components.insert(.fragment)
+      baseURL.withComponentBytes(.fragment) {
+        if let baseFragment = $0?.dropFirst() { // '#' separator.
+          writer.writeFragment { writePiece in writePiece(baseFragment) }
+        }
+      }
     }
     
-    return NewURL(storage: newstorage)
+    return NewURL(storage: writer.getStorage())
   }
 }
 

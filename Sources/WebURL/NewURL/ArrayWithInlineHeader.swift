@@ -103,20 +103,24 @@ extension ArrayWithInlineHeader {
 
 extension ArrayWithInlineHeader {
   
-  
-  
-  mutating func append<C>(contentsOf other: C) where C: Collection, C.Element == Element {
-    let newMinimumCapacity = buffer.capacity + other.count
+  mutating func append(uninitializedCapacity: Int, initializingWith initializer: (UnsafeMutableBufferPointer<Element>)->Int) {
+    let newMinimumCapacity = buffer.header.count + uninitializedCapacity
     ensureUniquelyReferenced(desiredCapacity: newMinimumCapacity)
     knownUnique_ensureCapacity(newMinimumCapacity)
     
     let preAppendCount = self.count
     let numAdded = buffer.withUnsafeMutablePointerToElements { elements -> Int in
-      UnsafeMutableBufferPointer(start: elements + preAppendCount, count: newMinimumCapacity - preAppendCount)
-      .initialize(from: other).1
+      let uninitializedBuffer = UnsafeMutableBufferPointer(start: elements + preAppendCount, count: newMinimumCapacity - preAppendCount)
+      return initializer(uninitializedBuffer)
     }
-    assert(numAdded == other.count)
+    assert(numAdded == uninitializedCapacity)
     knownUnique_setCount(preAppendCount + numAdded)
+  }
+  
+  mutating func append<C>(contentsOf other: C) where C: Collection, C.Element == Element {
+    append(uninitializedCapacity: other.count) {
+      $0.initialize(from: other).1
+    }
   }
   
   mutating func append(_ element: Element) {
