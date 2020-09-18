@@ -11,6 +11,7 @@ public struct NewURL {
     var input = input
     if var baseString = base {
       baseURL = baseString.withUTF8 { NewURLParser().constructURL(input: $0, baseURL: nil) }
+      guard baseURL != nil else { return nil }
     }
     guard let url = input.withUTF8({ NewURLParser().constructURL(input: $0, baseURL: baseURL) }) else {
       return nil

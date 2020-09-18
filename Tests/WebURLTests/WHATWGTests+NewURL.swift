@@ -148,15 +148,22 @@ extension WHATWGTests_NewURL {
         report.recordSection(sectionName)
       } else if let rawTestInfo = item as? [String: Any] {
         let expected = URLConstructorTestCase(from: rawTestInfo)
-//        guard expected.base == nil || expected.base!.isEmpty || expected.base == "about:blank" else {
-//          report.advanceTestIndex()
-//          continue
-//        }
         report.recordTest { report in
-          let _parserResult = NewURL(expected.input!, base: expected.base)
-          // Capture test data.
           report.capture(key: "expected", expected)
+          
+          // base URL parsing must always succeed.
+          guard let _ = NewURL(expected.base!, base: nil) else {
+            report.expectTrue(false)
+            return
+          }
+          // If failure = true, parsing "about:blank" against input must fail.
+          if expected.failure == true {
+            report.expectTrue(NewURL("about:blank", base: expected.input!) == nil)
+          }
+          
+          let _parserResult = NewURL(expected.input!, base: expected.base!)
           report.capture(key: "actual", _parserResult as Any)
+          
           // Compare results.
           guard let parserResult = _parserResult else {
             report.expectTrue(expected.failure == true)
@@ -177,7 +184,14 @@ extension WHATWGTests_NewURL {
 //          if let expectedOrigin = expected.origin {
 //            report.expectEqual(parserResult.origin.serialized, expectedOrigin)
 //          }
-          
+          // Check idempotence.
+          var serialized = parserResult.href
+          serialized.makeContiguousUTF8()
+          guard let reparsed = WebURL(serialized, base: nil) else {
+            report.expectTrue(false)
+            return
+          }
+          report.expectEqual(parserResult.href, reparsed.href)
         }
       } else {
         assertionFailure("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")
