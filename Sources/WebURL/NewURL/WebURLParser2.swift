@@ -1820,18 +1820,23 @@ extension URLScanner {
     
     // 2. Find the extent of the hostname.
     var hostnameEndIndex: Input.Index?
-    var inBracket = false
-    colonSearch: for idx in input.indices {
-      switch ASCII(input[idx]) {
-      case .leftSquareBracket?:
-        inBracket = true
-      case .rightSquareBracket?:
-        inBracket = false
-      case .colon? where inBracket == false:
-        hostnameEndIndex = idx
-        break colonSearch
-      default:
-        break
+    do {
+      // Note: This doesn't use 'input.indices' as that is surprisingly expensive.
+      var idx = input.startIndex
+      var inBracket = false
+      colonSearch: while idx != input.endIndex {
+        switch ASCII(input[idx]) {
+        case .leftSquareBracket?:
+          inBracket = true
+        case .rightSquareBracket?:
+          inBracket = false
+        case .colon? where inBracket == false:
+          hostnameEndIndex = idx
+          break colonSearch
+        default:
+          break
+        }
+        idx = input.index(after: idx)
       }
     }
     let hostname = input[..<(hostnameEndIndex ?? input.endIndex)]
