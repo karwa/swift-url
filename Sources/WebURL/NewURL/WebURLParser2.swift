@@ -1079,10 +1079,10 @@ struct NewURLParser {
 
 
 struct FilteredURLInput<Base> where Base: BidirectionalCollection, Base.Element == UInt8 {
-  var base: LazyFilterSequence<Base.SubSequence>
+  let base: Base.SubSequence
   
   init(_ rawInput: Base, isSetterMode: Bool) {
-    // 1. Trim leading/trailing C0 control characters and spaces.
+    // Trim leading/trailing C0 control characters and spaces.
     var trimmedSlice = rawInput[...]
     if isSetterMode == false {
       let trimmedInput = trimmedSlice.trim {
@@ -1096,17 +1096,7 @@ struct FilteredURLInput<Base> where Base: BidirectionalCollection, Base.Element 
       }
       trimmedSlice = trimmedInput
     }
-    
-    // 2. Filter all ASCII newlines and tabs.
-    let input = trimmedSlice.lazy.filter {
-      ASCII($0) != .horizontalTab
-      && ASCII($0) != .carriageReturn
-      && ASCII($0) != .lineFeed
-    }
-
-    // TODO: 3. Skip to unicode code-point boundaries.
-    
-    self.base = input
+    self.base = trimmedSlice
   }
 }
 
@@ -1114,27 +1104,33 @@ extension FilteredURLInput: BidirectionalCollection {
   typealias Index = Base.Index
   typealias Element = Base.Element
   
+  private var filtered: LazyFilterSequence<Base.SubSequence> {
+    return base.lazy.filter { byte in
+      return ASCII(byte) != .horizontalTab
+      && ASCII(byte) != .carriageReturn
+      && ASCII(byte) != .lineFeed
+    }
+  }
+  
   var startIndex: Index {
-    return base.startIndex
+    return filtered.startIndex
   }
   var endIndex: Index {
-    return base.endIndex
+    return filtered.endIndex
   }
   var count: Int {
-    return base.count
+    return filtered.count
   }
   func index(after i: Base.Index) -> Base.Index {
-    return base.index(after: i)
+    return filtered.index(after: i)
   }
   func index(before i: Base.Index) -> Base.Index {
-    return base.index(before: i)
-  }
-  func index(_ i: Base.Index, offsetBy distance: Int, limitedBy limit: Base.Index) -> Base.Index? {
-    return base.index(i, offsetBy: distance, limitedBy: limit)
+    return filtered.index(before: i)
   }
   func distance(from start: Base.Index, to end: Base.Index) -> Int {
-    return base.distance(from: start, to: end)
+    return filtered.distance(from: start, to: end)
   }
+  
   subscript(position: Base.Index) -> UInt8 {
     return base[position]
   }
