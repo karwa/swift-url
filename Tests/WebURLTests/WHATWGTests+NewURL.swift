@@ -386,7 +386,70 @@ let additionalTests: [AdditionalTest] = [
   
   // File URLs with invalid hostnames should fail to parse, even if the path begins with a Windows drive letter.
   .init(input: "file://^/C:/hello", ex_fail: true),
-        
+  
+  // Check we do not fail to yield a path when the input contributes nothing and the base URL has a 'nil' path.
+  .init(input: "..", base: "sc://a",
+        ex_href: "sc://a/",
+        ex_scheme: "sc:",
+        ex_hostname: "a",
+        ex_port: nil,
+        ex_path: "/",
+        ex_query: nil,
+        ex_fragment: nil),
+  .init(input: "../..///.", base: "sc://a",
+        ex_href: "sc://a///",
+        ex_scheme: "sc:",
+        ex_hostname: "a",
+        ex_port: nil,
+        ex_path: "///",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  // Ensure that we always flush trailing empties if the first component doesn't get yielded.
+  .init(input: "././././////b", base: "sc://a",
+        ex_href: "sc://a/////b",
+        ex_scheme: "sc:",
+        ex_hostname: "a",
+        ex_port: nil,
+        ex_path: "/////b",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  // Ensure we detect Windows drive letters even when they don't end with a '/'.
+  .init(input: "file:C|", base: nil,
+        ex_href: "file:///C:",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/C:",
+        ex_query: nil,
+        ex_fragment: nil),
+  .init(input: "../../..", base: "file:C|",
+        ex_href: "file:///C:/",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/C:/",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  // Code coverage for relative file paths which sum to nothing.
+  .init(input: ".", base: "file:///",
+        ex_href: "file:///",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/",
+        ex_query: nil,
+        ex_fragment: nil),
+  .init(input: "../b/..", base: "file:///a",
+        ex_href: "file:///",
+        ex_scheme: "file:",
+        ex_hostname: nil,
+        ex_port: nil,
+        ex_path: "/",
+        ex_query: nil,
+        ex_fragment: nil),
 ]
 
 extension WHATWGTests_NewURL {

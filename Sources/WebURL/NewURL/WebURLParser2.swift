@@ -904,7 +904,7 @@ struct NewURLParser {
           }
         }
       } else if schemeKind == .file {
-        // - 'file:' URLs get an implicit authority.
+        // 'file:' URLs get an implicit authority.
         writer.writeAuthorityHeader()
       }
           
@@ -919,74 +919,80 @@ struct NewURLParser {
               processChunk: { piece in writePiece(piece) }
             )
           }
-          
         case false:
           var pathLength = 0
-          if url.componentsToCopyFromBase.contains(.path) {
-            // FIXME: We are double-escaping the base-URL's path.
-            iterateAppendedPathComponents(input[path], baseURL: baseURL!, schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
+          iterateAppendedPathComponents(
+          	input[path],
+            baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
+            schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file,
+            handleInputPathComponent: { pathComponent, _ in
               pathLength += 1
               PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
-            }
-          } else {
-            iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) { _, pathComponent in
+          }, handleEmptyPathComponent: {
               pathLength += 1
-              PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
-            }
-          }
-          
+          }, handleBasePathComponent: { pathComponent in
+            pathLength += 1 + pathComponent.count
+          })
           assert(pathLength > 0)
+          
           writer.writeUnsafePathInPreallocatedBuffer(length: pathLength) { mutBuffer in
-                      
             var front = mutBuffer.endIndex
-            func handlePathComponent(_ isFirstComponent: Bool, _ pathComponent: AnyBidirectionalCollection<UInt8>) {
-              // Fast-path. Does not change length.
-              if pathComponent.isEmpty {
-                front = mutBuffer.index(before: front)
-                mutBuffer[front] = ASCII.forwardSlash.codePoint
-                return
-              }
-              // Normalize the 2nd character of a Windows drive letter to ':'. Again, doesn't change length.
-              if isFirstComponent, schemeKind == .file, URLStringUtils.isWindowsDriveLetter(pathComponent) {
+            func prependSlash() {
+              front = mutBuffer.index(before: front)
+              mutBuffer[front] = ASCII.forwardSlash.codePoint
+            }
+            func prependWindowsDriveLetter(_ pathComponent: FilteredURLInput<Input>.SubSequence) {
                 front = mutBuffer.index(before: front)
                 mutBuffer[front] = ASCII.colon.codePoint
                 front = mutBuffer.index(before: front)
                 mutBuffer[front] = pathComponent[pathComponent.startIndex]
-                front = mutBuffer.index(before: front)
-                mutBuffer[front] = ASCII.forwardSlash.codePoint
-                return
-              }
-              PercentEscaping.encodeReverseIterativelyAsBuffer(
-                bytes: pathComponent,
-                escapeSet: .url_path,
-                processChunk: { piece in
-                  let newFront = mutBuffer.index(front, offsetBy: -1 * piece.count)
-                  _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[newFront...]).initialize(from: piece)
-                  front = newFront
-              })
-              front = mutBuffer.index(before: front)
-              mutBuffer[front] = ASCII.forwardSlash.codePoint
+                prependSlash()
             }
             
-            if url.componentsToCopyFromBase.contains(.path) {
-              iterateAppendedPathComponents(input[path], baseURL: baseURL!, schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file,
-                                            handlePathComponent)
-            } else {
-              iteratePathComponents(input[path], schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file) {
-                handlePathComponent($0, AnyBidirectionalCollection($1))
-              }
-            }
+            iterateAppendedPathComponents(
+              input[path],
+              baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
+              schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file,
+              handleInputPathComponent: { pathComponent, isLeadingWindowsDriveLetter in
+                if pathComponent.isEmpty {
+                  prependSlash()
+                  return
+                }
+                if isLeadingWindowsDriveLetter {
+                  prependWindowsDriveLetter(pathComponent)
+                  return
+                }
+                PercentEscaping.encodeReverseIterativelyAsBuffer(
+                  bytes: pathComponent,
+                  escapeSet: .url_path,
+                  processChunk: { piece in
+                    let newFront = mutBuffer.index(front, offsetBy: -1 * piece.count)
+                    _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[newFront...]).initialize(from: piece)
+                    front = newFront
+                })
+                prependSlash()
+                
+            }, handleEmptyPathComponent: {
+                prependSlash()
+              
+            }, handleBasePathComponent: { pathComponent in
+              front = mutBuffer.index(front, offsetBy: -1 * pathComponent.count)
+              _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[front...]).initialize(from: pathComponent)
+              prependSlash()
+              
+            })
             // Because we fill the buffer in reverse, we *must* initialise the entire buffer.
             precondition(front == mutBuffer.startIndex, "Failed to initialise path contents")
             return pathLength
           }
         }
-        
       } else if url.componentsToCopyFromBase.contains(.path) {
         guard let baseURL = baseURL else { preconditionFailure("") }
         baseURL.withComponentBytes(.path) {
           if let basePath = $0 {
-            writer.writePathSimple { writePiece in writePiece(basePath) }
+            writer.writePathSimple { writePiece in
+              writePiece(basePath)
+            }
           }
         }
       } else if schemeKind.isSpecial {
@@ -1229,188 +1235,58 @@ private func findScheme<Input>(_ input: FilteredURLInput<Input>) -> Input.Index?
   return cursor
 }
 
-func iteratePathComponents<Input>(_ input: Input, schemeIsSpecial: Bool, isFileScheme: Bool, _ block: (Bool, Input.SubSequence)->Void)
-  where Input: BidirectionalCollection, Input.Element == UInt8 {
-    
-    func isPathComponentTerminator(_ byte: UInt8) -> Bool {
-      return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
-    }
-    
-    guard input.isEmpty == false else {
-      if schemeIsSpecial {
-        block(true, input.prefix(0))
-      }
-      return
-    }
 
-    var contentStartIdx = input.startIndex
-    
-    // Drop the initial separator slash if the input includes it.
-    if isPathComponentTerminator(input[contentStartIdx]) {
-      contentStartIdx = input.index(after: contentStartIdx)
-    }
-    // For file URLs, also drop any other leading slashes, single- or double-dot path components.
-    if isFileScheme {
-      while contentStartIdx != input.endIndex, isPathComponentTerminator(input[contentStartIdx]) {
-        // callback.validationError(.unexpectedEmptyPath)
-        contentStartIdx = input.index(after: contentStartIdx)
-      }
-      while let terminator = input[contentStartIdx...].firstIndex(where: isPathComponentTerminator) {
-        let component = input[contentStartIdx..<terminator]
-        guard URLStringUtils.isSingleDotPathSegment(component) || URLStringUtils.isDoubleDotPathSegment(component) else {
-          break
-        }
-        contentStartIdx = input.index(after: terminator)
-      }
-    }
-    
-    guard contentStartIdx != input.endIndex else {
-      // If the path (after trimming) is empty, we
-      block(false, input[contentStartIdx..<contentStartIdx])
-      return
-    }
-    
-    // Path component special cases:
-    //
-    // - Single dot ('.') components get skipped.
-    //   - If at the end of the path, they force a trailing slash.
-    // - Double dot ('..') components pop previous components from the path.
-    //   - For file URLs, they do not pop the last component if it is a Windows drive letter.
-    //   - If at the end of the path, they force a trailing slash.
-    //     (even if they have popped all other components, the result is an empty path, not a nil path)
-    // - Sequential empty components at the start of a file URL get collapsed.
-    
-    // Iterate the path components in reverse, so we can skip components which later get popped.
-    var path = input[contentStartIdx...]
-    var popcount = 0
-    var trailingEmptyCount = 0
-    var didYieldComponent = false
-    
-    func flushTrailingEmpties() {
-      if trailingEmptyCount != 0 {
-        for _ in 0 ..< trailingEmptyCount {
-          block(false, input.suffix(0))
-        }
-        didYieldComponent = true
-        trailingEmptyCount = 0
-      }
-    }
-        
-    // Consume components separated by terminators.
-    while let componentTerminatorIndex = path.lastIndex(where: isPathComponentTerminator) {
-      // Since we stripped the initial slash, we always have a multi-component path here.
-      
-      if ASCII(input[componentTerminatorIndex]) == .backslash {
-        //callback.validationError(.unexpectedReverseSolidus)
-      }
-      
-      let pathComponent = input[path.index(after: componentTerminatorIndex)..<path.endIndex]
-      defer { path = path.prefix(upTo: componentTerminatorIndex) }
- 
-      // If this is a '..' component, skip it and increase the popcount.
-      // If at the end of the path, mark it as a trailing empty.
-      guard URLStringUtils.isDoubleDotPathSegment(pathComponent) == false else {
-        popcount += 1
-        if pathComponent.endIndex == input.endIndex {
-					trailingEmptyCount += 1
-        }
-        continue
-      }
-      // If the popcount is not 0, this component can be ignored because of a subsequent '..'.
-      guard popcount == 0 else {
-        popcount -= 1
-        continue
-      }
-			// If this is a '.' component, skip it.
-      // If at the end of the path, mark it as a trailing empty.
-      if URLStringUtils.isSingleDotPathSegment(pathComponent) {
-        if pathComponent.endIndex == input.endIndex {
-          trailingEmptyCount += 1
-        }
-        continue
-      }
-      // If this component is empty, defer it until we process later components.
-      if pathComponent.isEmpty {
-        trailingEmptyCount += 1
-        continue
-      }
-      flushTrailingEmpties()
-      // FIXME: If we don't strip leading slashes (e.g. for non-file URLs), this may indeed be the first component.
-      //        As in, we may never yield another component after this (e.g. "file://C|/").
-      //        Luckily this only matters for file URLs, where we *do* strip the leading slashes.
-      block(false, pathComponent)
-      didYieldComponent = true
-    }
-        
-    if URLStringUtils.isDoubleDotPathSegment(path) {
-      popcount += 1
-    }
-    
-    guard popcount == 0 else {
-      // This component has been popped-out.
-      
-      // If the first path component is a Windows drive letter, it can't be popped-out.
-      if isFileScheme, URLStringUtils.isWindowsDriveLetter(path) {
-        flushTrailingEmpties()
-        block(true, path)
-        return
-      }
-      if !isFileScheme {
-        flushTrailingEmpties()
-      }
-      if didYieldComponent == false {
-        block(true, input.prefix(0))
-      }
-      return
-    }
-
-    if URLStringUtils.isSingleDotPathSegment(path) {
-      // This is a single-dot component which does not contribute to the final path,
-      // other than to force an empty component if no other components were yielded.
-
-      if !isFileScheme {
-        flushTrailingEmpties()
-      }
-      if didYieldComponent == false {
-        block(true, input.prefix(0))
-      }
-      return
-    }
-        
-    if path.isEmpty && isFileScheme {
-      // This means we have a leading empty component in a file URL (e.g. "file://somehost//foo/").
-      // Discard trailing empties and only yield
-      if didYieldComponent == false {
-        block(true, path)
-      }
-      return
-    }
-    
-    flushTrailingEmpties()
-    block(true, path)
-}
-
-
-func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schemeIsSpecial: Bool, isFileScheme: Bool, _ realblock: (Bool, AnyBidirectionalCollection<UInt8>)->Void)
-  where Input: BidirectionalCollection, Input.Element == UInt8 {
-    
-    func block<T>(_ isFirst: Bool, _ slice: T) where T: BidirectionalCollection, T.Element == UInt8 {
-      realblock(isFirst, AnyBidirectionalCollection(slice))
-    }
-    func isPathComponentTerminator(_ byte: UInt8) -> Bool {
-      return ASCII(byte) == .forwardSlash || (schemeIsSpecial && ASCII(byte) == .backslash)
-    }
-    
-    var contentStartIdx = input.startIndex
+/// Iterates the simplified components of a given path string, optionally applied relative to a base URL's path.
+/// The components are iterated in reverse order, and yielded via 3 callbacks.
+///
+/// A path string, such as `"a/b/c/.././d/e/../f/"`, describes a traversal through a tree of nodes.
+/// In order to resolve which nodes are present in the final path without allocating dynamic storage to represent the stack of visited nodes,
+/// the components must be iterated in reverse.
+///
+/// To construct a simplified path string, repeatedly prepend `"/"` (forward slash) followed by the component, to a resulting string.
+/// For example, the input `"a/b/"` yields the components `["", "b", "a"]`, and the construction proceeds as follows:
+/// `"/" -> "/b/" -> "/a/b/"`. The components are yielded by 3 callbacks, all of which build a single result:
+///
+///  - `handleInputPathComponent` yields a component from the input string.
+///     These components may be expensive to iterate and must be percent-encoded when written.
+///     In some circumstances, Windows drive letter components require normalisation. If the boolean flag is `true`, handlers should
+///     check if the component is a Windows drive letter and normalize it if it is.
+///  - `handleEmptyPathComponent` yields an empty component. Not all empty components are guaranteed to be called via this method,
+///     but it can be more efficient when we know the component is empty and doesn't need escaping or other checks.
+///  - `handleBasePathComponent` yields a component from the base URL's path.
+///     These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters will already have been normalized.
+///     They can essentially need no further processing, and may be written to the result as-is.
+///
+/// If the input string is empty, no callbacks will be called unless the scheme is special, in which case there is always an implicit empty path.
+/// If the input string is not empty, this function will always yield something.
+///
+func iterateAppendedPathComponents<Input>(
+  _ input: Input,
+  baseURL: NewURL?,
+  schemeIsSpecial: Bool,
+  isFileScheme: Bool,
+  handleInputPathComponent: (Input.SubSequence, _ isLeadingWindowsDriveLetter: Bool)->Void,
+  handleEmptyPathComponent: ()->Void,
+  handleBasePathComponent: (UnsafeBufferPointer<UInt8>)->Void
+) where Input: BidirectionalCollection, Input.Element == UInt8 {
     
     // Special URLs have an implicit, empty path.
     guard input.isEmpty == false else {
       if schemeIsSpecial {
-        block(true, input[...])
+        handleEmptyPathComponent()
       }
       return
     }
-
+    
+    let isPathComponentTerminator: (_ byte: UInt8) -> Bool
+    if schemeIsSpecial {
+      isPathComponentTerminator = { byte in ASCII(byte) == .forwardSlash || ASCII(byte) == .backslash }
+    } else {
+      isPathComponentTerminator = { byte in ASCII(byte) == .forwardSlash }
+    }
+    
+    var contentStartIdx = input.startIndex
+    
     // Trim leading slash if present.
     if isPathComponentTerminator(input[contentStartIdx]) {
       contentStartIdx = input.index(after: contentStartIdx)
@@ -1423,32 +1299,30 @@ func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schem
       }
       while let terminator = input[contentStartIdx...].firstIndex(where: isPathComponentTerminator) {
         let component = input[contentStartIdx..<terminator]
-        guard URLStringUtils.isSingleDotPathSegment(component) || URLStringUtils.isDoubleDotPathSegment(component) else {
+        guard URLStringUtils.isSingleDotPathSegment(component) || URLStringUtils.isDoubleDotPathSegment(component) || component.isEmpty else {
           break
         }
         contentStartIdx = input.index(after: terminator)
       }
     }
     
-    // If the path wasn't empty before, but is now, the path is a lone slash (non-file) or string of slashes (file).
-    // A path of "/" always resolves to "/", and is not relative to the base path...
-    //  - Except: if this is a file URL and the base path starts with a Windows drive letter (X). Then the resolved path is just "X:/"
+    // If the input is now empty after trimming, it is either a lone slash (non-file) or string of slashes and dots (file).
+    // All of these possible inputs get shortened down to "/", and are not relative to the base path.
+    // With one exception: if this is a file URL and the base path starts with a Windows drive letter (X), the result is just "X:/"
     guard contentStartIdx != input.endIndex else {
-      assert(isFileScheme, "Only file URLs seem to hit this path")
-      
       var didYield = false
       if isFileScheme {
-        baseURL.withComponentBytes(.path) {
+        baseURL?.withComponentBytes(.path) {
           guard let basePath = $0?.dropFirst() else { return } // dropFirst() due to the leading slash.
           if URLStringUtils.hasWindowsDriveLetterPrefix(basePath) {
-            block(false, input[contentStartIdx..<contentStartIdx])
-            block(true, basePath.prefix(2))
+            handleEmptyPathComponent()
+            handleBasePathComponent(UnsafeBufferPointer(rebasing: basePath.prefix(2)))
             didYield = true
           }
         }
       }
       if !didYield {
-        block(true, input[contentStartIdx..<contentStartIdx])
+        handleEmptyPathComponent()
       }
       return
     }
@@ -1456,10 +1330,10 @@ func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schem
     // Path component special cases:
     //
     // - Single dot ('.') components get skipped.
-    //   - If at the end of the path, they force a trailing slash.
+    //   - If at the end of the path, they force a trailing slash/empty component.
     // - Double dot ('..') components pop previous components from the path.
     //   - For file URLs, they do not pop the last component if it is a Windows drive letter.
-    //   - If at the end of the path, they force a trailing slash.
+    //   - If at the end of the path, they force a trailing slash/empty component.
     //     (even if they have popped all other components, the result is an empty path, not a nil path)
     // - Consecutive empty components at the start of a file URL get collapsed.
     
@@ -1472,7 +1346,7 @@ func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schem
     func flushTrailingEmpties() {
       if trailingEmptyCount != 0 {
         for _ in 0 ..< trailingEmptyCount {
-          block(false, input.suffix(0))
+          handleEmptyPathComponent()
         }
         didYieldComponent = true
         trailingEmptyCount = 0
@@ -1480,32 +1354,32 @@ func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schem
     }
         
     // Consume components separated by terminators.
+    // Since we stripped the initial slash, this loop never sees the initial path component
+    // unless it is empty and the scheme is not file.
     while let componentTerminatorIndex = path.lastIndex(where: isPathComponentTerminator) {
-      // Since we stripped the initial slash, we always have a multi-component path here.
+      
+      let pathComponent = input[path.index(after: componentTerminatorIndex)..<path.endIndex]
+      defer { path = path.prefix(upTo: componentTerminatorIndex) }
       
       if ASCII(input[componentTerminatorIndex]) == .backslash {
         //callback.validationError(.unexpectedReverseSolidus)
       }
-      
-      let pathComponent = input[path.index(after: componentTerminatorIndex)..<path.endIndex]
-      defer { path = path.prefix(upTo: componentTerminatorIndex) }
  
-      // If this is a '..' component, skip it and increase the popcount.
+      // '..' -> skip it and increase the popcount.
       // If at the end of the path, mark it as a trailing empty.
       guard URLStringUtils.isDoubleDotPathSegment(pathComponent) == false else {
         popcount += 1
         if pathComponent.endIndex == input.endIndex {
-          // FIXME: Never executed in tests.
           trailingEmptyCount += 1
         }
         continue
       }
-      // If the popcount is not 0, this component can be ignored because of a subsequent '..'.
+      // Every other component (incl. '.', empty components) can be popped.
       guard popcount == 0 else {
         popcount -= 1
         continue
       }
-      // If this is a '.' component, skip it.
+      // '.' -> skip it.
       // If at the end of the path, mark it as a trailing empty.
       if URLStringUtils.isSingleDotPathSegment(pathComponent) {
         if pathComponent.endIndex == input.endIndex {
@@ -1513,100 +1387,127 @@ func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schem
         }
         continue
       }
-      // If this component is empty, defer it until we process later components.
+      // '' (empty) -> defer processing.
       if pathComponent.isEmpty {
         trailingEmptyCount += 1
         continue
       }
       flushTrailingEmpties()
-      // FIXME: If we don't strip leading slashes (e.g. for non-file URLs), this may indeed be the first component.
-      //        As in, we may never yield another component after this (e.g. "file://C|/").
-      //        Luckily this only matters for file URLs, where we *do* strip the leading slashes.
-      block(false, pathComponent)
+      handleInputPathComponent(pathComponent, /* isLeadingWindowsDriveLetter */ false)
       didYieldComponent = true
     }
     
-    assert(path.isEmpty == false)
-    
+    // If the remainder (first component) is empty, if means the path begins with a '//'.
+    // This can't be a file URL, because we would have stripped that.
+    assert(path.isEmpty ? isFileScheme == false : true)
+        
     switch path {
-    // Process '..' and '.'. If this is the first component, ensure we have a trailing slash.
     case _ where URLStringUtils.isDoubleDotPathSegment(path):
       popcount += 1
       fallthrough
     case _ where URLStringUtils.isSingleDotPathSegment(path):
+      // Ensure we have a trailing slash.
       if !didYieldComponent {
         trailingEmptyCount = max(trailingEmptyCount, 1)
       }
       
-    // If the first path component is a Windows drive letter, it can't be popped-out,
-    // and we don't care about the base URL.
     case _ where URLStringUtils.isWindowsDriveLetter(path) && isFileScheme:
       flushTrailingEmpties()
-      block(true, path)
-      return
+      handleInputPathComponent(path, /* isLeadingWindowsDriveLetter */ true)
+      return // Never appended to base URL.
 
     case _ where popcount == 0:
     	flushTrailingEmpties()
-      block(true, path) // FIXME: May not actually be the first component.
+      handleInputPathComponent(path, /* isLeadingWindowsDriveLetter */ false)
       didYieldComponent = true
       
     default:
       popcount -= 1
       break // Popped out.
     }
+  
+    // The leading component has now been processed.
+    // If there is no base URL to carry state forward to, we need to flush anything that was deferred.
+    path = path.prefix(0)
+    guard let baseURL = baseURL else {
+      if didYieldComponent == false {
+        // If we haven't yielded anything yet, it's because the leading component was popped-out or skipped.
+        // Make sure we have at least (or for files, exactly) 1 trailing empty to yield when we flush.
+        trailingEmptyCount = isFileScheme ? 1 : max(trailingEmptyCount, 1)
+      }
+      flushTrailingEmpties()
+      return
+    }
     
-    // Okay, let's check out the base path now.
     baseURL.withComponentBytes(.path) {
       guard var basePath = $0?[...] else {
+        // No base path. Flush state from input string, as above.
+        assert(baseURL.schemeKind.isSpecial == false, "Special URLs always have a path")
+        if didYieldComponent == false {
+          trailingEmptyCount = isFileScheme ? 1 : max(trailingEmptyCount, 1)
+        }
+        flushTrailingEmpties()
         return
       }
       // Trim the leading slash.
       if basePath.first == ASCII.forwardSlash.codePoint {
         basePath = basePath.dropFirst()
       }
-      // Drop the last path component.y
+      // Drop the last path component.
       if basePath.last == ASCII.forwardSlash.codePoint {
         basePath = basePath.dropLast()
+      } else if isFileScheme {
+        // file URLs don't drop leading Windows drive letters.
+        let lastPathComponent: Slice<UnsafeBufferPointer<UInt8>>
+        let trimmedBasePath: Slice<UnsafeBufferPointer<UInt8>>
+        if let terminatorBeforeLastPathComponent = basePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
+          trimmedBasePath   = basePath[..<terminatorBeforeLastPathComponent]
+          lastPathComponent = basePath[terminatorBeforeLastPathComponent...].dropFirst()
+        } else {
+          trimmedBasePath   = basePath.prefix(0)
+          lastPathComponent = basePath
+        }
+        if !(lastPathComponent.startIndex == basePath.startIndex && URLStringUtils.isWindowsDriveLetter(lastPathComponent)) {
+          basePath = trimmedBasePath
+        }
       } else {
-       	basePath = basePath[..<(basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex)]
+        basePath = basePath[..<(basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex)]
       }
-      // Consume all other components. Process them like we do for the input string.
+      
+      // Consume remaining components. Continue to observe popcount and trailing empties.
       while let componentTerminatorIndex = basePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
         let pathComponent = basePath[basePath.index(after: componentTerminatorIndex)..<basePath.endIndex]
         defer { basePath = basePath.prefix(upTo: componentTerminatorIndex) }
         
         assert(URLStringUtils.isDoubleDotPathSegment(pathComponent) == false)
         assert(URLStringUtils.isSingleDotPathSegment(pathComponent) == false)
-        // If the popcount is not 0, this component can be ignored because of a subsequent '..'.
         guard popcount == 0 else {
           popcount -= 1
           continue
         }
-        // If this component is empty, defer it until we process later components.
         if pathComponent.isEmpty {
           trailingEmptyCount += 1
           continue
         }
         flushTrailingEmpties()
-        block(false, pathComponent)
+        handleBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
         didYieldComponent = true
       }
+      // We're left with the leading path component from the base URL (i.e. the very start of the resulting path).
       
       guard popcount == 0 else {
-        // This component has been popped-out.
-        
-        // If the first path component is a Windows drive letter, it can't be popped-out.
+        // Leading Windows drive letters cannot be popped-out.
         if isFileScheme, URLStringUtils.isWindowsDriveLetter(basePath) {
           trailingEmptyCount = max(1, trailingEmptyCount)
           flushTrailingEmpties()
-          block(true, basePath)
+          handleBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
           return
         }
         if !isFileScheme {
           flushTrailingEmpties()
         }
         if didYieldComponent == false {
-          block(true, input.prefix(0))
+          handleEmptyPathComponent()
         }
         return
       }
@@ -1615,20 +1516,19 @@ func iterateAppendedPathComponents<Input>(_ input: Input, baseURL: NewURL, schem
       assert(URLStringUtils.isSingleDotPathSegment(basePath) == false)
       
       if basePath.isEmpty {
+        // We are at the very start of the path. File URLs discard empties.
         if !isFileScheme {
           flushTrailingEmpties()
         }
-        // This means we have a leading empty component in a file URL (e.g. "file://somehost//foo/").
-        // Discard trailing empties and only yield
         if didYieldComponent == false {
-          // FIXME: Never executed in tests.
-          block(true, basePath)
+          // If we still didn't yield anything and basePath is empty, any components have been popped to a net zero result.
+          // Yield an empty path.
+          handleEmptyPathComponent()
         }
         return
       }
-      
       flushTrailingEmpties()
-      block(true, basePath)
+      handleBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
     }
 }
 
@@ -1947,12 +1847,19 @@ extension URLScanner {
     let path = input[..<(nextComponentStartIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    iteratePathComponents(path, schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file) { _, pathComponent in
+    iterateAppendedPathComponents(
+    	path, baseURL: nil,
+      schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file,
+      handleInputPathComponent: { pathComponent, _ in
       if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
         callback.validationError(.unexpectedReverseSolidus)
       }
       validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
-    }
+    }, handleEmptyPathComponent: {
+      // Nothing to do.
+    }, handleBasePathComponent: { _ in
+      assertionFailure("Should never be invoked without a base URL")
+    })
       
     // 4. Return the next component.
     if path.isEmpty && scheme.isSpecial == false {
