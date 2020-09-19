@@ -311,9 +311,11 @@ protocol CompressedOptional {
 }
 
 extension Optional: CompressedOptional {
-  static var none: Optional<Wrapped> {
+  #if swift(<5.3)
+  static var none: Self {
     return nil
   }
+  #endif
   func get() -> Wrapped? {
     return self
   }
