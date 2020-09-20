@@ -1096,7 +1096,16 @@ struct FilteredURLInput<Base> where Base: BidirectionalCollection, Base.Element 
       }
       trimmedSlice = trimmedInput
     }
+    // Trim initial filtered bytes so we can provide startIndex in O(1).
+    trimmedSlice = trimmedSlice.drop(while: Self.filterShouldDrop)
+    
     self.base = trimmedSlice
+  }
+  
+  static func filterShouldDrop(_ byte: UInt8) -> Bool {
+    return ASCII(byte) == .horizontalTab
+    || ASCII(byte) == .carriageReturn
+    || ASCII(byte) == .lineFeed
   }
 }
 
@@ -1104,19 +1113,18 @@ extension FilteredURLInput: BidirectionalCollection {
   typealias Index = Base.Index
   typealias Element = Base.Element
   
-  private var filtered: LazyFilterSequence<Base.SubSequence> {
-    return base.lazy.filter { byte in
-      return ASCII(byte) != .horizontalTab
-      && ASCII(byte) != .carriageReturn
-      && ASCII(byte) != .lineFeed
-    }
-  }
-  
   var startIndex: Index {
-    return filtered.startIndex
+    return base.startIndex
   }
   var endIndex: Index {
-    return filtered.endIndex
+    return base.endIndex
+  }
+  subscript(position: Base.Index) -> UInt8 {
+    return base[position]
+  }
+  
+  private var filtered: LazyFilterSequence<Base.SubSequence> {
+    return base.lazy.filter { Self.filterShouldDrop($0) == false }
   }
   var count: Int {
     return filtered.count
@@ -1129,10 +1137,6 @@ extension FilteredURLInput: BidirectionalCollection {
   }
   func distance(from start: Base.Index, to end: Base.Index) -> Int {
     return filtered.distance(from: start, to: end)
-  }
-  
-  subscript(position: Base.Index) -> UInt8 {
-    return base[position]
   }
 }
 

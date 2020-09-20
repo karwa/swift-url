@@ -31,7 +31,7 @@ extension PercentEscaping {
   ///
   /// -  important: 	This algorithm does not round-trip for arbitrary byte sequences unless `escapeSet` includes
   /// 				the `ASCII.percentSign` character itself. If not, sequences which happen to contain a valid escape string already
-  ///                 will be not be escaped, and the reciever, expecting an additional level of escaping, will over-unescape the resulting String.
+  ///                 will be not be escaped, and the receiver, expecting an additional level of escaping, will over-unescape the resulting String.
   ///
   /// - parameters:
   ///     - bytes:        The sequence of bytes to encode.
