@@ -1533,7 +1533,9 @@ extension URLScanner {
     let queryEndIndex = input.firstIndex { ASCII($0) == .numberSign }
       
     // 3. Validate the query-string.
-    validateURLCodePointsAndPercentEncoding(input.prefix(upTo: queryEndIndex ?? input.endIndex), callback: &callback)
+    if Callback.self != IgnoreValidationErrors.self {
+      validateURLCodePointsAndPercentEncoding(input.prefix(upTo: queryEndIndex ?? input.endIndex), callback: &callback)
+    }
       
     // 3. Return the next component.
     mapping.queryEndIndex.set(to: queryEndIndex ?? input.endIndex)
@@ -1552,7 +1554,9 @@ extension URLScanner {
     assert(mapping.fragmentEndIndex.get() == nil)
     
     // 2. Validate the fragment string.
-    validateURLCodePointsAndPercentEncoding(input, callback: &callback)
+    if Callback.self != IgnoreValidationErrors.self {
+      validateURLCodePointsAndPercentEncoding(input, callback: &callback)
+    }
     
     mapping.fragmentEndIndex.set(to: input.endIndex)
     return .success(continueFrom: nil)
