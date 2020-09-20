@@ -2,7 +2,7 @@
 
 /// An object which receives iterated path components. The components are visited in reverse order.
 ///
-protocol PathComponentVisitor {
+private protocol PathComponentVisitor {
   
   /// Called when the iterator yields a path component that originates from the input string.
   /// These components may not be contiguously stored and require percent-encoding when written.
@@ -49,7 +49,7 @@ struct PathBufferLengthCalculator: PathComponentVisitor {
     return visitor.length
   }
   
-  mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
+  fileprivate mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
   where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     length += 1
     PercentEscaping.encodeReverseIterativelyAsBuffer(
@@ -59,11 +59,11 @@ struct PathBufferLengthCalculator: PathComponentVisitor {
     )
   }
   
-  mutating func visitEmptyPathComponent() {
+  fileprivate mutating func visitEmptyPathComponent() {
     length += 1
   }
   
-  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+  fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
     length += 1 + pathComponent.count
   }
 }
@@ -98,7 +98,7 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
       .initialize(to: ASCII.forwardSlash.codePoint)
   }
 
-  mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
+  fileprivate mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
   where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     guard pathComponent.isEmpty == false else {
       prependSlash()
@@ -126,11 +126,11 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
     prependSlash()
   }
   
-  mutating func visitEmptyPathComponent() {
+  fileprivate mutating func visitEmptyPathComponent() {
     prependSlash()
   }
   
-  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+  fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
     front = buffer.index(front, offsetBy: -1 * pathComponent.count)
     buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
       .initialize(from: pathComponent.baseAddress!, count: pathComponent.count)
@@ -159,7 +159,7 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
     )
   }
   
-  mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
+  fileprivate mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
   where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     
     guard let pathComponent = pathComponent as? Input.SubSequence else {
@@ -170,10 +170,10 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
     }
     URLScanner<Input, Input.Index?, Callback>.validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
   }
-  mutating func visitEmptyPathComponent() {
+  fileprivate mutating func visitEmptyPathComponent() {
     // Nothing to do.
   }
-  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+  fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
     assertionFailure("Should never be invoked without a base URL")
   }
 }
@@ -204,7 +204,7 @@ extension PathComponentVisitor {
   /// If the input string is empty, no callbacks will be called unless the scheme is special, in which case there is always an implicit empty path.
   /// If the input string is not empty, this function will always yield something.
   ///
-  mutating func walkPathComponents<InputString>(
+  fileprivate mutating func walkPathComponents<InputString>(
     pathString input: InputString,
     schemeKind: NewURLParser.Scheme,
     baseURL: NewURL?
