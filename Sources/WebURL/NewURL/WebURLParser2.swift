@@ -922,69 +922,20 @@ struct NewURLParser {
             )
           }
         case false:
-          var pathLength = 0
-          iterateAppendedPathComponents(
-          	input[path],
-            baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
-            schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file,
-            handleInputPathComponent: { pathComponent, _ in
-              pathLength += 1
-              PercentEscaping.encodeIterativelyAsBuffer(bytes: pathComponent, escapeSet: .url_path) { pathLength += $0.count }
-          }, handleEmptyPathComponent: {
-              pathLength += 1
-          }, handleBasePathComponent: { pathComponent in
-            pathLength += 1 + pathComponent.count
-          })
+          let pathLength = PathBufferLengthCalculator.requiredBufferLength(
+            pathString: input[path],
+            schemeKind: schemeKind,
+            baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil
+          )
           assert(pathLength > 0)
           
           writer.writeUnsafePathInPreallocatedBuffer(length: pathLength) { mutBuffer in
-            var front = mutBuffer.endIndex
-            func prependSlash() {
-              front = mutBuffer.index(before: front)
-              mutBuffer[front] = ASCII.forwardSlash.codePoint
-            }
-            func prependWindowsDriveLetter(_ pathComponent: FilteredURLInput<Input>.SubSequence) {
-                front = mutBuffer.index(before: front)
-                mutBuffer[front] = ASCII.colon.codePoint
-                front = mutBuffer.index(before: front)
-                mutBuffer[front] = pathComponent[pathComponent.startIndex]
-                prependSlash()
-            }
-            
-            iterateAppendedPathComponents(
-              input[path],
-              baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
-              schemeIsSpecial: schemeKind.isSpecial, isFileScheme: schemeKind == .file,
-              handleInputPathComponent: { pathComponent, isLeadingWindowsDriveLetter in
-                if pathComponent.isEmpty {
-                  prependSlash()
-                  return
-                }
-                if isLeadingWindowsDriveLetter {
-                  prependWindowsDriveLetter(pathComponent)
-                  return
-                }
-                PercentEscaping.encodeReverseIterativelyAsBuffer(
-                  bytes: pathComponent,
-                  escapeSet: .url_path,
-                  processChunk: { piece in
-                    let newFront = mutBuffer.index(front, offsetBy: -1 * piece.count)
-                    _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[newFront...]).initialize(from: piece)
-                    front = newFront
-                })
-                prependSlash()
-                
-            }, handleEmptyPathComponent: {
-                prependSlash()
-              
-            }, handleBasePathComponent: { pathComponent in
-              front = mutBuffer.index(front, offsetBy: -1 * pathComponent.count)
-              _ = UnsafeMutableBufferPointer(rebasing: mutBuffer[front...]).initialize(from: pathComponent)
-              prependSlash()
-              
-            })
-            // Because we fill the buffer in reverse, we *must* initialise the entire buffer.
-            precondition(front == mutBuffer.startIndex, "Failed to initialise path contents")
+            PathPreallocatedBufferWriter.writePath(
+              to: mutBuffer,
+              pathString: input[path],
+              schemeKind: schemeKind,
+              baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil
+            )
             return pathLength
           }
         }
@@ -1237,45 +1188,225 @@ private func findScheme<Input>(_ input: FilteredURLInput<Input>) -> Input.Index?
   return cursor
 }
 
+// MARK: - Path Iteration
 
-/// Iterates the simplified components of a given path string, optionally applied relative to a base URL's path.
-/// The components are iterated in reverse order, and yielded via 3 callbacks.
+/// An object which receives iterated path components. The components are visited in reverse order.
 ///
-/// A path string, such as `"a/b/c/.././d/e/../f/"`, describes a traversal through a tree of nodes.
-/// In order to resolve which nodes are present in the final path without allocating dynamic storage to represent the stack of visited nodes,
-/// the components must be iterated in reverse.
+protocol PathComponentVisitor {
+  
+  /// Called when the iterator yields a path component that originates from the input string.
+  /// These components may not be contiguously stored and require percent-encoding when written.
+  ///
+  /// - parameters:
+  ///   - pathComponent:                The path component yielded by the iterator.
+  ///   - isLeadingWindowsDriveLetter:  If `true`, the component is a Windows drive letter in a `file:` URL.
+  ///                                   It should be normalized when written (by writing the first byte followed by the ASCII character `:`).
+  ///
+  mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
+    where InputString: BidirectionalCollection, InputString.Element == UInt8
+  
+  /// Called when the iterator yields an empty path component. Note that this does not imply that other methods are always called with non-empty path components.
+  /// This method exists solely as an optimisation, since empty components have no content to percent-encode/transform.
+  ///
+  mutating func visitEmptyPathComponent()
+  
+  /// Called when the iterator yields a path component that originates from the base URL's path.
+  /// These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters will already have been normalized.
+  /// They need no further processing, and may be written to the result as-is.
+  ///
+  /// - parameters:
+  ///   - pathComponent: The path component yielded by the iterator.
+  ///
+  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>)
+}
+
+/// A `PathComponentVisitor` which calculates the size of the buffer required to write a path.
 ///
-/// To construct a simplified path string, repeatedly prepend `"/"` (forward slash) followed by the component, to a resulting string.
-/// For example, the input `"a/b/"` yields the components `["", "b", "a"]`, and the construction proceeds as follows:
-/// `"/" -> "/b/" -> "/a/b/"`. The components are yielded by 3 callbacks, all of which build a single result:
+struct PathBufferLengthCalculator: PathComponentVisitor {
+  private var length: Int = 0
+  
+  static func requiredBufferLength<InputString>(
+    pathString input: InputString,
+    schemeKind: NewURLParser.Scheme,
+    baseURL: NewURL?
+  ) -> Int where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+    var visitor = PathBufferLengthCalculator()
+    visitor.walkPathComponents(
+      pathString: input,
+      schemeKind: schemeKind,
+      baseURL: baseURL
+    )
+    return visitor.length
+  }
+  
+  mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
+  where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+    length += 1
+    PercentEscaping.encodeReverseIterativelyAsBuffer(
+      bytes: pathComponent,
+      escapeSet: .url_path,
+      processChunk: { piece in length += piece.count }
+    )
+  }
+  
+  mutating func visitEmptyPathComponent() {
+    length += 1
+  }
+  
+  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+    length += 1 + pathComponent.count
+  }
+}
+
+/// A `PathComponentVisitor` which writes a properly percent-encoded, normalised URL path string
+/// in to a preallocated buffer. Use the `PathBufferLengthCalculator` to calculate the buffer's required size.
 ///
-///  - `handleInputPathComponent` yields a component from the input string.
-///     These components may be expensive to iterate and must be percent-encoded when written.
-///     In some circumstances, Windows drive letter components require normalisation. If the boolean flag is `true`, handlers should
-///     check if the component is a Windows drive letter and normalize it if it is.
-///  - `handleEmptyPathComponent` yields an empty component. Not all empty components are guaranteed to be called via this method,
-///     but it can be more efficient when we know the component is empty and doesn't need escaping or other checks.
-///  - `handleBasePathComponent` yields a component from the base URL's path.
-///     These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters will already have been normalized.
-///     They can essentially need no further processing, and may be written to the result as-is.
+struct PathPreallocatedBufferWriter: PathComponentVisitor {
+  private let buffer: UnsafeMutableBufferPointer<UInt8>
+  private var front: Int
+  
+  static func writePath<InputString>(
+    to buffer: UnsafeMutableBufferPointer<UInt8>,
+    pathString input: InputString,
+    schemeKind: NewURLParser.Scheme,
+    baseURL: NewURL?
+  ) -> Void where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+    // Checking this now allows the implementation to use `.baseAddress.unsafelyUnwrapped`.
+    precondition(buffer.baseAddress != nil)
+    var visitor = PathPreallocatedBufferWriter(buffer: buffer, front: buffer.endIndex)
+    visitor.walkPathComponents(
+      pathString: input,
+      schemeKind: schemeKind,
+      baseURL: baseURL
+    )
+    precondition(visitor.front == buffer.startIndex, "Failed to initialise entire buffer")
+  }
+  
+  private mutating func prependSlash() {
+    front = buffer.index(before: front)
+    buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
+      .initialize(to: ASCII.forwardSlash.codePoint)
+  }
+
+  mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
+  where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+    guard pathComponent.isEmpty == false else {
+      prependSlash()
+      return
+    }
+    guard isLeadingWindowsDriveLetter == false else {
+      assert(pathComponent.count == 2)
+      front = buffer.index(front, offsetBy: -2)
+      buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
+        .initialize(to: pathComponent[pathComponent.startIndex])
+      buffer.baseAddress.unsafelyUnwrapped.advanced(by: front &+ 1)
+        .initialize(to: ASCII.colon.codePoint)
+      prependSlash()
+      return
+    }
+    PercentEscaping.encodeReverseIterativelyAsBuffer(
+      bytes: pathComponent,
+      escapeSet: .url_path,
+      processChunk: { piece in
+        let newFront = buffer.index(front, offsetBy: -1 * piece.count)
+        buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront)
+          .initialize(from: piece.baseAddress!, count: piece.count)
+        front = newFront
+    })
+    prependSlash()
+  }
+  
+  mutating func visitEmptyPathComponent() {
+    prependSlash()
+  }
+  
+  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+    front = buffer.index(front, offsetBy: -1 * pathComponent.count)
+    buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
+      .initialize(from: pathComponent.baseAddress!, count: pathComponent.count)
+    prependSlash()
+  }
+}
+
+/// A `PathComponentVisitor` which emits URL validation errors for non-URL code points, invalid percent encoding,
+/// and use of backslashes as path separators.
 ///
-/// If the input string is empty, no callbacks will be called unless the scheme is special, in which case there is always an implicit empty path.
-/// If the input string is not empty, this function will always yield something.
-///
-func iterateAppendedPathComponents<Input>(
-  _ input: Input,
-  baseURL: NewURL?,
-  schemeIsSpecial: Bool,
-  isFileScheme: Bool,
-  handleInputPathComponent: (Input.SubSequence, _ isLeadingWindowsDriveLetter: Bool)->Void,
-  handleEmptyPathComponent: ()->Void,
-  handleBasePathComponent: (UnsafeBufferPointer<UInt8>)->Void
-) where Input: BidirectionalCollection, Input.Element == UInt8 {
+struct PathInputStringValidator<Input, Callback>: PathComponentVisitor
+where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.SubSequence, Callback: URLParserCallback {
+  private var callback: Callback
+  private let path: Input.SubSequence
+  
+  static func validatePathComponents(
+    pathString input: Input,
+    schemeKind: NewURLParser.Scheme,
+    callback: inout Callback
+  ) -> Void {
+    var visitor = PathInputStringValidator(callback: callback, path: input)
+    visitor.walkPathComponents(
+      pathString: input,
+      schemeKind: schemeKind,
+      baseURL: nil
+    )
+  }
+  
+  mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
+  where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+    
+    guard let pathComponent = pathComponent as? Input.SubSequence else {
+      preconditionFailure("Unexpected slice type")
+    }
+    if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
+      callback.validationError(.unexpectedReverseSolidus)
+    }
+    URLScanner<Input, Input.Index?, Callback>.validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
+  }
+  mutating func visitEmptyPathComponent() {
+    // Nothing to do.
+  }
+  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+    assertionFailure("Should never be invoked without a base URL")
+  }
+}
+
+extension PathComponentVisitor {
+  
+  /// Iterates the simplified components of a given path string, optionally applied relative to a base URL's path.
+  /// The components are iterated in reverse order, and yielded via 3 callbacks.
+  ///
+  /// A path string, such as `"a/b/c/.././d/e/../f/"`, describes a traversal through a tree of nodes.
+  /// In order to resolve which nodes are present in the final path without allocating dynamic storage to represent the stack of visited nodes,
+  /// the components must be iterated in reverse.
+  ///
+  /// To construct a simplified path string, repeatedly prepend `"/"` (forward slash) followed by the component, to a resulting string.
+  /// For example, the input `"a/b/"` yields the components `["", "b", "a"]`, and the construction proceeds as follows:
+  /// `"/" -> "/b/" -> "/a/b/"`. The components are yielded by 3 callbacks, all of which build a single result:
+  ///
+  ///  - `visitInputPathComponent` yields a component from the input string.
+  ///     These components may be expensive to iterate and must be percent-encoded when written.
+  ///     In some circumstances, Windows drive letter components require normalisation. If the boolean flag is `true`, handlers should
+  ///     check if the component is a Windows drive letter and normalize it if it is.
+  ///  - `visitEmptyPathComponent` yields an empty component. Not all empty components are guaranteed to be called via this method,
+  ///     but it can be more efficient when we know the component is empty and doesn't need escaping or other checks.
+  ///  - `visitBasePathComponent` yields a component from the base URL's path.
+  ///     These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters will already have been normalized.
+  ///     They can essentially need no further processing, and may be written to the result as-is.
+  ///
+  /// If the input string is empty, no callbacks will be called unless the scheme is special, in which case there is always an implicit empty path.
+  /// If the input string is not empty, this function will always yield something.
+  ///
+  mutating func walkPathComponents<InputString>(
+    pathString input: InputString,
+    schemeKind: NewURLParser.Scheme,
+    baseURL: NewURL?
+  ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+    
+    let schemeIsSpecial = schemeKind.isSpecial
+    let isFileScheme = (schemeKind == .file)
     
     // Special URLs have an implicit, empty path.
     guard input.isEmpty == false else {
       if schemeIsSpecial {
-        handleEmptyPathComponent()
+        visitEmptyPathComponent()
       }
       return
     }
@@ -1317,14 +1448,14 @@ func iterateAppendedPathComponents<Input>(
         baseURL?.withComponentBytes(.path) {
           guard let basePath = $0?.dropFirst() else { return } // dropFirst() due to the leading slash.
           if URLStringUtils.hasWindowsDriveLetterPrefix(basePath) {
-            handleEmptyPathComponent()
-            handleBasePathComponent(UnsafeBufferPointer(rebasing: basePath.prefix(2)))
+            visitEmptyPathComponent()
+            visitBasePathComponent(UnsafeBufferPointer(rebasing: basePath.prefix(2)))
             didYield = true
           }
         }
       }
       if !didYield {
-        handleEmptyPathComponent()
+        visitEmptyPathComponent()
       }
       return
     }
@@ -1348,13 +1479,13 @@ func iterateAppendedPathComponents<Input>(
     func flushTrailingEmpties() {
       if trailingEmptyCount != 0 {
         for _ in 0 ..< trailingEmptyCount {
-          handleEmptyPathComponent()
+          visitEmptyPathComponent()
         }
         didYieldComponent = true
         trailingEmptyCount = 0
       }
     }
-        
+    
     // Consume components separated by terminators.
     // Since we stripped the initial slash, this loop never sees the initial path component
     // unless it is empty and the scheme is not file.
@@ -1366,7 +1497,7 @@ func iterateAppendedPathComponents<Input>(
       if ASCII(input[componentTerminatorIndex]) == .backslash {
         //callback.validationError(.unexpectedReverseSolidus)
       }
- 
+      
       // '..' -> skip it and increase the popcount.
       // If at the end of the path, mark it as a trailing empty.
       guard URLStringUtils.isDoubleDotPathSegment(pathComponent) == false else {
@@ -1395,14 +1526,14 @@ func iterateAppendedPathComponents<Input>(
         continue
       }
       flushTrailingEmpties()
-      handleInputPathComponent(pathComponent, /* isLeadingWindowsDriveLetter */ false)
+      visitInputPathComponent(pathComponent, isLeadingWindowsDriveLetter: false)
       didYieldComponent = true
     }
     
     // If the remainder (first component) is empty, if means the path begins with a '//'.
     // This can't be a file URL, because we would have stripped that.
     assert(path.isEmpty ? isFileScheme == false : true)
-        
+    
     switch path {
     case _ where URLStringUtils.isDoubleDotPathSegment(path):
       popcount += 1
@@ -1415,19 +1546,19 @@ func iterateAppendedPathComponents<Input>(
       
     case _ where URLStringUtils.isWindowsDriveLetter(path) && isFileScheme:
       flushTrailingEmpties()
-      handleInputPathComponent(path, /* isLeadingWindowsDriveLetter */ true)
+      visitInputPathComponent(path, isLeadingWindowsDriveLetter: true)
       return // Never appended to base URL.
-
+    
     case _ where popcount == 0:
-    	flushTrailingEmpties()
-      handleInputPathComponent(path, /* isLeadingWindowsDriveLetter */ false)
+      flushTrailingEmpties()
+      visitInputPathComponent(path, isLeadingWindowsDriveLetter: false)
       didYieldComponent = true
       
     default:
       popcount -= 1
       break // Popped out.
     }
-  
+    
     // The leading component has now been processed.
     // If there is no base URL to carry state forward to, we need to flush anything that was deferred.
     path = path.prefix(0)
@@ -1492,7 +1623,7 @@ func iterateAppendedPathComponents<Input>(
           continue
         }
         flushTrailingEmpties()
-        handleBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
+        visitBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
         didYieldComponent = true
       }
       // We're left with the leading path component from the base URL (i.e. the very start of the resulting path).
@@ -1502,14 +1633,14 @@ func iterateAppendedPathComponents<Input>(
         if isFileScheme, URLStringUtils.isWindowsDriveLetter(basePath) {
           trailingEmptyCount = max(1, trailingEmptyCount)
           flushTrailingEmpties()
-          handleBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
+          visitBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
           return
         }
         if !isFileScheme {
           flushTrailingEmpties()
         }
         if didYieldComponent == false {
-          handleEmptyPathComponent()
+          visitEmptyPathComponent()
         }
         return
       }
@@ -1525,13 +1656,14 @@ func iterateAppendedPathComponents<Input>(
         if didYieldComponent == false {
           // If we still didn't yield anything and basePath is empty, any components have been popped to a net zero result.
           // Yield an empty path.
-          handleEmptyPathComponent()
+          visitEmptyPathComponent()
         }
         return
       }
       flushTrailingEmpties()
-      handleBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
+      visitBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
     }
+  }
 }
 
 struct URLScanner<Input, T, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input,
@@ -1849,19 +1981,9 @@ extension URLScanner {
     let path = input[..<(nextComponentStartIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    iterateAppendedPathComponents(
-    	path, baseURL: nil,
-      schemeIsSpecial: scheme.isSpecial, isFileScheme: scheme == .file,
-      handleInputPathComponent: { pathComponent, _ in
-      if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
-        callback.validationError(.unexpectedReverseSolidus)
-      }
-      validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
-    }, handleEmptyPathComponent: {
-      // Nothing to do.
-    }, handleBasePathComponent: { _ in
-      assertionFailure("Should never be invoked without a base URL")
-    })
+    if Callback.self != IgnoreValidationErrors.self {
+      PathInputStringValidator.validatePathComponents(pathString: path, schemeKind: scheme, callback: &callback)
+    }
       
     // 4. Return the next component.
     if path.isEmpty && scheme.isSpecial == false {
