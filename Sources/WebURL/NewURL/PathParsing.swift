@@ -37,7 +37,7 @@ struct PathBufferLengthCalculator: PathComponentVisitor {
   
   static func requiredBufferLength<InputString>(
     pathString input: InputString,
-    schemeKind: NewURLParser.Scheme,
+    schemeKind: NewURL.Scheme,
     baseURL: NewURL?
   ) -> Int where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     var visitor = PathBufferLengthCalculator()
@@ -78,7 +78,7 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
   static func writePath<InputString>(
     to buffer: UnsafeMutableBufferPointer<UInt8>,
     pathString input: InputString,
-    schemeKind: NewURLParser.Scheme,
+    schemeKind: NewURL.Scheme,
     baseURL: NewURL?
   ) -> Void where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     // Checking this now allows the implementation to use `.baseAddress.unsafelyUnwrapped`.
@@ -148,7 +148,7 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
   
   static func validatePathComponents(
     pathString input: Input,
-    schemeKind: NewURLParser.Scheme,
+    schemeKind: NewURL.Scheme,
     callback: inout Callback
   ) -> Void {
     var visitor = PathInputStringValidator(callback: callback, path: input)
@@ -168,7 +168,7 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
     if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
       callback.validationError(.unexpectedReverseSolidus)
     }
-    URLScanner<Input, Input.Index?, Callback>.validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
+    URLScanner<Input, Callback>.validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
   }
   fileprivate mutating func visitEmptyPathComponent() {
     // Nothing to do.
@@ -206,7 +206,7 @@ extension PathComponentVisitor {
   ///
   fileprivate mutating func walkPathComponents<InputString>(
     pathString input: InputString,
-    schemeKind: NewURLParser.Scheme,
+    schemeKind: NewURL.Scheme,
     baseURL: NewURL?
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     

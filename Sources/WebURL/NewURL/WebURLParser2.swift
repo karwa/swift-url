@@ -9,11 +9,20 @@ public struct NewURL {
   public init?(_ input: String, base: String?) {
     var baseURL: NewURL?
     var input = input
+    var callback = IgnoreValidationErrors()
     if var baseString = base {
-      baseURL = baseString.withUTF8 { NewURLParser().constructURL(input: $0, baseURL: nil) }
+      baseURL = baseString.withUTF8 {
+        ScannedURLString
+          .scan(inputString: $0, baseURL: nil, callback: &callback)?
+          .constructURLObject(callback: &callback)
+      }
       guard baseURL != nil else { return nil }
     }
-    guard let url = input.withUTF8({ NewURLParser().constructURL(input: $0, baseURL: baseURL) }) else {
+    guard let url = input.withUTF8({
+      ScannedURLString
+        .scan(inputString: $0, baseURL: baseURL, callback: &callback)?
+        .constructURLObject(callback: &callback)
+    }) else {
       return nil
     }
     self = url
@@ -40,7 +49,7 @@ extension NewURL {
     }
   }
 
-  var schemeKind: NewURLParser.Scheme {
+  var schemeKind: NewURL.Scheme {
     return storage.header.schemeKind
   }
   
@@ -132,7 +141,7 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   var _count: SizeType = 0
   
   var components: ComponentsToCopy = [] // TODO: Rename type.
-  var schemeKind: NewURLParser.Scheme = .other
+  var schemeKind: NewURL.Scheme = .other
   var schemeLength: SizeType = 0
   var usernameLength: SizeType = 0
   var passwordLength: SizeType = 0
@@ -276,96 +285,40 @@ struct URLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
 }
 
 
-
-
-enum ParsableComponent {
-   case scheme
-   case authority
-   case host
-   case port
-   case pathStart // better name?
-   case path
-   case query
-   case fragment
-}
-
-
-
-// --------------------------------
-// Compressed optionals
-// --------------------------------
-// Unused right now, but the idea is that instead of having ScannedURL<Input.Index>, we'd
-// have some overridden entrypoints which can, for example, compress an Optional<Int> (9 bytes on x86_64)
-// in to something like an Optional<UInt15>, where the high bit is reserved to indicate nil, and we have 5 bits of
-// magnitude (allowing indexing up to 32,768 bytes - which ought to be enough for most URLs).
-//
-// This means significant stack savings, better cache usage, and hopefully faster runtime overall.
-//
-
-protocol CompressedOptional {
-  associatedtype Wrapped
+/// A collection of UTF8 bytes which have been scanned and found to be structurally interpretable as a URL string, relative to some base URL.
+///
+/// Create a `ScannedURLString` using the static `.scan` function. You may then attempt to construct a URL object from its contents.
+///
+struct ScannedURLString<InputString> where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+  let inputString: FilteredURLInput<InputString>
+  let baseURL: NewURL?
+  let mapping: Mapping<InputString.Index>
   
-  static var none: Self { get }
-  func get() -> Wrapped?
-  mutating func set(to newValue: Wrapped?)
-}
-
-extension Optional: CompressedOptional {
-  #if swift(<5.3)
-  static var none: Self {
-    return nil
-  }
-  #endif
-  func get() -> Wrapped? {
-    return self
-  }
-  mutating func set(to newValue: Wrapped?) {
-    self = newValue
-  }
-}
-
-struct CompressedOptionalUnsignedInteger<Base: SignedInteger & FixedWidthInteger>: CompressedOptional {
-  typealias Wrapped = Base.Magnitude
-
-  private var base: Base
-  
-  init() {
-    self.base = -1
-  }
-  
-  static var none: Self {
-    return Self()
-  }
-  func get() -> Wrapped? {
-    return base >= 0 ? base.magnitude : nil
-  }
-  mutating func set(to newValue: Wrapped?) {
-    guard let newValue = newValue else {
-      self.base = -1
-      return
+  /// Scans the given collection of UTF8 bytes as a URL string, relative to some base URL.
+  ///
+  /// - parameters:
+  ///   - inputString:  The input string, as a collection of UTF8 bytes.
+  ///   - baseURL:      The base URL against which `inputString` should be interpreted.
+  ///   - callback:     A callback to receive validation errors. If these are unimportant, pass an instance of `IngoreValidationErrors`.
+  ///
+  /// - returns: A `ScannedURL` object if the string could be interpreted, otherwise `nil`.
+  ///            Note that returning a value does not mean that the URL is valid or can definitely be constructed.
+  ///
+  static func scan<Callback>(
+    inputString: InputString,
+    baseURL: NewURL?,
+    callback: inout Callback
+  ) -> ScannedURLString? where Callback: URLParserCallback {
+    
+    let filteredInput = FilteredURLInput(inputString, isSetterMode: false)
+    guard let scanResults = scanURL(filteredInput, baseURL: baseURL,
+                                    stateOverride: nil,
+                                    callback: &callback) else {
+      return nil
     }
-    precondition(newValue <= Base.Magnitude.max)
-    self.base = Base(newValue)
+    assert(scanResults.checkStructuralInvariants())
+    return ScannedURLString(inputString: filteredInput, baseURL: baseURL, mapping: scanResults)
   }
-}
-
-/// A set of components to be copied from a URL.
-///
-/// - seealso: `ScannedURL.componentsToCopyFromBase`
-///
-struct ComponentsToCopy: OptionSet {
-  typealias RawValue = UInt8
-  
-  var rawValue: RawValue
-  init(rawValue: RawValue) {
-    self.rawValue = rawValue
-  }
-  
-  static var scheme: Self    { Self(rawValue: 1 << 0) }
-  static var authority: Self { Self(rawValue: 1 << 1) }
-  static var path: Self      { Self(rawValue: 1 << 2) }
-  static var query: Self     { Self(rawValue: 1 << 3) }
-  static var fragment: Self  { Self(rawValue: 1 << 4) }
 }
 
 /// A summary of information obtained by scanning a string as a URL.
@@ -375,90 +328,105 @@ struct ComponentsToCopy: OptionSet {
 /// However, there is one important exception: constructing a final path can sometimes require _both_ the input string _and_ the base URL.
 /// This is the only case when a component is marked as present from both data sources.
 ///
-struct ScannedURL<IndexStorage: CompressedOptional> {
-  typealias Index = IndexStorage.Wrapped
-
-  // - Flags and data.
-  
-  var cannotBeABaseURL = false
-  var componentsToCopyFromBase: ComponentsToCopy = []
-  var schemeKind: NewURLParser.Scheme? = nil
+struct Mapping<Index> {
   
   // - Indexes.
   
   // This is the index of the scheme terminator (":"), if one exists.
-  var schemeTerminatorIndex = IndexStorage.none
+  var schemeTerminatorIndex = Index?.none
   
   // This is the index of the first character of the authority segment, if one exists.
   // The scheme and authority may be separated by an arbitrary amount of trivia.
   // The authority ends at the "*EndIndex" of the last of its components.
-  var authorityStartIndex = IndexStorage.none
+  var authorityStartIndex = Index?.none
   
     // This is the endIndex of the authority's username component, if one exists.
     // The username starts at the authorityStartIndex.
-    var usernameEndIndex = IndexStorage.none
+    var usernameEndIndex = Index?.none
   
     // This is the endIndex of the password, if one exists.
     // If a password exists, a username must also exist, and usernameEndIndex must be the ":" character.
     // The password starts at the index after usernameEndIndex.
-    var passwordEndIndex = IndexStorage.none
+    var passwordEndIndex = Index?.none
   
     // This is the endIndex of the hostname, if one exists.
     // The hostname starts at (username/password)EndIndex, or from authorityStartIndex if there are no credentials.
     // If a hostname exists, authorityStartIndex must be set.
-    var hostnameEndIndex = IndexStorage.none
+    var hostnameEndIndex = Index?.none
   
     // This is the endIndex of the port-string, if one exists. If a port exists, a hostname must also exist.
     // If it exists, the port-string starts at hostnameEndIndex and includes a leading ':' character.
-    var portEndIndex = IndexStorage.none
+    var portEndIndex = Index?.none
   
   // This is the endIndex of the path, if one exists.
   // If an authority segment exists, the path starts at the end of the authority and includes a leading slash.
   // Otherwise, it starts at the index after 'schemeTerminatorIndex' (if it exists) and may/may not include leading slashes.
   // If there is also no scheme, the path starts at the start of the string and may/may not include leading slashes.
-  var pathEndIndex = IndexStorage.none
+  var pathEndIndex = Index?.none
   
   // This is the endIndex of the query-string, if one exists.
   // If it exists, the query starts at the end of the last component and includes a leading '?' character.
-  var queryEndIndex = IndexStorage.none
+  var queryEndIndex = Index?.none
   
   // This is the endIndex of the fragment-string, if one exists.
   // If it exists, the fragment starts at the end of the last component and includes a leading '#' character.
-  var fragmentEndIndex = IndexStorage.none
+  var fragmentEndIndex = Index?.none
+  
+  // - Flags and data.
+  
+  var cannotBeABaseURL = false
+  var componentsToCopyFromBase: ComponentsToCopy = []
+  var schemeKind: NewURL.Scheme? = nil
 }
 
-extension ScannedURL {
+/// A set of components to be copied from a URL.
+///
+/// - seealso: `Mapping.componentsToCopyFromBase`
+///
+struct ComponentsToCopy: OptionSet {
+  var rawValue: UInt8
+  init(rawValue: UInt8) {
+    self.rawValue = rawValue
+  }
+  static var scheme: Self    { Self(rawValue: 1 << 0) }
+  static var authority: Self { Self(rawValue: 1 << 1) }
+  static var path: Self      { Self(rawValue: 1 << 2) }
+  static var query: Self     { Self(rawValue: 1 << 3) }
+  static var fragment: Self  { Self(rawValue: 1 << 4) }
+}
+
+extension Mapping {
   
   /// Performs some basic invariant checks on the scanned URL data.
   ///
   func checkStructuralInvariants() -> Bool {
     
     // We must have a scheme from somewhere.
-    if schemeTerminatorIndex.get() == nil {
+    if schemeTerminatorIndex == nil {
       guard componentsToCopyFromBase.contains(.scheme) else { return false }
     }
     // Authority components imply the presence of an authorityStartIndex and hostname.
-    if usernameEndIndex.get() != nil || passwordEndIndex.get() != nil || hostnameEndIndex.get() != nil || portEndIndex.get() != nil {
-      guard hostnameEndIndex.get() != nil else { return false }
-      guard authorityStartIndex.get() != nil else { return false }
+    if usernameEndIndex != nil || passwordEndIndex != nil || hostnameEndIndex != nil || portEndIndex != nil {
+      guard hostnameEndIndex != nil else { return false }
+      guard authorityStartIndex != nil else { return false }
     }
     // A password implies the presence of a username.
-    if passwordEndIndex.get() != nil {
-      guard usernameEndIndex.get() != nil else { return false }
+    if passwordEndIndex != nil {
+      guard usernameEndIndex != nil else { return false }
     }
     
     // Ensure components from input string do not overlap with 'componentsToCopyFromBase' (except path).
-    if schemeTerminatorIndex.get() != nil {
+    if schemeTerminatorIndex != nil {
       // FIXME: Scheme can overlap in relative URLs, but we already test the string and base schemes for equality.
       // guard componentsToCopyFromBase.contains(.scheme) == false else { return false }
     }
-    if authorityStartIndex.get() != nil {
+    if authorityStartIndex != nil {
       guard componentsToCopyFromBase.contains(.authority) == false else { return false }
     }
-    if queryEndIndex.get() != nil {
+    if queryEndIndex != nil {
       guard componentsToCopyFromBase.contains(.query) == false else { return false }
     }
-    if fragmentEndIndex.get() != nil {
+    if fragmentEndIndex != nil {
       guard componentsToCopyFromBase.contains(.fragment) == false else { return false }
     }
     return true
@@ -467,7 +435,7 @@ extension ScannedURL {
 
 protocol URLWriter {
   
-  init(schemeKind: NewURLParser.Scheme, cannotBeABaseURL: Bool)
+  init(schemeKind: NewURL.Scheme, cannotBeABaseURL: Bool)
   mutating func buildURL() -> NewURL
   
   /// A function which appends the given bytes to storage.
@@ -547,7 +515,7 @@ protocol URLWriter {
 struct GenericURLStorageWriter: URLWriter {
   var storage: NewURL.Storage
   
-  init(schemeKind: NewURLParser.Scheme, cannotBeABaseURL: Bool) {
+  init(schemeKind: NewURL.Scheme, cannotBeABaseURL: Bool) {
     storage = .init(capacity: 10, initialHeader: .init())
     storage.header.schemeKind = schemeKind
     storage.header.cannotBeABaseURL = cannotBeABaseURL
@@ -648,66 +616,15 @@ struct GenericURLStorageWriter: URLWriter {
   }
 }
 
-struct NewURLParser {
+extension ScannedURLString {
   
-  init() {}
-  
-  /// Constructs a new URL from the given input string, interpreted relative to the given (optional) base URL.
-  ///
-	func constructURL<Input>(
-    input: Input,
-    baseURL: NewURL?
-  ) -> NewURL? where Input: BidirectionalCollection, Input.Element == UInt8 {
-    
-    // There are 2 phases to constructing a new URL: scanning and construction.
-    //
-    // - Scanning:     Determine if the input is at all parseable, and which parts of `input`
-    //                 contribute to which components.
-    // - Construction: Use the information from the scanning step, together with the base URL,
-    //                 to transform and copy the pieces of each component in to a final result.
-    
-    let filteredInput = FilteredURLInput(input, isSetterMode: false)
-    
-//    var callback = CollectValidationErrors()
-    var callback = IgnoreValidationErrors()
-  
-    guard let scanResults = scanURL(filteredInput, baseURL: baseURL,
-                                    mappingType: ScannedURL<Optional<Input.Index>>.self, stateOverride: nil,
-                                    callback: &callback) else {
-      return nil
-    }
-    
-    assert(scanResults.checkStructuralInvariants())
-    
-//    print("")
-//    print("Scanning Errors:")
-//    print("-----------------------------------------")
-//    callback.errors.forEach { print($0.description); print("---") }
-//    print("-----------------------------------------")
-//    print("")
-//    callback.errors.removeAll(keepingCapacity: true)
-    let result = construct(url: scanResults, input: filteredInput, baseURL: baseURL, callback: &callback)
-    
-//    print("")
-//    print("Construction Errors:")
-//    print("-----------------------------------------")
-//    callback.errors.forEach { print($0.description); print("---") }
-//    print("-----------------------------------------")
-//    print("")
-    
-    return result
-  }
-  
-  func construct<Input, T, Callback>(
-    url: ScannedURL<T>,
-    input: FilteredURLInput<Input>,
-    baseURL: NewURL?,
+  func constructURLObject<Callback>(
     callback: inout Callback
-  ) -> NewURL? where ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
+  ) -> NewURL? where Callback: URLParserCallback {
     
-    var url = url
+    var url = self.mapping
 
-    let schemeKind: NewURLParser.Scheme
+    let schemeKind: NewURL.Scheme
     if let scannedSchemeKind = url.schemeKind {
       schemeKind = scannedSchemeKind
     } else if url.componentsToCopyFromBase.contains(.scheme), let baseURL = baseURL {
@@ -720,65 +637,65 @@ struct NewURLParser {
     // Some components require additional validation (e.g. the port), and others require adjustments based on
     // full knowledge of the URL string (e.g. if a file URL whose path starts with a Windows drive, clear the host).
     
-    let schemeRange = url.schemeTerminatorIndex.get().map { input.startIndex..<$0 }
-    var usernameRange: Range<Input.Index>?
-    var passwordRange: Range<Input.Index>?
-    var hostnameRange: Range<Input.Index>?
-    var portRange: Range<Input.Index>?
-    let pathRange: Range<Input.Index>?
-    let queryRange: Range<Input.Index>?
-    let fragmentRange: Range<Input.Index>?
+    let schemeRange = url.schemeTerminatorIndex.map { inputString.startIndex..<$0 }
+    var usernameRange: Range<InputString.Index>?
+    var passwordRange: Range<InputString.Index>?
+    var hostnameRange: Range<InputString.Index>?
+    var portRange: Range<InputString.Index>?
+    let pathRange: Range<InputString.Index>?
+    let queryRange: Range<InputString.Index>?
+    let fragmentRange: Range<InputString.Index>?
 
     // Step 1: Extract full ranges.
     
-    var cursor: Input.Index
+    var cursor: InputString.Index
     
-    if let authorityStart = url.authorityStartIndex.get() {
+    if let authorityStart = url.authorityStartIndex {
       cursor = authorityStart
-      if let usernameEnd = url.usernameEndIndex.get() {
+      if let usernameEnd = url.usernameEndIndex {
         usernameRange = cursor..<usernameEnd
         cursor = usernameEnd
-        if let passwordEnd = url.passwordEndIndex.get() {
-          assert(input[cursor] == ASCII.colon.codePoint)
-          cursor = input.index(after: cursor)
+        if let passwordEnd = url.passwordEndIndex {
+          assert(inputString[cursor] == ASCII.colon.codePoint)
+          cursor = inputString.index(after: cursor)
           passwordRange = cursor..<passwordEnd
           cursor = passwordEnd
         }
-        assert(input[cursor] == ASCII.commercialAt.codePoint)
-        cursor = input.index(after: cursor)
+        assert(inputString[cursor] == ASCII.commercialAt.codePoint)
+        cursor = inputString.index(after: cursor)
       }
-      if let hostnameEnd = url.hostnameEndIndex.get() {
+      if let hostnameEnd = url.hostnameEndIndex {
         hostnameRange = cursor..<hostnameEnd
         cursor = hostnameEnd
       }
-      if let portEndIndex = url.portEndIndex.get() {
-        assert(input[cursor] == ASCII.colon.codePoint)
-        cursor = input.index(after: cursor)
+      if let portEndIndex = url.portEndIndex {
+        assert(inputString[cursor] == ASCII.colon.codePoint)
+        cursor = inputString.index(after: cursor)
         portRange = cursor..<portEndIndex
         cursor = portEndIndex
       }
     } else if let schemeRange = schemeRange {
-      cursor = input.index(after: schemeRange.upperBound) // ":" scheme separator.
+      cursor = inputString.index(after: schemeRange.upperBound) // ":" scheme separator.
     } else {
-      cursor = input.startIndex
+      cursor = inputString.startIndex
     }
-    if let pathEnd = url.pathEndIndex.get() {
+    if let pathEnd = url.pathEndIndex {
       pathRange = cursor..<pathEnd
       cursor = pathEnd
     } else {
       pathRange = nil
     }
-    if let queryEnd = url.queryEndIndex.get() {
-      assert(input[cursor] == ASCII.questionMark.codePoint)
-      cursor = input.index(after: cursor) // "?" query separator not included in range.
+    if let queryEnd = url.queryEndIndex {
+      assert(inputString[cursor] == ASCII.questionMark.codePoint)
+      cursor = inputString.index(after: cursor) // "?" query separator not included in range.
       queryRange = cursor..<queryEnd
       cursor = queryEnd
     } else {
       queryRange = nil
     }
-    if let fragmentEnd = url.fragmentEndIndex.get() {
-      assert(input[cursor] == ASCII.numberSign.codePoint)
-      cursor = input.index(after: cursor) // "#" fragment separator not included in range.
+    if let fragmentEnd = url.fragmentEndIndex {
+      assert(inputString[cursor] == ASCII.numberSign.codePoint)
+      cursor = inputString.index(after: cursor) // "#" fragment separator not included in range.
       fragmentRange = cursor..<fragmentEnd
       cursor = fragmentEnd
     }  else {
@@ -790,7 +707,7 @@ struct NewURLParser {
     // 2.1: Parse port string.
     var port: UInt16?
     if let portRange = portRange, portRange.isEmpty == false {
-      guard let parsedInteger = UInt16(String(decoding: input[portRange], as: UTF8.self)) else {
+      guard let parsedInteger = UInt16(String(decoding: inputString[portRange], as: UTF8.self)) else {
         callback.validationError(.portOutOfRange)
         return nil
       }
@@ -803,14 +720,14 @@ struct NewURLParser {
     // - For non-special schemes: calculate the final length and lazily percent-encode in to the new storage.
     // - For ascii hostnames: communicate known final length and lazily lowercase characters
     var hostnameString: String?
-    if let hostname = hostnameRange.map({ input[$0] }) {
+    if let hostname = hostnameRange.map({ inputString[$0] }) {
       hostnameString = Array(hostname).withUnsafeBufferPointer { bytes -> String? in
         return WebURLParser.Host.parse(bytes, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)?.serialized
       }
       guard hostnameString != nil else { return nil }
     }
     // 2.3: For file URLs whose paths begin with a Windows drive letter, discard the host.
-    if schemeKind == .file, var pathContents = pathRange.map({ input[$0] }) {
+    if schemeKind == .file, var pathContents = pathRange.map({ inputString[$0] }) {
       // The path may or may not be prefixed with a leading slash.
       // Strip it so we can detect the Windows drive letter.
       if let firstChar = pathContents.first, (ASCII(firstChar) == .forwardSlash || ASCII(firstChar) == .backslash) {
@@ -840,7 +757,7 @@ struct NewURLParser {
       if let inputScheme = schemeRange {
         assert(schemeKind == url.schemeKind)
         // Scheme must be lowercased.
-        writer.writeSchemeContents(input[inputScheme].lazy.map {
+        writer.writeSchemeContents(inputString[inputScheme].lazy.map {
           ASCII($0)?.lowercased.codePoint ?? $0
         }, countIfKnown: nil)
         
@@ -862,7 +779,7 @@ struct NewURLParser {
         if let username = usernameRange, username.isEmpty == false {
           writer.writeUsernameContents { writePiece in
             PercentEscaping.encodeIterativelyAsBuffer(
-              bytes: input[username],
+              bytes: inputString[username],
               escapeSet: .url_userInfo,
               processChunk: { piece in writePiece(piece) }
             )
@@ -872,7 +789,7 @@ struct NewURLParser {
         if let password = passwordRange, password.isEmpty == false {
           writer.writePasswordContents { writePiece in
             PercentEscaping.encodeIterativelyAsBuffer(
-              bytes: input[password],
+              bytes: inputString[password],
               escapeSet: .url_userInfo,
               processChunk: { piece in writePiece(piece) }
             )
@@ -916,14 +833,14 @@ struct NewURLParser {
         case true:
           writer.writePathSimple { writePiece in
             PercentEscaping.encodeIterativelyAsBuffer(
-              bytes: input[path],
+              bytes: inputString[path],
               escapeSet: .url_c0,
               processChunk: { piece in writePiece(piece) }
             )
           }
         case false:
           let pathLength = PathBufferLengthCalculator.requiredBufferLength(
-            pathString: input[path],
+            pathString: inputString[path],
             schemeKind: schemeKind,
             baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil
           )
@@ -932,7 +849,7 @@ struct NewURLParser {
           writer.writeUnsafePathInPreallocatedBuffer(length: pathLength) { mutBuffer in
             PathPreallocatedBufferWriter.writePath(
               to: mutBuffer,
-              pathString: input[path],
+              pathString: inputString[path],
               schemeKind: schemeKind,
               baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil
             )
@@ -969,7 +886,7 @@ struct NewURLParser {
         })
         writer.writeQueryContents { writePiece in
           PercentEscaping.encodeIterativelyAsBuffer(
-            bytes: input[query],
+            bytes: inputString[query],
             escapeSet: escapeSet,
             processChunk: { piece in writePiece(piece) }
           )
@@ -988,7 +905,7 @@ struct NewURLParser {
       if let fragment = fragmentRange {
         writer.writeFragmentContents { writePiece in
           PercentEscaping.encodeIterativelyAsBuffer(
-            bytes: input[fragment],
+            bytes: inputString[fragment],
             escapeSet: .url_fragment,
             processChunk: { piece in writePiece(piece) }
           )
@@ -1100,24 +1017,44 @@ extension FilteredURLInput: BidirectionalCollection {
 // as all the scanning methods basically share the same constraints (except the entrypoint itself, which is slightly different).
 //
 
+// TODO: Remove this.
+extension Optional {
+  func get() -> Self {
+    return self
+  }
+  mutating func set(to newValue: Wrapped?) {
+    self = newValue
+  }
+}
+
+enum ParsableComponent {
+   case scheme
+   case authority
+   case host
+   case port
+   case pathStart // better name?
+   case path
+   case query
+   case fragment
+}
+
 /// The first stage is scanning, where we want to build up a map of the resulting URL's components.
 /// This will tell us whether the URL is structurally invalid, although it may still fail to normalize if the domain name is nonsense.
 ///
-func scanURL<Input, T, Callback>(
+func scanURL<Input, Callback>(
   _ input: FilteredURLInput<Input>,
   baseURL: NewURL?,
-  mappingType: ScannedURL<T>.Type,
   stateOverride: WebURLParser.ParserState? = nil,
   callback: inout Callback
-) -> ScannedURL<T>? where ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
+) -> Mapping<Input.Index>? where Callback: URLParserCallback {
   
-  var scanResults = ScannedURL<T>()
+  var scanResults = Mapping<Input.Index>()
   let success: Bool
   
   if let schemeEndIndex = findScheme(input) {
     
     let schemeNameBytes = input[..<schemeEndIndex].dropLast() // dropLast() to remove the ":" terminator.
-    let scheme = NewURLParser.Scheme.parse(asciiBytes: schemeNameBytes)
+    let scheme = NewURL.Scheme.parse(asciiBytes: schemeNameBytes)
     
     scanResults.schemeKind = scheme
     scanResults.schemeTerminatorIndex.set(to: input.index(before: schemeEndIndex))
@@ -1188,15 +1125,15 @@ private func findScheme<Input>(_ input: FilteredURLInput<Input>) -> Input.Index?
   return cursor
 }
 
-struct URLScanner<Input, T, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input,
-ScannedURL<T>.Index == Input.Index, Callback: URLParserCallback {
+struct URLScanner<Input, Callback> where Input: BidirectionalCollection, Input.Element == UInt8, Input.SubSequence == Input, Callback: URLParserCallback {
   
   enum ComponentParseResult {
     case failed
     case success(continueFrom: (ParsableComponent, Input.Index)?)
   }
   
-  typealias Scheme = NewURLParser.Scheme
+  typealias Scheme = NewURL.Scheme
+  typealias MappingX = Mapping<Input.Index>
 }
 
 // URLs with schemes.
@@ -1207,7 +1144,7 @@ extension URLScanner {
   
   /// Scans all components of the input string `input`, and builds up a map based on the URL's `scheme`.
   ///
-  static func scanURLWithScheme(_ input: Input, scheme: NewURLParser.Scheme, baseURL: NewURL?, _ mapping: inout ScannedURL<T>,
+  static func scanURLWithScheme(_ input: Input, scheme: NewURL.Scheme, baseURL: NewURL?, _ mapping: inout MappingX,
                                 callback: inout Callback) -> Bool {
 
     switch scheme {
@@ -1255,7 +1192,7 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
-  static func scanAllComponents(from: ParsableComponent, _ input: Input, scheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>,
+  static func scanAllComponents(from: ParsableComponent, _ input: Input, scheme: NewURL.Scheme, _ mapping: inout MappingX,
                                 callback: inout Callback) -> Bool {
     var component = from
     var remaining = input[...]
@@ -1299,7 +1236,7 @@ extension URLScanner {
   ///
   ///  If parsing doesn't fail, the next component is always `pathStart`.
   ///
-  static func scanAuthority(_ input: Input, scheme: NewURLParser.Scheme,_ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanAuthority(_ input: Input, scheme: NewURL.Scheme,_ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
      
     // 1. Validate the mapping.
     assert(mapping.usernameEndIndex.get() == nil)
@@ -1366,7 +1303,7 @@ extension URLScanner {
     return .success(continueFrom: postPort)
   }
   
-  static func scanHostname(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanHostname(_ input: Input, scheme: Scheme, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.hostnameEndIndex.get() == nil)
@@ -1413,7 +1350,7 @@ extension URLScanner {
     }
   }
   
-  static func scanPort(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanPort(_ input: Input, scheme: Scheme, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.portEndIndex.get() == nil)
@@ -1446,7 +1383,7 @@ extension URLScanner {
   /// Scans the URL string from the character immediately following the authority, and advises
   /// whether the remainder is a path, query or fragment.
   ///
-  static func scanPathStart(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanPathStart(_ input: Input, scheme: Scheme, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
       
     // 1. Validate the mapping.
     assert(mapping.pathEndIndex.get() == nil)
@@ -1491,7 +1428,7 @@ extension URLScanner {
 
   /// Scans a URL path string from the given input, and advises whether there are any components following it.
   ///
-  static func scanPath(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanPath(_ input: Input, scheme: Scheme, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.pathEndIndex.get() == nil)
@@ -1523,7 +1460,7 @@ extension URLScanner {
   
   /// Scans a URL query string from the given input, and advises whether there are any components following it.
   ///
-  static func scanQuery(_ input: Input, scheme: Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanQuery(_ input: Input, scheme: Scheme, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.queryEndIndex.get() == nil)
@@ -1548,7 +1485,7 @@ extension URLScanner {
   
   /// Scans a URL fragment string from the given input. There are never any components following it.
   ///
-  static func scanFragment(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanFragment(_ input: Input, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.fragmentEndIndex.get() == nil)
@@ -1570,7 +1507,7 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
-  static func scanAllFileURLComponents(_ input: Input, baseURL: NewURL?, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> Bool {
+  static func scanAllFileURLComponents(_ input: Input, baseURL: NewURL?, _ mapping: inout MappingX, callback: inout Callback) -> Bool {
     var remaining = input[...]
     
     guard case .success(let _component) = parseFileURLStart(remaining, baseURL: baseURL, &mapping, callback: &callback) else {
@@ -1612,7 +1549,7 @@ extension URLScanner {
     return true
   }
   
-  static func parseFileURLStart(_ input: Input, baseURL: NewURL?, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func parseFileURLStart(_ input: Input, baseURL: NewURL?, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
     
     // Note that file URLs may also be relative URLs. It all depends on what comes after "file:".
     // - 0 slashes:  copy base host, parse as path relative to base path.
@@ -1689,7 +1626,7 @@ extension URLScanner {
   }
   
   
-  static func scanFileHost(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanFileHost(_ input: Input, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
    
     // 1. Validate the mapping.
     assert(mapping.authorityStartIndex.get() == nil)
@@ -1733,7 +1670,7 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
     ///
-    static func scanAllCannotBeABaseURLComponents(_ input: Input, scheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> Bool {
+    static func scanAllCannotBeABaseURLComponents(_ input: Input, scheme: NewURL.Scheme, _ mapping: inout MappingX, callback: inout Callback) -> Bool {
       var remaining = input[...]
       
       guard case .success(let _component) = scanCannotBeABaseURLPath(remaining, &mapping, callback: &callback) else {
@@ -1775,7 +1712,7 @@ extension URLScanner {
       return true
     }
 
-  static func scanCannotBeABaseURLPath(_ input: Input, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func scanCannotBeABaseURLPath(_ input: Input, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
     
     // 1. Validate the mapping.
     assert(mapping.authorityStartIndex.get() == nil)
@@ -1816,7 +1753,7 @@ extension URLScanner {
   
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
-  static func scanAllRelativeURLComponents(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> Bool {
+  static func scanAllRelativeURLComponents(_ input: Input, baseScheme: NewURL.Scheme, _ mapping: inout MappingX, callback: inout Callback) -> Bool {
     var remaining = input[...]
     
     guard case .success(let _component) = parseRelativeURLStart(remaining, baseScheme: baseScheme, &mapping, callback: &callback) else {
@@ -1858,7 +1795,7 @@ extension URLScanner {
     return true
   }
   
-  static func parseRelativeURLStart(_ input: Input, baseScheme: NewURLParser.Scheme, _ mapping: inout ScannedURL<T>, callback: inout Callback) -> ComponentParseResult {
+  static func parseRelativeURLStart(_ input: Input, baseScheme: NewURL.Scheme, _ mapping: inout MappingX, callback: inout Callback) -> ComponentParseResult {
     
     mapping.componentsToCopyFromBase = [.scheme]
     
