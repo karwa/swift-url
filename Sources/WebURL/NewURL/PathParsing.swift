@@ -168,7 +168,7 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
     if pathComponent.endIndex != path.endIndex, ASCII(path[pathComponent.endIndex]) == .backslash {
       callback.validationError(.unexpectedReverseSolidus)
     }
-    URLScanner<Input, Callback>.validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
+    validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
   }
   fileprivate mutating func visitEmptyPathComponent() {
     // Nothing to do.
