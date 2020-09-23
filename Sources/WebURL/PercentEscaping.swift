@@ -506,6 +506,30 @@ extension PercentEscaping.EscapeSet {
       }
     }
   }
+  
+  static var url_query_nonSpecial: Self {
+    return Self { ascii in
+      switch ascii {
+        case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
+          _ where ascii.codePoint < ASCII.exclamationMark.codePoint,
+          _ where ascii.codePoint > ASCII.tilde.codePoint:
+          return true
+      default: return false
+      }
+    }
+  }
+  
+  static var url_query_special: Self {
+    return Self { ascii in
+      guard !url_query_nonSpecial.shouldEscape(ascii) else { return true }
+      switch ascii {
+      case .apostrophe:
+        return true
+      default:
+        return false
+      }
+    }
+  }
 
   static var url_path: Self {
     return Self { ascii in

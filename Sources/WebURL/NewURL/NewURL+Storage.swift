@@ -1,15 +1,15 @@
 /// An interface through which `ScannedURLString` constructs a new URL object.
 ///
 /// Conformers accept UTF8 bytes as given by the construction function, write them to storage, and mark
-/// relevant information in a header structure. Finally, they return a URL object wrapping that storage via the `buildURL()` method.
+/// relevant information in a header structure.
 ///
 /// Conformers may be specialised to only accepting certain kinds of URLs - and they might, for example, omit or replace certain fields
 /// in their header structures for their use-case.
 ///
 protocol URLWriter {
   
-  init(schemeKind: NewURL.Scheme, cannotBeABaseURL: Bool)
-  mutating func buildURL() -> NewURL
+  /// Notes the given information about the URL. This is always the first function to be called.
+  mutating func writeFlags(schemeKind: NewURL.Scheme, cannotBeABaseURL: Bool)
   
   /// A function which appends the given bytes to storage.
   ///
@@ -29,7 +29,7 @@ protocol URLWriter {
   typealias WriterFunc<T> = (T)->Void
  
   /// Appends the given bytes to storage, followed by the scheme separator character (`:`).
-  /// This is always the first call to the writer.
+  /// This is always the first call to the writer after `writeFlags`.
   mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8
   
   /// Appends the authority header (`//`) to storage.
@@ -85,14 +85,14 @@ protocol URLWriter {
   mutating func writeFragmentContents<T>(_ fragmentWriter: (WriterFunc<T>) -> Void) where T : RandomAccessCollection, T.Element == UInt8
 }
 
-// MARK: - GenericURLStorage
+// MARK: - GenericURLHeader
 
-/// A header for storing a generic absolute URL.
+/// A header which can support any kind of valid URL string.
 ///
 /// The stored URL must be of the format:
 ///  [scheme + ":"] + ["//"]? + [username]? + [":" + password] + ["@"]? + [hostname]? + [":" + port]? + ["/" + path]? + ["?" + query]? + ["#" + fragment]?
 ///
-struct GenericURLStorage<SizeType: BinaryInteger>: InlineArrayHeader {
+struct GenericURLHeader<SizeType: BinaryInteger>: InlineArrayHeader {
   var _count: SizeType = 0
   
   var components: ComponentsToCopy = [] // TODO: Rename type.
@@ -181,6 +181,13 @@ struct GenericURLStorage<SizeType: BinaryInteger>: InlineArrayHeader {
     return queryStart + queryLength
   }
   
+  /// Returns the range of the entire authority string, if one is present.
+  ///
+  var rangeOfAuthorityString: Range<SizeType>? {
+    guard components.contains(.authority) else { return nil }
+    return authorityStart ..< pathStart
+  }
+  
   func rangeOfComponent(_ component: NewURL.Component) -> Range<SizeType>? {
     let start: SizeType
     let length: SizeType
@@ -194,12 +201,6 @@ struct GenericURLStorage<SizeType: BinaryInteger>: InlineArrayHeader {
       start = hostnameStart
       length = hostnameLength
       
-    // FIXME: Move this to its own function instead of making it a fake component.
-    // Convenience component for copying a URL's entire authority string.
-    case .authority:
-      guard components.contains(.authority) else { return nil }
-      return authorityStart ..< pathStart
-    
     // Optional authority details.
     // These have no distinction between empty and nil values, because lone separators are not preserved.
     // e.g. "http://:@test.com" -> "http://test.com".
@@ -239,29 +240,48 @@ struct GenericURLStorage<SizeType: BinaryInteger>: InlineArrayHeader {
   }
 }
 
-extension GenericURLStorage {
+protocol HasGenericURLHeaderVariant: BinaryInteger {
+  
+  /// Wraps the given `buffer` in the appropriate `NewURL.Variant`.
+  ///
+  static func makeVariant(wrapping buffer: ArrayWithInlineHeader<GenericURLHeader<Self>, UInt8>) -> NewURL.Variant
+}
+
+extension Int: HasGenericURLHeaderVariant {
+  static func makeVariant(wrapping buffer: ArrayWithInlineHeader<GenericURLHeader<Int>, UInt8>) -> NewURL.Variant {
+    return .generic(buffer)
+  }
+}
+
+extension UInt8: HasGenericURLHeaderVariant {
+  static func makeVariant(wrapping buffer: ArrayWithInlineHeader<GenericURLHeader<UInt8>, UInt8>) -> NewURL.Variant {
+    return .small(buffer)
+  }
+}
+
+extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
+  
   struct Writer: URLWriter {
-    var storage: ArrayWithInlineHeader<GenericURLStorage, UInt8>
+    var storage: ArrayWithInlineHeader<GenericURLHeader, UInt8>
     
-    init(schemeKind: NewURL.Scheme, cannotBeABaseURL: Bool) {
-      storage = .init(capacity: 10, initialHeader: .init())
-      storage.header.schemeKind = schemeKind
-      storage.header.cannotBeABaseURL = cannotBeABaseURL
+    init(capacity: Int) {
+      self.storage = .init(capacity: capacity, initialHeader: .init())
     }
     
     mutating func buildURL() -> NewURL {
-      // FIXME
-      if let storage = storage as? ArrayWithInlineHeader<GenericURLStorage<Int>, UInt8> {
-        return NewURL(storage: storage)
-      }
-      fatalError()
+      return NewURL(variant: SizeType.makeVariant(wrapping: storage))
+    }
+    
+    mutating func writeFlags(schemeKind: NewURL.Scheme, cannotBeABaseURL: Bool) {
+      storage.header.schemeKind = schemeKind
+      storage.header.cannotBeABaseURL = cannotBeABaseURL
     }
     
     mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T : Collection, T.Element == UInt8 {
       storage.append(contentsOf: schemeBytes)
       storage.append(ASCII.colon.codePoint)
       storage.header.schemeLength = SizeType(countIfKnown.map { $0 + 1 } ?? storage.header.count)
-      storage.header.components = [.scheme]
+      storage.header.components = .scheme
     }
     
     mutating func writeAuthorityHeader() {
@@ -347,5 +367,89 @@ extension GenericURLStorage {
       }
     }
   }
+}
 
+// MARK: - Metrics collector.
+
+/// A `URLWriter` which collects various metrics so that storage can be optimally allocated and written.
+///
+/// Currently, it collects the total required capacity of the string (post any percent-encoding) and the length of the path component.
+/// It may collect other data in the future. In particular, it might be interesting to know if we can skip percent-encoding any components, or how many path
+/// components are in the final string (perhaps we'll have a URL storage type with random access to path components).
+///
+struct URLMetricsCollector: URLWriter {
+  var requiredCapacity: Int = 0
+  var pathLength: Int = 0
+  
+  init() {
+  }
+  
+  mutating func writeFlags(schemeKind: NewURL.Scheme, cannotBeABaseURL: Bool) {
+    // Nothing to do.
+  }
+
+  mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T : Collection, T.Element == UInt8 {
+    requiredCapacity = countIfKnown ?? schemeBytes.count
+    requiredCapacity += 1
+  }
+  
+  mutating func writeAuthorityHeader() {
+    requiredCapacity += 2
+  }
+  
+  mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    usernameWriter {
+      requiredCapacity += $0.count
+    }
+  }
+  
+  mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    requiredCapacity += 1
+    passwordWriter {
+      requiredCapacity += $0.count
+    }
+  }
+  
+  mutating func writeCredentialsTerminator() {
+    requiredCapacity += 1
+  }
+  
+  mutating func writeHostname<T>(_ hostname: T) where T : RandomAccessCollection, T.Element == UInt8 {
+    requiredCapacity += hostname.count
+  }
+  
+  mutating func writePort(_ port: UInt16) {
+    requiredCapacity += 1
+    requiredCapacity += String(port).utf8.count
+  }
+  
+  mutating func writeKnownAuthorityString(_ authority: UnsafeBufferPointer<UInt8>, usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int) {
+    requiredCapacity += authority.count
+  }
+  
+  mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    pathWriter {
+      requiredCapacity += $0.count
+      pathLength += $0.count
+    }
+  }
+  
+  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
+    self.requiredCapacity += length
+    pathLength = length
+  }
+  
+  mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    requiredCapacity += 1
+    queryWriter {
+      requiredCapacity += $0.count
+    }
+  }
+  
+  mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void) where T : RandomAccessCollection, T.Element == UInt8 {
+    requiredCapacity += 1
+    fragmentWriter {
+      requiredCapacity += $0.count
+    }
+  }
 }

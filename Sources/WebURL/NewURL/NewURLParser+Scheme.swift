@@ -36,8 +36,7 @@ extension NewURL.Scheme {
       return .other
     }
     
-    // Lowercase characters, erase non-ASCII bytes to ":" (a character which we know isn't in any special scheme).
-    var iter = asciiBytes.lazy.map { ASCII($0)?.lowercased ?? .colon }.makeIterator()
+    var iter = LowercaseASCIITransformer(base: asciiBytes).makeIterator()
     switch iter.next() {
     case .h?:
       guard iter.next() == .t, iter.next() == .t, iter.next() == .p else { return notRecognised() }

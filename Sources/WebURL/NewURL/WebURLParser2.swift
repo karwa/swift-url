@@ -1,9 +1,9 @@
 
 public struct NewURL {
-  var storage: Storage = .init(capacity: 0, initialHeader: .init())
+  var variant: Variant
   
-  init(storage: Storage) {
-    self.storage = storage
+  init(variant: Variant) {
+    self.variant = variant
   }
   
   public init?(_ input: String, base: String?) {
@@ -31,33 +31,106 @@ public struct NewURL {
 
 extension NewURL {
   
-  typealias Storage = ArrayWithInlineHeader<GenericURLStorage<Int>, UInt8>
-  
   enum Component {
     case scheme, username, password, hostname, port, path, query, fragment
-    case authority
   }
   
-  func withComponentBytes<T>(_ component: Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
-    guard let range = storage.header.rangeOfComponent(component) else { return block(nil) }
-    return storage.withElements(range: Int(range.lowerBound) ..< Int(range.upperBound)) { buffer in block(buffer) }
+  enum Variant {
+    case small(ArrayWithInlineHeader<GenericURLHeader<UInt8>, UInt8>)
+    case generic(ArrayWithInlineHeader<GenericURLHeader<Int>, UInt8>)
+  
+    var schemeKind: NewURL.Scheme {
+      switch self {
+      case .small(let storage): return storage.header.schemeKind
+      case .generic(let storage): return storage.header.schemeKind
+      }
+    }
+    
+    var cannotBeABaseURL: Bool {
+      switch self {
+      case .small(let storage): return storage.header.cannotBeABaseURL
+      case .generic(let storage): return storage.header.cannotBeABaseURL
+      }
+    }
+    
+    var entireString: String {
+      switch self {
+      case .small(let storage): return storage.asUTF8String()
+      case .generic(let storage): return storage.asUTF8String()
+      }
+    }
+    
+    func withComponentBytes<T>(_ component: Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
+      switch self {
+      case .small(let storage):
+        guard let range = storage.header.rangeOfComponent(component) else { return block(nil) }
+        return storage.withElements(range: Range(uncheckedBounds: (Int(range.lowerBound), Int(range.upperBound)))) { buffer in block(buffer) }
+      case .generic(let storage):
+        guard let range = storage.header.rangeOfComponent(component) else { return block(nil) }
+        return storage.withElements(range: range) { buffer in block(buffer) }
+      }
+    }
+    
+    func withAllAuthorityComponentBytes<T>(_ block: (
+      _ authorityString: UnsafeBufferPointer<UInt8>?,
+      _ usernameLength: Int,
+      _ passwordLength: Int,
+      _ hostnameLength: Int,
+      _ portLength: Int
+    )->T) -> T {
+      switch self {
+      case .small(let storage):
+        guard let range = storage.header.rangeOfAuthorityString else { return block(nil, 0, 0, 0, 0) }
+        return storage.withElements(range: Range(uncheckedBounds: (Int(range.lowerBound), Int(range.upperBound)))) { buffer in
+          block(
+            buffer,
+            Int(storage.header.usernameLength),
+            Int(storage.header.passwordLength),
+            Int(storage.header.hostnameLength),
+            Int(storage.header.portLength)
+          )
+        }
+      case .generic(let storage):
+        guard let range = storage.header.rangeOfAuthorityString else { return block(nil, 0, 0, 0, 0) }
+        return storage.withElements(range: range) { buffer in
+          block(
+            buffer,
+            storage.header.usernameLength,
+            storage.header.passwordLength,
+            storage.header.hostnameLength,
+            storage.header.portLength
+          )
+        }
+      }
+    }
+  }
+    
+  // Flags.
+
+  var schemeKind: NewURL.Scheme {
+    return variant.schemeKind
+  }
+  
+  public var cannotBeABaseURL: Bool {
+    return variant.cannotBeABaseURL
+  }
+  
+  // Components.
+  // Note: erasure to empty strings is done to fit the Javascript model for WHATWG tests.
+  
+  public var href: String {
+    return variant.entireString
   }
   
   func stringForComponent(_ component: Component) -> String? {
-    return withComponentBytes(component) { maybeBuffer in
+    return variant.withComponentBytes(component) { maybeBuffer in
       return maybeBuffer.map { buffer in String(decoding: buffer, as: UTF8.self) }
     }
-  }
-
-  var schemeKind: NewURL.Scheme {
-    return storage.header.schemeKind
   }
   
   public var scheme: String {
     return stringForComponent(.scheme)!
   }
-  
-  // Note: erasure to empty strings is done to fit the Javascript model for WHATWG tests.
   
   public var username: String {
     return stringForComponent(.username) ?? ""
@@ -99,14 +172,6 @@ extension NewURL {
     let string = stringForComponent(.fragment)
     guard string != "#" else { return "" }
     return string ?? ""
-  }
-  
-  public var cannotBeABaseURL: Bool {
-    return storage.header.cannotBeABaseURL
-  }
-  
-  public var href: String {
-    return storage.asUTF8String()
   }
 }
 
@@ -410,30 +475,28 @@ extension ScannedURLString {
     
     // Step 3: Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
     
-    func writeURL<WriterType: URLWriter>(using writerType: WriterType.Type) -> NewURL {
-    
-      var writer = WriterType(schemeKind: schemeKind, cannotBeABaseURL: url.cannotBeABaseURL)
-    
-      // 3.1: Write scheme
-      // We *must* have a scheme.
+    func writeURL<WriterType: URLWriter>(using writer: inout WriterType, knownPathLength: Int? = nil) {
+      
+      // 3.1: Write flags
+      writer.writeFlags(schemeKind: schemeKind, cannotBeABaseURL: url.cannotBeABaseURL)
+      
+      // 3.2: Write scheme.
       if let inputScheme = schemeRange {
         assert(schemeKind == url.schemeKind)
         // Scheme must be lowercased.
-        writer.writeSchemeContents(inputString[inputScheme].lazy.map {
-          ASCII($0)?.lowercased.codePoint ?? $0
-        }, countIfKnown: nil)
-        
+        writer.writeSchemeContents(LowercaseASCIITransformer(base: inputString[inputScheme]), countIfKnown: nil)
       } else {
         guard let baseURL = baseURL, url.componentsToCopyFromBase.contains(.scheme) else {
           preconditionFailure("Cannot construct a URL without a scheme")
         }
         assert(schemeKind == baseURL.schemeKind)
-        baseURL.withComponentBytes(.scheme) {
+        baseURL.variant.withComponentBytes(.scheme) {
           let bytes = $0!.dropLast() // drop terminator.
           writer.writeSchemeContents(bytes, countIfKnown: bytes.count)
         }
       }
-          
+      
+      // 3.3: Write authority.
       if var hostnameString = hostnameString {
         writer.writeAuthorityHeader()
         
@@ -472,15 +535,15 @@ extension ScannedURLString {
         guard let baseURL = baseURL else {
           preconditionFailure("")
         }
-        baseURL.withComponentBytes(.authority) {
+        baseURL.variant.withAllAuthorityComponentBytes {
           if let baseAuth = $0 {
             writer.writeAuthorityHeader()
             writer.writeKnownAuthorityString(
               baseAuth,
-              usernameLength: baseURL.storage.header.usernameLength,
-              passwordLength: baseURL.storage.header.passwordLength,
-              hostnameLength: baseURL.storage.header.hostnameLength,
-              portLength: baseURL.storage.header.portLength
+              usernameLength: $1,
+              passwordLength: $2,
+              hostnameLength: $3,
+              portLength: $4
             )
           }
         }
@@ -489,7 +552,7 @@ extension ScannedURLString {
         writer.writeAuthorityHeader()
       }
           
-      // Write path.
+      // 3.4: Write path.
       if let path = pathRange {
         switch url.cannotBeABaseURL {
         case true:
@@ -501,11 +564,16 @@ extension ScannedURLString {
             )
           }
         case false:
-          let pathLength = PathBufferLengthCalculator.requiredBufferLength(
-            pathString: inputString[path],
-            schemeKind: schemeKind,
-            baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil
-          )
+          let pathLength: Int
+          if let knownLength = knownPathLength {
+            pathLength = knownLength
+          } else {
+            pathLength = PathBufferLengthCalculator.requiredBufferLength(
+              pathString: inputString[path],
+              schemeKind: schemeKind,
+              baseURL: url.componentsToCopyFromBase.contains(.path) ? baseURL! : nil
+            )
+          }
           assert(pathLength > 0)
           
           writer.writeUnsafePathInPreallocatedBuffer(length: pathLength) { mutBuffer in
@@ -520,7 +588,7 @@ extension ScannedURLString {
         }
       } else if url.componentsToCopyFromBase.contains(.path) {
         guard let baseURL = baseURL else { preconditionFailure("") }
-        baseURL.withComponentBytes(.path) {
+        baseURL.variant.withComponentBytes(.path) {
           if let basePath = $0 {
             writer.writePathSimple { writePiece in
               writePiece(basePath)
@@ -534,36 +602,25 @@ extension ScannedURLString {
         }
       }
           
-      // Write query.
+      // 3.5: Write query.
       if let query = queryRange {
-        let urlIsSpecial = schemeKind.isSpecial
-        let escapeSet = PercentEscaping.EscapeSet(shouldEscape: { asciiChar in
-          switch asciiChar {
-          case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
-            _ where asciiChar.codePoint < ASCII.exclamationMark.codePoint,
-            _ where asciiChar.codePoint > ASCII.tilde.codePoint, .apostrophe where urlIsSpecial:
-            return true
-          default: return false
-          }
-        })
         writer.writeQueryContents { writePiece in
           PercentEscaping.encodeIterativelyAsBuffer(
             bytes: inputString[query],
-            escapeSet: escapeSet,
+            escapeSet: schemeKind.isSpecial ? .url_query_special : .url_query_nonSpecial,
             processChunk: { piece in writePiece(piece) }
           )
         }
-              
       } else if url.componentsToCopyFromBase.contains(.query) {
         guard let baseURL = baseURL else { preconditionFailure("") }
-        baseURL.withComponentBytes(.query) {
+        baseURL.variant.withComponentBytes(.query) {
           if let baseQuery = $0?.dropFirst() { // '?' separator.
             writer.writeQueryContents { writePiece in writePiece(baseQuery) }
           }
         }
       }
       
-      // Write fragment.
+      // 3.6: Write fragment.
       if let fragment = fragmentRange {
         writer.writeFragmentContents { writePiece in
           PercentEscaping.encodeIterativelyAsBuffer(
@@ -574,17 +631,30 @@ extension ScannedURLString {
         }
       } else if url.componentsToCopyFromBase.contains(.fragment) {
         guard let baseURL = baseURL else { preconditionFailure("") }
-        baseURL.withComponentBytes(.fragment) {
+        baseURL.variant.withComponentBytes(.fragment) {
           if let baseFragment = $0?.dropFirst() { // '#' separator.
             writer.writeFragmentContents { writePiece in writePiece(baseFragment) }
           }
         }
       }
       
-      return writer.buildURL()
+      return // 3.7: End of writing.
     }
+
+    // 4: Do a dry-run to calculate metrics about the final contents.
+    var metrics = URLMetricsCollector()
+    writeURL(using: &metrics)
     
-    return writeURL(using: GenericURLStorage<Int>.Writer.self)
+    // 5: Write to the optimal storage variant.
+    if metrics.requiredCapacity < UInt8.max {
+      var smallWriter = GenericURLHeader<UInt8>.Writer(capacity: metrics.requiredCapacity)
+      writeURL(using: &smallWriter, knownPathLength: metrics.pathLength)
+      return smallWriter.buildURL()
+    } else {
+      var genericWriter = GenericURLHeader<Int>.Writer(capacity: metrics.requiredCapacity)
+      writeURL(using: &genericWriter, knownPathLength: metrics.pathLength)
+      return genericWriter.buildURL()
+    }
   }
 }
 
@@ -1117,7 +1187,7 @@ extension URLScanner {
         // by having a non-empty path in a special-scheme URL (meaning a guaranteed non-nil path) and
         // including 'path' in 'componentsToCopyFromBase'.
         let basePathStartsWithWindowsDriveLetter: Bool = baseURL.map {
-          $0.withComponentBytes(.path) {
+          $0.variant.withComponentBytes(.path) {
             guard let basePath = $0 else { return false }
             return URLStringUtils.hasWindowsDriveLetterPrefix(basePath.dropFirst())
           }
@@ -1506,4 +1576,50 @@ extension FilteredURLInput: BidirectionalCollection {
   }
   
   // TODO: Investigate adding a custom Iterator once we have a more comprehensive benchmark suite.
+}
+
+/// A type which lazily transforms ASCII alpha characters to their lowercase variants.
+/// Non-ASCII/non-alpha characters remain unchanged.
+///
+struct LowercaseASCIITransformer<Base> where Base: Sequence, Base.Element == UInt8 {
+  var base: Base
+}
+
+extension LowercaseASCIITransformer: Sequence {
+  typealias Element = UInt8
+  
+  struct Iterator: IteratorProtocol {
+    var baseIterator: Base.Iterator
+    mutating func next() -> UInt8? {
+      let byte = baseIterator.next()
+      return ASCII(flatMap: byte)?.lowercased.codePoint ?? byte
+    }
+  }
+  
+  func makeIterator() -> Iterator {
+    return Iterator(baseIterator: base.makeIterator())
+  }
+}
+
+extension LowercaseASCIITransformer: Collection where Base: Collection, Base.Element == UInt8 {
+
+  var startIndex: Base.Index {
+    return base.startIndex
+  }
+  var endIndex: Base.Index {
+    return base.endIndex
+  }
+  var count: Int {
+    return base.count
+  }
+  func index(after i: Base.Index) -> Base.Index {
+    return base.index(after: i)
+  }
+  func distance(from start: Base.Index, to end: Base.Index) -> Int {
+    return base.distance(from: start, to: end)
+  }
+  subscript(position: Base.Index) -> UInt8 {
+    let byte = base[position]
+    return ASCII(base[position])?.lowercased.codePoint ?? byte
+  }
 }
