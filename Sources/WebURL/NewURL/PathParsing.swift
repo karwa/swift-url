@@ -187,6 +187,17 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
 
 extension PathComponentVisitor {
   
+  // FIXME(swift):
+  // This should be a nested function inside 'walkPathComponents', but writing it
+  // that way introduces a heap allocation which dominates the performance of the entire function.
+  private mutating func __flushTrailingEmpties(_ trailingEmptyCount: inout Int, _ didYieldComponent: inout Bool) {
+    if trailingEmptyCount != 0 {
+      visitEmptyPathComponents(trailingEmptyCount)
+      didYieldComponent = true
+      trailingEmptyCount = 0
+    }
+  }
+  
   /// Iterates the simplified components of a given path string, optionally applied relative to a base URL's path.
   /// The components are iterated in reverse order, and yielded via 3 callbacks.
   ///
@@ -293,14 +304,6 @@ extension PathComponentVisitor {
     var trailingEmptyCount = 0
     var didYieldComponent = false
     
-    func flushTrailingEmpties() {
-      if trailingEmptyCount != 0 {
-        visitEmptyPathComponents(trailingEmptyCount)
-        didYieldComponent = true
-        trailingEmptyCount = 0
-      }
-    }
-    
     // Consume components separated by terminators.
     // Since we stripped the initial slash, this loop never sees the initial path component
     // unless it is empty and the scheme is not file.
@@ -340,7 +343,7 @@ extension PathComponentVisitor {
         trailingEmptyCount += 1
         continue
       }
-      flushTrailingEmpties()
+      __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
       visitInputPathComponent(pathComponent, isLeadingWindowsDriveLetter: false)
       didYieldComponent = true
     }
@@ -360,12 +363,12 @@ extension PathComponentVisitor {
       }
       
     case _ where URLStringUtils.isWindowsDriveLetter(path) && isFileScheme:
-      flushTrailingEmpties()
+      __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
       visitInputPathComponent(path, isLeadingWindowsDriveLetter: true)
       return // Never appended to base URL.
     
     case _ where popcount == 0:
-      flushTrailingEmpties()
+      __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
       visitInputPathComponent(path, isLeadingWindowsDriveLetter: false)
       didYieldComponent = true
       
@@ -383,7 +386,7 @@ extension PathComponentVisitor {
         // Make sure we have at least (or for files, exactly) 1 trailing empty to yield when we flush.
         trailingEmptyCount = isFileScheme ? 1 : max(trailingEmptyCount, 1)
       }
-      flushTrailingEmpties()
+      __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
       return
     }
     
@@ -394,7 +397,7 @@ extension PathComponentVisitor {
         if didYieldComponent == false {
           trailingEmptyCount = isFileScheme ? 1 : max(trailingEmptyCount, 1)
         }
-        flushTrailingEmpties()
+        __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
         return
       }
       // Trim the leading slash.
@@ -437,7 +440,7 @@ extension PathComponentVisitor {
           trailingEmptyCount += 1
           continue
         }
-        flushTrailingEmpties()
+        __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
         visitBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
         didYieldComponent = true
       }
@@ -447,12 +450,12 @@ extension PathComponentVisitor {
         // Leading Windows drive letters cannot be popped-out.
         if isFileScheme, URLStringUtils.isWindowsDriveLetter(basePath) {
           trailingEmptyCount = max(1, trailingEmptyCount)
-          flushTrailingEmpties()
+          __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
           visitBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
           return
         }
         if !isFileScheme {
-          flushTrailingEmpties()
+          __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
         }
         if didYieldComponent == false {
           visitEmptyPathComponent()
@@ -466,7 +469,7 @@ extension PathComponentVisitor {
       if basePath.isEmpty {
         // We are at the very start of the path. File URLs discard empties.
         if !isFileScheme {
-          flushTrailingEmpties()
+          __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
         }
         if didYieldComponent == false {
           // If we still didn't yield anything and basePath is empty, any components have been popped to a net zero result.
@@ -475,7 +478,7 @@ extension PathComponentVisitor {
         }
         return
       }
-      flushTrailingEmpties()
+      __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
       visitBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
     }
   }
