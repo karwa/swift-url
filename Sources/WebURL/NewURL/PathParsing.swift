@@ -15,10 +15,10 @@ private protocol PathComponentVisitor {
   mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
     where InputString: BidirectionalCollection, InputString.Element == UInt8
   
-  /// Called when the iterator yields an empty path component. Note that this does not imply that other methods are always called with non-empty path components.
+  /// Called when the iterator yields a string of empty path components. Note that this does not imply that other methods are always called with non-empty path components.
   /// This method exists solely as an optimisation, since empty components have no content to percent-encode/transform.
   ///
-  mutating func visitEmptyPathComponent()
+  mutating func visitEmptyPathComponents(_ n: Int)
   
   /// Called when the iterator yields a path component that originates from the base URL's path.
   /// These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters will already have been normalized.
@@ -28,6 +28,13 @@ private protocol PathComponentVisitor {
   ///   - pathComponent: The path component yielded by the iterator.
   ///
   mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>)
+}
+
+extension PathComponentVisitor {
+  
+  mutating func visitEmptyPathComponent() {
+    visitEmptyPathComponents(1)
+  }
 }
 
 /// A `PathComponentVisitor` which calculates the size of the buffer required to write a path.
@@ -59,8 +66,8 @@ struct PathBufferLengthCalculator: PathComponentVisitor {
     )
   }
   
-  fileprivate mutating func visitEmptyPathComponent() {
-    length += 1
+  fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
+    length += n
   }
   
   fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
@@ -92,10 +99,10 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
     precondition(visitor.front == buffer.startIndex, "Failed to initialise entire buffer")
   }
   
-  private mutating func prependSlash() {
-    front = buffer.index(before: front)
+  private mutating func prependSlash(_ n: Int = 1) {
+    front = buffer.index(front, offsetBy: -1 * n)
     buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
-      .initialize(to: ASCII.forwardSlash.codePoint)
+      .initialize(repeating: ASCII.forwardSlash.codePoint, count: n)
   }
 
   fileprivate mutating func visitInputPathComponent<InputString>(_ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool)
@@ -126,8 +133,8 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
     prependSlash()
   }
   
-  fileprivate mutating func visitEmptyPathComponent() {
-    prependSlash()
+  fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
+    prependSlash(n)
   }
   
   fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
@@ -170,7 +177,7 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
     }
     validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
   }
-  fileprivate mutating func visitEmptyPathComponent() {
+  fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
     // Nothing to do.
   }
   fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
@@ -195,8 +202,8 @@ extension PathComponentVisitor {
   ///     These components may be expensive to iterate and must be percent-encoded when written.
   ///     In some circumstances, Windows drive letter components require normalisation. If the boolean flag is `true`, handlers should
   ///     check if the component is a Windows drive letter and normalize it if it is.
-  ///  - `visitEmptyPathComponent` yields an empty component. Not all empty components are guaranteed to be called via this method,
-  ///     but it can be more efficient when we know the component is empty and doesn't need escaping or other checks.
+  ///  - `visitEmptyPathComponents` yields a string of empty components. Not all empty components are guaranteed to be called via this method,
+  ///     but it can be more efficient when we know the components are empty and don't need escaping or other checks.
   ///  - `visitBasePathComponent` yields a component from the base URL's path.
   ///     These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters will already have been normalized.
   ///     They can essentially need no further processing, and may be written to the result as-is.
@@ -288,9 +295,7 @@ extension PathComponentVisitor {
     
     func flushTrailingEmpties() {
       if trailingEmptyCount != 0 {
-        for _ in 0 ..< trailingEmptyCount {
-          visitEmptyPathComponent()
-        }
+        visitEmptyPathComponents(trailingEmptyCount)
         didYieldComponent = true
         trailingEmptyCount = 0
       }
