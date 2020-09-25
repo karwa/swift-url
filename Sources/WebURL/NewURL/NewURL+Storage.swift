@@ -1,4 +1,4 @@
-/// An interface through which `ScannedURLString` constructs a new URL object.
+/// An interface through which `ParsedURLString` constructs a new URL object.
 ///
 /// Conformers accept UTF8 bytes as given by the construction function, write them to storage, and mark
 /// relevant information in a header structure.
