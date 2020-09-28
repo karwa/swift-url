@@ -70,13 +70,13 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
     write(to: &metrics)
     // Write to the optimal storage variant.
     if metrics.requiredCapacity < UInt8.max {
-      var smallWriter = GenericURLHeader<UInt8>.Writer(capacity: metrics.requiredCapacity)
-      write(to: &smallWriter, knownPathLength: metrics.pathLength)
-      return smallWriter.buildURL()
+      return GenericURLHeader<UInt8>.writeURLToNewStorage(capacity: metrics.requiredCapacity) { smallWriter in
+        write(to: &smallWriter, knownPathLength: metrics.pathLength)
+      }
     } else {
-      var genericWriter = GenericURLHeader<Int>.Writer(capacity: metrics.requiredCapacity)
-      write(to: &genericWriter, knownPathLength: metrics.pathLength)
-      return genericWriter.buildURL()
+      return GenericURLHeader<Int>.writeURLToNewStorage(capacity: metrics.requiredCapacity) { genericWriter in
+        write(to: &genericWriter, knownPathLength: metrics.pathLength)
+      }
     }
   }
   

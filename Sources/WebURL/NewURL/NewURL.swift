@@ -27,8 +27,8 @@ extension NewURL {
   }
   
   enum Variant {
-    case small(ArrayWithInlineHeader<GenericURLHeader<UInt8>, UInt8>)
-    case generic(ArrayWithInlineHeader<GenericURLHeader<Int>, UInt8>)
+    case small(ManagedArrayBuffer<GenericURLHeader<UInt8>, UInt8>)
+    case generic(ManagedArrayBuffer<GenericURLHeader<Int>, UInt8>)
   
     var schemeKind: NewURL.Scheme {
       switch self {
@@ -46,8 +46,8 @@ extension NewURL {
     
     var entireString: String {
       switch self {
-      case .small(let storage): return storage.asUTF8String()
-      case .generic(let storage): return storage.asUTF8String()
+      case .small(let storage): return String(decoding: storage, as: UTF8.self)
+      case .generic(let storage): return String(decoding: storage, as: UTF8.self)
       }
     }
     
