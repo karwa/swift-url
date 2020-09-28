@@ -1,11 +1,10 @@
-
 public struct NewURL {
   var variant: Variant
-  
+
   init(variant: Variant) {
     self.variant = variant
   }
-  
+
   public init?(_ input: String, base: String?) {
     var baseURL: NewURL?
     var input = input
@@ -21,58 +20,63 @@ public struct NewURL {
 }
 
 extension NewURL {
-  
+
   enum Component {
     case scheme, username, password, hostname, port, path, query, fragment
   }
-  
+
   enum Variant {
     case small(ManagedArrayBuffer<GenericURLHeader<UInt8>, UInt8>)
     case generic(ManagedArrayBuffer<GenericURLHeader<Int>, UInt8>)
-  
+
     var schemeKind: NewURL.Scheme {
       switch self {
       case .small(let storage): return storage.header.schemeKind
       case .generic(let storage): return storage.header.schemeKind
       }
     }
-    
+
     var cannotBeABaseURL: Bool {
       switch self {
       case .small(let storage): return storage.header.cannotBeABaseURL
       case .generic(let storage): return storage.header.cannotBeABaseURL
       }
     }
-    
+
     var entireString: String {
       switch self {
       case .small(let storage): return String(decoding: storage, as: UTF8.self)
       case .generic(let storage): return String(decoding: storage, as: UTF8.self)
       }
     }
-    
+
     func withComponentBytes<T>(_ component: Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
       switch self {
       case .small(let storage):
         guard let range = storage.header.rangeOfComponent(component) else { return block(nil) }
-        return storage.withElements(range: Range(uncheckedBounds: (Int(range.lowerBound), Int(range.upperBound)))) { buffer in block(buffer) }
+        return storage.withElements(range: Range(uncheckedBounds: (Int(range.lowerBound), Int(range.upperBound)))) {
+          buffer in block(buffer)
+        }
       case .generic(let storage):
         guard let range = storage.header.rangeOfComponent(component) else { return block(nil) }
         return storage.withElements(range: range) { buffer in block(buffer) }
       }
     }
-    
-    func withAllAuthorityComponentBytes<T>(_ block: (
-      _ authorityString: UnsafeBufferPointer<UInt8>?,
-      _ usernameLength: Int,
-      _ passwordLength: Int,
-      _ hostnameLength: Int,
-      _ portLength: Int
-    )->T) -> T {
+
+    func withAllAuthorityComponentBytes<T>(
+      _ block: (
+        _ authorityString: UnsafeBufferPointer<UInt8>?,
+        _ usernameLength: Int,
+        _ passwordLength: Int,
+        _ hostnameLength: Int,
+        _ portLength: Int
+      ) -> T
+    ) -> T {
       switch self {
       case .small(let storage):
         guard let range = storage.header.rangeOfAuthorityString else { return block(nil, 0, 0, 0, 0) }
-        return storage.withElements(range: Range(uncheckedBounds: (Int(range.lowerBound), Int(range.upperBound)))) { buffer in
+        return storage.withElements(range: Range(uncheckedBounds: (Int(range.lowerBound), Int(range.upperBound)))) {
+          buffer in
           block(
             buffer,
             Int(storage.header.usernameLength),
@@ -95,38 +99,38 @@ extension NewURL {
       }
     }
   }
-    
+
   // Flags.
 
   var schemeKind: NewURL.Scheme {
     return variant.schemeKind
   }
-  
+
   public var cannotBeABaseURL: Bool {
     return variant.cannotBeABaseURL
   }
-  
+
   // Components.
   // Note: erasure to empty strings is done to fit the Javascript model for WHATWG tests.
-  
+
   public var href: String {
     return variant.entireString
   }
-  
+
   func stringForComponent(_ component: Component) -> String? {
     return variant.withComponentBytes(component) { maybeBuffer in
       return maybeBuffer.map { buffer in String(decoding: buffer, as: UTF8.self) }
     }
   }
-  
+
   public var scheme: String {
     return stringForComponent(.scheme)!
   }
-  
+
   public var username: String {
     return stringForComponent(.username) ?? ""
   }
-  
+
   public var password: String {
     var string = stringForComponent(.password)
     if !(string?.isEmpty ?? true) {
@@ -135,11 +139,11 @@ extension NewURL {
     }
     return string ?? ""
   }
-  
+
   public var hostname: String {
     return stringForComponent(.hostname) ?? ""
   }
-  
+
   public var port: String {
     var string = stringForComponent(.port)
     if !(string?.isEmpty ?? true) {
@@ -148,17 +152,17 @@ extension NewURL {
     }
     return string ?? ""
   }
-  
+
   public var path: String {
     return stringForComponent(.path) ?? ""
   }
-  
+
   public var query: String {
     let string = stringForComponent(.query)
     guard string != "?" else { return "" }
     return string ?? ""
   }
-  
+
   public var fragment: String {
     let string = stringForComponent(.fragment)
     guard string != "#" else { return "" }
@@ -167,14 +171,14 @@ extension NewURL {
 }
 
 extension NewURL: CustomStringConvertible {
-  
+
   public var description: String {
     return
       """
       URL Constructor output:
-      
+
       Href: \(href)
-      
+
       Scheme: \(scheme) (\(schemeKind))
       Username: \(username)
       Password: \(password)

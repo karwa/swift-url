@@ -69,17 +69,19 @@ func replaceElements<C, T: BufferContainer>(
   with newElements: C,
   isUnique: Bool,
   storageConstructor: (_ minimumCapacity: Int) -> T
-) -> (bufferCount: Int, insertedCount: Int, newStorage: T?, newStorageCount: Int) where C : Collection, T.Element == C.Element {
-  
+) -> (bufferCount: Int, insertedCount: Int, newStorage: T?, newStorageCount: Int)
+where C: Collection, T.Element == C.Element {
   precondition(subrange.lowerBound >= 0, "subrange start is negative")
   precondition(subrange.upperBound <= initializedCount, "subrange extends past the end")
-  
+
   let insertCount = newElements.count
   let finalCount = initializedCount - subrange.count + insertCount
-  
+
   if isUnique && finalCount <= buffer.count {
-    let newCount = replaceSubrange_inplace(buffer: buffer, initializedCount: initializedCount,
-                                           subrange: subrange, newElementCount: insertCount) { ptr, expectedCount in
+    let newCount = replaceSubrange_inplace(
+      buffer: buffer, initializedCount: initializedCount,
+      subrange: subrange, newElementCount: insertCount
+    ) { ptr, expectedCount in
       let n = UnsafeMutableBufferPointer(start: ptr, count: expectedCount).initialize(from: newElements).1
       precondition(n == expectedCount, "newElements did not contain newElements.count objects")
     }
@@ -90,28 +92,24 @@ func replaceElements<C, T: BufferContainer>(
   let newCount = newStorage.withUnsafeMutablePointerToElements { newBufferPtr -> Int in
     let newBuffer = UnsafeMutableBufferPointer(start: newBufferPtr, count: finalCount)
     if isUnique {
-      return newBuffer.moveInitialize(from: srcBuffer, replacingSubrange: subrange, withElements: insertCount) { ptr, expectedCount in
+      return newBuffer.moveInitialize(from: srcBuffer, replacingSubrange: subrange, withElements: insertCount) {
+        ptr, expectedCount in
         let n = UnsafeMutableBufferPointer(start: ptr, count: expectedCount).initialize(from: newElements).1
         precondition(n == expectedCount, "newElements did not contain newElements.count objects")
       }
     }
-    return newBuffer.initialize(from: UnsafeBufferPointer(srcBuffer), replacingSubrange: subrange, withElements: insertCount) { ptr, expectedCount in
+    return newBuffer.initialize(
+      from: UnsafeBufferPointer(srcBuffer), replacingSubrange: subrange, withElements: insertCount
+    ) { ptr, expectedCount in
       let n = UnsafeMutableBufferPointer(start: ptr, count: expectedCount).initialize(from: newElements).1
       precondition(n == expectedCount, "newElements did not contain newElements.count objects")
     }
   }
   assert(newCount == finalCount)
-  return (bufferCount: isUnique ? 0 : initializedCount, insertedCount: insertCount, newStorage: newStorage, newStorageCount: finalCount)
-}
-
-
-/// A _debugPrecondition check that `i` has exactly reached the end of
-/// `s`.  This test is never used to ensure memory safety; that is
-/// always guaranteed by measuring `s` once and re-using that value.
-private func _expectEnd<C: Collection>(of s: C, is i: C.Index) {
-  assert(
-    i == s.endIndex,
-    "invalid Collection: count differed in successive traversals")
+  return (
+    bufferCount: isUnique ? 0 : initializedCount, insertedCount: insertCount, newStorage: newStorage,
+    newStorageCount: finalCount
+  )
 }
 
 /// Given a buffer, whose elements from `0..<initializedCount` are initialized, replaces the given subrange with the elements in `newValues`.
@@ -125,11 +123,11 @@ func replaceSubrange_inplace<Element>(
   subrange: Range<Int>,
   newElementCount: Int,
   _ initializeNewElements:
-    ((UnsafeMutablePointer<Element>, _ count: Int) -> ()) = { ptr, count in
+    ((UnsafeMutablePointer<Element>, _ count: Int) -> Void) = { ptr, count in
       precondition(count == 0)
     }
 ) -> Int {
-  
+
   let oldCount = initializedCount
   let growth = newElementCount - subrange.count
   let finalCount = oldCount + growth
@@ -138,19 +136,21 @@ func replaceSubrange_inplace<Element>(
   guard let elements = buffer.baseAddress else { return 0 }
   switch growth {
   case _ where growth > 0:
-    (elements + subrange.lowerBound + newElementCount).moveInitialize(from: elements + subrange.upperBound, count: oldCount - subrange.upperBound)
+    (elements + subrange.lowerBound + newElementCount)
+      .moveInitialize(from: elements + subrange.upperBound, count: oldCount - subrange.upperBound)
     (elements + subrange.lowerBound).deinitialize(count: subrange.count)
     initializeNewElements(elements + subrange.lowerBound, newElementCount)
-    
+
   case _ where growth == 0:
     (elements + subrange.lowerBound).deinitialize(count: subrange.count)
     initializeNewElements(elements + subrange.lowerBound, newElementCount)
-    
+
   case _ where growth < 0: fallthrough
   default:
     (elements + subrange.lowerBound).deinitialize(count: subrange.count)
     initializeNewElements(elements + subrange.lowerBound, newElementCount)
-    (elements + subrange.lowerBound + newElementCount).moveInitialize(from: elements + subrange.upperBound, count: oldCount - subrange.upperBound)
+    (elements + subrange.lowerBound + newElementCount)
+      .moveInitialize(from: elements + subrange.upperBound, count: oldCount - subrange.upperBound)
   }
   return finalCount
 }
@@ -162,7 +162,7 @@ extension UnsafeMutableBufferPointer {
   /// Initializes the contents of this buffer by moving the contents of `oldContents`, with the exception of `subrange`, whose
   /// old contents are deinitialized and replaced by a region of size `newCount`, initialized by the given closure.
   ///
-	/// - parameters:
+  /// - parameters:
   ///   - oldContents:            The buffer whose contents should be moved in to this buffer.
   ///   - subrange:               The region of `buffer` which should be replaced.
   ///   - newCount:               The number of elements to replace `subrange` with.
@@ -173,18 +173,18 @@ extension UnsafeMutableBufferPointer {
   func moveInitialize(
     from oldContents: UnsafeMutableBufferPointer<Element>,
     replacingSubrange subrange: Range<Int>,
-    withElements newCount: Int, // Number of new elements to insert
+    withElements newCount: Int,  // Number of new elements to insert
     _ initializeNewElements:
-      ((UnsafeMutablePointer<Element>, _ count: Int) -> ()) = { ptr, count in
+      ((UnsafeMutablePointer<Element>, _ count: Int) -> Void) = { ptr, count in
         precondition(count == 0)
       }
   ) -> Int {
     guard let sourceStart = oldContents.baseAddress else { return 0 }
-    
+
     precondition(subrange.lowerBound >= 0 && subrange.upperBound <= oldContents.count, "Invalid subrange")
     let finalCount = oldContents.count - subrange.count + newCount
     precondition(finalCount <= self.count, "Insufficient capacity")
-    
+
     var head = self.baseAddress!
     // Move the head items
     head.moveInitialize(from: sourceStart, count: subrange.lowerBound)
@@ -198,7 +198,7 @@ extension UnsafeMutableBufferPointer {
     head.moveInitialize(from: sourceStart + subrange.upperBound, count: oldContents.count - subrange.upperBound)
     return finalCount
   }
-  
+
   /// Initializes the contents of this buffer by copying the contents of `oldContents`, with the exception of `subrange`, which is
   /// replaced by a region of size `newCount`, initialized by the given closure.
   ///
@@ -213,18 +213,18 @@ extension UnsafeMutableBufferPointer {
   func initialize(
     from oldContents: UnsafeBufferPointer<Element>,
     replacingSubrange subrange: Range<Int>,
-    withElements newCount: Int, // Number of new elements to insert
+    withElements newCount: Int,  // Number of new elements to insert
     _ initializeNewElements:
-      ((UnsafeMutablePointer<Element>, _ count: Int) -> ()) = { ptr, count in
+      ((UnsafeMutablePointer<Element>, _ count: Int) -> Void) = { ptr, count in
         precondition(count == 0)
       }
   ) -> Int {
     guard let sourceStart = oldContents.baseAddress else { return 0 }
-    
+
     precondition(subrange.lowerBound >= 0 && subrange.upperBound <= oldContents.count, "Invalid subrange")
     let finalCount = oldContents.count - subrange.count + newCount
     precondition(finalCount <= self.count, "Insufficient capacity")
-    
+
     var head = self.baseAddress!
     // Copy the head items.
     head.initialize(from: sourceStart, count: subrange.lowerBound)

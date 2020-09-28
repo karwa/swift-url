@@ -14,9 +14,10 @@ extension NewURL {
 }
 
 extension NewURL.Scheme {
-  
+
   var isSpecial: Bool {
-    return self != .other
+    if case .other = self { return false }
+    return true
   }
 
   /// Parses the scheme from a collection of ASCII bytes.
@@ -35,7 +36,7 @@ extension NewURL.Scheme {
       // https://bugs.swift.org/browse/SR-13063
       return .other
     }
-    
+
     var iter = LowercaseASCIITransformer(base: asciiBytes).makeIterator()
     switch iter.next() {
     case .h?:
@@ -78,13 +79,13 @@ extension NewURL.Scheme {
 }
 
 extension NewURL.Scheme {
-  
+
   var defaultPort: UInt16? {
     switch self {
-    case .http, .ws:   return 80
+    case .http, .ws: return 80
     case .https, .wss: return 443
-    case .ftp:         return 21
-    default:           return nil
+    case .ftp: return 21
+    default: return nil
     }
   }
 }
