@@ -18,19 +18,19 @@ func urlFromBytes<Bytes>(_ inputString: Bytes, baseURL: NewURL?) -> NewURL?
 where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
   var callback = IgnoreValidationErrors()
-  let filtered = FilteredURLInput.create(inputString, isSetterMode: false, callback: &callback)
-
-  if filtered.needsLazyFilter {
-    return ParsedURLString(inputString: filtered, baseURL: baseURL, callback: &callback)?.constructURLObject()
+  let (trimmedInput, needsFiltering) = FilteredURLInput.trim(inputString, callback: &callback)
+  if needsFiltering {
+    let filteredInput = FilteredURLInput<Bytes>(trimmedInput)
+    return ParsedURLString(inputString: filteredInput, baseURL: baseURL, callback: &callback)?.constructURLObject()
   }
-  if let bufferSlice = filtered.base as? Slice<UnsafeBufferPointer<UInt8>> {
+  if let bufferSlice = trimmedInput as? Slice<UnsafeBufferPointer<UInt8>> {
     return ParsedURLString(
       inputString: UnsafeBufferPointer(rebasing: bufferSlice),
       baseURL: baseURL,
       callback: &callback
     )?.constructURLObject()
   }
-  return ParsedURLString(inputString: filtered.base, baseURL: baseURL, callback: &callback)?.constructURLObject()
+  return ParsedURLString(inputString: trimmedInput, baseURL: baseURL, callback: &callback)?.constructURLObject()
 }
 
 // MARK: - ParsedURLString
@@ -1468,34 +1468,27 @@ where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
 ///
 struct FilteredURLInput<Base> where Base: BidirectionalCollection, Base.Element == UInt8 {
   let base: Base.SubSequence
-  let needsLazyFilter: Bool
 
-  private init(base: Base.SubSequence, needsLazyFilter: Bool) {
+  init(_ base: Base.SubSequence) {
     self.base = base
-    self.needsLazyFilter = needsLazyFilter
   }
-
-  static func create<Callback>(_ rawInput: Base, isSetterMode: Bool, callback: inout Callback) -> FilteredURLInput
-  where Callback: URLParserCallback {
+  
+  static func trim<Callback: URLParserCallback>(_ rawInput: Base, callback: inout Callback) -> (Base.SubSequence, needsFiltering: Bool) {
     // Trim leading/trailing C0 control characters and spaces.
     var trimmedSlice = rawInput[...]
-    if isSetterMode == false {
-      let trimmedInput = trimmedSlice.trim {
-        switch ASCII($0) {
-        case ASCII.ranges.controlCharacters?, .space?: return true
-        default: return false
-        }
+    let trimmedInput = trimmedSlice.trim {
+      switch ASCII($0) {
+      case ASCII.ranges.controlCharacters?, .space?: return true
+      default: return false
       }
-      if trimmedInput.startIndex != trimmedSlice.startIndex || trimmedInput.endIndex != trimmedSlice.endIndex {
-        callback.validationError(.unexpectedC0ControlOrSpace)
-      }
-      trimmedSlice = trimmedInput
     }
-    // Trim initial filtered bytes so we can provide startIndex in O(1).
-    let needsLazyFilter = trimmedSlice.contains(where: filterShouldDrop)
-    trimmedSlice = needsLazyFilter ? trimmedSlice.drop(while: filterShouldDrop) : trimmedSlice
-
-    return FilteredURLInput(base: trimmedSlice, needsLazyFilter: needsLazyFilter)
+    if trimmedInput.startIndex != trimmedSlice.startIndex || trimmedInput.endIndex != trimmedSlice.endIndex {
+      callback.validationError(.unexpectedC0ControlOrSpace)
+    }
+    trimmedSlice = trimmedInput
+    // Trim initial filtered bytes.
+    trimmedSlice = trimmedSlice.drop(while: filterShouldDrop)
+    return (trimmedSlice, trimmedSlice.contains(where: filterShouldDrop))
   }
 
   static func filterShouldDrop(_ byte: UInt8) -> Bool {
@@ -1519,34 +1512,34 @@ extension FilteredURLInput: BidirectionalCollection {
     return base[position]
   }
   subscript(bounds: Range<Base.Index>) -> FilteredURLInput<Base> {
-    return FilteredURLInput(base: base[bounds], needsLazyFilter: needsLazyFilter)
+    return FilteredURLInput(base[bounds])
   }
 
   private var filtered: LazyFilterSequence<Base.SubSequence> {
     return base.lazy.filter { Self.filterShouldDrop($0) == false }
   }
   var count: Int {
-    return needsLazyFilter ? filtered.count : base.count
+    return filtered.count
+  }
+  var isEmpty: Bool {
+    return filtered.isEmpty
   }
   func index(after i: Base.Index) -> Base.Index {
-    return needsLazyFilter ? filtered.index(after: i) : base.index(after: i)
+    return filtered.index(after: i)
   }
   func index(before i: Base.Index) -> Base.Index {
-    return needsLazyFilter ? filtered.index(before: i) : base.index(before: i)
+    return filtered.index(before: i)
   }
   func distance(from start: Base.Index, to end: Base.Index) -> Int {
-    return needsLazyFilter ? filtered.distance(from: start, to: end) : base.distance(from: start, to: end)
+    return filtered.distance(from: start, to: end)
   }
   func formIndex(after i: inout Base.Index) {
-    needsLazyFilter ? filtered.formIndex(after: &i) : base.formIndex(after: &i)
+    filtered.formIndex(after: &i)
   }
   func formIndex(before i: inout Base.Index) {
-    needsLazyFilter ? filtered.formIndex(before: &i) : base.formIndex(before: &i)
+    filtered.formIndex(before: &i)
   }
-  func withContiguousStorageIfAvailable<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R? {
-    return needsLazyFilter ? nil : try base.withContiguousStorageIfAvailable(body)
-  }
-  
+
   // TODO: Investigate adding a custom Iterator once we have a more comprehensive benchmark suite.
 }
 
