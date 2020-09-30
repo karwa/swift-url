@@ -16,12 +16,13 @@ let package = Package(
   targets: [
     .target(name: "Algorithms"),
     .testTarget(name: "AlgorithmsTests", dependencies: ["Algorithms", "Checkit"]),
-
+		// Old URL implementation which more closely follows the WHATWG algorithm.
     .target(name: "OldURL", dependencies: ["Algorithms"]),
-    .target(name: "WebURL", dependencies: ["Algorithms"]),
+    .testTarget(name: "OldURLTests", dependencies: ["OldURL"]),
     
+    .target(name: "WebURL", dependencies: ["Algorithms"]),
     .target(name: "URLTestUtils", dependencies: ["WebURL"]),
-    .testTarget(name: "WebURLTests", dependencies: ["OldURL","WebURL", "URLTestUtils"]),
+    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "URLTestUtils"]),
     
     .target(name: "URLBenchmarks", dependencies: ["WebURL", "OldURL"]),
   ]

@@ -1,4 +1,4 @@
-extension WebURLParser {
+extension WebURL {
 
   public enum Host {
     case domain(String)
@@ -9,7 +9,7 @@ extension WebURLParser {
   }
 }
 
-extension WebURLParser.Host {
+extension WebURL.Host {
 
   // TODO: Replace `.domain(String)` with a "Domain" type which
   //       cannot be user-instantiated with an empty string.
@@ -25,14 +25,14 @@ extension WebURLParser.Host {
 
 // Standard protocols.
 
-extension WebURLParser.Host: Equatable, Hashable, CustomStringConvertible {
+extension WebURL.Host: Equatable, Hashable, CustomStringConvertible {
 
   public var description: String {
     return serialized
   }
 }
 
-extension WebURLParser.Host: Codable {
+extension WebURL.Host: Codable {
 
   public enum Kind: String, Codable {
     case domain
@@ -97,7 +97,7 @@ extension WebURLParser.Host: Codable {
 
 // Parsing initializers.
 
-extension WebURLParser.Host {
+extension WebURL.Host {
 
   @inlinable public static func parse<Source, Callback>(
     _ input: Source, isNotSpecial: Bool = false, callback: inout Callback
@@ -114,7 +114,7 @@ extension WebURLParser.Host {
 
 // Parsing and serialization impl.
 
-extension WebURLParser.Host {
+extension WebURL.Host {
 
   public struct ValidationError: Error, Equatable, CustomStringConvertible {
     private let errorCode: UInt8
@@ -194,7 +194,7 @@ extension WebURLParser.Host {
 
 // This is a poor approximation of unicode's "domain2ascii" algorithm,
 // which simply lowercases ASCII alphas and fails for non-ASCII characters.
-func fake_domain2ascii(_ domain: inout [UInt8]) -> WebURLParser.Host.ValidationError? {
+func fake_domain2ascii(_ domain: inout [UInt8]) -> WebURL.Host.ValidationError? {
   for i in domain.indices {
     guard let asciiChar = ASCII(domain[i]) else { return .containsForbiddenHostCodePoint }
     domain[i] = asciiChar.lowercased.codePoint
@@ -202,7 +202,7 @@ func fake_domain2ascii(_ domain: inout [UInt8]) -> WebURLParser.Host.ValidationE
   return nil
 }
 
-extension WebURLParser.Host {
+extension WebURL.Host {
 
   /// Serialises the host, according to https://url.spec.whatwg.org/#host-serializing (as of 14.06.2020).
   ///

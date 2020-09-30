@@ -10,7 +10,7 @@ import XCTest
 
 let testBasic_printResults = false
 
-final class URLTests: XCTestCase {
+final class OldURLTests: XCTestCase {
 
   /// Tests a handful of basic situations demonstrating the major features of the parser.
   /// These tests are not meant to be exhaustive; for something more comprehensive, see the WHATWG constructor tests.
@@ -156,7 +156,7 @@ final class URLTests: XCTestCase {
 
 // Percent-escaping tests.
 
-extension URLTests {
+extension OldURLTests {
 
   func testPercentEscaping() {
     let testStrings: [String] = [

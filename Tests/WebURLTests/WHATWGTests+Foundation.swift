@@ -1,6 +1,6 @@
 import Foundation
 
-extension OldURL_WHATWGTests {
+extension WHATWGTests {
 
   /// Attempts to map Foundation's URL API to the WHATWG model for constructor tests.
   /// Just for fun.

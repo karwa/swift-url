@@ -1,4 +1,4 @@
-extension WebURLParser {
+extension WebURL {
 
   public struct QueryParameters {
     public var items: [(name: String, value: String)] = []
@@ -6,7 +6,7 @@ extension WebURLParser {
   }
 }
 
-extension WebURLParser.QueryParameters {
+extension WebURL.QueryParameters {
 
   /// Parses a `QueryParameters` object from an `application/x-www-form-urlencoded`-formatted String.
   ///
@@ -66,6 +66,6 @@ extension WebURLParser.QueryParameters {
   /// Conforms to https://url.spec.whatwg.org/#urlencoded-serializing as of 27.06.2020
   ///
   var serialized: String {
-    return WebURLParser.QueryParameters.serialiseQueryString(items)
+    return WebURL.QueryParameters.serialiseQueryString(items)
   }
 }

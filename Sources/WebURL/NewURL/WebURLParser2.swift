@@ -1333,7 +1333,7 @@ extension URLScanner.UnprocessedMapping {
     var hostnameString: String?
     if let hostname = hostnameRange.map({ inputString[$0] }) {
       hostnameString = Array(hostname).withUnsafeBufferPointer { bytes -> String? in
-        return WebURLParser.Host
+        return WebURL.Host
           .parse(bytes, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)?
           .serialized
       }
