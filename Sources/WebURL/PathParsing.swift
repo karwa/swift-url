@@ -44,8 +44,8 @@ struct PathBufferLengthCalculator: PathComponentVisitor {
 
   static func requiredBufferLength<InputString>(
     pathString input: InputString,
-    schemeKind: NewURL.Scheme,
-    baseURL: NewURL?
+    schemeKind: WebURL.Scheme,
+    baseURL: WebURL?
   ) -> Int where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     var visitor = PathBufferLengthCalculator()
     visitor.walkPathComponents(
@@ -86,8 +86,8 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
   static func writePath<InputString>(
     to buffer: UnsafeMutableBufferPointer<UInt8>,
     pathString input: InputString,
-    schemeKind: NewURL.Scheme,
-    baseURL: NewURL?
+    schemeKind: WebURL.Scheme,
+    baseURL: WebURL?
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     // Checking this now allows the implementation to use `.baseAddress.unsafelyUnwrapped`.
     precondition(buffer.baseAddress != nil)
@@ -155,7 +155,7 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
 
   static func validatePathComponents(
     pathString input: Input,
-    schemeKind: NewURL.Scheme,
+    schemeKind: WebURL.Scheme,
     callback: inout Callback
   ) {
     var visitor = PathInputStringValidator(callback: callback, path: input)
@@ -225,8 +225,8 @@ extension PathComponentVisitor {
   ///
   fileprivate mutating func walkPathComponents<InputString>(
     pathString input: InputString,
-    schemeKind: NewURL.Scheme,
-    baseURL: NewURL?
+    schemeKind: WebURL.Scheme,
+    baseURL: WebURL?
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
 
     let schemeIsSpecial = schemeKind.isSpecial

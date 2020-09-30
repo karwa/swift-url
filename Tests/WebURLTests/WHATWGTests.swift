@@ -152,16 +152,16 @@ extension WHATWGTests {
           report.capture(key: "expected", expected)
           
           // base URL parsing must always succeed.
-          guard let _ = NewURL(expected.base!, base: nil) else {
+          guard let _ = WebURL(expected.base!, base: nil) else {
             report.expectTrue(false)
             return
           }
           // If failure = true, parsing "about:blank" against input must fail.
           if expected.failure == true {
-            report.expectTrue(NewURL("about:blank", base: expected.input!) == nil)
+            report.expectTrue(WebURL("about:blank", base: expected.input!) == nil)
           }
           
-          let _parserResult = NewURL(expected.input!, base: expected.base!)
+          let _parserResult = WebURL(expected.input!, base: expected.base!)
           report.capture(key: "actual", _parserResult as Any)
           
           // Compare results.
@@ -187,7 +187,7 @@ extension WHATWGTests {
           // Check idempotence.
           var serialized = parserResult.href
           serialized.makeContiguousUTF8()
-          guard let reparsed = NewURL(serialized, base: nil) else {
+          guard let reparsed = WebURL(serialized, base: nil) else {
             report.expectTrue(false)
             return
           }
@@ -457,7 +457,7 @@ extension WHATWGTests {
   func testAdditional() {
     
     for test in additionalTests {
-      guard let result = NewURL(test.input, base: test.base) else {
+      guard let result = WebURL(test.input, base: test.base) else {
         XCTAssertTrue(test.ex_fail, "Test failed: \(test)")
         continue
       }
@@ -474,7 +474,7 @@ extension WHATWGTests {
   }
 }
 
-#if false // Setters have not been implemented for NewURL yet.
+#if false // Setters have not been implemented for WebURL yet.
 
 // WHATWG Setter Tests.
 // Creates a URL object from an input String (which must not fail), and modifies one property.

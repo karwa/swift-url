@@ -46,9 +46,9 @@ doTest(iterations: 1_000) {
   }
 }
 sleep(1)
-print("NewURL")
+print("WebURL")
 doTest(iterations: 1_000) {
   for str in testURLs {
-    _ = NewURL(str, base: nil)
+    _ = WebURL(str, base: nil)
   }
 }

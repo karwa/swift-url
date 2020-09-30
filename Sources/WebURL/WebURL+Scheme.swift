@@ -1,4 +1,4 @@
-extension NewURL {
+extension WebURL {
 
   /// A URL’s scheme is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing.
   ///
@@ -13,7 +13,7 @@ extension NewURL {
   }
 }
 
-extension NewURL.Scheme {
+extension WebURL.Scheme {
 
   var isSpecial: Bool {
     if case .other = self { return false }
@@ -78,7 +78,7 @@ extension NewURL.Scheme {
   }
 }
 
-extension NewURL.Scheme {
+extension WebURL.Scheme {
 
   var defaultPort: UInt16? {
     switch self {

@@ -14,7 +14,7 @@
 //    the content to freshly-allocated storage. The actual construction process involves performing a dry-run
 //    to calculate the optimal result type and produce an allocation which is correctly sized to hold the result.
 
-func urlFromBytes<Bytes>(_ inputString: Bytes, baseURL: NewURL?) -> NewURL?
+func urlFromBytes<Bytes>(_ inputString: Bytes, baseURL: WebURL?) -> WebURL?
 where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
   var callback = IgnoreValidationErrors()
@@ -45,7 +45,7 @@ where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 ///
 struct ParsedURLString<InputString> where InputString: BidirectionalCollection, InputString.Element == UInt8 {
   let inputString: InputString
-  let baseURL: NewURL?
+  let baseURL: WebURL?
   let mapping: ProcessedMapping
 
   /// Parses the given collection of UTF8 bytes as a URL string, relative to some base URL.
@@ -55,7 +55,7 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
   ///   - baseURL:      The base URL against which `inputString` should be interpreted.
   ///   - callback:     A callback to receive validation errors. If these are unimportant, pass an instance of `IngoreValidationErrors`.
   ///
-  init?<Callback: URLParserCallback>(inputString: InputString, baseURL: NewURL?, callback: inout Callback) {
+  init?<Callback: URLParserCallback>(inputString: InputString, baseURL: WebURL?, callback: inout Callback) {
     guard let mapping = URLScanner.scanURLString(inputString, baseURL: baseURL, callback: &callback) else {
       return nil
     }
@@ -66,7 +66,7 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
 
   /// Allocates a new storage buffer and writes the URL to it.
   ///
-  func constructURLObject() -> NewURL {
+  func constructURLObject() -> WebURL {
 
     // Do a dry-run to calculate metrics about the final contents.
     var metrics = URLMetricsCollector()
@@ -115,12 +115,12 @@ extension ParsedURLString {
 
     let cannotBeABaseURL: Bool
     let componentsToCopyFromBase: ComponentsToCopy
-    let schemeKind: NewURL.Scheme
+    let schemeKind: WebURL.Scheme
 
     /// - seealso: `ParsedURLString.write(to:knownPathLength:)`.
     func write<WriterType: URLWriter>(
       inputString: InputString,
-      baseURL: NewURL?,
+      baseURL: WebURL?,
       to writer: inout WriterType,
       knownPathLength: Int? = nil
     ) {
@@ -328,7 +328,7 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
     case success(continueFrom: (ParsableComponent, InputString.Index)?)
   }
 
-  typealias Scheme = NewURL.Scheme
+  typealias Scheme = WebURL.Scheme
   typealias InputSlice = InputString.SubSequence
 }
 
@@ -389,7 +389,7 @@ extension URLScanner {
 
     var cannotBeABaseURL = false
     var componentsToCopyFromBase: ComponentsToCopy = []
-    var schemeKind: NewURL.Scheme? = nil
+    var schemeKind: WebURL.Scheme? = nil
   }
 }
 
@@ -418,7 +418,7 @@ extension URLScanner {
   ///
   static func scanURLString(
     _ input: InputString,
-    baseURL: NewURL?,
+    baseURL: WebURL?,
     callback: inout Callback
   ) -> ParsedURLString<InputString>.ProcessedMapping? {
     return scanURLStringWithoutProcessing(input, baseURL: baseURL, callback: &callback)?
@@ -427,7 +427,7 @@ extension URLScanner {
 
   static func scanURLStringWithoutProcessing(
     _ input: InputString,
-    baseURL: NewURL?,
+    baseURL: WebURL?,
     callback: inout Callback
   ) -> UnprocessedMapping? {
 
@@ -435,7 +435,7 @@ extension URLScanner {
 
     if let schemeEndIndex = findScheme(input) {
       let schemeName = input.prefix(upTo: schemeEndIndex).dropLast()  // dropLast() to remove the ":" terminator.
-      let schemeKind = NewURL.Scheme.parse(asciiBytes: schemeName)
+      let schemeKind = WebURL.Scheme.parse(asciiBytes: schemeName)
 
       scanResults.schemeKind = schemeKind
       scanResults.schemeTerminatorIndex = schemeName.endIndex
@@ -478,7 +478,7 @@ extension URLScanner {
   /// Scans all components of the input string `input`, and builds up a map based on the URL's `scheme`.
   ///
   static func scanURLWithScheme(
-    _ input: InputSlice, scheme: Scheme, baseURL: NewURL?,
+    _ input: InputSlice, scheme: Scheme, baseURL: WebURL?,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> Bool {
 
@@ -529,7 +529,7 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   static func scanAllComponents(
-    from: ParsableComponent, _ input: InputSlice, scheme: NewURL.Scheme,
+    from: ParsableComponent, _ input: InputSlice, scheme: WebURL.Scheme,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> Bool {
 
@@ -572,7 +572,7 @@ extension URLScanner {
   /// If parsing doesn't fail, the next component is always `pathStart`.
   ///
   static func scanAuthority(
-    _ input: InputSlice, scheme: NewURL.Scheme,
+    _ input: InputSlice, scheme: WebURL.Scheme,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> ComponentParseResult {
 
@@ -845,7 +845,7 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   static func scanAllFileURLComponents(
-    _ input: InputSlice, baseURL: NewURL?,
+    _ input: InputSlice, baseURL: WebURL?,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> Bool {
 
@@ -889,7 +889,7 @@ extension URLScanner {
   }
 
   static func parseFileURLStart(
-    _ input: InputSlice, baseURL: NewURL?,
+    _ input: InputSlice, baseURL: WebURL?,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> ComponentParseResult {
 
@@ -1017,7 +1017,7 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   static func scanAllCannotBeABaseURLComponents(
-    _ input: InputSlice, scheme: NewURL.Scheme,
+    _ input: InputSlice, scheme: WebURL.Scheme,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> Bool {
 
@@ -1110,7 +1110,7 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   static func scanAllRelativeURLComponents(
-    _ input: InputSlice, baseScheme: NewURL.Scheme,
+    _ input: InputSlice, baseScheme: WebURL.Scheme,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> Bool {
 
@@ -1156,7 +1156,7 @@ extension URLScanner {
   }
 
   static func parseRelativeURLStart(
-    _ input: InputSlice, baseScheme: NewURL.Scheme,
+    _ input: InputSlice, baseScheme: WebURL.Scheme,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> ComponentParseResult {
 
@@ -1226,7 +1226,7 @@ extension URLScanner.UnprocessedMapping {
   ///
   func process(
     inputString: InputString,
-    baseURL: NewURL?,
+    baseURL: WebURL?,
     callback: inout Callback
   ) -> ParsedURLString<InputString>.ProcessedMapping? {
 
@@ -1235,7 +1235,7 @@ extension URLScanner.UnprocessedMapping {
 
     var componentsToCopyFromBase = u_mapping.componentsToCopyFromBase
 
-    let schemeKind: NewURL.Scheme
+    let schemeKind: WebURL.Scheme
     if let scannedSchemeKind = u_mapping.schemeKind {
       schemeKind = scannedSchemeKind
     } else if componentsToCopyFromBase.contains(.scheme), let baseURL = baseURL {
