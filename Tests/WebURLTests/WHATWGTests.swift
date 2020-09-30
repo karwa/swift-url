@@ -1,8 +1,8 @@
 import XCTest
 
-@testable import WebURL
+@testable import OldURL
 
-final class WHATWGTests: XCTestCase {}
+final class OldURL_WHATWGTests: XCTestCase {}
 
 // WHATWG URL Constructor Tests.
 // Creates a URL object from a (input: String, base: String) pair, and checks that it has the expected
@@ -11,7 +11,7 @@ final class WHATWGTests: XCTestCase {}
 // Data file from:
 // https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json as of 15.06.2020
 //
-extension WHATWGTests {
+extension OldURL_WHATWGTests {
 
   // Data structure to parse the test description in to.
   struct URLConstructorTestCase: CustomStringConvertible {
@@ -152,16 +152,16 @@ extension WHATWGTests {
           report.capture(key: "expected", expected)
           
           // base URL parsing must always succeed.
-          guard let baseURL = WebURL(expected.base!) else {
+          guard let baseURL = OldURL(expected.base!) else {
             report.expectTrue(false)
             return
           }
           // If failure = true, parsing "about:blank" against input must fail.
           if expected.failure == true {
-            report.expectEqual(WebURL("about:blank", base: expected.input!), nil)
+            report.expectEqual(OldURL("about:blank", base: expected.input!), nil)
           }
           
-          let _parserResult = WebURL(expected.input!, baseURL: baseURL)
+          let _parserResult = OldURL(expected.input!, baseURL: baseURL)
           report.capture(key: "actual", _parserResult as Any)
           
           // Compare results.
@@ -187,7 +187,7 @@ extension WHATWGTests {
           // Check idempotence.
           var serialized = parserResult.href
           serialized.makeContiguousUTF8()
-          guard let reparsed = WebURL(serialized, base: nil) else {
+          guard let reparsed = OldURL(serialized, base: nil) else {
             report.expectTrue(false)
             return
           }
@@ -215,7 +215,7 @@ extension WHATWGTests {
 // Data file from:
 // https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json as of 15.06.2020
 //
-extension WHATWGTests {
+extension OldURL_WHATWGTests {
 
   private struct URLSetterTest {
     var comment: String?
@@ -229,7 +229,7 @@ extension WHATWGTests {
     var tests: [URLSetterTest]
   }
 
-  private func webURLStringPropertyWithJSName(_ str: String) -> WritableKeyPath<WebURL, String>? {
+  private func webURLStringPropertyWithJSName(_ str: String) -> WritableKeyPath<OldURL, String>? {
     switch str {
     case "search":
       return \.search
@@ -252,7 +252,7 @@ extension WHATWGTests {
     }
   }
 
-  private func webURLPortPropertyWithJSName(_ str: String) -> WritableKeyPath<WebURL, UInt16?>? {
+  private func webURLPortPropertyWithJSName(_ str: String) -> WritableKeyPath<OldURL, UInt16?>? {
     switch str {
     case "port":
       return \.port
@@ -307,7 +307,7 @@ extension WHATWGTests {
       // The 'port' tests are a little special.
       // The JS URL model exposes `port` as a String, and these XFAIL-ed tests
       // check that parsing stops when it encounters an invalid character/overflows/etc.
-      // However, `WebURL.port` is a `UInt16?`, so these considerations simply don't apply.
+      // However, `OldURL.port` is a `UInt16?`, so these considerations simply don't apply.
       //
       // The tests fail because `transformValue` ends up returning `nil` for these junk strings.
       52, 53, 54, 55, 56, 57, 58, 60, 61,  // `port` tests.
@@ -348,7 +348,7 @@ extension WHATWGTests {
   /// 4. Checks the URL's properties and values against the expected values.
   ///
   private func performSetterTest<T>(
-    _ testcase: URLSetterTest, property: WritableKeyPath<WebURL, T>,
+    _ testcase: URLSetterTest, property: WritableKeyPath<OldURL, T>,
     transformValue: (String) -> T, _ report: inout WHATWG_TestReport
   ) {
 
@@ -356,7 +356,7 @@ extension WHATWGTests {
     report.capture(key: "Input", testcase.href)
     report.capture(key: "New Value", testcase.newValue)
     // 1. Parse the URL.
-    guard var url = WebURL(testcase.href) else {
+    guard var url = OldURL(testcase.href) else {
       report.expectTrue(false, "Failed to parse")
       return
     }
@@ -531,12 +531,12 @@ struct WHATWG_TestReport {
 
 
 // These are not technically WHATWG test cases, but they test
-// functionality exposed via the JS/WebURL model.
+// functionality exposed via the JS/OldURL model.
 //
-extension WHATWGTests {
+extension OldURL_WHATWGTests {
 
   func testSearchParamsEscaping() {
-    var url = WebURL("http://example/?a=b ~")!
+    var url = OldURL("http://example/?a=b ~")!
     // Query string is escaped with the "query" escape set.
     XCTAssertEqual(url.href, "http://example/?a=b%20~")
 

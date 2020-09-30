@@ -1,12 +1,12 @@
 import XCTest
 
-@testable import WebURL
+@testable import OldURL
 
 // TODO:
 // Test plan.
 //================
 // - hasNonURLCodePoints
-// - WebURLParser.Components.QueryParameters
+// - OldURLParser.Components.QueryParameters
 
 let testBasic_printResults = false
 
@@ -15,16 +15,16 @@ final class URLTests: XCTestCase {
   /// Tests a handful of basic situations demonstrating the major features of the parser.
   /// These tests are not meant to be exhaustive; for something more comprehensive, see the WHATWG constructor tests.
   ///
-  /// Note that these tests operate at the `WebURLParser.Components` level, not the `WebURL` object model-level.
+  /// Note that these tests operate at the `OldURLParser.Components` level, not the `WebURL` object model-level.
   ///
   func testBasic() {
 
-    let testData: [(String, WebURLParser.Components?)] = [
+    let testData: [(String, OldURLParser.Components?)] = [
 
       // Leading, trailing whitespace.
       (
         "        http://www.google.com   ",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .http,
           username: "", password: "", host: .domain("www.google.com"), port: nil,
           path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -33,7 +33,7 @@ final class URLTests: XCTestCase {
       // Non-ASCII characters in path.
       (
         "http://mail.yahoo.com/€uronews/",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .http,
           username: "", password: "", host: .domain("mail.yahoo.com"), port: nil,
           path: ["%E2%82%ACuronews", ""], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -42,7 +42,7 @@ final class URLTests: XCTestCase {
       // Spaces in credentials.
       (
         "ftp://%100myUsername:sec ret ))@ftp.someServer.de:21/file/thing/book.txt",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .ftp,
           username: "%100myUsername", password: "sec%20ret%20))", host: .domain("ftp.someserver.de"), port: nil,
           path: ["file", "thing", "book.txt"], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -51,7 +51,7 @@ final class URLTests: XCTestCase {
       // Windows drive letters.
       (
         "file:///C|/demo",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .file,
           username: "", password: "", host: .empty, port: nil,
           path: ["C:", "demo"], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -60,7 +60,7 @@ final class URLTests: XCTestCase {
       // '..' in path.
       (
         "http://www.test.com/../athing/anotherthing/.././something/",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .http,
           username: "", password: "", host: .domain("www.test.com"), port: nil,
           path: ["athing", "something", ""], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -69,7 +69,7 @@ final class URLTests: XCTestCase {
       // IPv6 address.
       (
         "https://[::ffff:192.168.0.1]/aThing",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .https,
           username: "", password: "", host: .ipv6Address(IPv6Address("::ffff:c0a8:1")!), port: nil,
           path: ["aThing"], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -78,7 +78,7 @@ final class URLTests: XCTestCase {
       // IPv4 address.
       (
         "https://192.168.0.1/aThing",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .https,
           username: "", password: "", host: .ipv4Address(IPv4Address("192.168.0.1")!), port: nil,
           path: ["aThing"], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -87,7 +87,7 @@ final class URLTests: XCTestCase {
       // Invalid IPv4 address (trailing non-hex-digit makes it a domain).
       (
         "https://0x3h",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .https,
           username: "", password: "", host: .domain("0x3h"), port: nil,
           path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -99,7 +99,7 @@ final class URLTests: XCTestCase {
       // Non-ASCII opaque host.
       (
         "tp://www.bücher.de",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .other("tp"),
           username: "", password: "", host: .opaque(OpaqueHost("www.b%C3%BCcher.de")!), port: nil,
           path: [], query: nil, fragment: nil, cannotBeABaseURL: false)
@@ -108,7 +108,7 @@ final class URLTests: XCTestCase {
       // Emoji opaque host.
       (
         "tp://👩‍👩‍👦‍👦️/family",
-        WebURLParser.Components(
+        OldURLParser.Components(
           scheme: .other("tp"),
           username: "", password: "",
           host: .opaque(
@@ -120,17 +120,17 @@ final class URLTests: XCTestCase {
       // ==== Everything below is XFAIL while host parsing is still being implemented ==== //
 
       //Non-ASCII domain.
-      // ("http://www.bücher.de", WebURLParser.Components(
+      // ("http://www.bücher.de", OldURLParser.Components(
       //     scheme: "http",
       //     authority: .init(username: nil, password: nil, host: .domain("www.xn--bcher-kva.de"), port: nil),
       //     path: [""], query: nil, fragment: nil, cannotBeABaseURL: false)
       // ),
     ]
 
-    func debugPrint(_ url: String, _ parsedComponents: WebURLParser.Components?) {
+    func debugPrint(_ url: String, _ parsedComponents: OldURLParser.Components?) {
       print("URL:\t|\(url)|")
       if let results = parsedComponents {
-        print("Results:\n\(WebURL(components: results).debugDescription)")
+        print("Results:\n\(OldURL(components: results).debugDescription)")
       } else {
         print("Results:\nFAIL")
       }
@@ -142,7 +142,7 @@ final class URLTests: XCTestCase {
       print("===================")
     }
     for (input, expectedComponents) in testData {
-      let results = WebURLParser.parse(input)
+      let results = OldURLParser.parse(input)
       XCTAssertEqual(results, expectedComponents, "Failed to correctly parse \(input)")
       if testBasic_printResults {
         debugPrint(input, results)

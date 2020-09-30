@@ -17,11 +17,12 @@ let package = Package(
     .target(name: "Algorithms"),
     .testTarget(name: "AlgorithmsTests", dependencies: ["Algorithms", "Checkit"]),
 
+    .target(name: "OldURL", dependencies: ["Algorithms"]),
     .target(name: "WebURL", dependencies: ["Algorithms"]),
     
     .target(name: "URLTestUtils", dependencies: ["WebURL"]),
-    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "URLTestUtils"]),
+    .testTarget(name: "WebURLTests", dependencies: ["OldURL","WebURL", "URLTestUtils"]),
     
-    .target(name: "URLBenchmarks", dependencies: ["WebURL"]),
+    .target(name: "URLBenchmarks", dependencies: ["WebURL", "OldURL"]),
   ]
 )
