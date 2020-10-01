@@ -1332,11 +1332,7 @@ extension URLScanner.UnprocessedMapping {
     // - For ascii hostnames: communicate known final length and lazily lowercase characters
     var hostnameString: String?
     if let hostname = hostnameRange.map({ inputString[$0] }) {
-      hostnameString = Array(hostname).withUnsafeBufferPointer { bytes -> String? in
-        return WebURL.Host
-          .parse(bytes, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)?
-          .serialized
-      }
+      hostnameString = WebURL.Host.parse(hostname, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)?.serialized
       guard hostnameString != nil else { return nil }
     }
     // 2.3: For file URLs whose paths begin with a Windows drive letter, discard the host.

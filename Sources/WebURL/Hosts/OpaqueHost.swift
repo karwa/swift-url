@@ -61,9 +61,9 @@ extension OpaqueHost {
     }
   }
 
-  public static func parse<Callback>(
-    _ input: UnsafeBufferPointer<UInt8>, callback: inout Callback
-  ) -> OpaqueHost? where Callback: URLParserCallback {
+  public static func parse<Bytes, Callback>(
+    _ input: Bytes, callback: inout Callback
+  ) -> OpaqueHost? where Bytes: Collection, Bytes.Element == UInt8, Callback: URLParserCallback {
     // This isn't technically in the spec algorithm, but opaque hosts are defined to be non-nil.
     guard input.isEmpty == false else {
       callback.validationError(opaqueHost: .emptyInput)

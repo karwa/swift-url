@@ -231,8 +231,8 @@ extension IPv6Address {
   /// - returns:
   ///     Either the successfully-parsed address, or `.none` if parsing fails.
   ///
-  public static func parse<Callback>(_ input: UnsafeBufferPointer<UInt8>, callback: inout Callback) -> Self?
-  where Callback: IPv6AddressParserCallback {
+  public static func parse<Bytes, Callback>(_ input: Bytes, callback: inout Callback) -> Self?
+  where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv6AddressParserCallback {
     guard input.isEmpty == false else {
       callback.validationError(ipv6: .emptyInput)
       return nil
@@ -313,11 +313,7 @@ extension IPv6Address {
             return nil
           }
 
-          guard
-            let value = IPv4Address.parse_simple(
-              UnsafeBufferPointer(rebasing: input[pieceStartIndex...]),
-              callback: &callback.wrappingIPv4Errors
-            )
+          guard let value = IPv4Address.parse_simple(input[pieceStartIndex...], callback: &callback.wrappingIPv4Errors)
           else {
             return nil
           }
@@ -577,9 +573,9 @@ extension IPv4Address {
   ///     A result object containing either the successfully-parsed address, or a failure flag communicating whether parsing
   ///     failed because the string was not in the correct format.
   ///
-  public static func parse<Callback>(
-    _ input: UnsafeBufferPointer<UInt8>, callback: inout Callback
-  ) -> ParseResult where Callback: IPv4ParserCallback {
+  public static func parse<Bytes, Callback>(
+    _ input: Bytes, callback: inout Callback
+  ) -> ParseResult where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4ParserCallback {
     guard input.isEmpty == false else {
       callback.validationError(ipv4: .emptyInput)
       return .failure
@@ -720,9 +716,9 @@ extension IPv4Address {
   /// - returns:
   ///     Either the successfully-parsed address, or `.none` if parsing failed.
   ///
-  public static func parse_simple<Callback>(
-    _ input: UnsafeBufferPointer<UInt8>, callback: inout Callback
-  ) -> Self? where Callback: IPv4ParserCallback {
+  public static func parse_simple<Bytes, Callback>(
+    _ input: Bytes, callback: inout Callback
+  ) -> Self? where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4ParserCallback {
 
     var result = UInt32(0)
     var idx = input.startIndex

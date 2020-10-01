@@ -137,9 +137,9 @@ extension WebURL.Host {
   // TODO: If we were allowed to mutate the input (which the URL parser could certainly allow),
   //       we could percent-decode it in-place.
 
-  public static func parse<Callback>(
-    _ input: UnsafeBufferPointer<UInt8>, isNotSpecial: Bool = false, callback: inout Callback
-  ) -> Self? where Callback: URLParserCallback {
+  public static func parse<Bytes, Callback>(
+    _ input: Bytes, isNotSpecial: Bool = false, callback: inout Callback
+  ) -> Self? where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Callback: URLParserCallback {
 
     guard input.isEmpty == false else {
       return .empty
@@ -149,7 +149,7 @@ extension WebURL.Host {
         callback.validationError(hostParser: .expectedClosingSquareBracket)
         return nil
       }
-      let slice = UnsafeBufferPointer(rebasing: input.dropFirst().dropLast())
+      let slice = input.dropFirst().dropLast()
       return IPv6Address.parse(slice, callback: &callback).map { .ipv6Address($0) }
     }
 
