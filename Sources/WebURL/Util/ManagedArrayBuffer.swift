@@ -57,10 +57,16 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
       precondition(buffer.header.count <= buffer.header.capacity)
       return unsafeDowncast(buffer, to: Self.self)
     }
-    
+
     deinit {
-      _ = withUnsafeMutablePointers { headerPtr, elemsPtr in
-        elemsPtr.deinitialize(count: headerPtr.pointee.count)
+      // Swift does not specialize generic classes (often? maybe? not sure, but it's flaky).
+      // That means this deinit will never be eliminated, and even querying `.count`
+      // can be very expensive.
+      // https://bugs.swift.org/browse/SR-13221
+      if Swift._isPOD(Element.self) == false {
+        _ = withUnsafeMutablePointers { headerPtr, elemsPtr in
+          elemsPtr.deinitialize(count: headerPtr.pointee.count)
+        }
       }
     }
   }
