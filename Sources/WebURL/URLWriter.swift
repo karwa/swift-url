@@ -52,10 +52,10 @@ protocol URLWriter {
   /// If called, this must always be the immediate successor to either `writeUsernameContents` or `writePasswordContents`.
   mutating func writeCredentialsTerminator()
 
-  /// Appends the given bytes to storage.
+  /// Appends the bytes given by `hostnameWriter`.
   /// The content must already be percent-encoded/IDNA-transformed and not include any separators.
   /// If called, this must always have been preceded by a call to `writeAuthorityHeader`.
-  mutating func writeHostname<T>(_ hostname: T) where T: RandomAccessCollection, T.Element == UInt8
+  mutating func writeHostname<T>(_ hostnameWriter: (WriterFunc<T>) -> Void) where T: Collection, T.Element == UInt8
 
   /// Appends the port separator character (`:`), followed by the textual representation of the given port number to storage.
   /// If called, this must always be the immediate successor to `writeHostname`.
@@ -138,8 +138,10 @@ struct URLMetricsCollector: URLWriter {
     requiredCapacity += 1
   }
 
-  mutating func writeHostname<T>(_ hostname: T) where T: RandomAccessCollection, T.Element == UInt8 {
-    requiredCapacity += hostname.count
+  mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+    hostnameWriter {
+      requiredCapacity += $0.count
+    }
   }
 
   mutating func writePort(_ port: UInt16) {

@@ -88,7 +88,7 @@ extension WebURL {
 /// The stored URL must be of the format:
 ///  [scheme + ":"] + ["//"]? + [username]? + [":" + password] + ["@"]? + [hostname]? + [":" + port]? + ["/" + path]? + ["?" + query]? + ["#" + fragment]?
 ///
-struct GenericURLHeader<SizeType: BinaryInteger>: ManagedBufferHeader {
+struct GenericURLHeader<SizeType: FixedWidthInteger>: ManagedBufferHeader {
   var _count: SizeType = 0
   var _capacity: SizeType = 0
 
@@ -123,7 +123,7 @@ struct GenericURLHeader<SizeType: BinaryInteger>: ManagedBufferHeader {
   }
 
   var schemeEnd: SizeType {
-    schemeStart + schemeLength
+    schemeStart &+ schemeLength
   }
 
   // Authority may or may not be present.
@@ -136,21 +136,21 @@ struct GenericURLHeader<SizeType: BinaryInteger>: ManagedBufferHeader {
   // The output of the URL parser preserves that, so we need to factor that in to our component offset calculations.
 
   var authorityStart: SizeType {
-    return schemeEnd + (components.contains(.authority) ? 2 : 0 /* // */)
+    return schemeEnd &+ (components.contains(.authority) ? 2 : 0 /* // */)
   }
 
   var usernameStart: SizeType {
     return authorityStart
   }
   var passwordStart: SizeType {
-    return usernameStart + usernameLength
+    return usernameStart &+ usernameLength
   }
   var hostnameStart: SizeType {
-    return passwordStart + passwordLength
+    return passwordStart &+ passwordLength
       + (usernameLength == 0 && passwordLength == 0 ? 0 : 1) /* @ */
   }
   var portStart: SizeType {
-    return hostnameStart + hostnameLength
+    return hostnameStart &+ hostnameLength
   }
 
   // Components with leading separators.
@@ -166,28 +166,28 @@ struct GenericURLHeader<SizeType: BinaryInteger>: ManagedBufferHeader {
   /// Any trailing components (path, query, fragment) start from here.
   ///
   var pathStart: SizeType {
-    return components.contains(.authority) ? (portStart + portLength) : schemeEnd
+    return components.contains(.authority) ? (portStart &+ portLength) : schemeEnd
   }
 
   /// Returns the position of the leading '?' in the query-string, if one is present. Otherwise, returns the position after the path.
   /// All query strings start with a '?'.
   ///
   var queryStart: SizeType {
-    return pathStart + pathLength
+    return pathStart &+ pathLength
   }
 
   /// Returns the position of the leading '#' in the fragment, if one is present. Otherwise, returns the position after the query-string.
   /// All fragments start with a '#'.
   ///
   var fragmentStart: SizeType {
-    return queryStart + queryLength
+    return queryStart &+ queryLength
   }
 
   /// Returns the range of the entire authority string, if one is present.
   ///
   var rangeOfAuthorityString: Range<SizeType>? {
     guard components.contains(.authority) else { return nil }
-    return authorityStart..<pathStart
+    return Range(uncheckedBounds: (authorityStart, pathStart))
   }
 
   func rangeOfComponent(_ component: WebURL.Component) -> Range<SizeType>? {
@@ -238,11 +238,11 @@ struct GenericURLHeader<SizeType: BinaryInteger>: ManagedBufferHeader {
       start = fragmentStart
       length = fragmentLength
     }
-    return start..<(start + length)
+    return Range(uncheckedBounds: (start, start &+ length))
   }
 }
 
-protocol HasGenericURLHeaderVariant: BinaryInteger {
+protocol HasGenericURLHeaderVariant: FixedWidthInteger {
 
   /// Wraps the given `buffer` in the appropriate `WebURL.Variant`.
   ///
@@ -274,6 +274,10 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
     return WebURL(variant: SizeType.makeVariant(wrapping: storage))
   }
 
+  // Note: use of wrapping arithmetic is safe here because are writing to a fixed-size buffer,
+  //       meaning the count, capacity, and the lengths of all components must fit in `SizeType`.
+  //       Additionally, 'writeURLToNewStorage' checks that the final count is equal to the expected length,
+  //       so any wrapping will be detected before handing the written storage over.
   struct Writer: URLWriter {
     var header: GenericURLHeader
     var buffer: UnsafeMutableBufferPointer<UInt8>
@@ -287,19 +291,19 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
     private mutating func writeByte(_ byte: UInt8) {
       buffer.baseAddress.unsafelyUnwrapped.pointee = byte
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(1))
-      header.count += 1
+      header.count &+= 1
     }
 
     private mutating func writeByte(_ byte: UInt8, count: Int) {
       buffer.baseAddress.unsafelyUnwrapped.initialize(repeating: byte, count: count)
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(count))
-      header.count += count
+      header.count &+= count
     }
 
     private mutating func writeBytes<T>(_ bytes: T) where T: Collection, T.Element == UInt8 {
       let count = buffer.initialize(from: bytes).1
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(count))
-      header.count += count
+      header.count &+= count
     }
 
     mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
@@ -310,7 +314,7 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
     mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8 {
       writeBytes(schemeBytes)
       writeByte(ASCII.colon.codePoint)
-      header.schemeLength = SizeType(countIfKnown.map { $0 + 1 } ?? header.count)
+      header.schemeLength = SizeType(countIfKnown.map { $0 &+ 1 } ?? header.count)
       header.components = .scheme
     }
 
@@ -323,7 +327,7 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
     where T: RandomAccessCollection, T.Element == UInt8 {
       usernameWriter { piece in
         writeBytes(piece)
-        header.usernameLength += SizeType(piece.count)
+        header.usernameLength &+= SizeType(piece.count)
       }
     }
 
@@ -333,17 +337,19 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       header.passwordLength = 1
       passwordWriter { piece in
         writeBytes(piece)
-        header.passwordLength += SizeType(piece.count)
+        header.passwordLength &+= SizeType(piece.count)
       }
     }
 
     mutating func writeCredentialsTerminator() {
       writeByte(ASCII.commercialAt.codePoint)
     }
-
-    mutating func writeHostname<T>(_ hostname: T) where T: RandomAccessCollection, T.Element == UInt8 {
-      writeBytes(hostname)
-      header.hostnameLength = SizeType(hostname.count)
+    
+    mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+      hostnameWriter {
+        writeBytes($0)
+        header.hostnameLength &+= SizeType($0.count)
+      }
     }
 
     mutating func writePort(_ port: UInt16) {
@@ -351,7 +357,7 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       var portString = String(port)
       portString.withUTF8 {
         writeBytes($0)
-        header.portLength = SizeType(1 + $0.count)
+        header.portLength = SizeType(1 &+ $0.count)
       }
     }
 
@@ -371,7 +377,7 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       header.components.insert(.path)
       pathWriter {
         writeBytes($0)
-        header.pathLength += SizeType($0.count)
+        header.pathLength &+= SizeType($0.count)
       }
     }
 
@@ -381,7 +387,7 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       let bytesWritten = writer(UnsafeMutableBufferPointer(rebasing: buffer.prefix(length)))
       assert(bytesWritten == length)
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(length))
-      header.count += length
+      header.count &+= length
 
       header.pathLength = SizeType(length)
     }
@@ -393,7 +399,7 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       header.queryLength = 1
       queryWriter {
         writeBytes($0)
-        header.queryLength += SizeType($0.count)
+        header.queryLength &+= SizeType($0.count)
       }
     }
 
@@ -404,7 +410,7 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       header.fragmentLength = 1
       fragmentWriter {
         writeBytes($0)
-        header.fragmentLength += SizeType($0.count)
+        header.fragmentLength &+= SizeType($0.count)
       }
     }
   }
