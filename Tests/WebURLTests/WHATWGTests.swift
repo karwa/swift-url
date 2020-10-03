@@ -507,7 +507,7 @@ extension WHATWGTests {
     case "hash":
       return \.fragment
     case "host":
-      return \.host
+      return \.hostKind
     case "pathname":
       return \.pathname
     case "password":

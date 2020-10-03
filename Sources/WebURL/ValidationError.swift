@@ -21,15 +21,6 @@ extension URLParserCallback {
     let wrapped = ValidationError.AnyHostParserError.ipv6AddressError(error)
     validationError(.hostParserError(wrapped))
   }
-  // Other host-parser errors.
-  public mutating func validationError(hostParser error: WebURL.Host.ValidationError) {
-    let wrapped = ValidationError.AnyHostParserError.hostParserError(error)
-    validationError(.hostParserError(wrapped))
-  }
-  public mutating func validationError(opaqueHost error: OpaqueHost.ValidationError) {
-    let wrapped = ValidationError.AnyHostParserError.opaqueHostError(error)
-    validationError(.hostParserError(wrapped))
-  }
 }
 extension ValidationError {
   var ipv6Error: IPv6Address.ValidationError? {
@@ -72,18 +63,12 @@ public struct ValidationError: Equatable {
   enum AnyHostParserError: Equatable, CustomStringConvertible {
     case ipv4AddressError(IPv4Address.ValidationError)
     case ipv6AddressError(IPv6Address.ValidationError)
-    case opaqueHostError(OpaqueHost.ValidationError)
-    case hostParserError(WebURL.Host.ValidationError)
 
     var description: String {
       switch self {
       case .ipv4AddressError(let error):
         return error.description
       case .ipv6AddressError(let error):
-        return error.description
-      case .opaqueHostError(let error):
-        return error.description
-      case .hostParserError(let error):
         return error.description
       }
     }
@@ -118,12 +103,7 @@ extension ValidationError: CustomStringConvertible {
   internal static var unexpectedEmptyPath:                Self { Self(code: 19) }
   internal static var invalidURLCodePoint:                Self { Self(code: 20) }
   internal static var unescapedPercentSign:               Self { Self(code: 21) }
-
-  internal static var hostParserError_errorCode: UInt8 = 22
-  internal static func hostParserError(_ err: AnyHostParserError) -> Self {
-      Self(code: hostParserError_errorCode, hostParserError: err)
-  }
-  // TODO: host-related errors. Map these to our existing host-parser errors.
+  // FIXME: lacking description.
   internal static var unclosedIPv6Address:                Self { Self(code: 22) }
   internal static var domainToASCIIFailure:               Self { Self(code: 23) }
   internal static var domainToASCIIEmptyDomainFailure:    Self { Self(code: 24) }
@@ -131,6 +111,11 @@ extension ValidationError: CustomStringConvertible {
   // This one is not in the spec.
   internal static var _baseURLRequired:                   Self { Self(code: 99) }
   internal static var _invalidUTF8:                       Self { Self(code: 98) }
+  // Wrapped errors from the IPAddress parsers.
+  internal static var hostParserError_errorCode: UInt8 = 97
+  internal static func hostParserError(_ err: AnyHostParserError) -> Self {
+      Self(code: hostParserError_errorCode, hostParserError: err)
+  }
 
   public var description: String {
     switch self {

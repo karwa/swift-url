@@ -105,12 +105,12 @@ extension ParsedURLString {
     let schemeRange: Range<InputString.Index>?
     let usernameRange: Range<InputString.Index>?
     let passwordRange: Range<InputString.Index>?
-
+    let hostnameRange: Range<InputString.Index>?
     let pathRange: Range<InputString.Index>?
     let queryRange: Range<InputString.Index>?
     let fragmentRange: Range<InputString.Index>?
 
-    let hostnameString: String?
+    let hostKind: ParsedHost?
     let port: UInt16?
 
     let cannotBeABaseURL: Bool
@@ -144,7 +144,7 @@ extension ParsedURLString {
       }
 
       // 3: Write authority.
-      if var hostnameString = hostnameString {
+      if let hostname = hostnameRange {
         writer.writeAuthorityHeader()
 
         var hasCredentials = false
@@ -171,9 +171,9 @@ extension ParsedURLString {
         if hasCredentials {
           writer.writeCredentialsTerminator()
         }
-        hostnameString.withUTF8 {
-          writer.writeHostname($0)
-        }
+        
+        hostKind!.write(bytes: inputString[hostname], using: &writer)
+        
         if let port = port, port != schemeKind.defaultPort {
           writer.writePort(port)
         }
@@ -1325,46 +1325,51 @@ extension URLScanner.UnprocessedMapping {
       port = parsedInteger
     }
     // 2.2 Process hostname.
-    // Even though it may be discarded later by certain file URLs, we still need to do this now to reject invalid hostnames.
-    // FIXME: Improve this in the following ways:
-    // - Remove the copying to Array
-    // - For non-special schemes: calculate the final length and lazily percent-encode in to the new storage.
-    // - For ascii hostnames: communicate known final length and lazily lowercase characters
-    var hostnameString: String?
+    // Even though it may be discarded later by certain file URLs, we still need to do this now
+    // to reject invalid hostnames.
+    var hostKind: ParsedHost?
     if let hostname = hostnameRange.map({ inputString[$0] }) {
-      hostnameString = WebURL.Host.parse(hostname, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)?.serialized
-      guard hostnameString != nil else { return nil }
+      hostKind = ParsedHost.parse(hostname, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)
+      guard hostKind != nil else { return nil }
     }
-    // 2.3: For file URLs whose paths begin with a Windows drive letter, discard the host.
-    if schemeKind == .file, var pathContents = pathRange.map({ inputString[$0] }) {
-      // The path may or may not be prefixed with a leading slash.
-      // Strip it so we can detect the Windows drive letter.
-      if let firstChar = pathContents.first, ASCII(firstChar) == .forwardSlash || ASCII(firstChar) == .backslash {
-        pathContents = pathContents.dropFirst()
-      }
-      if URLStringUtils.hasWindowsDriveLetterPrefix(pathContents) {
-        if !(hostnameString == nil || hostnameString?.isEmpty == true) {
-          callback.validationError(.unexpectedHostFileScheme)
+    // 2.3 File URLs have some quirks.
+    if schemeKind == .file {
+      // 2.3.1: If the path begins with a Windows drive letter, discard the authority (incl. base URL authority).
+      if var pathContents = pathRange.map({ inputString[$0] }) {
+        // Strip the leading slash if present.
+        if let firstChar = pathContents.first, ASCII(firstChar) == .forwardSlash || ASCII(firstChar) == .backslash {
+          pathContents = pathContents.dropFirst()
         }
-        hostnameString = nil  // file URLs turn 'nil' in to an implicit, empty host.
-        componentsToCopyFromBase.remove(.authority)
+        if URLStringUtils.hasWindowsDriveLetterPrefix(pathContents) {
+          switch hostKind {
+          case .none, .some(.empty): break
+          default: callback.validationError(.unexpectedHostFileScheme)
+          }
+          // file URLs are special, so they get an implicit, empty authority when writing.
+          hostKind = nil
+          hostnameRange = nil
+          componentsToCopyFromBase.remove(.authority)
+        }
+      }
+      // 2.3.2: Replace 'localhost' with an empty/nil host.
+      // file URLs are special, so they get an implicit, empty authority when writing.
+      if let hostnameContents = hostnameRange.map({ inputString[$0] }),
+         hostnameContents.elementsEqual("localhost".utf8) {
+        hostKind = nil
+        hostnameRange = nil
       }
     }
-    // 2.4: For file URLs, replace 'localhost' with an empty/nil host.
-    if schemeKind == .file && hostnameString == "localhost" {
-      hostnameString = nil  // file URLs turn 'nil' in to an implicit, empty host.
-    }
-
+    
     // Step 3: Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
-
     return ParsedURLString<InputString>.ProcessedMapping(
       schemeRange: schemeRange,
       usernameRange: usernameRange,
       passwordRange: passwordRange,
+      hostnameRange: hostnameRange,
       pathRange: pathRange,
       queryRange: queryRange,
       fragmentRange: fragmentRange,
-      hostnameString: hostnameString,
+      hostKind: hostKind,
       port: port,
       cannotBeABaseURL: u_mapping.cannotBeABaseURL,
       componentsToCopyFromBase: componentsToCopyFromBase,
