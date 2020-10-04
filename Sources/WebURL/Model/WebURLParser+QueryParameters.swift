@@ -19,15 +19,22 @@ extension WebURL.QueryParameters {
       let name: String
       let value: String
       if let separatorIdx = byteSequence.firstIndex(of: ASCII.equalSign.codePoint) {
-        name = PercentEscaping.decodeFormEncodedString(
-          utf8: byteSequence[Range(uncheckedBounds: (byteSequence.startIndex, separatorIdx))]
+        name = String(
+          decoding: byteSequence[Range(uncheckedBounds: (byteSequence.startIndex, separatorIdx))]
+            .lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self),
+          as: UTF8.self
         )
         let valueStartIdx = byteSequence.index(after: separatorIdx)
-        value = PercentEscaping.decodeFormEncodedString(
-          utf8: byteSequence[Range(uncheckedBounds: (valueStartIdx, byteSequence.endIndex))]
+        value = String(
+          decoding: byteSequence[Range(uncheckedBounds: (valueStartIdx, byteSequence.endIndex))]
+            .lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self),
+          as: UTF8.self
         )
       } else {
-        name = PercentEscaping.decodeFormEncodedString(utf8: byteSequence)
+        name = String(
+          decoding: byteSequence.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self),
+          as: UTF8.self
+        )
         value = ""
       }
       items.append((name, value))
@@ -52,9 +59,13 @@ extension WebURL.QueryParameters {
   static func serialiseQueryString<S>(_ queryComponents: S) -> String where S: Sequence, S.Element == (String, String) {
     var output = ""
     for (name, value) in queryComponents {
-      PercentEscaping.encodeIterativelyAsStringForForm(bytes: name.utf8) { output.append($0) }
+      PercentEncoding.encode(bytes: name.utf8, using: URLEncodeSet.FormEncoded.self) {
+        output.append(String(decoding: $0, as: UTF8.self))
+      }
       output.append("=")
-      PercentEscaping.encodeIterativelyAsStringForForm(bytes: value.utf8) { output.append($0) }
+      PercentEncoding.encode(bytes: value.utf8, using: URLEncodeSet.FormEncoded.self) {
+        output.append(String(decoding: $0, as: UTF8.self))
+      }
       output.append("&")
     }
     if !output.isEmpty { output.removeLast() }

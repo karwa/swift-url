@@ -1,4 +1,3 @@
-
 enum ParsedHost: Equatable {
   case domain
   case ipv4Address(IPv4Address)
@@ -31,7 +30,7 @@ extension ParsedHost {
       return validateOpaqueHostname(input, callback: &callback) ? .opaque : nil
     }
 
-    let domain = LazilyPercentDecoded(base: input)
+    let domain = input.lazy.percentDecoded
     // TODO:
     //
     // 6. Let asciiDomain be the result of running domain to ASCII on domain.
@@ -50,8 +49,8 @@ extension ParsedHost {
         return nil
       }
     }
-    let asciiDomain = domain//LowercaseASCIITransformer(base: domain)
-    
+    let asciiDomain = domain  //LowercaseASCIITransformer(base: domain)
+
     var ipv4Error = LastValidationError()
     switch IPv4Address.parse(asciiDomain, callback: &ipv4Error) {
     case .success(let address):
@@ -64,7 +63,7 @@ extension ParsedHost {
     }
     return .domain
   }
-  
+
   static func validateOpaqueHostname<Bytes, Callback>(
     _ input: Bytes, callback: inout Callback
   ) -> Bool where Bytes: Collection, Bytes.Element == UInt8, Callback: URLParserCallback {
@@ -87,21 +86,21 @@ extension ParsedHost {
     }
     return true
   }
-  
+
   func write<Bytes, Writer>(bytes: Bytes, using writer: inout Writer)
   where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Writer: URLWriter {
     switch self {
     case .empty:
-      break // Nothing to do.
+      break  // Nothing to do.
     case .domain:
       // This is our cheap substitute for IDNA. Only valid for ASCII domains.
       assert(bytes.isEmpty == false)
-      let transformed = LowercaseASCIITransformer(base: LazilyPercentDecoded(base: bytes))
+      let transformed = LowercaseASCIITransformer(base: bytes.lazy.percentDecoded)
       writer.writeHostname { $0(transformed) }
     case .opaque:
       assert(bytes.isEmpty == false)
       writer.writeHostname { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-        PercentEscaping.chunkedEncode(bytes, escapeSet: URLEscapeSets.C0.self) { piece in
+        PercentEncoding.encode(bytes: bytes, using: URLEncodeSet.C0.self) { piece in
           writePiece(piece)
         }
       }

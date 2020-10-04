@@ -60,11 +60,12 @@ struct PathBufferLengthCalculator: PathComponentVisitor {
     _ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     length += 1
-    PercentEscaping.encodeReverseIterativelyAsBuffer(
+    PercentEncoding.encodeFromBack(
       bytes: pathComponent,
-      escapeSet: .url_path,
-      processChunk: { piece in length += piece.count }
-    )
+      using: URLEncodeSet.Path.self
+    ) { piece in
+      length += piece.count
+    }
   }
 
   fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
@@ -121,15 +122,15 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
       prependSlash()
       return
     }
-    PercentEscaping.encodeReverseIterativelyAsBuffer(
+    PercentEncoding.encodeFromBack(
       bytes: pathComponent,
-      escapeSet: .url_path,
-      processChunk: { piece in
-        let newFront = buffer.index(front, offsetBy: -1 * piece.count)
-        buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront)
-          .initialize(from: piece.baseAddress!, count: piece.count)
-        front = newFront
-      })
+      using: URLEncodeSet.Path.self
+    ) { piece in
+      let newFront = buffer.index(front, offsetBy: -1 * piece.count)
+      buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront)
+        .initialize(from: piece.baseAddress!, count: piece.count)
+      front = newFront
+    }
     prependSlash()
   }
 

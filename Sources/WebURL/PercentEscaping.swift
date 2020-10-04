@@ -1,578 +1,388 @@
-// TODO: Think about exposing this as a public API.
-// The issue with round-tripping Strings like "%100" (the URL standard version doesn't round-trip) makes it a bit awkward.
+enum PercentEncoding {}
 
-enum PercentEscaping {
-  struct EscapeSet {
-    var shouldEscape: (ASCII) -> Bool
+/// A set of characters which should be transformed or substituted during a percent-encoding transformation.
+///
+/// - seealso: `PercentEncoding`
+///
+protocol PercentEncodeSet {
+
+  /// Whether or not the given ASCII `character` should be percent-encoded.
+  ///
+  static func shouldEscape(character: ASCII) -> Bool
+
+  /// An optional function which allows the encode-set to replace a non-percent-encoded character with another character.
+  ///
+  /// For example, the `application/x-www-form-urlencoded` encoding does not escape the space character, and instead replaces it with a "+".
+  /// Conformers must also implement the reverse substitution function, `unsubstitute(character:)`.
+  ///
+  static func substitute(for character: ASCII) -> ASCII
+
+  /// An optional function which recovers a character from its substituted value.
+  ///
+  /// For example, the `application/x-www-form-urlencoded` encoding does not escape the space character, and instead replaces it with a "+".
+  /// This function would thus return a space in place of a "+", so the original character can be recovered.
+  /// Conformers must also implement the substitution function, `substitute(for:)`.
+  ///
+  static func unsubstitute(character: ASCII) -> ASCII
+}
+
+extension PercentEncodeSet {
+
+  static func substitute(for character: ASCII) -> ASCII {
+    return character
+  }
+  static func unsubstitute(character: ASCII) -> ASCII {
+    return character
   }
 }
 
-// Encoding.
-// The encoding interface contains 2 sets of entry-points:
-//
-// 1. Iteratively encoding an arbitrary-length sequence of bytes, into a small buffer or "smol" String,
-//    with callbacks to process each chunk.
-// 2. Encoding a single UTF8-encoded code-point, again in to a small buffer or "smol" String.
-//    There is a callback (due to the buffer hopefully being stack-allocated), but it is only called once.
-//
-// Each of these entry-points has a buffer and String version, in case it makes sense to defer the String
-// validation overhead.
+// MARK: - Encoding.
 
-extension PercentEscaping {
+// TODO: Investigate a lazy collection, whose Element is an enum containing either 1 or 3 UInt8s.
 
-  /// Iteratively encodes the given byte sequence as a buffer of ASCII bytes, by means of the "percent-escaping" transformation.
-  /// A callback is invoked periodically to process the results.
+extension PercentEncoding {
+
+  /// Encodes the given byte sequence as an ASCII string, by means of the "percent-encoding" transformation.
+  /// The bytes are encoded in to a small buffer which is given to the provided closure to process.
   ///
-  /// - Bytes which are not valid ASCII characters are always transformed as the sequence "%ZZ",
+  /// - Bytes which are not valid ASCII characters are _always_ encoded as the sequence "%ZZ",
   ///   where ZZ is the byte's numerical value as a hexadecimal string.
-  /// - Bytes which are valid ASCII characters are also transformed if the predicate returns `true`.
+  /// - Bytes which are valid ASCII characters are also encoded if included in the given `EncodeSet`.
+  /// - Otherwise, the `EncodeSet` is also able to substitute ASCII characters.
   ///
-  /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
-  ///
-  /// -  important: 	This algorithm does not round-trip for arbitrary byte sequences unless `escapeSet` includes
-  /// 				the `ASCII.percentSign` character itself. If not, sequences which happen to contain a valid escape string already
-  ///                 will be not be escaped, and the receiver, expecting an additional level of escaping, will over-unescape the resulting String.
+  /// -  important:	If the "%" character is not in the encode-set, this function will not automatically percent-encode it. This means that existing
+  ///             	percent-encoded sequences will be passed-through, rather than being double-encoded. If the byte string is truly an arbitrary
+  ///             	sequence of bytes which may by coincidence contain the same bytes as a percent-encoded sequence, the "%" character
+  ///               must be in the encode-set to preserve the original contents.
   ///
   /// - parameters:
   ///     - bytes:        The sequence of bytes to encode.
-  ///     - escapeSet:    The predicate which decides if a particular ASCII character should be escaped or not.
-  ///     - processChunk: A callback which processes a chunk of escaped data. Each chunk is guaranteed to be a valid ASCII String, containing
-  ///                     only the % character, upper-case ASCII hex digits, and characters allowed by the escape set.
+  ///     - encodeSet:    The predicate which decides if a particular ASCII character should be escaped or not.
+  ///     - processChunk: A callback which processes a chunk of encoded data. Each chunk is guaranteed to be a valid ASCII String, containing
+  ///                     only the % character, upper-case ASCII hex digits, and characters allowed by the encode set. The given pointer, and any
+  ///                     derived pointers to the same region of memory, must not escape the closure.
   ///
-  static func encodeIterativelyAsBuffer<S>(
-    bytes: S, escapeSet: EscapeSet,
-    processChunk: (UnsafeMutableBufferPointer<UInt8>) -> Void
-  ) where S: Sequence, S.Element == UInt8 {
-    withSmallStringSizedStackBuffer { buffer in
+  static func encode<Bytes, EncodeSet: PercentEncodeSet>(
+    bytes: Bytes,
+    using encodeSet: EncodeSet.Type,
+    _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
+  ) where Bytes: Sequence, Bytes.Element == UInt8 {
+
+    withSmallStringSizedStackBuffer { chunkBuffer in
+      let chunkSize = chunkBuffer.count
       var i = 0
       for byte in bytes {
-        // If the buffer can't hold an escaped byte, flush it.
-        if i &+ 3 > buffer.count {
-          processChunk(UnsafeMutableBufferPointer(rebasing: buffer[..<i]))
+        // Ensure the buffer has at least enough space for an escaped byte (%XX).
+        if i &+ 3 > chunkSize {
+          processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress, count: i))
           i = 0
         }
-        if let asciiChar = ASCII(byte), escapeSet.shouldEscape(asciiChar) == false {
-          buffer[i] = byte
+        if let asciiChar = ASCII(byte), encodeSet.shouldEscape(character: asciiChar) == false {
+          chunkBuffer[i] = encodeSet.substitute(for: asciiChar).codePoint
           i &+= 1
-        } else {
-          _escape(byte: byte, into: UnsafeMutableBufferPointer(rebasing: buffer[i...]))
-          i &+= 3
+          continue
         }
-      }
-      // Flush the buffer.
-      processChunk(UnsafeMutableBufferPointer(rebasing: buffer[..<i]))
-    }
-  }
-  
-  /// A version of `encodeIterativelyAsBuffer` which encodes the given bytes in a sliding window starting at the end and iterating towards the beginning.
-  /// Within a window, the bytes are given in their original order.
-  ///
-  static func encodeReverseIterativelyAsBuffer<S>(
-    bytes: S, escapeSet: EscapeSet,
-    processChunk: (UnsafeMutableBufferPointer<UInt8>) -> Void
-  ) where S: BidirectionalCollection, S.Element == UInt8 {
-    withSmallStringSizedStackBuffer { buffer in
-      var i = buffer.endIndex
-      for byte in bytes.reversed() {
-        // If the buffer can't hold an escaped byte, flush it.
-        if i &- 3 < 0 {
-          processChunk(UnsafeMutableBufferPointer(rebasing: buffer[i...]))
-          i = buffer.endIndex
-        }
-        if let asciiChar = ASCII(byte), escapeSet.shouldEscape(asciiChar) == false {
-          i &-= 1
-          buffer[i] = byte
-        } else {
-          i &-= 3
-          _escape(byte: byte, into: UnsafeMutableBufferPointer(rebasing: buffer[i...]))
-        }
-      }
-      // Flush the buffer.
-      processChunk(UnsafeMutableBufferPointer(rebasing: buffer[i...]))
-    }
-  }
-
-  /// See `encodeIterativelyAsBuffer<C>(bytes: escapeSet: processChunk:)`
-  ///
-  static func encodeIterativelyAsString<S>(
-    bytes: S, escapeSet: EscapeSet,
-    processChunk: (String) -> Void
-  ) where S: Sequence, S.Element == UInt8 {
-    encodeIterativelyAsBuffer(
-      bytes: bytes, escapeSet: escapeSet,
-      processChunk: { buffer in
-        processChunk(String(decoding: buffer, as: UTF8.self))
-      })
-  }
-
-  /// Encodes a single UTF8-encode codepoint as a buffer of ASCII bytes, by means of the "percent-escaping" transformation.
-  /// A callback is invoked once to process the result.
-  ///
-  /// - Code-points which are not ASCII characters are always transformed as the sequence "%ZZ%ZZ%ZZ...",
-  ///   where ZZ are the UTF8 bytes' numerical values as a hexadecimal string.
-  /// - Bytes which are valid ASCII characters are also transformed if the predicate returns `true`.
-  ///
-  /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
-  ///
-  /// -  important:    This algorithm does not encode the `ASCII.percentSign` character itself,
-  ///                  unless it is explicitly told to do so by the escape set.
-  /// - precondition: `singleUTF8CodePoint` may not be empty, nor may it contain more than 4 bytes.
-  ///
-  /// - parameters:
-  ///     - singleUTF8CodePoint:  The single UTF8-encoded codepoint to transform. May not be larger than 4 bytes.
-  ///     - escapeSet:            The predicate which decides if a particular ASCII character should be escaped or not.
-  ///     - processResult:        A callback which processes the escaped data. It will only be invoked once.
-  ///                             The buffer is guaranteed to be a valid ASCII String, containing only the % character,
-  ///                             upper-case ASCII hex digits, and characters allowed by the escape set.
-  ///
-  static func encodeAsBuffer<C>(
-    singleUTF8CodePoint: C, escapeSet: EscapeSet,
-    processResult: (UnsafeBufferPointer<UInt8>) -> Void
-  ) where C: Collection, C.Element == UInt8 {
-    precondition((1...4) ~= singleUTF8CodePoint.count, "Cannot encode more or less than a single codepoint")
-    var result: (UInt16, UInt64) = (0, 0)  // 4 UTF8 bytes * 3 ASCII chars/byte = 12 bytes.
-    withUnsafeMutableBytes(of: &result) { rawbuffer in
-      let buffer = rawbuffer.bindMemory(to: UInt8.self)
-      var i = 0
-      for byte in singleUTF8CodePoint {
-        if let asciiChar = ASCII(byte), escapeSet.shouldEscape(asciiChar) == false {
-          buffer[0] = byte
-          processResult(UnsafeBufferPointer(rebasing: buffer[0..<1]))
-          return  // An ASCII byte means the code-point is over.
-        }
-        _escape(byte: byte, into: UnsafeMutableBufferPointer(rebasing: buffer[i...]))
+        _escape(
+          byte: byte,
+          into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: 3)
+        )
         i &+= 3
       }
-      processResult(UnsafeBufferPointer(rebasing: buffer[..<i]))
+      // Flush the buffer.
+      processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress, count: i))
     }
   }
 
-  /// See `encodeAsBuffer<C>(singleUTF8CodePoint: escapeSet: processChunk:)`
+  /// Encodes the given byte sequence as an ASCII string, by means of the "percent-encoding" transformation.
+  /// The bytes are encoded in to a small buffer which is given to the provided closure to process.
   ///
-  static func encodeAsString<C>(
-    singleUTF8CodePoint: C, escapeSet: EscapeSet,
-    processResult: (String) -> Void
-  ) where C: Collection, C.Element == UInt8 {
-    encodeAsBuffer(
-      singleUTF8CodePoint: singleUTF8CodePoint, escapeSet: escapeSet,
-      processResult: { buffer in
-        processResult(String(decoding: buffer, as: UTF8.self))
-      })
+  /// Unlike the regular `encode` function, this function processes the input sequence in reverse. The buffers given to the `processChunk` closure
+  /// are correctly-ordered, but represent a sliding window which begins at the last chunk of the input sequence and moves towards the beginning. Each
+  /// buffer of bytes may be _prepended_, so that its contents occur before all chunks yielded so far, in order to obtain the same result as calling the regular
+  /// `encode` function and _appening_ the contents of each buffer.
+  ///
+  /// - seealso: `encode(bytes:using:_:)`
+  ///
+  /// -  important:  If the "%" character is not in the encode-set, this function will not automatically percent-encode it. This means that existing
+  ///               percent-encoded sequences will be passed-through, rather than being double-encoded. If the byte string is truly an arbitrary
+  ///               sequence of bytes which may by coincidence contain the same bytes as a percent-encoded sequence, the "%" character
+  ///               must be in the encode-set to preserve the original contents.
+  ///
+  /// - parameters:
+  ///     - bytes:        The sequence of bytes to encode.
+  ///     - encodeSet:    The predicate which decides if a particular ASCII character should be escaped or not.
+  ///     - processChunk: A callback which processes a chunk of encoded data. Each chunk is guaranteed to be a valid ASCII String, containing
+  ///                     only the % character, upper-case ASCII hex digits, and characters allowed by the encode set. The given pointer, and any
+  ///                     derived pointers to the same region of memory, must not escape the closure.
+  ///
+  static func encodeFromBack<Bytes, EncodeSet: PercentEncodeSet>(
+    bytes: Bytes,
+    using encodeSet: EncodeSet.Type,
+    _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
+  ) where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+
+    withSmallStringSizedStackBuffer { chunkBuffer in
+      let chunkSize = chunkBuffer.count
+      var i = chunkBuffer.endIndex
+      for byte in bytes.reversed() {
+        // Ensure the buffer has at least enough space for an escaped byte (%XX).
+        if i < 3 {
+          processChunk(
+            UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: chunkSize &- i)
+          )
+          i = chunkBuffer.endIndex
+        }
+        if let asciiChar = ASCII(byte), encodeSet.shouldEscape(character: asciiChar) == false {
+          i &-= 1
+          chunkBuffer[i] = encodeSet.substitute(for: asciiChar).codePoint
+          continue
+        }
+        i &-= 3
+        _escape(
+          byte: byte,
+          into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: 3)
+        )
+      }
+      // Flush the buffer.
+      processChunk(
+        UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: chunkSize &- i)
+      )
+    }
   }
 
-  /// Note: Assumes that output.count >= 3.
+  @inline(__always)
   private static func _escape(byte: UInt8, into output: UnsafeMutableBufferPointer<UInt8>) {
+    assert(output.count >= 3)
     output[0] = ASCII.percentSign.codePoint
     output[1] = ASCII.getHexDigit_upper(byte >> 4).codePoint
     output[2] = ASCII.getHexDigit_upper(byte).codePoint
   }
 }
 
-/// A plugin for the percent-escaping decoder, allowing additional characters
-/// to be optionally unescaped at the same time that percent-decoding happens.
-///
-/// It is written this way (as a protocol) to encourage generic specialisation.
-///
-fileprivate protocol DecoderPlugin {
+// MARK: - Decoding.
 
-  /// If the plugin wishes to replace the given `byte`, returns the replacement byte.
-  /// Otherwise, returns `nil`
+extension LazyCollectionProtocol where Element == UInt8 {
+
+  /// Returns a `Collection` which lazily decodes ASCII byte sequences of the form "%ZZ", where `ZZ` are 2 hex digits, in to bytes with the value `0xZZ`.
+  /// Non-ASCII bytes and those which do not match the percent-escaping pattern are left unchanged.
   ///
-  static func replaceIfDesired(_ byte: UInt8) -> UInt8?
-}
+  /// This is a `PercentEncodeSet`-neutral decoder. If the byte sequence's encoding set may have substitutions, use `percentDecoded(using:)` instead.
+  ///
+  var percentDecoded: LazilyPercentDecoded<Self> {
+    return LazilyPercentDecoded(base: self)
+  }
 
-fileprivate struct NoopDecoderPlugin: DecoderPlugin {
-  static func replaceIfDesired(_ byte: UInt8) -> UInt8? {
-    return nil
+  typealias LazilyPercentDecodedWithSubstitutions = LazilyPercentDecoded<
+    LazyMapSequence<LazySequence<Self.Elements>.Elements, UInt8>
+  >
+
+  /// Returns a `Collection` which lazily decodes ASCII byte sequences of the form "%ZZ", where `ZZ` are 2 hex digits, in to bytes with the value `0xZZ`.
+  /// Non-ASCII bytes and those which do not match the percent-escaping pattern are left unchanged.
+  ///
+  /// This decoder is suitable to use if the encode-set may include substitutions.
+  ///
+  func percentDecoded<EncodeSet: PercentEncodeSet>(
+    using encodeSet: EncodeSet.Type
+  ) -> LazilyPercentDecodedWithSubstitutions {
+    return self.lazy.map { byte in
+      return ASCII(byte).map(encodeSet.unsubstitute)?.codePoint ?? byte
+    }.percentDecoded
   }
 }
 
-fileprivate struct ReplacePlusWithSpace: DecoderPlugin {
-  static func replaceIfDesired(_ byte: UInt8) -> UInt8? {
-    if byte == ASCII.plus { return ASCII.space.codePoint }
-    return nil
+struct LazilyPercentDecoded<Base: Collection>: Collection, LazyCollectionProtocol where Base.Element == UInt8 {
+  typealias Element = UInt8
+
+  let base: Base
+  let startIndex: Index
+
+  fileprivate init(base: Base) {
+    self.base = base
+    var start = Index(withoutReadingValue: base.startIndex)
+    start.advance(in: base)
+    self.startIndex = start
+  }
+
+  struct Index: Comparable {
+    var range: Range<Base.Index>
+    var decodedValue: UInt8
+
+    init(withoutReadingValue position: Base.Index) {
+      self.range = Range(uncheckedBounds: (position, position))
+      self.decodedValue = 0
+    }
+
+    mutating func advance(in base: Base) {
+
+      // If the current value is or ends at endIndex, the next index _is_ endIndex.
+      guard range.upperBound != base.endIndex else {
+        self.range = Range(uncheckedBounds: (range.upperBound, range.upperBound))
+        self.decodedValue = 0
+        return
+      }
+      // Read the next byte. If it is a % sign, attempt to consume the next two bytes and decode the value.
+      let byte0 = base[range.upperBound]
+      let byte1Index = base.index(after: range.upperBound)
+      guard _slowPath(byte0 == ASCII.percentSign.codePoint) else {
+        self.decodedValue = byte0
+        self.range = Range(uncheckedBounds: (range.upperBound, byte1Index))
+        return
+      }
+      var tail = base.suffix(from: byte1Index)
+      guard let byte1 = tail.popFirst(), let decodedByte1 = ASCII(byte1).map(ASCII.parseHexDigit(ascii:)),
+        decodedByte1 != ASCII.parse_NotFound,
+        let byte2 = tail.popFirst(), let decodedByte2 = ASCII(byte2).map(ASCII.parseHexDigit(ascii:)),
+        decodedByte2 != ASCII.parse_NotFound
+      else {
+        self.decodedValue = byte0
+        self.range = Range(uncheckedBounds: (range.upperBound, byte1Index))
+        return
+      }
+      self.decodedValue = (decodedByte1 &* 16) &+ (decodedByte2)
+      self.range = Range(uncheckedBounds: (range.upperBound, tail.startIndex))
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+      return lhs.range.lowerBound == rhs.range.lowerBound
+    }
+
+    static func < (lhs: Self, rhs: Self) -> Bool {
+      return lhs.range.lowerBound < rhs.range.lowerBound
+    }
+  }
+
+  var endIndex: Index {
+    return Index(withoutReadingValue: base.endIndex)
+  }
+
+  func index(after i: Index) -> Index {
+    var tmp = i
+    formIndex(after: &tmp)
+    return tmp
+  }
+
+  func formIndex(after i: inout Index) {
+    i.advance(in: base)
+  }
+
+  subscript(position: Index) -> Element {
+    return position.decodedValue
   }
 }
 
-extension PercentEscaping {
+// MARK: - String APIs.
 
-  /// Decodes the given percent-escaped byte sequence, without interpreting the result.   
-  ///
-  /// The decoder replaces patterns of the form "%ZZ" with the byte 0xZZ, where Z is an ASCII hexadecimal digit.
-  /// The decoded sequence is returned as a binary blob, without additional interpretation. If the contents are expected
-  /// to be a UTF8-encoded `String`, use the `decodeString` function instead.
-  ///
-  /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
-  ///
-  /// - parameters:
-  ///     - bytes:    The sequence of bytes to decode.
-  ///
-  /// - returns:  An `Array` of bytes containing the unescaped contents of the given sequence. 
-  ///
-  static func decode<C>(bytes: C) -> [UInt8] where C: Collection, C.Element == UInt8 {
-    var decodedByteCount = 0
-    switch _decode(bytes: bytes, plugin: NoopDecoderPlugin.self, onDecode: { _ in decodedByteCount &+= 1 }) {
-    case .none:
-      assert(decodedByteCount == bytes.count)
-      return Array(bytes)
-    case .some(let firstEscapedByte):
-      assert(decodedByteCount <= bytes.count)
-      return Array(unsafeUninitializedCapacity: decodedByteCount) { buffer, count in
-        count = buffer.initialize(from: bytes[..<firstEscapedByte]).1
-        _ = _decode(
-          bytes: bytes[firstEscapedByte...], plugin: NoopDecoderPlugin.self,
-          onDecode: {
-            buffer[count] = $0
-            count &+= 1
-          })
-      }
+extension Sequence where Element == UInt8 {
+
+  func percentEncodedString<EncodeSet: PercentEncodeSet>(encodeSet: EncodeSet.Type) -> String {
+    var result = ""
+    PercentEncoding.encode(bytes: self, using: encodeSet) { chunk in
+      result.append(String(decoding: chunk, as: UTF8.self))
     }
+    return result
   }
+}
 
-  /// Decodes the given percent-escaped byte sequence and interprets the result as a UTF8-encoded `String`.   
-  ///
-  /// The decoder replaces patterns of the form "%ZZ" with the byte 0xZZ, where Z is an ASCII hexadecimal digit.
-  /// If the decoded byte sequence represents an invalid UTF8 `String`, it will be repaired by replacing
-  /// the appropriate parts with the unicode replacement character (U+FFFD).
-  ///
-  /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
-  /// 
-  /// - parameters:
-  ///     - bytes:    The sequence of bytes to decode.
-  ///
-  /// - returns:  A `String` containing the unescaped contents of the given byte sequence, interpreted as UTF8. 
-  ///
-  static func decodeString<C>(utf8 bytes: C) -> String where C: Collection, C.Element == UInt8 {
+// MARK: - URL encode sets.
 
-    // We cannot decode in fixed-size chunks, since each chunk might not be a valid UTF8 sequence.
-    // So there ends up being 3 potential strategies to decoding:
-    //
-    // 1. Decode in to a temporary Array, then copy in to a String.
-    //    - Possibly causing 2 heap allocations, depending on the eventual length of the decoded bytes.
-    //
-    // 2. Be conservative and ask String for a capacity of `bytes.count`,
-    //    even though we may end up using significantly less than that.
-    //    - Given that one byte of the original gets escaped as 3 bytes,
-    //      we will almost never decode in to a small-string, even if the decoded string really is small.
-    //      e.g. "🐶️%" is 8 bytes decoded (small) but 22 bytes when escaped -- and it's more than just non-ASCII
-    //      characters that get escaped (also spaces, slashes, question marks, etc).
-    //
-    // 3. Scan the String and determine the actual required capacity before decoding. 
-    //    - This makes the operation 2*O(n), but is able to avoid heap allocations if the decoded string is small.
-    //      We can also perform the second decoding pass from the first escaped byte and avoid copying unescaped strings.
-    //
-    // Each part of a URL tends to be relatively small once decoded and gets defensively unescaped
-    // (it often isn't even escaped at all). So we choose option #3. 
+enum URLEncodeSet {
 
-    var decodedByteCount = 0
-    switch _decode(bytes: bytes, plugin: NoopDecoderPlugin.self, onDecode: { _ in decodedByteCount &+= 1 }) {
-    case .none:
-      assert(decodedByteCount == bytes.count)
-      return String(decoding: bytes, as: UTF8.self)
-    case .some(let firstEscapedByte):
-      assert(decodedByteCount <= bytes.count)
-      return String(_unsafeUninitializedCapacity: decodedByteCount) { buffer in
-        var i = buffer.initialize(from: bytes[..<firstEscapedByte]).1
-        _ = _decode(
-          bytes: bytes[firstEscapedByte...], plugin: NoopDecoderPlugin.self,
-          onDecode: {
-            buffer[i] = $0
-            i &+= 1
-          })
-        return i
-      }
-    }
-  }
-
-  // Fast path for decoding a String when the source is another String.
-  // In that case, non-escaped strings can just be returned without copying
-  // (which is a common case; strings are often defensively unescaped).
-
-  /// Decodes the given percent-escaped `String` and interprets the result as a UTF8 `String`.    
-  ///
-  /// The decoder replaces patterns of the form "%ZZ" with the byte 0xZZ, where Z is an ASCII hexadecimal digit.
-  /// If the decoded byte sequence represents an invalid UTF8 `String`, it will be repaired by replacing
-  /// the appropriate parts with the unicode replacement character (U+FFFD).
-  ///
-  /// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
-  ///
-  /// - parameters:
-  ///     - string:    The string to decode.
-  ///
-  /// - returns:  A `String` containing the unescaped contents of the given `String`, interpreted as UTF8. 
-  ///
-  static func decodeString<S>(_ string: S) -> String where S: StringProtocol {
-    let original = string
-    return string._withUTF8 { bytes in
-      var decodedByteCount = 0
-      switch _decode(bytes: bytes, plugin: NoopDecoderPlugin.self, onDecode: { _ in decodedByteCount &+= 1 }) {
-      case .none:
-        assert(decodedByteCount == bytes.count)
-        return String(original)  // This shouldn't result in a copy.
-      case .some(let firstEscapedByte):
-        assert(decodedByteCount <= bytes.count)
-        return String(_unsafeUninitializedCapacity: decodedByteCount) { buffer in
-          var i = buffer.initialize(from: bytes[..<firstEscapedByte]).1
-          _ = _decode(
-            bytes: bytes[firstEscapedByte...], plugin: NoopDecoderPlugin.self,
-            onDecode: {
-              buffer[i] = $0
-              i &+= 1
-            })
-          return i
-        }
-      }
-    }
-  }
-
-  private static func _decode<C, P>(bytes: C, plugin: P.Type, onDecode: (UInt8) -> Void) -> C.Index?
-  where C: Collection, C.Element == UInt8, P: DecoderPlugin {
-    var firstEscapedByteIndex: C.Index?
-    var byte0Index = bytes.startIndex
-    while byte0Index != bytes.endIndex {
-      let byte0 = bytes[byte0Index]
-      if _slowPath(byte0 == ASCII.percentSign) {
-        // Try to decode the next two bytes. If either one fails, byte0 isn't the start of a percent-escaped byte;
-        // invoke the callback with `byte0` and try again from `byte1`.
-        let byte1Index = bytes.index(after: byte0Index)
-        guard byte1Index != bytes.endIndex,
-          let decodedByte1 = ASCII(bytes[byte1Index]).map({ ASCII.parseHexDigit(ascii: $0) }),
-          decodedByte1 != ASCII.parse_NotFound
-        else {
-          onDecode(byte0)
-          byte0Index = byte1Index
-          continue
-        }
-        let byte2Index = bytes.index(after: byte1Index)
-        guard byte2Index != bytes.endIndex,
-          let decodedByte2 = ASCII(bytes[byte2Index]).map({ ASCII.parseHexDigit(ascii: $0) }),
-          decodedByte2 != ASCII.parse_NotFound
-        else {
-          onDecode(byte0)
-          byte0Index = byte1Index
-          continue
-        }
-        let decodedValue = (decodedByte1 &* 16) &+ (decodedByte2)
-        onDecode(decodedValue)
-        if firstEscapedByteIndex == nil {
-          firstEscapedByteIndex = byte0Index
-        }
-        byte0Index = bytes.index(after: byte2Index)
-      } else if let replacement = plugin.replaceIfDesired(byte0) {
-        onDecode(replacement)
-        if firstEscapedByteIndex == nil {
-          firstEscapedByteIndex = byte0Index
-        }
-        byte0Index = bytes.index(after: byte0Index)
+  struct C0: PercentEncodeSet {
+    @inline(__always)
+    static func shouldEscape(character: ASCII) -> Bool {
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b00000000_00000000_00000000_00000000_11111111_11111111_11111111_11111111
+      let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
       } else {
-        onDecode(byte0)
-        byte0Index = bytes.index(after: byte0Index)
-      }
-    }
-    return firstEscapedByteIndex
-  }
-}
-
-// Form encoding/decoding.
-
-extension PercentEscaping {
-
-  /// An iterative percent-escaping entrypoint for encoding a byte-sequence as an `application/x-www-form-urlencoded` String.
-  ///
-  /// The major difference to `encodeIterativelyAsString` is that spaces are escaped as "+" characters, and the escape set is fixed.
-  ///  - seealso: `encodeIterativelyAsString`
-  ///
-  static func encodeIterativelyAsStringForForm<S>(
-    bytes: S,
-    processChunk: (String) -> Void
-  ) where S: Sequence, S.Element == UInt8 {
-    encodeIterativelyAsBuffer(
-      bytes: bytes,
-      escapeSet: EscapeSet { ascii in
-        // Do not percent-escape spaces because we 'plus-escape' them instead.
-        guard ascii != .space else { return false }
-        return EscapeSet.www_form_urlEncoded.shouldEscape(ascii)
-      },
-      processChunk: { buffer in
-        for i in buffer.startIndex..<buffer.endIndex {
-          if buffer[i] == ASCII.space.codePoint {
-            buffer[i] = ASCII.plus.codePoint
-          }
-        }
-        processChunk(String(decoding: buffer, as: UTF8.self))
-      }
-    )
-  }
-
-  /// Decodes a String escaped according to the requirements of `application/x-www-form-urlencoded`.
-  ///
-  /// The major difference to `decodeString` is that the decoder will unescape the "+" character as a space, in addition to percent-decoding.
-  ///  - seealso: `decodeString`
-  ///
-  static func decodeFormEncodedString<C>(utf8 bytes: C) -> String where C: Collection, C.Element == UInt8 {
-    var decodedByteCount = 0
-    switch _decode(bytes: bytes, plugin: ReplacePlusWithSpace.self, onDecode: { _ in decodedByteCount &+= 1 }) {
-    case .none:
-      assert(decodedByteCount == bytes.count)
-      return String(decoding: bytes, as: UTF8.self)
-    case .some(let firstEscapedByte):
-      assert(decodedByteCount <= bytes.count)
-      return String(_unsafeUninitializedCapacity: decodedByteCount) { buffer in
-        var i = buffer.initialize(from: bytes[..<firstEscapedByte]).1
-        _ = _decode(
-          bytes: bytes[firstEscapedByte...], plugin: ReplacePlusWithSpace.self,
-          onDecode: {
-            buffer[i] = $0
-            i &+= 1
-          })
-        return i
-      }
-    }
-  }
-}
-
-extension StringProtocol {
-
-  /// Encodes the given String's UTF8-encoded bytes as an ASCII String, by means of the "percent-escaping" transformation.   
-  ///
-  /// - Bytes which are valid ASCII characters are replaced by the sequence "%XX" if the predicate returns `true`,
-  ///   where XX is the byte's numerical value in hexadecimal.
-  /// - Bytes which are not valid ASCII characters are always escaped.
-  ///
-  /// - parameters:
-  ///     - shouldEscapeASCII:    The predicate which decides if a particular ASCII character should be escaped or not.
-  ///
-  /// - returns:  A percent-escaped ASCII String from which the original String may be decoded. 
-  ///
-  //    @_specialize(where Self == String)
-  //    @_specialize(where Self == Substring)
-  //    func percentEscaped(where shouldEscapeASCII: (ASCII)->Bool) -> String {
-  //        return self._withUTF8 { PercentEscaping.encode(bytes: $0, where: shouldEscapeASCII) }
-  //    }
-
-  /// Decodes the given percent-escaped `String` and interprets the result as a UTF8 `String`.    
-  ///
-  /// The decoder replaces patterns of the form "%ZZ" with the byte 0xZZ, where Z is an ASCII hexadecimal digit.
-  /// If the decoded byte sequence represents an invalid UTF8 `String`, it will be repaired by replacing
-  /// the appropriate parts with the unicode replacement character (U+FFFD).
-  ///
-  /// - returns:  A `String` containing the unescaped contents of the given `String`, interpreted as UTF8. 
-  ///
-  //    @_specialize(where Self == String)
-  //    @_specialize(where Self == Substring)
-  //    func removingPercentEscaping() -> String {
-  //        return PercentEscaping.decodeString(self)
-  //    }
-}
-
-extension Character {
-
-  /// Encodes the given Character's UTF8-encoded bytes as an ASCII String, by means of the "percent-escaping" transformation.   
-  ///
-  /// - If the Character is ASCII, it is replaced by the sequence "%XX" if the predicate returns `true`,
-  ///   where XX is the ASCII codepoint's numerical value in hexadecimal.
-  /// - Characters which are not ASCII are always escaped.
-  ///
-  /// - parameters:
-  ///     - shouldEscapeASCII:    The predicate which decides if a particular ASCII character should be escaped or not.
-  ///
-  /// - returns:  A percent-escaped ASCII String from which the original Character may be decoded. 
-  ///
-  //    func percentEscaped(where shouldEscapeASCII: (ASCII)->Bool) -> String {
-  //        return PercentEscaping.encode(bytes: self.utf8, where: shouldEscapeASCII)
-  //    }
-}
-
-// - URL Percent-escaping predicates.
-
-// Complies with https://url.spec.whatwg.org/#percent-encoded-bytes as of 14.06.2020
-//
-extension PercentEscaping.EscapeSet {
-
-  static var url_c0: Self {
-    return Self { ascii in
-      ascii.codePoint > 0x7E || ASCII.ranges.controlCharacters.contains(ascii)
-    }
-  }
-
-  static var url_fragment: Self {
-    return Self { ascii in
-      guard !url_c0.shouldEscape(ascii) else { return true }
-      switch ascii {
-      case .space, .doubleQuotationMark, .lessThanSign, .greaterThanSign, .backtick:
-        return true
-      default:
-        return false
-      }
-    }
-  }
-  
-  static var url_query_nonSpecial: Self {
-    return Self { ascii in
-      switch ascii {
-        case .doubleQuotationMark, .numberSign, .lessThanSign, .greaterThanSign,
-          _ where ascii.codePoint < ASCII.exclamationMark.codePoint,
-          _ where ascii.codePoint > ASCII.tilde.codePoint:
-          return true
-      default: return false
-      }
-    }
-  }
-  
-  static var url_query_special: Self {
-    return Self { ascii in
-      guard !url_query_nonSpecial.shouldEscape(ascii) else { return true }
-      switch ascii {
-      case .apostrophe:
-        return true
-      default:
-        return false
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
       }
     }
   }
 
-  static var url_path: Self {
-    return Self { ascii in
-      guard !url_fragment.shouldEscape(ascii) else { return true }
-      switch ascii {
-      case .numberSign, .questionMark, .leftCurlyBracket, .rightCurlyBracket:
-        return true
-      default:
-        return false
+  struct Fragment: PercentEncodeSet {
+    @inline(__always)
+    static func shouldEscape(character: ASCII) -> Bool {
+      if C0.shouldEscape(character: character) { return true }
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b01010000_00000000_00000000_00000101_00000000_00000000_00000000_00000000
+      let hi: UInt64 = 0b00000000_00000000_00000000_00000001_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
       }
     }
   }
 
-  static var url_userInfo: Self {
-    return Self { ascii in
-      guard !url_path.shouldEscape(ascii) else { return true }
-      switch ascii {
-      case .forwardSlash, .colon, .semicolon, .equalSign, .commercialAt,
-        .leftSquareBracket, .rightSquareBracket, .backslash, .circumflexAccent,
-        .verticalBar:
-        return true
-      default:
-        return false
+  struct Query_NotSpecial: PercentEncodeSet {
+    @inline(__always)
+    static func shouldEscape(character: ASCII) -> Bool {
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b01010000_00000000_00000000_00001101_11111111_11111111_11111111_11111111
+      let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
       }
     }
   }
 
-  static var www_form_urlEncoded: Self {
-    return Self { ascii in
-      switch ascii {
-      case _ where ascii.isAlphaNumeric: return false
+  struct Query_Special: PercentEncodeSet {
+    @inline(__always)
+    static func shouldEscape(character: ASCII) -> Bool {
+      if Query_NotSpecial.shouldEscape(character: character) { return true }
+      return character == .apostrophe
+    }
+  }
+
+  struct Path: PercentEncodeSet {
+    @inline(__always)
+    static func shouldEscape(character: ASCII) -> Bool {
+      if Fragment.shouldEscape(character: character) { return true }
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b10000000_00000000_00000000_00001000_00000000_00000000_00000000_00000000
+      let hi: UInt64 = 0b00101000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+  }
+
+  struct UserInfo: PercentEncodeSet {
+    @inline(__always)
+    static func shouldEscape(character: ASCII) -> Bool {
+      if Path.shouldEscape(character: character) { return true }
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b00101100_00000000_10000000_00000000_00000000_00000000_00000000_00000000
+      let hi: UInt64 = 0b00010000_00000000_00000000_00000000_01111000_00000000_00000000_00000001
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+  }
+
+  struct FormEncoded: PercentEncodeSet {
+    static func shouldEscape(character: ASCII) -> Bool {
+      // Do not percent-escape spaces because we 'plus-escape' them instead.
+      if character == .space { return false }
+      switch character {
+      case _ where character.isAlphaNumeric: return false
       case .asterisk, .minus, .period, .underscore: return false
       default: return true
       }
     }
-  }
-  
-  /// This escape set is not defined in the standard; it escapes all
-  /// characters which would otherwise not be allowed in a host string.
-  ///
-  static var url_host_forbidden: Self {
-    return Self { ascii in
-      return URLStringUtils.isForbiddenHostCodePoint(ascii)
+    static func substitute(for character: ASCII) -> ASCII {
+      return character == .space ? .plus : character
+    }
+    static func unsubstitute(character: ASCII) -> ASCII {
+      return character == .plus ? .space : character
     }
   }
 }

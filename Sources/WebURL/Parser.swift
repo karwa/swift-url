@@ -150,30 +150,26 @@ extension ParsedURLString {
         var hasCredentials = false
         if let username = usernameRange, username.isEmpty == false {
           writer.writeUsernameContents { writePiece in
-            PercentEscaping.encodeIterativelyAsBuffer(
-              bytes: inputString[username],
-              escapeSet: .url_userInfo,
-              processChunk: { piece in writePiece(piece) }
-            )
+            PercentEncoding.encode(bytes: inputString[username], using: URLEncodeSet.UserInfo.self) { piece in
+              writePiece(piece)
+            }
           }
           hasCredentials = true
         }
         if let password = passwordRange, password.isEmpty == false {
           writer.writePasswordContents { writePiece in
-            PercentEscaping.encodeIterativelyAsBuffer(
-              bytes: inputString[password],
-              escapeSet: .url_userInfo,
-              processChunk: { piece in writePiece(piece) }
-            )
+            PercentEncoding.encode(bytes: inputString[password], using: URLEncodeSet.UserInfo.self) { piece in
+              writePiece(piece)
+            }
           }
           hasCredentials = true
         }
         if hasCredentials {
           writer.writeCredentialsTerminator()
         }
-        
+
         hostKind!.write(bytes: inputString[hostname], using: &writer)
-        
+
         if let port = port, port != schemeKind.defaultPort {
           writer.writePort(port)
         }
@@ -204,11 +200,9 @@ extension ParsedURLString {
         switch cannotBeABaseURL {
         case true:
           writer.writePathSimple { writePiece in
-            PercentEscaping.encodeIterativelyAsBuffer(
-              bytes: inputString[path],
-              escapeSet: .url_c0,
-              processChunk: { piece in writePiece(piece) }
-            )
+            PercentEncoding.encode(bytes: inputString[path], using: URLEncodeSet.C0.self) { piece in
+              writePiece(piece)
+            }
           }
         case false:
           let pathLength: Int
@@ -251,13 +245,18 @@ extension ParsedURLString {
 
       // 5: Write query.
       if let query = queryRange {
-        writer.writeQueryContents { writePiece in
-          PercentEscaping.encodeIterativelyAsBuffer(
-            bytes: inputString[query],
-            escapeSet: schemeKind.isSpecial ? .url_query_special : .url_query_nonSpecial,
-            processChunk: { piece in writePiece(piece) }
-          )
+        writer.writeQueryContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
+          if schemeKind.isSpecial {
+            PercentEncoding.encode(bytes: inputString[query], using: URLEncodeSet.Query_Special.self) { piece in
+              writePiece(piece)
+            }
+          } else {
+            PercentEncoding.encode(bytes: inputString[query], using: URLEncodeSet.Query_NotSpecial.self) { piece in
+              writePiece(piece)
+            }
+          }
         }
+
       } else if componentsToCopyFromBase.contains(.query) {
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
         baseURL.variant.withComponentBytes(.query) {
@@ -270,11 +269,9 @@ extension ParsedURLString {
       // 6: Write fragment.
       if let fragment = fragmentRange {
         writer.writeFragmentContents { writePiece in
-          PercentEscaping.encodeIterativelyAsBuffer(
-            bytes: inputString[fragment],
-            escapeSet: .url_fragment,
-            processChunk: { piece in writePiece(piece) }
-          )
+          PercentEncoding.encode(bytes: inputString[fragment], using: URLEncodeSet.Fragment.self) { piece in
+            writePiece(piece)
+          }
         }
       } else if componentsToCopyFromBase.contains(.fragment) {
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
@@ -1354,12 +1351,13 @@ extension URLScanner.UnprocessedMapping {
       // 2.3.2: Replace 'localhost' with an empty/nil host.
       // file URLs are special, so they get an implicit, empty authority when writing.
       if let hostnameContents = hostnameRange.map({ inputString[$0] }),
-         hostnameContents.elementsEqual("localhost".utf8) {
+        hostnameContents.elementsEqual("localhost".utf8)
+      {
         hostKind = nil
         hostnameRange = nil
       }
     }
-    
+
     // Step 3: Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
     return ParsedURLString<InputString>.ProcessedMapping(
       schemeRange: schemeRange,
@@ -1473,8 +1471,11 @@ struct FilteredURLInput<Base> where Base: BidirectionalCollection, Base.Element 
   init(_ base: Base.SubSequence) {
     self.base = base
   }
-  
-  static func trim<Callback: URLParserCallback>(_ rawInput: Base, callback: inout Callback) -> (Base.SubSequence, needsFiltering: Bool) {
+
+  static func trim<Callback: URLParserCallback>(
+    _ rawInput: Base, callback: inout Callback
+  ) -> (Base.SubSequence, needsFiltering: Bool) {
+
     // Trim leading/trailing C0 control characters and spaces.
     var trimmedSlice = rawInput[...]
     let trimmedInput = trimmedSlice.trim {
