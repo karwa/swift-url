@@ -161,7 +161,7 @@ extension WHATWGTests {
             report.expectTrue(WebURL("about:blank", base: expected.input!) == nil)
           }
           
-          let _parserResult = WebURL(expected.input!, base: expected.base!)
+          let _parserResult = WebURL(expected.input!, base: expected.base!)?.jsModel
           report.capture(key: "actual", _parserResult as Any)
           
           // Compare results.
@@ -187,7 +187,7 @@ extension WHATWGTests {
           // Check idempotence.
           var serialized = parserResult.href
           serialized.makeContiguousUTF8()
-          guard let reparsed = WebURL(serialized, base: nil) else {
+          guard let reparsed = WebURL(serialized, base: nil)?.jsModel else {
             report.expectTrue(false)
             return
           }
@@ -457,7 +457,7 @@ extension WHATWGTests {
   func testAdditional() {
     
     for test in additionalTests {
-      guard let result = WebURL(test.input, base: test.base) else {
+      guard let result = WebURL(test.input, base: test.base)?.jsModel else {
         XCTAssertTrue(test.ex_fail, "Test failed: \(test)")
         continue
       }

@@ -136,7 +136,7 @@ extension ParsedURLString {
         guard let baseURL = baseURL, componentsToCopyFromBase.contains(.scheme) else {
           preconditionFailure("Cannot construct a URL without a scheme")
         }
-        assert(schemeKind == baseURL.schemeKind)
+        assert(schemeKind == baseURL._schemeKind)
         baseURL.variant.withComponentBytes(.scheme) {
           let bytes = $0!.dropLast()  // drop terminator.
           writer.writeSchemeContents(bytes)
@@ -494,7 +494,7 @@ extension URLScanner {
       return nil
     }
     // If base `cannotBeABaseURL`, the only thing we can do is set the fragment.
-    guard base.cannotBeABaseURL == false else {
+    guard base._cannotBeABaseURL == false else {
       guard ASCII(flatMap: input.first) == .numberSign else {
         callback.validationError(.missingSchemeNonRelativeURL)
         return nil
@@ -507,14 +507,14 @@ extension URLScanner {
       return scanResults
     }
     // (No scheme + valid base URL) = relative URL.
-    if base.schemeKind == .file {
+    if base._schemeKind == .file {
       scanResults.componentsToCopyFromBase = [.scheme]
       return scanAllFileURLComponents(
         input[...], baseURL: baseURL, &scanResults, callback: &callback
       ) ? scanResults : nil
     }
     return scanAllRelativeURLComponents(
-      input[...], baseScheme: base.schemeKind, &scanResults, callback: &callback
+      input[...], baseScheme: base._schemeKind, &scanResults, callback: &callback
     ) ? scanResults : nil
   }
 
@@ -552,7 +552,7 @@ extension URLScanner {
         authority = authority.dropFirst(2)
       } else {
         // Note: since `scheme` is special, comparing the kind is sufficient.
-        if scheme == baseURL?.schemeKind {
+        if scheme == baseURL?._schemeKind {
           callback.validationError(.relativeURLMissingBeginningSolidus)
           return scanAllRelativeURLComponents(input, baseScheme: scheme, &mapping, callback: &callback)
         }
@@ -943,7 +943,7 @@ extension URLScanner {
     // - 3 slahses:  empty host, parse as absolute path.
     // - 4+ slashes: invalid.
 
-    let baseScheme = baseURL?.schemeKind
+    let baseScheme = baseURL?._schemeKind
 
     var cursor = input.startIndex
     guard cursor != input.endIndex, let c0 = ASCII(input[cursor]), c0 == .forwardSlash || c0 == .backslash else {
@@ -1282,7 +1282,7 @@ extension URLScanner.UnprocessedMapping {
     if let scannedSchemeKind = u_mapping.schemeKind {
       schemeKind = scannedSchemeKind
     } else if componentsToCopyFromBase.contains(.scheme), let baseURL = baseURL {
-      schemeKind = baseURL.schemeKind
+      schemeKind = baseURL._schemeKind
     } else {
       preconditionFailure("We must have a scheme")
     }

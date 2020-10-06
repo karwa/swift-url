@@ -415,7 +415,7 @@ extension PathComponentVisitor {
     baseURL.variant.withComponentBytes(.path) {
       guard var basePath = $0?[...] else {
         // No base path. Flush state from input string, as above.
-        assert(baseURL.schemeKind.isSpecial == false, "Special URLs always have a path")
+        assert(baseURL._schemeKind.isSpecial == false, "Special URLs always have a path")
         if didYieldComponent == false {
           trailingEmptyCount = isFileScheme ? 1 : max(trailingEmptyCount, 1)
         }

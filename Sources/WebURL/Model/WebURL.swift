@@ -21,16 +21,21 @@ public struct WebURL {
 
 extension WebURL {
 
-  // Flags.
+  // Flags used by the parser.
 
-  var schemeKind: WebURL.Scheme {
+  var _schemeKind: WebURL.Scheme {
     return variant.schemeKind
   }
 
-  public var cannotBeABaseURL: Bool {
+  var _cannotBeABaseURL: Bool {
     return variant.cannotBeABaseURL
   }
+}
 
+// Note: All of these are now dead. To be replaced with a new object model.
+
+extension WebURL {
+  
   // Components.
   // Note: erasure to empty strings is done to fit the Javascript model for WHATWG tests.
 
@@ -91,24 +96,3 @@ extension WebURL {
   }
 }
 
-extension WebURL: CustomStringConvertible {
-
-  public var description: String {
-    return
-      """
-      URL Constructor output:
-
-      Href: \(href)
-
-      Scheme: \(scheme) (\(schemeKind))
-      Username: \(username)
-      Password: \(password)
-      Hostname: \(hostname)
-      Port: \(port)
-      Path: \(path)
-      Query: \(query)
-      Fragment: \(fragment)
-      CannotBeABaseURL: \(cannotBeABaseURL)
-      """
-  }
-}
