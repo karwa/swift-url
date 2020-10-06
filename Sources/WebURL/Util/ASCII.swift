@@ -20,7 +20,7 @@ extension ASCII {
     guard let asciiVal = c.asciiValue else { return nil }
     self.init(_unchecked: asciiVal)
   }
-  
+
   internal init?(flatMap v: UInt8?) {
     guard let byte = v, byte & 0x80 == 0 else { return nil }
     self.init(_unchecked: byte)

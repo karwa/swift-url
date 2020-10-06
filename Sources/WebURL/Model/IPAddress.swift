@@ -46,7 +46,7 @@ extension IPv6AddressParserCallback {
 
 // MARK: - IPv6
 
-/// A 128-bit numerical identifier assigned to a device on an 
+/// A 128-bit numerical identifier assigned to a device on an
 /// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
 ///
 public struct IPv6Address {
@@ -71,7 +71,7 @@ public struct IPv6Address {
   // Network byte order.
 
   /// The network address (i.e. in network byte order).
-  /// 
+  ///
   public var networkAddress: AddressType {
     return (
       rawAddress.0.bigEndian, rawAddress.1.bigEndian,
@@ -171,7 +171,7 @@ extension IPv6Address {
     }
 
     // Note: These are deliberately not public, because we don't want to make the set of possible errors API.
-    //       They are 'internal' for testing purposes only.  
+    //       They are 'internal' for testing purposes only.
     internal static var emptyInput: Self { Self(errorCode: 1) }
     // -
     internal static var unexpectedLeadingColon: Self { Self(errorCode: 2) }
@@ -221,7 +221,7 @@ extension IPv6Address {
   }
 
   /// Parses an IPv6 address from a UTF-8 string.
-  /// 
+  ///
   /// TODO: Add description of accepted formats.
   ///
   /// - parameters:
@@ -406,45 +406,45 @@ extension IPv6Address {
 
 // MARK: - IPv4
 
-  /// A 32-bit numerical identifier assigned to a device on an 
-  /// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.
+/// A 32-bit numerical identifier assigned to a device on an
+/// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.
+///
+public struct IPv4Address {
+
+  // Host byte order.
+
+  /// The raw address (i.e. in host byte order).
   ///
-  public struct IPv4Address {
+  public var rawAddress: UInt32
 
-    // Host byte order.
-
-    /// The raw address (i.e. in host byte order).
-    ///
-    public var rawAddress: UInt32
-
-    /// Creates a value with the given raw address.
-    ///
-    /// - parameters:
-    ///     - rawAddress:   The address value in host byte order.
-    ///
-    @inlinable
-    public init(rawAddress: UInt32) {
-      self.rawAddress = rawAddress
-    }
-
-    // Network byte order.
-
-    /// The network address (i.e. in network byte order).
-    /// 
-    public var networkAddress: UInt32 {
-      return rawAddress.bigEndian
-    }
-
-    /// Creates a value with the given network address.
-    ///
-    /// - parameters:
-    ///     - networkAddress:   The address value in network byte order.
-    ///
-    @inlinable
-    public init(networkAddress: UInt32) {
-      self.init(rawAddress: networkAddress.bigEndian)
-    }
+  /// Creates a value with the given raw address.
+  ///
+  /// - parameters:
+  ///     - rawAddress:   The address value in host byte order.
+  ///
+  @inlinable
+  public init(rawAddress: UInt32) {
+    self.rawAddress = rawAddress
   }
+
+  // Network byte order.
+
+  /// The network address (i.e. in network byte order).
+  ///
+  public var networkAddress: UInt32 {
+    return rawAddress.bigEndian
+  }
+
+  /// Creates a value with the given network address.
+  ///
+  /// - parameters:
+  ///     - networkAddress:   The address value in network byte order.
+  ///
+  @inlinable
+  public init(networkAddress: UInt32) {
+    self.init(rawAddress: networkAddress.bigEndian)
+  }
+}
 
 // Standard protocols.
 
@@ -516,7 +516,7 @@ extension IPv4Address {
     }
 
     // Note: These are deliberately not public, because we don't want to make the set of possible errors API.
-    //       They are 'internal' for testing purposes only.  
+    //       They are 'internal' for testing purposes only.
     internal static var emptyInput: Self { Self(errorCode: 1) }
     // -
     internal static var pieceBeginsWithInvalidCharacter: Self { Self(errorCode: 3) }  // full only.
@@ -561,7 +561,7 @@ extension IPv4Address {
   }
 
   /// Parses an IPv4 address from a UTF-8 string.
-  /// 
+  ///
   /// The given string may have 1, 2, 3 or 4 pieces, separated by a '.',
   /// and each piece may be specified in octal, decimal, or hexadecimal notation.
   /// A single trailing '.' is permitted.
@@ -705,7 +705,7 @@ extension IPv4Address {
   }
 
   /// Parses an IPv4 address from a UTF-8 string.
-  /// 
+  ///
   /// This simplified parser accepts only the 4-piece decimal notation ("a.b.c.d").
   /// Trailing '.'s are not permitted.
   ///

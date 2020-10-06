@@ -20,7 +20,7 @@ public struct WebURL {
 }
 
 extension WebURL {
-  
+
   // Flags.
 
   var schemeKind: WebURL.Scheme {

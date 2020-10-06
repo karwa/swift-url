@@ -14,4 +14,3 @@
 ///
 public struct _WebURL {
 }
-
