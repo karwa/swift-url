@@ -79,7 +79,7 @@ extension PercentEncoding {
       for byte in bytes {
         // Ensure the buffer has at least enough space for an escaped byte (%XX).
         if i &+ 3 > chunkSize {
-          processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress, count: i))
+          processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped, count: i))
           i = 0
         }
         if let asciiChar = ASCII(byte), encodeSet.shouldEscape(character: asciiChar) == false {
@@ -89,13 +89,13 @@ extension PercentEncoding {
         }
         _escape(
           byte: byte,
-          into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: 3)
+          into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped + i, count: 3)
         )
         i &+= 3
         didEncode = true
       }
       // Flush the buffer.
-      processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress, count: i))
+      processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped, count: i))
       return didEncode
     }
   }
@@ -140,7 +140,7 @@ extension PercentEncoding {
         // Ensure the buffer has at least enough space for an escaped byte (%XX).
         if i < 3 {
           processChunk(
-            UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: chunkSize &- i)
+            UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped + i, count: chunkSize &- i)
           )
           i = chunkBuffer.endIndex
         }
@@ -152,13 +152,13 @@ extension PercentEncoding {
         i &-= 3
         _escape(
           byte: byte,
-          into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: 3)
+          into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped + i, count: 3)
         )
         didEncode = true
       }
       // Flush the buffer.
       processChunk(
-        UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: chunkSize &- i)
+        UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped + i, count: chunkSize &- i)
       )
       return didEncode
     }
@@ -168,7 +168,7 @@ extension PercentEncoding {
   private static func _escape(byte: UInt8, into output: UnsafeMutableBufferPointer<UInt8>) {
     assert(output.count >= 3)
     output[0] = ASCII.percentSign.codePoint
-    output[1] = ASCII.getHexDigit_upper(byte >> 4).codePoint
+    output[1] = ASCII.getHexDigit_upper(byte &>> 4).codePoint
     output[2] = ASCII.getHexDigit_upper(byte).codePoint
   }
 }
