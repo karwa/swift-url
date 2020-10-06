@@ -206,7 +206,7 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
 
 extension PathComponentVisitor {
 
-  // FIXME(swift):
+  // FIXME: [swift]
   // This should be a nested function inside 'walkPathComponents', but writing it
   // that way introduces a heap allocation which dominates the performance of the entire function.
   private mutating func __flushTrailingEmpties(_ trailingEmptyCount: inout Int, _ didYieldComponent: inout Bool) {

@@ -31,7 +31,7 @@ extension ParsedHost {
     }
 
     let domain = input.lazy.percentDecoded
-    // TODO:
+    // TODO [idna]:
     //
     // 6. Let asciiDomain be the result of running domain to ASCII on domain.
     //

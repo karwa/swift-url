@@ -1462,7 +1462,7 @@ private func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Coll
     case _ where c?.isAlphaNumeric == true, .plus?, .minus?, .period?:
       return false
     default:
-      // TODO: assert(c != ASCII.horizontalTab && c != ASCII.lineFeed)
+      assert(c != .horizontalTab && c != .lineFeed)
       return true
     }
   })

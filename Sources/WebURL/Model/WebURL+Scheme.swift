@@ -32,7 +32,7 @@ extension WebURL.Scheme {
   ///
   static func parse<S>(asciiBytes: S) -> Self where S: Sequence, S.Element == UInt8 {
     func notRecognised() -> Self {
-      // FIXME (swift): This should be `Unicode.ASCII.self`, but UTF8 decoding is literally 10x faster.
+      // FIXME: [swift] This should be `Unicode.ASCII.self`, but UTF8 decoding is literally 10x faster.
       // https://bugs.swift.org/browse/SR-13063
       return .other
     }
