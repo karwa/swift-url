@@ -30,7 +30,7 @@ protocol URLWriter {
 
   /// Appends the given bytes to storage, followed by the scheme separator character (`:`).
   /// This is always the first call to the writer after `writeFlags`.
-  mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8
+  mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8
 
   /// Appends the authority header (`//`) to storage.
   /// If called, this must always be the immediate successor to `writeSchemeContents`.
@@ -40,13 +40,13 @@ protocol URLWriter {
   /// The content must already be percent-encoded and not include any separators.
   /// If called, this must always be the immediate successor to `writeAuthorityHeader`.
   mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8
+  where T: Collection, T.Element == UInt8
 
   /// Appends the password separator character (`:`), followed by the bytes provided by `passwordWriter`.
   /// The content must already be percent-encoded and not include any separators.
   /// If called, this must always be the immediate successor to `writeUsernameContents`.
   mutating func writePasswordContents<T>(_ passwordWriter: (WriterFunc<T>) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8
+  where T: Collection, T.Element == UInt8
 
   /// Appends the credential terminator byte (`@`).
   /// If called, this must always be the immediate successor to either `writeUsernameContents` or `writePasswordContents`.
@@ -73,7 +73,7 @@ protocol URLWriter {
   /// Appends the bytes given by `pathWriter`.
   /// The content must already be percent-encoded. No separators are added before or after the content.
   mutating func writePathSimple<T>(_ pathWriter: (WriterFunc<T>) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8
+  where T: Collection, T.Element == UInt8
 
   /// Appends an uninitialized space of size `length` and calls the given closure to allow for the path content to be written out of order.
   /// The `writer` closure must return the number of bytes written (`bytesWritten`), and all bytes from `0..<bytesWritten` must be initialized.
@@ -83,12 +83,24 @@ protocol URLWriter {
   /// Appends the query separator character (`?`), followed by the bytes provided by `queryWriter`.
   /// The content must already be percent-encoded.
   mutating func writeQueryContents<T>(_ queryWriter: (WriterFunc<T>) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8
+  where T: Collection, T.Element == UInt8
 
   /// Appends the fragment separator character (`#`), followed by the bytes provided by `fragmentWriter`
   /// The content must already be percent-encoded.
   mutating func writeFragmentContents<T>(_ fragmentWriter: (WriterFunc<T>) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8
+  where T: Collection, T.Element == UInt8
+
+  mutating func writeHint(_ component: ComponentsToCopy, needsEscaping: Bool)
+  mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector)
+}
+
+extension URLWriter {
+  mutating func writeHint(_ component: ComponentsToCopy, needsEscaping: Bool) {
+    // Not required.
+  }
+  mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector) {
+    // Not required.
+  }
 }
 
 // MARK: - Metrics collector.
@@ -101,18 +113,31 @@ protocol URLWriter {
 ///
 struct URLMetricsCollector: URLWriter {
   var requiredCapacity: Int = 0
-  var pathLength: Int = 0
+  var pathMetrics: PathMetricsCollector? = nil
+  private var componentsWhichMaySkipEscaping: ComponentsToCopy = []
 
   init() {
+  }
+
+  func componentMaySkipEscaping(_ component: ComponentsToCopy) -> Bool {
+    return componentsWhichMaySkipEscaping.contains(component)
+  }
+
+  mutating func writeHint(_ component: ComponentsToCopy, needsEscaping: Bool) {
+    if needsEscaping == false {
+      componentsWhichMaySkipEscaping.insert(component)
+    }
+  }
+  mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector) {
+    self.pathMetrics = pathMetrics
   }
 
   mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
     // Nothing to do.
   }
 
-  mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8 {
-    requiredCapacity = countIfKnown ?? schemeBytes.count
-    requiredCapacity += 1
+  mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
+    requiredCapacity = schemeBytes.count + 1
   }
 
   mutating func writeAuthorityHeader() {
@@ -120,14 +145,14 @@ struct URLMetricsCollector: URLWriter {
   }
 
   mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8 {
+  where T: Collection, T.Element == UInt8 {
     usernameWriter {
       requiredCapacity += $0.count
     }
   }
 
   mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8 {
+  where T: Collection, T.Element == UInt8 {
     requiredCapacity += 1
     passwordWriter {
       requiredCapacity += $0.count
@@ -157,20 +182,18 @@ struct URLMetricsCollector: URLWriter {
   }
 
   mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8 {
+  where T: Collection, T.Element == UInt8 {
     pathWriter {
       requiredCapacity += $0.count
-      pathLength += $0.count
     }
   }
 
   mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
     self.requiredCapacity += length
-    pathLength = length
   }
 
   mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8 {
+  where T: Collection, T.Element == UInt8 {
     requiredCapacity += 1
     queryWriter {
       requiredCapacity += $0.count
@@ -178,7 +201,7 @@ struct URLMetricsCollector: URLWriter {
   }
 
   mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
-  where T: RandomAccessCollection, T.Element == UInt8 {
+  where T: Collection, T.Element == UInt8 {
     requiredCapacity += 1
     fragmentWriter {
       requiredCapacity += $0.count

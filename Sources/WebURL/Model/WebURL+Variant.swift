@@ -1,4 +1,3 @@
-
 extension WebURL {
 
   enum Component {
@@ -288,22 +287,25 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       precondition(buffer.baseAddress != nil, "Invalid buffer")
     }
 
-    private mutating func writeByte(_ byte: UInt8) {
+    private mutating func writeByte(_ byte: UInt8) -> SizeType {
       buffer.baseAddress.unsafelyUnwrapped.pointee = byte
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(1))
       header.count &+= 1
+      return 1
     }
 
-    private mutating func writeByte(_ byte: UInt8, count: Int) {
+    private mutating func writeByte(_ byte: UInt8, count: Int) -> SizeType {
       buffer.baseAddress.unsafelyUnwrapped.initialize(repeating: byte, count: count)
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(count))
       header.count &+= count
+      return SizeType(truncatingIfNeeded: count)
     }
 
-    private mutating func writeBytes<T>(_ bytes: T) where T: Collection, T.Element == UInt8 {
+    private mutating func writeBytes<T>(_ bytes: T) -> SizeType where T: Collection, T.Element == UInt8 {
       let count = buffer.initialize(from: bytes).1
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(count))
       header.count &+= count
+      return SizeType(truncatingIfNeeded: count)
     }
 
     mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
@@ -311,53 +313,47 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       header.cannotBeABaseURL = cannotBeABaseURL
     }
 
-    mutating func writeSchemeContents<T>(_ schemeBytes: T, countIfKnown: Int?) where T: Collection, T.Element == UInt8 {
-      writeBytes(schemeBytes)
-      writeByte(ASCII.colon.codePoint)
-      header.schemeLength = SizeType(countIfKnown.map { $0 &+ 1 } ?? header.count)
+    mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
+      header.schemeLength = writeBytes(schemeBytes) + 1
+      _ = writeByte(ASCII.colon.codePoint)
       header.components = .scheme
     }
 
     mutating func writeAuthorityHeader() {
-      writeByte(ASCII.forwardSlash.codePoint, count: 2)
+      _ = writeByte(ASCII.forwardSlash.codePoint, count: 2)
       header.components.insert(.authority)
     }
 
     mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
-    where T: RandomAccessCollection, T.Element == UInt8 {
+    where T: Collection, T.Element == UInt8 {
       usernameWriter { piece in
-        writeBytes(piece)
-        header.usernameLength &+= SizeType(piece.count)
+        header.usernameLength &+= writeBytes(piece)
       }
     }
 
     mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
-    where T: RandomAccessCollection, T.Element == UInt8 {
-      writeByte(ASCII.colon.codePoint)
-      header.passwordLength = 1
+    where T: Collection, T.Element == UInt8 {
+      header.passwordLength = writeByte(ASCII.colon.codePoint)
       passwordWriter { piece in
-        writeBytes(piece)
-        header.passwordLength &+= SizeType(piece.count)
+        header.passwordLength &+= writeBytes(piece)
       }
     }
 
     mutating func writeCredentialsTerminator() {
-      writeByte(ASCII.commercialAt.codePoint)
+      _ = writeByte(ASCII.commercialAt.codePoint)
     }
-    
+
     mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
-      hostnameWriter {
-        writeBytes($0)
-        header.hostnameLength &+= SizeType($0.count)
+      hostnameWriter { piece in
+        header.hostnameLength &+= writeBytes(piece)
       }
     }
 
     mutating func writePort(_ port: UInt16) {
-      writeByte(ASCII.colon.codePoint)
+      header.portLength = writeByte(ASCII.colon.codePoint)
       var portString = String(port)
       portString.withUTF8 {
-        writeBytes($0)
-        header.portLength = SizeType(1 &+ $0.count)
+        header.portLength &+= writeBytes($0)
       }
     }
 
@@ -365,19 +361,18 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       _ authority: UnsafeBufferPointer<UInt8>,
       usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
     ) {
-      writeBytes(authority)
-      header.usernameLength = SizeType(usernameLength)
-      header.passwordLength = SizeType(passwordLength)
-      header.hostnameLength = SizeType(hostnameLength)
-      header.portLength = SizeType(portLength)
+      _ = writeBytes(authority)
+      header.usernameLength = SizeType(truncatingIfNeeded: usernameLength)
+      header.passwordLength = SizeType(truncatingIfNeeded: passwordLength)
+      header.hostnameLength = SizeType(truncatingIfNeeded: hostnameLength)
+      header.portLength = SizeType(truncatingIfNeeded: portLength)
     }
 
     mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
-    where T: RandomAccessCollection, T.Element == UInt8 {
+    where T: Collection, T.Element == UInt8 {
       header.components.insert(.path)
-      pathWriter {
-        writeBytes($0)
-        header.pathLength &+= SizeType($0.count)
+      pathWriter { piece in
+        header.pathLength &+= writeBytes(piece)
       }
     }
 
@@ -389,28 +384,24 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(length))
       header.count &+= length
 
-      header.pathLength = SizeType(length)
+      header.pathLength = SizeType(truncatingIfNeeded: length)
     }
 
     mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
-    where T: RandomAccessCollection, T.Element == UInt8 {
+    where T: Collection, T.Element == UInt8 {
       header.components.insert(.query)
-      writeByte(ASCII.questionMark.codePoint)
-      header.queryLength = 1
+      header.queryLength = writeByte(ASCII.questionMark.codePoint)
       queryWriter {
-        writeBytes($0)
-        header.queryLength &+= SizeType($0.count)
+        header.queryLength &+= writeBytes($0)
       }
     }
 
     mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
-    where T: RandomAccessCollection, T.Element == UInt8 {
+    where T: Collection, T.Element == UInt8 {
       header.components.insert(.fragment)
-      writeByte(ASCII.numberSign.codePoint)
-      header.fragmentLength = 1
+      header.fragmentLength = writeByte(ASCII.numberSign.codePoint)
       fragmentWriter {
-        writeBytes($0)
-        header.fragmentLength &+= SizeType($0.count)
+        header.fragmentLength &+= writeBytes($0)
       }
     }
   }

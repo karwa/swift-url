@@ -62,13 +62,18 @@ extension PercentEncoding {
   ///                     only the % character, upper-case ASCII hex digits, and characters allowed by the encode set. The given pointer, and any
   ///                     derived pointers to the same region of memory, must not escape the closure.
   ///
+  /// - returns: `true` if any bytes from the given sequence required percent-encoding, otherwise `false`.
+  ///             Note that `false` is also returned if bytes were substituted, as long as no percent-encoding was required.
+  ///
+  @discardableResult
   static func encode<Bytes, EncodeSet: PercentEncodeSet>(
     bytes: Bytes,
     using encodeSet: EncodeSet.Type,
     _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
-  ) where Bytes: Sequence, Bytes.Element == UInt8 {
+  ) -> Bool where Bytes: Sequence, Bytes.Element == UInt8 {
 
-    withSmallStringSizedStackBuffer { chunkBuffer in
+    return withSmallStringSizedStackBuffer { chunkBuffer -> Bool in
+      var didEncode = false
       let chunkSize = chunkBuffer.count
       var i = 0
       for byte in bytes {
@@ -87,9 +92,11 @@ extension PercentEncoding {
           into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: 3)
         )
         i &+= 3
+        didEncode = true
       }
       // Flush the buffer.
       processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress, count: i))
+      return didEncode
     }
   }
 
@@ -115,13 +122,18 @@ extension PercentEncoding {
   ///                     only the % character, upper-case ASCII hex digits, and characters allowed by the encode set. The given pointer, and any
   ///                     derived pointers to the same region of memory, must not escape the closure.
   ///
+  /// - returns: `true` if any bytes from the given sequence required percent-encoding, otherwise `false`.
+  ///             Note that `false` is also returned if bytes were substituted, as long as no percent-encoding was required.
+  ///
+  @discardableResult
   static func encodeFromBack<Bytes, EncodeSet: PercentEncodeSet>(
     bytes: Bytes,
     using encodeSet: EncodeSet.Type,
     _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
-  ) where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+  ) -> Bool where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
-    withSmallStringSizedStackBuffer { chunkBuffer in
+    return withSmallStringSizedStackBuffer { chunkBuffer -> Bool in
+      var didEncode = false
       let chunkSize = chunkBuffer.count
       var i = chunkBuffer.endIndex
       for byte in bytes.reversed() {
@@ -142,11 +154,13 @@ extension PercentEncoding {
           byte: byte,
           into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: 3)
         )
+        didEncode = true
       }
       // Flush the buffer.
       processChunk(
         UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped.advanced(by: i), count: chunkSize &- i)
       )
+      return didEncode
     }
   }
 

@@ -37,43 +37,48 @@ extension PathComponentVisitor {
   }
 }
 
-/// A `PathComponentVisitor` which calculates the size of the buffer required to write a path.
+/// A `PathComponentVisitor` which calculates metrics about a path.
 ///
-struct PathBufferLengthCalculator: PathComponentVisitor {
-  private var length: Int = 0
+struct PathMetricsCollector: PathComponentVisitor {
+  private(set) var requiredCapacity: Int = 0
+  private(set) var numberOfComponents: Int = 0
+  private(set) var needsEscaping = false
 
-  static func requiredBufferLength<InputString>(
+  static func collectMetrics<InputString>(
     pathString input: InputString,
     schemeKind: WebURL.Scheme,
     baseURL: WebURL?
-  ) -> Int where InputString: BidirectionalCollection, InputString.Element == UInt8 {
-    var visitor = PathBufferLengthCalculator()
+  ) -> PathMetricsCollector
+  where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+    var visitor = PathMetricsCollector()
     visitor.walkPathComponents(
       pathString: input,
       schemeKind: schemeKind,
       baseURL: baseURL
     )
-    return visitor.length
+    return visitor
   }
 
   fileprivate mutating func visitInputPathComponent<InputString>(
     _ pathComponent: InputString, isLeadingWindowsDriveLetter: Bool
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
-    length += 1
-    PercentEncoding.encodeFromBack(
+    numberOfComponents += 1
+    requiredCapacity += 1  // for the path separator.
+    let thisComponentNeedsEscaping = PercentEncoding.encodeFromBack(
       bytes: pathComponent,
       using: URLEncodeSet.Path.self
-    ) { piece in
-      length += piece.count
-    }
+    ) { piece in requiredCapacity += piece.count }
+    needsEscaping = needsEscaping || thisComponentNeedsEscaping
   }
 
   fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
-    length += n
+    numberOfComponents += n
+    requiredCapacity += n
   }
 
   fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
-    length += 1 + pathComponent.count
+    numberOfComponents += 1
+    requiredCapacity += 1 + pathComponent.count
   }
 }
 
@@ -83,16 +88,18 @@ struct PathBufferLengthCalculator: PathComponentVisitor {
 struct PathPreallocatedBufferWriter: PathComponentVisitor {
   private let buffer: UnsafeMutableBufferPointer<UInt8>
   private var front: Int
+  private let needsEscaping: Bool
 
   static func writePath<InputString>(
     to buffer: UnsafeMutableBufferPointer<UInt8>,
     pathString input: InputString,
     schemeKind: WebURL.Scheme,
-    baseURL: WebURL?
+    baseURL: WebURL?,
+    needsEscaping: Bool = true
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     // Checking this now allows the implementation to use `.baseAddress.unsafelyUnwrapped`.
     precondition(buffer.baseAddress != nil)
-    var visitor = PathPreallocatedBufferWriter(buffer: buffer, front: buffer.endIndex)
+    var visitor = PathPreallocatedBufferWriter(buffer: buffer, front: buffer.endIndex, needsEscaping: needsEscaping)
     visitor.walkPathComponents(
       pathString: input,
       schemeKind: schemeKind,
@@ -122,13 +129,23 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
       prependSlash()
       return
     }
-    PercentEncoding.encodeFromBack(
-      bytes: pathComponent,
-      using: URLEncodeSet.Path.self
-    ) { piece in
-      let newFront = buffer.index(front, offsetBy: -1 * piece.count)
-      buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront)
-        .initialize(from: piece.baseAddress!, count: piece.count)
+    if needsEscaping {
+      PercentEncoding.encodeFromBack(
+        bytes: pathComponent,
+        using: URLEncodeSet.Path.self
+      ) { piece in
+        let newFront = buffer.index(front, offsetBy: -1 * piece.count)
+        buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront)
+          .initialize(from: piece.baseAddress!, count: piece.count)
+        front = newFront
+      }
+    } else {
+      let count = pathComponent.count
+      let newFront = buffer.index(front, offsetBy: -1 * count)
+      _ = UnsafeMutableBufferPointer(
+        start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
+        count: count
+      ).initialize(from: pathComponent)
       front = newFront
     }
     prependSlash()

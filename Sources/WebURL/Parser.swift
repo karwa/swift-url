@@ -74,11 +74,11 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
     // Write to the optimal storage variant.
     if metrics.requiredCapacity < UInt8.max {
       return GenericURLHeader<UInt8>.writeURLToNewStorage(capacity: metrics.requiredCapacity) { smallWriter in
-        write(to: &smallWriter, knownPathLength: metrics.pathLength)
+        write(to: &smallWriter, metrics: metrics)
       }
     } else {
       return GenericURLHeader<Int>.writeURLToNewStorage(capacity: metrics.requiredCapacity) { genericWriter in
-        write(to: &genericWriter, knownPathLength: metrics.pathLength)
+        write(to: &genericWriter, metrics: metrics)
       }
     }
   }
@@ -89,8 +89,8 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
   /// If this `ParsedURLString` is being written for a second time and this length is already known, it may be provided via `knownPathLength`
   /// to skip the length calculation phase of path-writing.
   ///
-  func write<WriterType: URLWriter>(to writer: inout WriterType, knownPathLength: Int? = nil) {
-    mapping.write(inputString: inputString, baseURL: baseURL, to: &writer, knownPathLength: knownPathLength)
+  func write<WriterType: URLWriter>(to writer: inout WriterType, metrics: URLMetricsCollector? = nil) {
+    mapping.write(inputString: inputString, baseURL: baseURL, to: &writer, metrics: metrics)
   }
 }
 
@@ -122,7 +122,7 @@ extension ParsedURLString {
       inputString: InputString,
       baseURL: WebURL?,
       to writer: inout WriterType,
-      knownPathLength: Int? = nil
+      metrics: URLMetricsCollector? = nil
     ) {
 
       // 1: Write flags
@@ -131,7 +131,7 @@ extension ParsedURLString {
       // 2: Write scheme.
       if let inputScheme = schemeRange {
         // Scheme must be lowercased.
-        writer.writeSchemeContents(LowercaseASCIITransformer(base: inputString[inputScheme]), countIfKnown: nil)
+        writer.writeSchemeContents(LowercaseASCIITransformer(base: inputString[inputScheme]))
       } else {
         guard let baseURL = baseURL, componentsToCopyFromBase.contains(.scheme) else {
           preconditionFailure("Cannot construct a URL without a scheme")
@@ -139,7 +139,7 @@ extension ParsedURLString {
         assert(schemeKind == baseURL.schemeKind)
         baseURL.variant.withComponentBytes(.scheme) {
           let bytes = $0!.dropLast()  // drop terminator.
-          writer.writeSchemeContents(bytes, countIfKnown: bytes.count)
+          writer.writeSchemeContents(bytes)
         }
       }
 
@@ -150,17 +150,19 @@ extension ParsedURLString {
         var hasCredentials = false
         if let username = usernameRange, username.isEmpty == false {
           writer.writeUsernameContents { writePiece in
-            PercentEncoding.encode(bytes: inputString[username], using: URLEncodeSet.UserInfo.self) { piece in
-              writePiece(piece)
-            }
+            PercentEncoding.encode(
+              bytes: inputString[username],
+              using: URLEncodeSet.UserInfo.self
+            ) { piece in writePiece(piece) }
           }
           hasCredentials = true
         }
         if let password = passwordRange, password.isEmpty == false {
           writer.writePasswordContents { writePiece in
-            PercentEncoding.encode(bytes: inputString[password], using: URLEncodeSet.UserInfo.self) { piece in
-              writePiece(piece)
-            }
+            PercentEncoding.encode(
+              bytes: inputString[password],
+              using: URLEncodeSet.UserInfo.self
+            ) { piece in writePiece(piece) }
           }
           hasCredentials = true
         }
@@ -199,32 +201,42 @@ extension ParsedURLString {
       if let path = pathRange {
         switch cannotBeABaseURL {
         case true:
-          writer.writePathSimple { writePiece in
-            PercentEncoding.encode(bytes: inputString[path], using: URLEncodeSet.C0.self) { piece in
-              writePiece(piece)
+          var didEscape = false
+          if metrics?.componentMaySkipEscaping(.path) == true {
+            writer.writePathSimple { $0(inputString[path]) }
+          } else {
+            writer.writePathSimple { writePiece in
+              didEscape = PercentEncoding.encode(
+                bytes: inputString[path],
+                using: URLEncodeSet.C0.self
+              ) { piece in writePiece(piece) }
             }
           }
+          writer.writeHint(.path, needsEscaping: didEscape)
         case false:
-          let pathLength: Int
-          if let knownLength = knownPathLength {
-            pathLength = knownLength
+          let pathMetrics: PathMetricsCollector
+          if let urlMetrics = metrics, let precalcPathMetrics = urlMetrics.pathMetrics {
+            pathMetrics = precalcPathMetrics
           } else {
-            pathLength = PathBufferLengthCalculator.requiredBufferLength(
+            pathMetrics = PathMetricsCollector.collectMetrics(
               pathString: inputString[path],
               schemeKind: schemeKind,
               baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
             )
           }
-          assert(pathLength > 0)
+          writer.writeHint(.path, needsEscaping: pathMetrics.needsEscaping)
+          writer.writePathMetricsHint(pathMetrics)
+          assert(pathMetrics.requiredCapacity > 0)
 
-          writer.writeUnsafePathInPreallocatedBuffer(length: pathLength) { mutBuffer in
+          writer.writeUnsafePathInPreallocatedBuffer(length: pathMetrics.requiredCapacity) { mutBuffer in
             PathPreallocatedBufferWriter.writePath(
               to: mutBuffer,
               pathString: inputString[path],
               schemeKind: schemeKind,
-              baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
+              baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
+              needsEscaping: pathMetrics.needsEscaping
             )
-            return pathLength
+            return pathMetrics.requiredCapacity
           }
         }
       } else if componentsToCopyFromBase.contains(.path) {
@@ -245,18 +257,27 @@ extension ParsedURLString {
 
       // 5: Write query.
       if let query = queryRange {
-        writer.writeQueryContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-          if schemeKind.isSpecial {
-            PercentEncoding.encode(bytes: inputString[query], using: URLEncodeSet.Query_Special.self) { piece in
-              writePiece(piece)
-            }
-          } else {
-            PercentEncoding.encode(bytes: inputString[query], using: URLEncodeSet.Query_NotSpecial.self) { piece in
-              writePiece(piece)
+        var didEscape = false
+        if metrics?.componentMaySkipEscaping(.query) == true {
+          writer.writeQueryContents { writerPiece in
+            writerPiece(inputString[query])
+          }
+        } else {
+          writer.writeQueryContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
+            if schemeKind.isSpecial {
+              didEscape = PercentEncoding.encode(
+                bytes: inputString[query],
+                using: URLEncodeSet.Query_Special.self
+              ) { piece in writePiece(piece) }
+            } else {
+              didEscape = PercentEncoding.encode(
+                bytes: inputString[query],
+                using: URLEncodeSet.Query_NotSpecial.self
+              ) { piece in writePiece(piece) }
             }
           }
         }
-
+        writer.writeHint(.query, needsEscaping: didEscape)
       } else if componentsToCopyFromBase.contains(.query) {
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
         baseURL.variant.withComponentBytes(.query) {
@@ -268,11 +289,20 @@ extension ParsedURLString {
 
       // 6: Write fragment.
       if let fragment = fragmentRange {
-        writer.writeFragmentContents { writePiece in
-          PercentEncoding.encode(bytes: inputString[fragment], using: URLEncodeSet.Fragment.self) { piece in
-            writePiece(piece)
+        var didEscape = false
+        if metrics?.componentMaySkipEscaping(.fragment) == true {
+          writer.writeFragmentContents { writePiece in
+            writePiece(inputString[fragment])
+          }
+        } else {
+          writer.writeFragmentContents { writePiece in
+            didEscape = PercentEncoding.encode(
+              bytes: inputString[fragment],
+              using: URLEncodeSet.Fragment.self
+            ) { piece in writePiece(piece) }
           }
         }
+        writer.writeHint(.fragment, needsEscaping: didEscape)
       } else if componentsToCopyFromBase.contains(.fragment) {
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
         baseURL.variant.withComponentBytes(.fragment) {
