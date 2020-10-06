@@ -1,9 +1,5 @@
 extension WebURL {
 
-  enum Component {
-    case scheme, username, password, hostname, port, path, query, fragment
-  }
-
   enum Variant {
     case small(ManagedArrayBuffer<GenericURLHeader<UInt8>, UInt8>)
     case generic(ManagedArrayBuffer<GenericURLHeader<Int>, UInt8>)
@@ -90,9 +86,7 @@ extension WebURL {
 struct GenericURLHeader<SizeType: FixedWidthInteger>: ManagedBufferHeader {
   var _count: SizeType = 0
   var _capacity: SizeType = 0
-
-  var components: ComponentsToCopy = []  // TODO: Rename type.
-  var schemeKind: WebURL.Scheme = .other
+  
   var schemeLength: SizeType = 0
   var usernameLength: SizeType = 0
   var passwordLength: SizeType = 0
@@ -102,6 +96,9 @@ struct GenericURLHeader<SizeType: FixedWidthInteger>: ManagedBufferHeader {
   var pathLength: SizeType = 0
   var queryLength: SizeType = 0
   var fragmentLength: SizeType = 0
+
+  var hasAuthority: Bool = false
+  var schemeKind: WebURL.Scheme = .other
   var cannotBeABaseURL: Bool = false
 
   var count: Int {
@@ -117,7 +114,7 @@ struct GenericURLHeader<SizeType: FixedWidthInteger>: ManagedBufferHeader {
   // Scheme is always present and starts at byte 0.
 
   var schemeStart: SizeType {
-    assert(components.contains(.scheme), "URLs must always have a scheme")
+    assert(schemeLength != 0, "URLs must always have a scheme")
     return 0
   }
 
@@ -135,7 +132,7 @@ struct GenericURLHeader<SizeType: FixedWidthInteger>: ManagedBufferHeader {
   // The output of the URL parser preserves that, so we need to factor that in to our component offset calculations.
 
   var authorityStart: SizeType {
-    return schemeEnd &+ (components.contains(.authority) ? 2 : 0 /* // */)
+    return schemeEnd &+ (hasAuthority ? 2 : 0 /* // */)
   }
 
   var usernameStart: SizeType {
@@ -165,7 +162,7 @@ struct GenericURLHeader<SizeType: FixedWidthInteger>: ManagedBufferHeader {
   /// Any trailing components (path, query, fragment) start from here.
   ///
   var pathStart: SizeType {
-    return components.contains(.authority) ? (portStart &+ portLength) : schemeEnd
+    return hasAuthority ? (portStart &+ portLength) : schemeEnd
   }
 
   /// Returns the position of the leading '?' in the query-string, if one is present. Otherwise, returns the position after the path.
@@ -185,7 +182,7 @@ struct GenericURLHeader<SizeType: FixedWidthInteger>: ManagedBufferHeader {
   /// Returns the range of the entire authority string, if one is present.
   ///
   var rangeOfAuthorityString: Range<SizeType>? {
-    guard components.contains(.authority) else { return nil }
+    guard hasAuthority else { return nil }
     return Range(uncheckedBounds: (authorityStart, pathStart))
   }
 
@@ -196,46 +193,49 @@ struct GenericURLHeader<SizeType: FixedWidthInteger>: ManagedBufferHeader {
     case .scheme:
       assert(schemeLength > 1)
       return Range(uncheckedBounds: (schemeStart, schemeEnd))
-
     case .hostname:
-      guard components.contains(.authority) else { return nil }
+      guard hasAuthority else { return nil }
       start = hostnameStart
       length = hostnameLength
 
-    // Optional authority details.
-    // These have no distinction between empty and nil values, because lone separators are not preserved.
+    // Components with leading/trailing separators.
+    //
+    // Username & Password make no distinction between empty and nil values, because lone separators are not preserved.
     // e.g. "http://:@test.com" -> "http://test.com".
     case .username:
-      guard components.contains(.authority), usernameLength != 0 else { return nil }
+      guard usernameLength != 0 else { return nil }
+      assert(hasAuthority)
       start = usernameStart
       length = usernameLength
-    // Password and port have leading separators, but lone separators should never exist.
+    // passwordLength and portLength include the leading separator, but lone separators are removed.
+    // i.e. we should never see a length of 1. A length of 0 means a nil value.
     case .password:
       assert(passwordLength != 1)
-      guard components.contains(.authority), passwordLength > 1 else { return nil }
+      guard passwordLength != 0 else { return nil }
+      assert(hasAuthority)
       start = passwordStart
       length = passwordLength
     case .port:
       assert(portLength != 1)
-      guard components.contains(.authority), portLength > 1 else { return nil }
+      guard portLength != 0 else { return nil }
+      assert(hasAuthority)
       start = portStart
       length = portLength
-
-    // Components with leading separators.
-    // Lone separators are preserved in some cases, which is marked by a length of 1.
-    // A length of 0 means a nil value.
+    // Lone separators may be preserved for these components. We may see a length of 1.
     case .path:
-      guard components.contains(.path), pathLength != 0 else { return nil }
+      guard pathLength != 0 else { return nil }
       start = pathStart
       length = pathLength
     case .query:
-      guard components.contains(.query), queryLength != 0 else { return nil }
+      guard queryLength != 0 else { return nil }
       start = queryStart
       length = queryLength
     case .fragment:
-      guard components.contains(.fragment), fragmentLength != 0 else { return nil }
+      guard fragmentLength != 0 else { return nil }
       start = fragmentStart
       length = fragmentLength
+    default:
+      preconditionFailure("Unknown component")
     }
     return Range(uncheckedBounds: (start, start &+ length))
   }
@@ -316,12 +316,11 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
     mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
       header.schemeLength = writeBytes(schemeBytes) + 1
       _ = writeByte(ASCII.colon.codePoint)
-      header.components = .scheme
     }
 
     mutating func writeAuthorityHeader() {
       _ = writeByte(ASCII.forwardSlash.codePoint, count: 2)
-      header.components.insert(.authority)
+      header.hasAuthority = true
     }
 
     mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
@@ -370,15 +369,12 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
 
     mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
     where T: Collection, T.Element == UInt8 {
-      header.components.insert(.path)
       pathWriter { piece in
         header.pathLength &+= writeBytes(piece)
       }
     }
 
     mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
-      header.components.insert(.path)
-
       let bytesWritten = writer(UnsafeMutableBufferPointer(rebasing: buffer.prefix(length)))
       assert(bytesWritten == length)
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(length))
@@ -389,7 +385,6 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
 
     mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
     where T: Collection, T.Element == UInt8 {
-      header.components.insert(.query)
       header.queryLength = writeByte(ASCII.questionMark.codePoint)
       queryWriter {
         header.queryLength &+= writeBytes($0)
@@ -398,7 +393,6 @@ extension GenericURLHeader where SizeType: HasGenericURLHeaderVariant {
 
     mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
     where T: Collection, T.Element == UInt8 {
-      header.components.insert(.fragment)
       header.fragmentLength = writeByte(ASCII.numberSign.codePoint)
       fragmentWriter {
         header.fragmentLength &+= writeBytes($0)

@@ -114,7 +114,7 @@ extension ParsedURLString {
     let port: UInt16?
 
     let cannotBeABaseURL: Bool
-    let componentsToCopyFromBase: ComponentsToCopy
+    fileprivate let componentsToCopyFromBase: ComponentsToCopy
     let schemeKind: WebURL.Scheme
 
     /// - seealso: `ParsedURLString.write(to:knownPathLength:)`.
@@ -149,21 +149,37 @@ extension ParsedURLString {
 
         var hasCredentials = false
         if let username = usernameRange, username.isEmpty == false {
-          writer.writeUsernameContents { writePiece in
-            PercentEncoding.encode(
-              bytes: inputString[username],
-              using: URLEncodeSet.UserInfo.self
-            ) { piece in writePiece(piece) }
+          var didEscape = false
+          if metrics?.componentMaySkipEscaping(.username) == true {
+            writer.writeUsernameContents { writePiece in
+              writePiece(inputString[username])
+            }
+          } else {
+            writer.writeUsernameContents { writePiece in
+              didEscape = PercentEncoding.encode(
+                bytes: inputString[username],
+                using: URLEncodeSet.UserInfo.self
+              ) { piece in writePiece(piece) }
+            }
           }
+          writer.writeHint(.username, needsEscaping: didEscape)
           hasCredentials = true
         }
         if let password = passwordRange, password.isEmpty == false {
-          writer.writePasswordContents { writePiece in
-            PercentEncoding.encode(
-              bytes: inputString[password],
-              using: URLEncodeSet.UserInfo.self
-            ) { piece in writePiece(piece) }
+          var didEscape = false
+          if metrics?.componentMaySkipEscaping(.password) == true {
+            writer.writePasswordContents { writePiece in
+              writePiece(inputString[password])
+            }
+          } else {
+            writer.writePasswordContents { writePiece in
+              didEscape = PercentEncoding.encode(
+                bytes: inputString[password],
+                using: URLEncodeSet.UserInfo.self
+              ) { piece in writePiece(piece) }
+            }
           }
+          writer.writeHint(.password, needsEscaping: didEscape)
           hasCredentials = true
         }
         if hasCredentials {
@@ -323,7 +339,7 @@ extension ParsedURLString {
 ///
 /// - seealso: `URLScanner.UnprocessedMapping.componentsToCopyFromBase`
 ///
-struct ComponentsToCopy: OptionSet {
+fileprivate struct ComponentsToCopy: OptionSet {
   var rawValue: UInt8
   init(rawValue: UInt8) {
     self.rawValue = rawValue
@@ -335,7 +351,7 @@ struct ComponentsToCopy: OptionSet {
   static var fragment: Self { Self(rawValue: 1 << 4) }
 }
 
-enum ParsableComponent {
+fileprivate enum ParsableComponent {
   case authority
   case host
   case port
@@ -347,7 +363,7 @@ enum ParsableComponent {
 
 /// A namespace for URL scanning methods.
 ///
-enum URLScanner<InputString, Callback>
+fileprivate enum URLScanner<InputString, Callback>
 where InputString: BidirectionalCollection, InputString.Element == UInt8, Callback: URLParserCallback {
 
   enum ComponentParseResult {
