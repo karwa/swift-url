@@ -24,6 +24,13 @@ extension WebURL {
       case .generic(let storage): return String(decoding: storage, as: UTF8.self)
       }
     }
+    
+    func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) -> T) -> T {
+      switch self {
+      case .small(let storage): return storage.withUnsafeBufferPointer(block)
+      case .generic(let storage): return storage.withUnsafeBufferPointer(block)
+      }
+    }
 
     func withComponentBytes<T>(_ component: Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
       switch self {

@@ -4,6 +4,14 @@ public struct WebURL {
   init(variant: Variant) {
     self.variant = variant
   }
+  
+  public init?(_ input: String) {
+    var input = input
+    guard let url = input.withUTF8({ urlFromBytes($0, baseURL: nil) }) else {
+      return nil
+    }
+    self = url
+  }
 
   public init?(_ input: String, base: String?) {
     var baseURL: WebURL?
@@ -32,8 +40,57 @@ extension WebURL {
   }
 }
 
-// Note: All of these are now dead. To be replaced with a new object model.
+// Standard protocols.
 
+extension WebURL: CustomStringConvertible, LosslessStringConvertible, TextOutputStreamable {
+  
+  public var description: String {
+    return variant.entireString
+  }
+  
+  public func write<Target>(to target: inout Target) where Target : TextOutputStream {
+    target.write(description)
+  }
+}
+
+extension WebURL: Equatable, Hashable {
+  
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.variant.withEntireString { lhsBuffer in
+      rhs.variant.withEntireString { rhsBuffer in
+        return (lhsBuffer.baseAddress == rhsBuffer.baseAddress && lhsBuffer.count == rhsBuffer.count) ||
+          lhsBuffer.elementsEqual(rhsBuffer)
+      }
+    }
+  }
+  
+  public func hash(into hasher: inout Hasher) {
+    variant.withEntireString { buffer in
+      hasher.combine(bytes: UnsafeRawBufferPointer(buffer))
+    }
+  }
+}
+
+extension WebURL: Codable {
+  
+  public init(from decoder: Decoder) throws {
+    let box = try decoder.singleValueContainer()
+    guard let decoded = WebURL(try box.decode(String.self)) else {
+      throw DecodingError.dataCorruptedError(in: box, debugDescription: "Invalid URL")
+    }
+    self = decoded
+  }
+  
+  public func encode(to encoder: Encoder) throws {
+    var box = encoder.singleValueContainer()
+    try box.encode(self.description)
+  }
+}
+
+
+// Note: All of these are now dead. To be replaced with a new object model.
+// It might be worth having the JS model call through and make any adjustments that it needs,
+// to improve test coverage.
 extension WebURL {
   
   // Components.
