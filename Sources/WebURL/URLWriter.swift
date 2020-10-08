@@ -132,109 +132,128 @@ extension URLWriter {
   }
 }
 
-// MARK: - Metrics collector.
+// MARK: - Metrics.
 
-/// A `URLWriter` which collects various metrics so that storage can be optimally allocated and written.
+/// Information which is used to determine how a URL should be stored or written.
 ///
-/// Currently, it collects the total required capacity of the string (post any percent-encoding) and the length of the path component.
-/// It may collect other data in the future. In particular, it might be interesting to know if we can skip percent-encoding any components, or how many path
-/// components are in the final string (perhaps we'll have a URL storage type with random access to path components).
-///
-struct URLMetricsCollector: URLWriter {
-  private(set) var requiredCapacity: Int = 0
-  private(set) var pathMetrics: PathMetricsCollector? = nil
-  private var componentsWhichMaySkipEscaping: WebURL.ComponentSet = []
-
-  init() {
-  }
-
-  func componentMaySkipEscaping(_ component: WebURL.Component) -> Bool {
-    return componentsWhichMaySkipEscaping.contains(component)
-  }
-
-  mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
-    // Nothing to do.
-  }
-
-  mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
-    requiredCapacity = schemeBytes.count + 1
-  }
-
-  mutating func writeAuthorityHeader() {
-    requiredCapacity += 2
-  }
-
-  mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    usernameWriter {
-      requiredCapacity += $0.count
-    }
-  }
-
-  mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    requiredCapacity += 1
-    passwordWriter {
-      requiredCapacity += $0.count
-    }
-  }
-
-  mutating func writeCredentialsTerminator() {
-    requiredCapacity += 1
-  }
-
-  mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
-    hostnameWriter {
-      requiredCapacity += $0.count
-    }
-  }
-
-  mutating func writePort(_ port: UInt16) {
-    requiredCapacity += 1
-    requiredCapacity += String(port).utf8.count
-  }
-
-  mutating func writeKnownAuthorityString(
-    _ authority: UnsafeBufferPointer<UInt8>,
-    usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
-  ) {
-    requiredCapacity += authority.count
-  }
-
-  mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    pathWriter {
-      requiredCapacity += $0.count
-    }
-  }
-
-  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
-    self.requiredCapacity += length
-  }
-
-  mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    requiredCapacity += 1
-    queryWriter {
-      requiredCapacity += $0.count
-    }
-  }
-
-  mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    requiredCapacity += 1
-    fragmentWriter {
-      requiredCapacity += $0.count
-    }
-  }
+struct URLMetrics {
   
-  mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
-    if needsEscaping == false {
-      componentsWhichMaySkipEscaping.insert(component)
-    }
-  }
+  /// The capacity required to store the URL's code-units. Must always be present and correct.
+  var requiredCapacity: Int
   
-  mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector) {
-    self.pathMetrics = pathMetrics
+  /// If set, contains information about the number of code-units in the path, number of path components, etc.
+  /// If not set, users may make no assumptions about the path.
+  var pathMetrics: PathMetricsCollector? = nil
+  
+  /// Components which are known to not require percent-encoding.
+  /// If a component is not in this set, users must assume that it requires percent-encoding.
+  var componentsWhichMaySkipEscaping: WebURL.ComponentSet = []
+}
+
+extension URLMetrics {
+  
+  static func collect(_ body: (inout Collector) -> Void) -> URLMetrics {
+    var collector = Collector()
+    body(&collector)
+    precondition(collector.metrics.requiredCapacity >= 0)
+    return collector.metrics
+  }
+
+  struct Collector: URLWriter {
+    // TODO: Prohibit users reading this until they finish writing.
+    fileprivate var metrics = URLMetrics(requiredCapacity: 0)
+
+    fileprivate init() {
+    }
+
+    func componentMaySkipEscaping(_ component: WebURL.Component) -> Bool {
+      return metrics.componentsWhichMaySkipEscaping.contains(component)
+    }
+
+    mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
+      // Nothing to do.
+    }
+
+    mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
+      metrics.requiredCapacity = schemeBytes.count + 1
+    }
+
+    mutating func writeAuthorityHeader() {
+      metrics.requiredCapacity += 2
+    }
+
+    mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void)
+    where T: Collection, T.Element == UInt8 {
+      usernameWriter {
+        metrics.requiredCapacity += $0.count
+      }
+    }
+
+    mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
+    where T: Collection, T.Element == UInt8 {
+      metrics.requiredCapacity += 1
+      passwordWriter {
+        metrics.requiredCapacity += $0.count
+      }
+    }
+
+    mutating func writeCredentialsTerminator() {
+      metrics.requiredCapacity += 1
+    }
+
+    mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+      hostnameWriter {
+        metrics.requiredCapacity += $0.count
+      }
+    }
+
+    mutating func writePort(_ port: UInt16) {
+      metrics.requiredCapacity += 1
+      metrics.requiredCapacity += String(port).utf8.count
+    }
+
+    mutating func writeKnownAuthorityString(
+      _ authority: UnsafeBufferPointer<UInt8>,
+      usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
+    ) {
+      metrics.requiredCapacity += authority.count
+    }
+
+    mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
+    where T: Collection, T.Element == UInt8 {
+      pathWriter {
+        metrics.requiredCapacity += $0.count
+      }
+    }
+
+    mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
+      metrics.requiredCapacity += length
+    }
+
+    mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
+    where T: Collection, T.Element == UInt8 {
+      metrics.requiredCapacity += 1
+      queryWriter {
+        metrics.requiredCapacity += $0.count
+      }
+    }
+
+    mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
+    where T: Collection, T.Element == UInt8 {
+      metrics.requiredCapacity += 1
+      fragmentWriter {
+        metrics.requiredCapacity += $0.count
+      }
+    }
+    
+    mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
+      if needsEscaping == false {
+        metrics.componentsWhichMaySkipEscaping.insert(component)
+      }
+    }
+    
+    mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector) {
+      metrics.pathMetrics = pathMetrics
+    }
   }
 }

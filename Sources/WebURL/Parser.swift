@@ -69,8 +69,9 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
   func constructURLObject() -> WebURL {
 
     // Do a dry-run to calculate metrics about the final contents.
-    var metrics = URLMetricsCollector()
-    write(to: &metrics)
+    let metrics = URLMetrics.collect { collector in
+      write(to: &collector)
+    }
     // Write to the optimal storage variant.
     if metrics.requiredCapacity < UInt8.max {
       return GenericURLHeader<UInt8>.writeURLToNewStorage(capacity: metrics.requiredCapacity) { smallWriter in
@@ -89,7 +90,7 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
   /// If this `ParsedURLString` is being written for a second time and this length is already known, it may be provided via `knownPathLength`
   /// to skip the length calculation phase of path-writing.
   ///
-  func write<WriterType: URLWriter>(to writer: inout WriterType, metrics: URLMetricsCollector? = nil) {
+  func write<WriterType: URLWriter>(to writer: inout WriterType, metrics: URLMetrics? = nil) {
     mapping.write(inputString: inputString, baseURL: baseURL, to: &writer, metrics: metrics)
   }
 }
@@ -122,7 +123,7 @@ extension ParsedURLString {
       inputString: InputString,
       baseURL: WebURL?,
       to writer: inout WriterType,
-      metrics: URLMetricsCollector? = nil
+      metrics: URLMetrics? = nil
     ) {
 
       // 1: Write flags
@@ -150,7 +151,7 @@ extension ParsedURLString {
         var hasCredentials = false
         if let username = usernameRange, username.isEmpty == false {
           var didEscape = false
-          if metrics?.componentMaySkipEscaping(.username) == true {
+          if metrics?.componentsWhichMaySkipEscaping.contains(.username) == true {
             writer.writeUsernameContents { writePiece in
               writePiece(inputString[username])
             }
@@ -167,7 +168,7 @@ extension ParsedURLString {
         }
         if let password = passwordRange, password.isEmpty == false {
           var didEscape = false
-          if metrics?.componentMaySkipEscaping(.password) == true {
+          if metrics?.componentsWhichMaySkipEscaping.contains(.password) == true {
             writer.writePasswordContents { writePiece in
               writePiece(inputString[password])
             }
@@ -218,7 +219,7 @@ extension ParsedURLString {
         switch cannotBeABaseURL {
         case true:
           var didEscape = false
-          if metrics?.componentMaySkipEscaping(.path) == true {
+          if metrics?.componentsWhichMaySkipEscaping.contains(.path) == true {
             writer.writePathSimple { $0(inputString[path]) }
           } else {
             writer.writePathSimple { writePiece in
@@ -274,7 +275,7 @@ extension ParsedURLString {
       // 5: Write query.
       if let query = queryRange {
         var didEscape = false
-        if metrics?.componentMaySkipEscaping(.query) == true {
+        if metrics?.componentsWhichMaySkipEscaping.contains(.query) == true {
           writer.writeQueryContents { writerPiece in
             writerPiece(inputString[query])
           }
@@ -306,7 +307,7 @@ extension ParsedURLString {
       // 6: Write fragment.
       if let fragment = fragmentRange {
         var didEscape = false
-        if metrics?.componentMaySkipEscaping(.fragment) == true {
+        if metrics?.componentsWhichMaySkipEscaping.contains(.fragment) == true {
           writer.writeFragmentContents { writePiece in
             writePiece(inputString[fragment])
           }
