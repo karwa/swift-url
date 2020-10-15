@@ -71,10 +71,30 @@ func replaceElements<C, T: BufferContainer>(
   storageConstructor: (_ minimumCapacity: Int) -> T
 ) -> (bufferCount: Int, insertedCount: Int, newStorage: T?, newStorageCount: Int)
 where C: Collection, T.Element == C.Element {
+  return replaceElements(
+    in: buffer,
+    initializedCount: initializedCount,
+    isUnique: isUnique,
+    subrange: subrange,
+    withElements: newElements.count,
+    initializedWith: { return $0.initialize(from: newElements).1 },
+    storageConstructor: storageConstructor
+  )
+}
+  
+func replaceElements<T: BufferContainer>(
+  in buffer: UnsafeMutableBufferPointer<T.Element>,
+  initializedCount: Int,
+  isUnique: Bool,
+  subrange: Range<Int>,
+  withElements newElementsCount: Int,
+  initializedWith initializer: (UnsafeMutableBufferPointer<T.Element>)->Int,
+  storageConstructor: (_ minimumCapacity: Int) -> T
+) -> (bufferCount: Int, insertedCount: Int, newStorage: T?, newStorageCount: Int) {
   precondition(subrange.lowerBound >= 0, "subrange start is negative")
   precondition(subrange.upperBound <= initializedCount, "subrange extends past the end")
 
-  let insertCount = newElements.count
+  let insertCount = newElementsCount
   let finalCount = initializedCount - subrange.count + insertCount
 
   if isUnique && finalCount <= buffer.count {
@@ -82,8 +102,8 @@ where C: Collection, T.Element == C.Element {
       buffer: buffer, initializedCount: initializedCount,
       subrange: subrange, newElementCount: insertCount
     ) { ptr, expectedCount in
-      let n = UnsafeMutableBufferPointer(start: ptr, count: expectedCount).initialize(from: newElements).1
-      precondition(n == expectedCount, "newElements did not contain newElements.count objects")
+      let n = initializer(UnsafeMutableBufferPointer(start: ptr, count: expectedCount))
+      precondition(n == expectedCount, "initializer failed to initialize entire capacity")
     }
     return (bufferCount: newCount, insertedCount: insertCount, newStorage: nil, newStorageCount: 0)
   }
@@ -94,15 +114,15 @@ where C: Collection, T.Element == C.Element {
     if isUnique {
       return newBuffer.moveInitialize(from: srcBuffer, replacingSubrange: subrange, withElements: insertCount) {
         ptr, expectedCount in
-        let n = UnsafeMutableBufferPointer(start: ptr, count: expectedCount).initialize(from: newElements).1
-        precondition(n == expectedCount, "newElements did not contain newElements.count objects")
+        let n = initializer(UnsafeMutableBufferPointer(start: ptr, count: expectedCount))
+        precondition(n == expectedCount, "initializer failed to initialize entire capacity")
       }
     }
     return newBuffer.initialize(
       from: UnsafeBufferPointer(srcBuffer), replacingSubrange: subrange, withElements: insertCount
     ) { ptr, expectedCount in
-      let n = UnsafeMutableBufferPointer(start: ptr, count: expectedCount).initialize(from: newElements).1
-      precondition(n == expectedCount, "newElements did not contain newElements.count objects")
+      let n = initializer(UnsafeMutableBufferPointer(start: ptr, count: expectedCount))
+      precondition(n == expectedCount, "initializer failed to initialize entire capacity")
     }
   }
   assert(newCount == finalCount)

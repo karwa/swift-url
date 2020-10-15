@@ -73,7 +73,7 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
       write(to: &collector)
     }
     // Write to the optimal storage variant.
-    if metrics.requiredCapacity < UInt8.max {
+    if metrics.requiredCapacity <= UInt8.max {
       return GenericURLHeader<UInt8>.writeURLToNewStorage(capacity: metrics.requiredCapacity) { smallWriter in
         write(to: &smallWriter, metrics: metrics)
       }

@@ -282,10 +282,10 @@ extension AltRangeReplaceableCollection {
     return replaceSubrange(i..<i, with: CollectionOfOne(newElement)).lowerBound
   }
 
-  //  mutating func removeSubrange(_ bounds: Range<Self.Index>) {
-  //    replaceSubrange(bounds, with: EmptyCollection())
-  //  }
-  //
+  mutating func removeSubrange(_ bounds: Range<Self.Index>) {
+    replaceSubrange(bounds, with: EmptyCollection())
+  }
+  
   //  mutating func remove(at i: Self.Index) -> Self.Element {
   //    precondition(i != endIndex)
   //    removeSubrange(i..<i)

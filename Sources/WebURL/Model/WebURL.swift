@@ -1,7 +1,7 @@
 public struct WebURL {
-  var variant: Variant
+  var variant: AnyURLStorage
 
-  init(variant: Variant) {
+  init(variant: AnyURLStorage) {
     self.variant = variant
   }
   

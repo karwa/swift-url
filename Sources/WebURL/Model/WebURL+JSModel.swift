@@ -19,7 +19,7 @@ extension WebURL {
   /// the kinds of URLs a browser will accept or reject.
   ///
   public struct JSModel {
-    var variant: Variant
+    var variant: AnyURLStorage
 
     var swiftModel: WebURL {
       return WebURL(variant: self.variant)
@@ -43,7 +43,13 @@ extension WebURL.JSModel {
   // Note: erasure to empty strings is done to fit the Javascript model for WHATWG tests.
 
   public var href: String {
-    return variant.entireString
+    get {
+      return variant.entireString
+    }
+    set {
+      guard let newURL = WebURL(newValue) else { return }
+      self = newURL.jsModel
+    }
   }
 
   func stringForComponent(_ component: WebURL.Component) -> String? {
@@ -57,7 +63,24 @@ extension WebURL.JSModel {
   }
 
   public var username: String {
-    return stringForComponent(.username) ?? ""
+    get {
+    	return stringForComponent(.username) ?? ""
+    }
+    set {
+      // TODO: Switch the storage with something so we get a unique reference.
+      switch variant {
+      case .generic(var storage):
+        var stringToInsert = newValue
+        self.variant = stringToInsert.withUTF8 { utf8 in
+          storage.replaceUsername(with: utf8).1
+        }
+      case .small(var storage):
+        var stringToInsert = newValue
+        self.variant = stringToInsert.withUTF8 { utf8 in
+          storage.replaceUsername(with: utf8).1
+        }
+      }
+    }
   }
 
   public var password: String {
