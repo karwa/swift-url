@@ -399,6 +399,36 @@ extension URLStorage {
 
 extension URLStorage {
   
+  fileprivate mutating func replaceSubrange(
+    _ subrangeToReplace: Range<Int>,
+    newElementCount: Int,
+    newStructure: URLStructure<Int>, newMetrics: URLMetrics,
+    initializingSubrangeWith subrangeInitializer: (UnsafeMutableBufferPointer<UInt8>)->Int
+  ) -> AnyURLStorage {
+    
+    if AnyURLStorage.isOptimalStorageType(Self.self, for: newStructure, metrics: newMetrics) {
+      codeUnits.unsafeReplaceSubrange(subrangeToReplace, withUninitializedCapacity: newElementCount,
+                                      initializingWith: subrangeInitializer)
+      guard header.copyStructure(from: newStructure, metrics: newMetrics) else {
+        preconditionFailure("AnyURLStorage.isOptimalStorageType returned true for an incompatible header/string")
+      }
+      return AnyURLStorage(self)
+    } else {
+      let newStorage = AnyURLStorage(creatingOptimalStorageFor: newStructure, metrics: newMetrics) { dest in
+        return codeUnits.withUnsafeBufferPointer { src in
+          dest.initialize(from: src, replacingSubrange: subrangeToReplace, withElements: newElementCount) { rgnStart, count in
+            let written = subrangeInitializer(UnsafeMutableBufferPointer(start: rgnStart, count: count))
+            precondition(written == count)
+          }
+        }
+      }
+      assert(newStorage.withEntireString { $0.count } == newMetrics.requiredCapacity)
+      return newStorage
+    }
+  }
+  
+  
+  
   mutating func replaceUsername(
     with newValue: UnsafeBufferPointer<UInt8>
   ) -> (Bool, AnyURLStorage) {
@@ -422,21 +452,10 @@ extension URLStorage {
       let newMetrics = URLMetrics(requiredCapacity: header.count - subrangeToRemove.count)
       var newStructure = oldStructure
       newStructure.usernameLength = 0
-      if AnyURLStorage.isOptimalStorageType(Self.self, for: newStructure, metrics: newMetrics) {
-        codeUnits.removeSubrange(subrangeToRemove)
-        guard header.copyStructure(from: newStructure, metrics: newMetrics) else {
-          preconditionFailure("AnyURLStorage.isOptimalStorageType returned true for an incompatible header/string")
-        }
-        return (true, AnyURLStorage(self))
-      } else {
-        let newStorage = AnyURLStorage(creatingOptimalStorageFor: newStructure, metrics: newMetrics) { dest in
-          return codeUnits.withUnsafeBufferPointer { src in
-            return dest.initialize(from: src, replacingSubrange: subrangeToRemove, withElements: 0)
-          }
-        }
-        assert(newStorage.withEntireString { $0.count } == newMetrics.requiredCapacity)
-        return (true, newStorage)
-      }
+      
+      let result = replaceSubrange(subrangeToRemove, newElementCount: 0, newStructure: newStructure, newMetrics: newMetrics,
+                                   initializingSubrangeWith: { _ in return 0 })
+      return (true, result)
     }
     
     let subrangeToRemove = oldStructure.usernameStart..<oldStructure.passwordStart
@@ -449,8 +468,10 @@ extension URLStorage {
     let newByteCount = newStructure.usernameLength + (hasPassword || oldStructure.usernameLength != 0 ? 0 : 1)
     let newMetrics = URLMetrics(requiredCapacity: header.count + (newByteCount - subrangeToRemove.count))
     
-    if AnyURLStorage.isOptimalStorageType(Self.self, for: newStructure, metrics: newMetrics) {
-      codeUnits.unsafeReplaceSubrange(subrangeToRemove, withUninitializedCapacity: newByteCount) { dest in
+    let result = replaceSubrange(
+      subrangeToRemove, newElementCount: newByteCount,
+      newStructure: newStructure, newMetrics: newMetrics,
+      initializingSubrangeWith: { dest in
 				var remainingBuffer = dest
         if needsEncoding {
           PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) { encodedStr in
@@ -467,37 +488,9 @@ extension URLStorage {
         }
         precondition(remainingBuffer.count == 0)
         return newByteCount
-      }
-      guard header.copyStructure(from: newStructure, metrics: newMetrics) else {
-        preconditionFailure("AnyURLStorage.isOptimalStorageType returned true for an incompatible header/string")
-      }
-      return (true, AnyURLStorage(self))
-    } else {
-      let newStorage = AnyURLStorage(creatingOptimalStorageFor: newStructure, metrics: newMetrics) { dest in
-        codeUnits.withUnsafeBufferPointer { src in
-          return dest.initialize(from: src, replacingSubrange: subrangeToRemove, withElements: newByteCount) { rgnStart, count in
-            var remainingBuffer = UnsafeMutableBufferPointer(start: rgnStart, count: count)
-            if needsEncoding {
-              PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) { encodedStr in
-                let end = remainingBuffer.initialize(from: encodedStr).1
-                remainingBuffer = UnsafeMutableBufferPointer(rebasing: remainingBuffer[end...])
-              }
-            } else {
-              let end = remainingBuffer.initialize(from: newValue).1
-              remainingBuffer = UnsafeMutableBufferPointer(rebasing: remainingBuffer[end...])
-            }
-            if hasPassword == false {
-              remainingBuffer.baseAddress?.pointee = ASCII.commercialAt.codePoint
-              remainingBuffer = UnsafeMutableBufferPointer(rebasing: remainingBuffer.dropFirst())
-            }
-            precondition(remainingBuffer.count == 0)
-          }
-        }
-      }
-      assert(newStorage.withEntireString{ $0.count } == newMetrics.requiredCapacity)
-      return (true, newStorage)
+      })
+      return (true, result)
     }
-  }
 }
 
 
