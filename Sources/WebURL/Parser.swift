@@ -68,20 +68,13 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
   ///
   func constructURLObject() -> WebURL {
 
-    // Do a dry-run to calculate metrics about the final contents.
-    let metrics = URLMetrics.collect { collector in
-      write(to: &collector)
+    let (structure, metrics) = StructureAndMetricsCollector.collect { collector in write(to: &collector) }
+    let newStorage = AnyURLStorage(creatingOptimalStorageFor: structure, metrics: metrics) { codeUnits in
+      var writer = UnsafePresizedBufferWriter(buffer: codeUnits)
+      write(to: &writer, metrics: metrics)
+      return writer.bytesWritten
     }
-    // Write to the optimal storage variant.
-    if metrics.requiredCapacity <= UInt8.max {
-      return GenericURLHeader<UInt8>.writeURLToNewStorage(capacity: metrics.requiredCapacity) { smallWriter in
-        write(to: &smallWriter, metrics: metrics)
-      }
-    } else {
-      return GenericURLHeader<Int>.writeURLToNewStorage(capacity: metrics.requiredCapacity) { genericWriter in
-        write(to: &genericWriter, metrics: metrics)
-      }
-    }
+    return WebURL(variant: newStorage)
   }
 
   /// Writes the URL to the given consumer.

@@ -8,7 +8,6 @@
 //                  caring about that detail.
 //
 // - GenericURLHeader<SizeType>: A basic URLHeader which stores a URLStructure in its entirety.
-// - [TOREMOVE] GenericURLHeader<SizeType>.Writer: A nested URLWriter which constructs a buffer whose parent is its header type.
 //
 
 // MARK: - URLStructure
@@ -333,11 +332,6 @@ struct URLStorage<Header: URLHeader> {
     } catch {
       return nil
     }
-  }
-  
-  // TODO: Remove this once URL construction goes through `AnyURLStorage(creatingOptimalStorageFor:)`.
-  init(storage: ManagedArrayBuffer<Header, UInt8>) {
-    self.codeUnits = storage
   }
 }
 
@@ -722,155 +716,5 @@ extension GenericURLHeader: URLHeader where SizeType: AnyURLStorageErasableGener
   
   var structure: URLStructure<Int> {
     return URLStructure(copying: _structure)
-  }
-}
-
-
-// MARK: - [TOREMOVE]: GenericURLHeader.Writer
-
-// TODO: With the new URLStructure/URLStorage model, we should be able to replace this with a Writer that can write
-//       _any_ header. In fact, we could even gather the URLStructure during metrics collection.
-
-extension GenericURLHeader where SizeType: AnyURLStorageErasableGenericHeaderSize {
-
-  static func writeURLToNewStorage(capacity: Int, _ body: (inout Writer) -> Void) -> WebURL {
-    let buffer = ManagedArrayBuffer<GenericURLHeader, UInt8>(unsafeUninitializedCapacity: capacity) { elements in
-      var writer = Writer(header: .init(), buffer: elements)
-      body(&writer)
-      precondition(writer.count == capacity)
-      return GenericURLHeader(_count: writer.count, _capacity: SizeType(elements.count), structure: writer.structure)
-    }
-    return WebURL(variant: AnyURLStorage(URLStorage(storage: buffer)))
-  }
-
-  // Note: use of wrapping arithmetic is safe here because are writing to a fixed-size buffer,
-  //       meaning the count, capacity, and the lengths of all components must fit in `SizeType`.
-  //       Additionally, 'writeURLToNewStorage' checks that the final count is equal to the expected length,
-  //       so any wrapping will be detected before handing the written storage over.
-  struct Writer: URLWriter {
-    var structure: URLStructure<SizeType>
-    var count: SizeType
-    var buffer: UnsafeMutableBufferPointer<UInt8>
-
-    init(header: GenericURLHeader, buffer: UnsafeMutableBufferPointer<UInt8>) {
-      self.structure = header._structure
-      self.count = header._count
-      self.buffer = buffer
-      precondition(buffer.baseAddress != nil, "Invalid buffer")
-    }
-
-    private mutating func writeByte(_ byte: UInt8) -> SizeType {
-      buffer.baseAddress.unsafelyUnwrapped.pointee = byte
-      buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(1))
-      count &+= 1
-      return 1
-    }
-
-    private mutating func writeByte(_ byte: UInt8, count: Int) -> SizeType {
-      buffer.baseAddress.unsafelyUnwrapped.initialize(repeating: byte, count: count)
-      buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(count))
-      let sz_count = SizeType(truncatingIfNeeded: count)
-      self.count &+= sz_count
-      return sz_count
-    }
-
-    private mutating func writeBytes<T>(_ bytes: T) -> SizeType where T: Collection, T.Element == UInt8 {
-      let count = buffer.initialize(from: bytes).1
-      buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(count))
-      let sz_count = SizeType(truncatingIfNeeded: count)
-      self.count &+= sz_count
-      return sz_count
-    }
-
-    mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
-      structure.schemeKind = schemeKind
-      structure.cannotBeABaseURL = cannotBeABaseURL
-    }
-
-    mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
-      structure.schemeLength = writeBytes(schemeBytes) + 1
-      _ = writeByte(ASCII.colon.codePoint)
-    }
-
-    mutating func writeAuthorityHeader() {
-      _ = writeByte(ASCII.forwardSlash.codePoint, count: 2)
-      structure.hasAuthority = true
-    }
-
-    mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      usernameWriter { piece in
-        structure.usernameLength &+= writeBytes(piece)
-      }
-    }
-
-    mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      structure.passwordLength = writeByte(ASCII.colon.codePoint)
-      passwordWriter { piece in
-        structure.passwordLength &+= writeBytes(piece)
-      }
-    }
-
-    mutating func writeCredentialsTerminator() {
-      _ = writeByte(ASCII.commercialAt.codePoint)
-    }
-
-    mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
-      hostnameWriter { piece in
-        structure.hostnameLength &+= writeBytes(piece)
-      }
-    }
-
-    mutating func writePort(_ port: UInt16) {
-      structure.portLength = writeByte(ASCII.colon.codePoint)
-      var portString = String(port)
-      portString.withUTF8 {
-        structure.portLength &+= writeBytes($0)
-      }
-    }
-
-    mutating func writeKnownAuthorityString(
-      _ authority: UnsafeBufferPointer<UInt8>,
-      usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
-    ) {
-      _ = writeBytes(authority)
-      structure.usernameLength = SizeType(truncatingIfNeeded: usernameLength)
-      structure.passwordLength = SizeType(truncatingIfNeeded: passwordLength)
-      structure.hostnameLength = SizeType(truncatingIfNeeded: hostnameLength)
-      structure.portLength = SizeType(truncatingIfNeeded: portLength)
-    }
-
-    mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      pathWriter { piece in
-        structure.pathLength &+= writeBytes(piece)
-      }
-    }
-
-    mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
-      let bytesWritten = writer(UnsafeMutableBufferPointer(rebasing: buffer.prefix(length)))
-      assert(bytesWritten == length)
-      buffer = UnsafeMutableBufferPointer(rebasing: buffer.dropFirst(length))
-      count &+= SizeType(truncatingIfNeeded: length)
-
-      structure.pathLength = SizeType(truncatingIfNeeded: length)
-    }
-
-    mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      structure.queryLength = writeByte(ASCII.questionMark.codePoint)
-      queryWriter {
-        structure.queryLength &+= writeBytes($0)
-      }
-    }
-
-    mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      structure.fragmentLength = writeByte(ASCII.numberSign.codePoint)
-      fragmentWriter {
-        structure.fragmentLength &+= writeBytes($0)
-      }
-    }
   }
 }

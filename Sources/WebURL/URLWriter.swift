@@ -132,7 +132,7 @@ extension URLWriter {
   }
 }
 
-// MARK: - Metrics.
+// MARK: - Writers.
 
 /// Information which is used to determine how a URL should be stored or written.
 ///
@@ -150,110 +150,255 @@ struct URLMetrics {
   var componentsWhichMaySkipEscaping: WebURL.ComponentSet = []
 }
 
-extension URLMetrics {
+/// A `URLWriter` which does not actually write to any storage, and gathers information about
+/// what the result looks like (its `URLStructure` and `URLMetrics`).
+///
+/// This type cannot be instantiated directly. Use the `StructureAndMetricsCollector.collect { ... }` function
+/// to obtain an instance, write to it, and collect its results.
+///
+struct StructureAndMetricsCollector: URLWriter {
+  private var metrics = URLMetrics(requiredCapacity: 0)
+  private var structure = URLStructure<Int>()
   
-  static func collect(_ body: (inout Collector) -> Void) -> URLMetrics {
-    var collector = Collector()
+  private init() {}
+  
+  static func collect(
+    _ body: (inout StructureAndMetricsCollector) -> Void
+  ) -> (structure: URLStructure<Int>, metrics: URLMetrics) {
+    var collector = StructureAndMetricsCollector()
     body(&collector)
     precondition(collector.metrics.requiredCapacity >= 0)
-    return collector.metrics
+    return (collector.structure, collector.metrics)
   }
 
-  struct Collector: URLWriter {
-    // TODO: Prohibit users reading this until they finish writing.
-    fileprivate var metrics = URLMetrics(requiredCapacity: 0)
+  mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
+    structure.schemeKind = schemeKind
+    structure.cannotBeABaseURL = cannotBeABaseURL
+  }
 
-    fileprivate init() {
-    }
+  mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
+    structure.schemeLength = schemeBytes.count + 1
+    metrics.requiredCapacity = structure.schemeLength
+  }
 
-    func componentMaySkipEscaping(_ component: WebURL.Component) -> Bool {
-      return metrics.componentsWhichMaySkipEscaping.contains(component)
-    }
+  mutating func writeAuthorityHeader() {
+    structure.hasAuthority = true
+    metrics.requiredCapacity += 2
+  }
 
-    mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
-      // Nothing to do.
+  mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    structure.usernameLength = 0
+    usernameWriter {
+      structure.usernameLength += $0.count
     }
+    metrics.requiredCapacity += structure.usernameLength
+  }
 
-    mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
-      metrics.requiredCapacity = schemeBytes.count + 1
+  mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    structure.passwordLength = 1
+    passwordWriter {
+      structure.passwordLength += $0.count
     }
+    metrics.requiredCapacity += structure.passwordLength
+  }
 
-    mutating func writeAuthorityHeader() {
-      metrics.requiredCapacity += 2
-    }
+  mutating func writeCredentialsTerminator() {
+    metrics.requiredCapacity += 1
+  }
 
-    mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      usernameWriter {
-        metrics.requiredCapacity += $0.count
-      }
+  mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+    structure.hostnameLength = 0
+    hostnameWriter {
+      structure.hostnameLength += $0.count
     }
+    metrics.requiredCapacity += structure.hostnameLength
+  }
 
-    mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      metrics.requiredCapacity += 1
-      passwordWriter {
-        metrics.requiredCapacity += $0.count
-      }
+  mutating func writePort(_ port: UInt16) {
+    structure.portLength = 1
+    switch port {
+    case 10000...UInt16.max: structure.portLength += 5
+    case 1000..<10000: structure.portLength += 4
+    case 100..<1000: structure.portLength += 3
+    case 10..<100: structure.portLength += 2
+    case 0..<10: structure.portLength += 1
+    default: preconditionFailure()
     }
+    metrics.requiredCapacity += structure.portLength
+  }
 
-    mutating func writeCredentialsTerminator() {
-      metrics.requiredCapacity += 1
-    }
+  mutating func writeKnownAuthorityString(
+    _ authority: UnsafeBufferPointer<UInt8>,
+    usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
+  ) {
+    structure.usernameLength = usernameLength
+    structure.passwordLength = passwordLength
+    structure.hostnameLength = hostnameLength
+    structure.portLength = portLength
+    metrics.requiredCapacity += authority.count
+  }
 
-    mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
-      hostnameWriter {
-        metrics.requiredCapacity += $0.count
-      }
+  mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    structure.pathLength = 0
+    pathWriter {
+      structure.pathLength += $0.count
     }
+    metrics.requiredCapacity += structure.pathLength
+  }
 
-    mutating func writePort(_ port: UInt16) {
-      metrics.requiredCapacity += 1
-      metrics.requiredCapacity += String(port).utf8.count
-    }
+  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
+    structure.pathLength = length
+    metrics.requiredCapacity += length
+  }
 
-    mutating func writeKnownAuthorityString(
-      _ authority: UnsafeBufferPointer<UInt8>,
-      usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
-    ) {
-      metrics.requiredCapacity += authority.count
+  mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    structure.queryLength = 1
+    queryWriter {
+      structure.queryLength += $0.count
     }
+    metrics.requiredCapacity += structure.queryLength
+  }
 
-    mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      pathWriter {
-        metrics.requiredCapacity += $0.count
-      }
+  mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    structure.fragmentLength = 1
+    fragmentWriter {
+      structure.fragmentLength += $0.count
     }
+    metrics.requiredCapacity += structure.fragmentLength
+  }
+  
+  // Hints.
+  
+  mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
+    if needsEscaping == false {
+      metrics.componentsWhichMaySkipEscaping.insert(component)
+    }
+  }
+  
+  mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector) {
+    metrics.pathMetrics = pathMetrics
+  }
+}
 
-    mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
-      metrics.requiredCapacity += length
-    }
+/// A `URLWriter` which writes to a pre-sized mutable buffer.
+///
+/// The buffer **must** have sufficient capacity to store the entire result,
+/// as this writer is free to omit bounds checking in release build configurations.
+///
+struct UnsafePresizedBufferWriter: URLWriter {
+  private(set) var bytesWritten: Int
+  let buffer: UnsafeMutableBufferPointer<UInt8>
 
-    mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      metrics.requiredCapacity += 1
-      queryWriter {
-        metrics.requiredCapacity += $0.count
-      }
-    }
+  init(buffer: UnsafeMutableBufferPointer<UInt8>) {
+    self.bytesWritten = 0
+    self.buffer = buffer
+    precondition(buffer.baseAddress != nil, "Invalid buffer")
+  }
 
-    mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
-    where T: Collection, T.Element == UInt8 {
-      metrics.requiredCapacity += 1
-      fragmentWriter {
-        metrics.requiredCapacity += $0.count
-      }
+  // Underlying buffer-writing functions.
+  
+  private mutating func writeByte(_ byte: UInt8) {
+    assert(bytesWritten < buffer.count)
+    (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).pointee = byte
+    bytesWritten += 1
+  }
+  private mutating func writeByte(_ byte: UInt8, count: Int) {
+    assert(bytesWritten < buffer.count)
+    (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).initialize(repeating: byte, count: count)
+    bytesWritten += count
+  }
+  private mutating func writeBytes<T>(_ bytes: T) where T: Collection, T.Element == UInt8 {
+    assert(bytesWritten < buffer.count)
+    let count = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: bytesWritten)).initialize(from: bytes).1
+    bytesWritten += count
+  }
+  
+  // URLWriter.
+
+  mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
+  }
+
+  mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
+    writeBytes(schemeBytes)
+    writeByte(ASCII.colon.codePoint)
+  }
+
+  mutating func writeAuthorityHeader() {
+    writeByte(ASCII.forwardSlash.codePoint, count: 2)
+  }
+
+  mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    usernameWriter { piece in
+      writeBytes(piece)
     }
-    
-    mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
-      if needsEscaping == false {
-        metrics.componentsWhichMaySkipEscaping.insert(component)
-      }
+  }
+
+  mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    writeByte(ASCII.colon.codePoint)
+    passwordWriter { piece in
+      writeBytes(piece)
     }
-    
-    mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector) {
-      metrics.pathMetrics = pathMetrics
+  }
+
+  mutating func writeCredentialsTerminator() {
+    writeByte(ASCII.commercialAt.codePoint)
+  }
+
+  mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+    hostnameWriter { piece in
+      writeBytes(piece)
+    }
+  }
+
+  mutating func writePort(_ port: UInt16) {
+    writeByte(ASCII.colon.codePoint)
+    var portString = String(port)
+    portString.withUTF8 {
+      writeBytes($0)
+    }
+  }
+
+  mutating func writeKnownAuthorityString(
+    _ authority: UnsafeBufferPointer<UInt8>,
+    usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
+  ) {
+    writeBytes(authority)
+  }
+
+  mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    pathWriter { piece in
+      writeBytes(piece)
+    }
+  }
+
+  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
+    let space = UnsafeMutableBufferPointer(start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten, count: length)
+    let pathBytesWritten = writer(space)
+    assert(pathBytesWritten == length)
+    bytesWritten += pathBytesWritten
+  }
+
+  mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    writeByte(ASCII.questionMark.codePoint)
+    queryWriter {
+      writeBytes($0)
+    }
+  }
+
+  mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
+  where T: Collection, T.Element == UInt8 {
+    writeByte(ASCII.numberSign.codePoint)
+    fragmentWriter {
+      writeBytes($0)
     }
   }
 }

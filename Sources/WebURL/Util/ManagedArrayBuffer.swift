@@ -55,8 +55,8 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
             return try headerConstructor(&uninitializedElements)
           }
         })
-      precondition(buffer.header.capacity >= minimumCapacity)
-      precondition(buffer.header.count <= buffer.header.capacity)
+      precondition(buffer.header.capacity >= minimumCapacity, "Header failed to store capacity")
+      precondition(buffer.header.count >= 0 && buffer.header.count <= buffer.header.capacity, "Invalid count")
       return unsafeDowncast(buffer, to: Self.self)
     }
 
