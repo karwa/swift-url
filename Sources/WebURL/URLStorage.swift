@@ -429,9 +429,9 @@ extension URLStorage {
   
   
   
-  mutating func replaceUsername(
-    with newValue: UnsafeBufferPointer<UInt8>
-  ) -> (Bool, AnyURLStorage) {
+  mutating func replaceUsername<Input>(
+    with newValue: Input
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
     
     let oldStructure = header.structure
     
