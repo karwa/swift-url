@@ -427,70 +427,130 @@ extension URLStorage {
     }
   }
   
+  fileprivate mutating func removeSubrange(
+    _ subrangeToRemove: Range<Int>, newStructure: URLStructure<Int>, newMetrics: URLMetrics
+  ) -> AnyURLStorage {
+    return replaceSubrange(subrangeToRemove, newElementCount: 0, newStructure: newStructure, newMetrics: newMetrics,
+                           initializingSubrangeWith: { _ in 0 })
+  }
   
   
-  mutating func replaceUsername<Input>(
-    with newValue: Input
+  
+  mutating func setUsername<Input>(
+    to newValue: Input
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
     
     let oldStructure = header.structure
-    
-    // If the operation is invalid, no header can support the proposed string.
-    guard oldStructure.cannotHaveCredentialsOrPort == false else { return (false, AnyURLStorage(self)) }
-   
-    // Only URLs with hostnames can have credentials, so we already have the authority header, etc.
-    // We just need to replace any existing username, and if there is no password: add or remove the trailing "@".
-    assert(oldStructure.hasAuthority && oldStructure.hostnameLength != 0)
-    let hasPassword = (oldStructure.passwordLength != 0)
+    guard oldStructure.cannotHaveCredentialsOrPort == false else {
+      return (false, AnyURLStorage(self))
+    }
     
     // Empty usernames are removed.
     guard newValue.isEmpty == false else {
-      guard oldStructure.usernameLength != 0 else { return (true, AnyURLStorage(self)) }
-      // We are removing a non-empty username, so there must also be a credential separator ("@").
-      // If there is no password keeping it around, remove it.
-      let subrangeToRemove = oldStructure.usernameStart..<(oldStructure.passwordStart + (hasPassword ? 0 : 1))
-      let newMetrics = URLMetrics(requiredCapacity: header.count - subrangeToRemove.count)
+      guard oldStructure.usernameLength != 0 else {
+        return (true, AnyURLStorage(self))
+      }
       var newStructure = oldStructure
       newStructure.usernameLength = 0
+      let subrangeToRemove = oldStructure.usernameStart..<(oldStructure.passwordStart + (newStructure.hasCredentialSeparator ? 0 : 1))
+      let newMetrics = URLMetrics(requiredCapacity: header.count - subrangeToRemove.count)
       
-      let result = replaceSubrange(subrangeToRemove, newElementCount: 0, newStructure: newStructure, newMetrics: newMetrics,
-                                   initializingSubrangeWith: { _ in return 0 })
-      return (true, result)
+      return (true, removeSubrange(subrangeToRemove, newStructure: newStructure, newMetrics: newMetrics))
     }
     
-    let subrangeToRemove = oldStructure.usernameStart..<oldStructure.passwordStart
-    // We have Calculate the final size once percent-encoded.
     var newStructure = oldStructure
     newStructure.usernameLength = 0
     let needsEncoding = PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) {
       newStructure.usernameLength += $0.count
     }
-    let newByteCount = newStructure.usernameLength + (hasPassword || oldStructure.usernameLength != 0 ? 0 : 1)
-    let newMetrics = URLMetrics(requiredCapacity: header.count + (newByteCount - subrangeToRemove.count))
-    
+    let insertSeparator = (oldStructure.hasCredentialSeparator == false)
+    let bytesToWrite = newStructure.usernameLength + (insertSeparator ? 1 : 0)
+    let subrangeToReplace = oldStructure.usernameStart..<oldStructure.passwordStart
+    let newMetrics = URLMetrics(requiredCapacity: header.count + (bytesToWrite - subrangeToReplace.count))
     let result = replaceSubrange(
-      subrangeToRemove, newElementCount: newByteCount,
+      subrangeToReplace, newElementCount: bytesToWrite,
       newStructure: newStructure, newMetrics: newMetrics,
       initializingSubrangeWith: { dest in
-				var remainingBuffer = dest
+        guard var ptr = dest.baseAddress else { return 0 }
+        // Contents.
         if needsEncoding {
-          PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) { encodedStr in
-            let end = remainingBuffer.initialize(from: encodedStr).1
-            remainingBuffer = UnsafeMutableBufferPointer(rebasing: remainingBuffer[end...])
+          PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) { piece in
+            ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
+            ptr += piece.count
           }
         } else {
-          let end = remainingBuffer.initialize(from: newValue).1
-          remainingBuffer = UnsafeMutableBufferPointer(rebasing: remainingBuffer[end...])
+          let n = UnsafeMutableBufferPointer(start: ptr, count: newStructure.usernameLength)
+            .initialize(from: newValue).1
+          ptr += n
         }
-        if hasPassword == false {
-          remainingBuffer.baseAddress?.pointee = ASCII.commercialAt.codePoint
-          remainingBuffer = UnsafeMutableBufferPointer(rebasing: remainingBuffer.dropFirst())
+        // Trailing "@".
+        if insertSeparator {
+          ptr.pointee = ASCII.commercialAt.codePoint
+          ptr += 1
         }
-        precondition(remainingBuffer.count == 0)
-        return newByteCount
+        precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
+        return bytesToWrite
       })
       return (true, result)
     }
+  
+  mutating func setPassword<Input>(
+    to newValue: Input
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+    
+    let oldStructure = header.structure
+    guard oldStructure.cannotHaveCredentialsOrPort == false else {
+      return (false, AnyURLStorage(self))
+    }
+    
+    // Empty passwords are removed.
+    guard newValue.isEmpty == false else {
+      guard oldStructure.passwordLength != 0 else {
+        return (true, AnyURLStorage(self))
+      }
+      var newStructure = oldStructure
+      newStructure.passwordLength = 0
+      let subrangeToRemove = oldStructure.passwordStart..<(oldStructure.hostnameStart - (newStructure.hasCredentialSeparator ? 1 : 0))
+      let newMetrics = URLMetrics(requiredCapacity: header.count - subrangeToRemove.count)
+      
+      return (true, removeSubrange(subrangeToRemove, newStructure: newStructure, newMetrics: newMetrics))
+    }
+    
+    var newStructure = oldStructure
+    newStructure.passwordLength = 1 // leading ":"
+    let needsEncoding = PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) {
+      newStructure.passwordLength += $0.count
+    }
+    let bytesToWrite = newStructure.passwordLength + 1 // We always (over-)write the trailing "@".
+    let subrangeToReplace = oldStructure.passwordStart..<oldStructure.hostnameStart
+    let newMetrics = URLMetrics(requiredCapacity: header.count + (bytesToWrite - subrangeToReplace.count))
+    let result = replaceSubrange(
+      subrangeToReplace, newElementCount: bytesToWrite,
+      newStructure: newStructure, newMetrics: newMetrics,
+      initializingSubrangeWith: { dest in
+        guard var ptr = dest.baseAddress else { return 0 }
+        // Leading ":"
+        ptr.pointee = ASCII.colon.codePoint
+        ptr += 1
+        // Contents.
+        if needsEncoding {
+          PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) { piece in
+            ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
+            ptr += piece.count
+          }
+        } else {
+          let n = UnsafeMutableBufferPointer(start: ptr, count: newStructure.passwordLength - 1)
+            .initialize(from: newValue).1
+          ptr += n
+        }
+        // Trailing "@".
+        ptr.pointee = ASCII.commercialAt.codePoint
+        ptr += 1
+        precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
+        return bytesToWrite
+      })
+      return (true, result)
+  }
 }
 
 

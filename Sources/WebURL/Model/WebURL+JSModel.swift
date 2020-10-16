@@ -27,6 +27,37 @@ extension WebURL {
   }
 }
 
+// In-place mutations.
+
+fileprivate let _tempStorage = AnyURLStorage(
+  URLStorage<GenericURLHeader<UInt8>>(
+    structure: .init(), metrics: .init(requiredCapacity: 0), initializingCodeUnitsWith: { _ in return 0 }
+  )!
+)
+
+extension WebURL.JSModel {
+  
+  mutating func withMutableStorage(
+    _ small: (inout URLStorage<GenericURLHeader<UInt8>>)->AnyURLStorage,
+    _ generic: (inout URLStorage<GenericURLHeader<Int>>)->AnyURLStorage
+  ) {
+    // We need to go through a bit of a dance in order to get a unique reference to the storage.
+    //
+    // Basically: swap the enum to point to some read-only storage, then extract the URLStorage (which is a value)
+    // from our local variable, then set the local variable to also point to read-only storage.
+    var localRef = self.variant
+    self.variant = _tempStorage
+    switch localRef {
+    case .generic(var storage):
+      localRef = _tempStorage
+      self.variant = generic(&storage)
+    case .small(var storage):
+      localRef = _tempStorage
+      self.variant = small(&storage)
+    }
+  }
+}
+
 extension WebURL.JSModel {
 
   // Flags.
@@ -67,29 +98,34 @@ extension WebURL.JSModel {
     	return stringForComponent(.username) ?? ""
     }
     set {
-      // TODO: Switch the storage with something so we get a unique reference.
-      switch variant {
-      case .generic(var storage):
-        var stringToInsert = newValue
-        self.variant = stringToInsert.withUTF8 { utf8 in
-          storage.replaceUsername(with: utf8).1
-        }
-      case .small(var storage):
-        var stringToInsert = newValue
-        self.variant = stringToInsert.withUTF8 { utf8 in
-          storage.replaceUsername(with: utf8).1
-        }
+      var stringToInsert = newValue
+      stringToInsert.withUTF8 { utf8 in
+        withMutableStorage(
+          { small in small.setUsername(to: utf8).1 },
+          { generic in generic.setUsername(to: utf8).1 }
+        )
       }
     }
   }
 
   public var password: String {
-    var string = stringForComponent(.password)
-    if !(string?.isEmpty ?? true) {
-      let separator = string?.removeFirst()
-      assert(separator == ":")
+    get {
+      var string = stringForComponent(.password)
+      if !(string?.isEmpty ?? true) {
+        let separator = string?.removeFirst()
+        assert(separator == ":")
+      }
+      return string ?? ""
     }
-    return string ?? ""
+    set {
+      var stringToInsert = newValue
+      stringToInsert.withUTF8 { utf8 in
+        withMutableStorage(
+          { small in small.setPassword(to: utf8).1 },
+          { generic in generic.setPassword(to: utf8).1 }
+        )
+      }
+    }
   }
 
   public var hostname: String {

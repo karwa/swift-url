@@ -510,8 +510,8 @@ extension WHATWGTests {
 //      return \.hostKind
 //    case "pathname":
 //      return \.pathname
-//    case "password":
-//      return \.password
+    case "password":
+      return \.password
     case "username":
       return \.username
 //    case "protocol":
