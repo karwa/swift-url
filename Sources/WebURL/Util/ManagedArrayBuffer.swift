@@ -10,11 +10,14 @@ protocol ManagedBufferHeader {
   /// This property must be kept accurate as the buffer is mutated. It is used when the buffer is deinitialized in order to deinitialize the stored elements.
   var count: Int { get set }
 
-  // TODO: It would be nice to make this read-only, but that would require a 'copyWithNewCapacity' method,
-  //       which would have to be written by hand for every header type :(
+  /// This property is set by `bindToCapacity` and should never be modified.
+  var capacity: Int { get }
 
-  /// This property is set when a buffer is allocated and should not be modified.
-  var capacity: Int { get set }
+  /// Binds the header to a particular capacity.
+  /// The header may opt to address less than the total allocated capacity, as long as it addresses at least `minimumCapacity` elements.
+  /// If the header cannot address `minimumCapacity` elements, it should trigger a runtime error.
+  ///
+  mutating func bindToCapacity(minimumCapacity: Int, actualCapacity: Int)
 }
 
 /// An alternative `ManagedBuffer` interface, with the following differences:
@@ -37,7 +40,7 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
 
     static func newBuffer(minimumCapacity: Int, initialHeader: Header) -> Self {
       let buffer = Self.create(minimumCapacity: minimumCapacity, makingHeaderWith: { _ in return initialHeader })
-      buffer.header.capacity = buffer.capacity
+      buffer.header.bindToCapacity(minimumCapacity: minimumCapacity, actualCapacity: buffer.capacity)
       buffer.header.count = 0
       return unsafeDowncast(buffer, to: Self.self)
     }

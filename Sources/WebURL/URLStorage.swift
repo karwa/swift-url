@@ -714,9 +714,9 @@ extension UInt8: AnyURLStorageErasableGenericHeaderSize {
 /// A `ManagedBufferHeader` containing a complete `URLStructure` and size-appropriate `count` and `capacity` fields.
 ///
 struct GenericURLHeader<SizeType: FixedWidthInteger> {
-  var _count: SizeType
-  var _capacity: SizeType
-  var _structure: URLStructure<SizeType>
+  private var _count: SizeType
+  private var _capacity: SizeType
+  private var _structure: URLStructure<SizeType>
   
   init(_count: SizeType, _capacity: SizeType, structure: URLStructure<SizeType>) {
     self._count = _count
@@ -735,10 +735,20 @@ extension GenericURLHeader: ManagedBufferHeader {
     get { return Int(_count) }
     set { _count = SizeType(newValue) }
   }
+  
+  mutating func bindToCapacity(minimumCapacity: Int, actualCapacity: Int) {
+    if actualCapacity <= Int(SizeType.max) {
+      _capacity = SizeType(actualCapacity)
+    } else {
+      // Even if we have been careful and ensured that minimumCapacity <= SizeType.max,
+      // the actual capacity from the operating system might still overflow. In that case,
+      // set the capacity to SizeType.max (unfortunately discarding the unaddressable capacity).
+      _capacity = .max
+    }
+  }
 
   var capacity: Int {
-    get { return Int(_capacity) }
-    set { _capacity = SizeType(newValue) }
+    return Int(_capacity)
   }
 }
 
