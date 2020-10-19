@@ -88,7 +88,7 @@ func replaceElements<T: BufferContainer>(
   isUnique: Bool,
   subrange: Range<Int>,
   withElements newElementsCount: Int,
-  initializedWith initializer: (UnsafeMutableBufferPointer<T.Element>)->Int,
+  initializedWith initializer: (inout UnsafeMutableBufferPointer<T.Element>)->Int,
   storageConstructor: (_ minimumCapacity: Int) -> T
 ) -> (bufferCount: Int, insertedCount: Int, newStorage: T?, newStorageCount: Int) {
   precondition(subrange.lowerBound >= 0, "subrange start is negative")
@@ -102,7 +102,8 @@ func replaceElements<T: BufferContainer>(
       buffer: buffer, initializedCount: initializedCount,
       subrange: subrange, newElementCount: insertCount
     ) { ptr, expectedCount in
-      let n = initializer(UnsafeMutableBufferPointer(start: ptr, count: expectedCount))
+      var rangePtr = UnsafeMutableBufferPointer(start: ptr, count: expectedCount)
+      let n = initializer(&rangePtr)
       precondition(n == expectedCount, "initializer failed to initialize entire capacity")
     }
     return (bufferCount: newCount, insertedCount: insertCount, newStorage: nil, newStorageCount: 0)
@@ -114,14 +115,16 @@ func replaceElements<T: BufferContainer>(
     if isUnique {
       return newBuffer.moveInitialize(from: srcBuffer, replacingSubrange: subrange, withElements: insertCount) {
         ptr, expectedCount in
-        let n = initializer(UnsafeMutableBufferPointer(start: ptr, count: expectedCount))
+        var rangePtr = UnsafeMutableBufferPointer(start: ptr, count: expectedCount)
+        let n = initializer(&rangePtr)
         precondition(n == expectedCount, "initializer failed to initialize entire capacity")
       }
     }
     return newBuffer.initialize(
       from: UnsafeBufferPointer(srcBuffer), replacingSubrange: subrange, withElements: insertCount
     ) { ptr, expectedCount in
-      let n = initializer(UnsafeMutableBufferPointer(start: ptr, count: expectedCount))
+      var rangePtr = UnsafeMutableBufferPointer(start: ptr, count: expectedCount)
+      let n = initializer(&rangePtr)
       precondition(n == expectedCount, "initializer failed to initialize entire capacity")
     }
   }

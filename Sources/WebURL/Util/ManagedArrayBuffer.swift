@@ -246,13 +246,13 @@ struct ManagedArrayBuffer<Header: ManagedBufferHeader, Element> {
     get {
       return storage.header
     }
-    _modify {
+    @inline(__always) _modify {
       let preModifyCapacity = storage.header.capacity
       ensureUnique()
       yield &storage.header
       assert(storage.header.capacity == preModifyCapacity, "Invalid change of capacity")
     }
-    set {
+    @inline(__always) set {
       let preModifyCapacity = storage.header.capacity
       ensureUnique()
       storage.header = newValue
@@ -370,11 +370,13 @@ extension ManagedArrayBuffer: AltRangeReplaceableCollection {
   @discardableResult
   mutating func append<S>(contentsOf newElements: S) -> Range<Self.Index> where S: Sequence, Self.Element == S.Element {
     let preAppendEnd = endIndex
-    var result = unsafeAppend(uninitializedCapacity: newElements.underestimatedCount) { ptr in
-      return ptr.initialize(from: newElements)
+    
+    var result: (S.Iterator, Int)?
+    unsafeAppend(uninitializedCapacity: newElements.underestimatedCount) { ptr in
+      result = ptr.initialize(from: newElements)
+      return result.unsafelyUnwrapped.1
     }
-    precondition(result.1 == newElements.underestimatedCount)
-    while let remaining = result.0.next() {
+    while let remaining = result?.0.next() {
       append(remaining)
     }
     return Range(uncheckedBounds: (preAppendEnd, endIndex))
@@ -389,27 +391,27 @@ extension ManagedArrayBuffer {
   ///
   /// - important: The closure must initialize **exactly** `uninitializedCapacity` elements.
   ///
-  mutating func unsafeAppend<T>(
-    uninitializedCapacity: Int, initializingWith initializer: (UnsafeMutableBufferPointer<Element>) -> T
-  ) -> T {
+  mutating func unsafeAppend(
+    uninitializedCapacity: Int, initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int
+  ) {
     let oldCount = self.count
     let newCount = oldCount + uninitializedCapacity
     reserveCapacity(newCount)
     assert(storage.isKnownUniqueReference(), "reserveCapacity should have made this unique")
 
-    let retVal = storage.withUnsafeMutablePointerToElements { elements -> T in
-      let uninitializedBuffer = UnsafeMutableBufferPointer(start: elements + oldCount, count: uninitializedCapacity)
-      return initializer(uninitializedBuffer)
+    storage.withUnsafeMutablePointerToElements { elements in
+      var uninitializedBuffer = UnsafeMutableBufferPointer(start: elements + oldCount, count: uninitializedCapacity)
+      let n = initializer(&uninitializedBuffer)
+      precondition(n == uninitializedCapacity)
     }
     storage.header.count = newCount
-    return retVal
   }
   
   @discardableResult
   mutating func unsafeReplaceSubrange(
     _ subrange: Range<Int>,
     withUninitializedCapacity newSubrangeCount: Int,
-    initializingWith initializer: (UnsafeMutableBufferPointer<Element>) -> Int) -> Range<Int> {
+    initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int) -> Range<Int> {
     
     let isUnique = storage.isKnownUniqueReference()
     let result = storage.withUnsafeMutablePointerToElements { elems in

@@ -403,7 +403,7 @@ extension URLStorage {
     _ subrangeToReplace: Range<Int>,
     newElementCount: Int,
     newStructure: URLStructure<Int>, newMetrics: URLMetrics,
-    initializingSubrangeWith subrangeInitializer: (UnsafeMutableBufferPointer<UInt8>)->Int
+    initializingSubrangeWith subrangeInitializer: (inout UnsafeMutableBufferPointer<UInt8>)->Int
   ) -> AnyURLStorage {
     
     if AnyURLStorage.isOptimalStorageType(Self.self, for: newStructure, metrics: newMetrics) {
@@ -417,7 +417,8 @@ extension URLStorage {
       let newStorage = AnyURLStorage(creatingOptimalStorageFor: newStructure, metrics: newMetrics) { dest in
         return codeUnits.withUnsafeBufferPointer { src in
           dest.initialize(from: src, replacingSubrange: subrangeToReplace, withElements: newElementCount) { rgnStart, count in
-            let written = subrangeInitializer(UnsafeMutableBufferPointer(start: rgnStart, count: count))
+            var rgnPtr = UnsafeMutableBufferPointer(start: rgnStart, count: count)
+            let written = subrangeInitializer(&rgnPtr)
             precondition(written == count)
           }
         }

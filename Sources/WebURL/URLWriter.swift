@@ -308,12 +308,12 @@ struct UnsafePresizedBufferWriter: URLWriter {
     bytesWritten += 1
   }
   private mutating func writeByte(_ byte: UInt8, count: Int) {
-    assert(bytesWritten < buffer.count)
+    assert(bytesWritten < buffer.count || count == 0)
     (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).initialize(repeating: byte, count: count)
     bytesWritten += count
   }
   private mutating func writeBytes<T>(_ bytes: T) where T: Collection, T.Element == UInt8 {
-    assert(bytesWritten < buffer.count)
+    assert(bytesWritten < buffer.count || bytes.isEmpty)
     let count = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: bytesWritten)).initialize(from: bytes).1
     bytesWritten += count
   }
