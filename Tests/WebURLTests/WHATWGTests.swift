@@ -514,8 +514,8 @@ extension WHATWGTests {
       return \.password
     case "username":
       return \.username
-//    case "protocol":
-//      return \.scheme
+    case "protocol":
+      return \.scheme
     default:
       return nil
     }
@@ -579,9 +579,9 @@ extension WHATWGTests {
       // However, `WebURL.port` is a `UInt16?`, so these considerations simply don't apply.
       //
       // The tests fail because `transformValue` ends up returning `nil` for these junk strings.
-      52, 53, 54, 55, 56, 57, 58, 60, 61,  // `port` tests.
+      //52, 53, 54, 55, 56, 57, 58, 60, 61,  // `port` tests.
 
-      96,  // IDNA Nontransitional_Processing.
+      //96,  // IDNA Nontransitional_Processing.
     ]
     for testGroup in testGroups {
       report.recordSection(testGroup.property)
@@ -598,6 +598,7 @@ extension WHATWGTests {
           }
         }
       } else {
+        report.advanceTestIndex()
 //        assertionFailure("Unhandled test cases for property: \(testGroup.property)")
 //        report.expectTrue(false)
       }

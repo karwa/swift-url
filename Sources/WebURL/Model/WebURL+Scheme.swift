@@ -88,4 +88,13 @@ extension WebURL.Scheme {
     default: return nil
     }
   }
+  
+  func isDefaultPortString<Bytes>(_ bytes: Bytes) -> Bool where Bytes: Collection, Bytes.Element == UInt8 {
+    switch self {
+    case .http, .ws: return bytes.elementsEqual([ASCII.n8.codePoint, ASCII.n0.codePoint])
+    case .https, .wss: return bytes.elementsEqual([ASCII.n4.codePoint, ASCII.n4.codePoint, ASCII.n3.codePoint])
+    case .ftp: return bytes.elementsEqual([ASCII.n2.codePoint, ASCII.n1.codePoint])
+    default: return false
+    }
+  }
 }

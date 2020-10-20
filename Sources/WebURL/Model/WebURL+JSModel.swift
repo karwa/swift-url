@@ -96,9 +96,13 @@ extension WebURL.JSModel {
     set {
       var stringToInsert = newValue
       stringToInsert.withUTF8 { utf8 in
+        // URLStorage's setter requires that the ":", if present, be the last character.
+        // The JS model's setter succeeds even if the ":" is not the last character,
+        // but everything after the ":" gets silently dropped.
+        let newSchemeBytes = UnsafeBufferPointer(rebasing: utf8.prefix(while: { $0 != ASCII.colon.codePoint }))
         withMutableStorage(
-          { small in small.setScheme(to: utf8).1 },
-          { generic in generic.setScheme(to: utf8).1 }
+          { small in small.setScheme(to: newSchemeBytes).1 },
+          { generic in generic.setScheme(to: newSchemeBytes).1 }
         )
       }
     }

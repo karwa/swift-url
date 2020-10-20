@@ -412,6 +412,89 @@ extension URLStorage {
     return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
   }
   
+  /// Attempts to set the scheme component to the given value. The new value may or may not contain a trailing colon (e.g. `http`, `http:`).
+  /// Colons are only accepted as the last character of the string.
+  ///
+  mutating func setScheme<Input>(
+    to newValue: Input
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+    
+    guard let idx = findScheme(newValue), // Checks scheme contents.
+          idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex, // No content after scheme.
+          idx != newValue.startIndex // Scheme cannot be empty.
+    else {
+      return (false, AnyURLStorage(self))
+    }
+    
+    let newSchemeBytes = newValue[..<idx]
+    
+    let oldStructure = header.structure
+    var newStructure = oldStructure
+    newStructure.schemeKind = WebURL.Scheme.parse(asciiBytes: newSchemeBytes)
+    newStructure.schemeLength = newSchemeBytes.count + 1
+     
+    if newStructure.schemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
+      return (false, AnyURLStorage(self))
+    }
+    if newStructure.schemeKind == .file, oldStructure.hasCredentialSeparator || oldStructure.portLength != 0 {
+      return (false, AnyURLStorage(self))
+    }
+    if oldStructure.schemeKind == .file, oldStructure.hostnameLength == 0 {
+      return (false, AnyURLStorage(self))
+    }
+    // The operation is valid.
+ 		
+    // If we have a port and it's the default port for the new scheme, remove it.
+    let removePort: Bool = withComponentBytes(.port) {
+      guard let portBytes = $0 else { return false }
+      assert(portBytes.count > 1, "port string should include leading separator")
+      return newStructure.schemeKind.isDefaultPortString(portBytes.dropFirst())
+    }
+    guard removePort else {
+      let result = replaceSubrange(
+        0..<oldStructure.schemeLength, withUninitializedSpace: newStructure.schemeLength, newStructure: newStructure
+      ) { subrange in
+        _ = subrange.initialize(from: LowercaseASCIITransformer(base: newSchemeBytes))
+        subrange[subrange.count - 1] = ASCII.colon.codePoint
+        return newStructure.schemeLength
+      }
+      return (true, result)
+    }
+    
+    newStructure.portLength = 0
+    let newCount = header.count + (newStructure.schemeLength - oldStructure.schemeLength) - oldStructure.portLength
+      
+    if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
+      // Remove port first to avoid clobbering.
+      codeUnits.removeSubrange(oldStructure.portStart..<oldStructure.pathStart)
+      codeUnits.unsafeReplaceSubrange(
+        0..<oldStructure.schemeLength, withUninitializedCapacity: newStructure.schemeLength
+      ) { buffer in
+        var i = buffer.initialize(from: LowercaseASCIITransformer(base: newSchemeBytes)).1
+        buffer[i] = ASCII.colon.codePoint
+        i += 1
+        return i
+      }
+      guard header.copyStructure(from: newStructure) else {
+        preconditionFailure("AnyURLStorage.isOptimalStorageType returned true for an incompatible header/string")
+      }
+      return (true, AnyURLStorage(self))
+    }
+    let result = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
+      self.codeUnits.withUnsafeBufferPointer { src in
+        var i = dest.initialize(from: LowercaseASCIITransformer(base: newSchemeBytes)).1
+        (dest.baseAddress.unsafelyUnwrapped + i).pointee = ASCII.colon.codePoint
+        i += 1
+        i += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: i))
+          .initialize(from: UnsafeBufferPointer(rebasing: src[oldStructure.schemeLength..<oldStructure.portStart])).1
+        i += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: i))
+          .initialize(from: UnsafeBufferPointer(rebasing: src[oldStructure.pathStart...])).1
+        return i
+      }
+    }
+    return (true, result)
+  }
+  
   mutating func setUsername<Input>(
     to newValue: Input
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
