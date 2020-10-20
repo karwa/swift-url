@@ -7,17 +7,31 @@
 ///
 protocol ManagedBufferHeader {
 
-  /// This property must be kept accurate as the buffer is mutated. It is used when the buffer is deinitialized in order to deinitialize the stored elements.
+  /// The number of initialized elements that are stored in the allocation attached to this header.
+  ///
+  /// It is imperative that this value be kept up-to-date at all times. It is particularly important to consider that when `AltManagedBuffer` is deinitialized,
+  /// elements in the range `0..<count` will automatically be deinitialized as well.
+  ///
   var count: Int { get set }
 
-  /// This property is set by `bindToCapacity` and should never be modified.
+  /// The total number of elements which may be stored in the allocation attached to this header.
+  ///
+  /// `AltManagedBuffer` automatically manages this value and no other code should modify it.
+  /// This value is set by using the `withCapacity` function to obtain a copy of an existing header with a new capacity value.
+  ///
   var capacity: Int { get }
 
-  /// Binds the header to a particular capacity.
-  /// The header may opt to address less than the total allocated capacity, as long as it addresses at least `minimumCapacity` elements.
-  /// If the header cannot address `minimumCapacity` elements, it should trigger a runtime error.
+  /// Returns a copy of this header, for attaching to a buffer with a different capacity.
   ///
-  mutating func bindToCapacity(minimumCapacity: Int, actualCapacity: Int)
+  /// The returned header's `capacity` must be at least as large as `minimumCapacity`, and not greater than `maximumCapacity`.
+  /// If the header is unable to store values as large as `minimumCapacity`, this method returns `nil`.
+  ///
+  /// - Note: `maximumCapacity` is a value provided by the operating system. Even if you have taken care to ensure this
+  ///         type of header is only constructed in limited situations (for example, when the required capacity fits inside a `UInt8`/is less than 256),
+  ///         the operating system is not aware of those conditions, and may very well provide 259 or even 300+ bytes of space.
+  ///         Again, the header need only be large enough to store a value of `minimumCapacity`.
+  ///
+  func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self?
 }
 
 /// An alternative `ManagedBuffer` interface, with the following differences:
@@ -38,28 +52,22 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
 
   private final class _Storage: ManagedBuffer<Header, Element> {
 
+    /// Creates a new buffer with the given capacity and initial header.
+    ///
+    /// The header's `count` is automatically set to 0 (as the uninitialized buffer does not contain anything).
+    /// The addressable capacity may depend on the OS and header type, but must be at least as large as `minimumCapacity`.
+    ///
     static func newBuffer(minimumCapacity: Int, initialHeader: Header) -> Self {
-      let buffer = Self.create(minimumCapacity: minimumCapacity, makingHeaderWith: { _ in return initialHeader })
-      buffer.header.bindToCapacity(minimumCapacity: minimumCapacity, actualCapacity: buffer.capacity)
-      buffer.header.count = 0
-      return unsafeDowncast(buffer, to: Self.self)
-    }
-
-    /// Note: If `headerConstructor` throws, it must have first uninitialized any partially-initialized portion of the buffer or `Element` must be trivial.
-    static func newBuffer(
-      minimumCapacity: Int,
-      makingHeaderWith headerConstructor: (inout UnsafeMutableBufferPointer<Element>) throws -> Header
-    ) rethrows -> Self {
-      let buffer = try Self.create(
-        minimumCapacity: minimumCapacity,
-        makingHeaderWith: { newBuffer in
-          return try newBuffer.withUnsafeMutablePointerToElements {
-            var uninitializedElements = UnsafeMutableBufferPointer(start: $0, count: newBuffer.capacity)
-            return try headerConstructor(&uninitializedElements)
-          }
-        })
-      precondition(buffer.header.capacity >= minimumCapacity, "Header failed to store capacity")
-      precondition(buffer.header.count >= 0 && buffer.header.count <= buffer.header.capacity, "Invalid count")
+      let buffer = Self.create(minimumCapacity: minimumCapacity) { unsafeBuffer in
+        guard var newHeader = initialHeader.withCapacity(
+          minimumCapacity: minimumCapacity, maximumCapacity: unsafeBuffer.capacity
+        ) else {
+          preconditionFailure("Failed to create header with desireed capacity")
+        }
+        precondition(newHeader.capacity >= minimumCapacity)
+        newHeader.count = 0
+        return newHeader
+      }
       return unsafeDowncast(buffer, to: Self.self)
     }
 
@@ -83,19 +91,6 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
   ///
   init(minimumCapacity: Int, initialHeader: Header) {
     self.wrapped = _Storage.newBuffer(minimumCapacity: minimumCapacity, initialHeader: initialHeader)
-  }
-
-  /// Creates a new buffer which is initialized by the given closure.
-  ///
-  /// The closure is called with the entire allocated capacity, and must construct a header as well as initializing any contents.
-  /// The header's `capacity` should be set to the `count` of the given buffer, and the header's `count` must accurately describe
-  /// the number of elements that were initialized.
-  ///
-  /// - important: If `headerConstructor` throws, it must have first uninitialized any partially-initialized portion of the buffer,
-  ///              or `Element` must be a trivial type.
-  ///
-  init(minimumCapacity: Int, makingHeaderWith: (inout UnsafeMutableBufferPointer<Element>) throws -> Header) rethrows {
-    self.wrapped = try _Storage.newBuffer(minimumCapacity: minimumCapacity, makingHeaderWith: makingHeaderWith)
   }
 
   /// The stored `Header` instance.
@@ -212,28 +207,13 @@ struct ManagedArrayBuffer<Header: ManagedBufferHeader, Element> {
   var storage: AltManagedBufferReference<Header, Element>
 
   /// Creates a new `ManagedArrayBuffer` with the given minimum capacity and header.
-  /// Note that the header's `capacity` is automatically set to the actual, allocated capacity, and the header's `count` is set to `0`.
+  /// The new header's `count` is automatically set to `0`, and its `capacity` is set according to the behaviour described by `ManagedBufferHeader`.
   ///
   init(minimumCapacity: Int, initialHeader: Header) {
     self.storage = .init(minimumCapacity: minimumCapacity, initialHeader: initialHeader)
   }
 
-  /// Creates a new `ManagedArrayBuffer` with capacity for the given number of elements, which is then initialized by the given closure.
-  ///
-  /// The closure is called with the buffer's entire, uninitialized capacity, and must construct a header as well as initializing any contents.
-  /// The header's `capacity` should be set to the `count` of the given buffer, and the header's `count` must accurately describe
-  /// the number of elements that were initialized by the closure.
-  ///
-  /// - important: If `headerConstructor` throws, it must have first uninitialized any partially-initialized portion of the buffer,
-  ///              or `Element` must be a trivial type.
-  ///
-  init(
-    unsafeUninitializedCapacity capacity: Int,
-    initializingStorageWith headerConstructor: (inout UnsafeMutableBufferPointer<Element>) throws -> Header
-  ) rethrows {
-    self.storage = try .init(minimumCapacity: capacity, makingHeaderWith: headerConstructor)
-  }
-
+  @inline(__always)
   mutating func ensureUnique() {
     if !storage.isKnownUniqueReference() {
       storage = storage.copyToNewBuffer(minimumCapacity: count)

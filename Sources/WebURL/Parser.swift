@@ -68,8 +68,8 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
   ///
   func constructURLObject() -> WebURL {
 
-    let (structure, metrics) = StructureAndMetricsCollector.collect { collector in write(to: &collector) }
-    let newStorage = AnyURLStorage(creatingOptimalStorageFor: structure, metrics: metrics) { codeUnits in
+    let (count, structure, metrics) = StructureAndMetricsCollector.collect { collector in write(to: &collector) }
+    let newStorage = AnyURLStorage(optimalStorageForCapacity: count, structure: structure) { codeUnits in
       var writer = UnsafePresizedBufferWriter(buffer: codeUnits)
       write(to: &writer, metrics: metrics)
       return writer.bytesWritten
@@ -470,14 +470,18 @@ extension URLScanner {
 
     var scanResults = UnprocessedMapping()
 
-    if let schemeEndIndex = findScheme(input) {
-      let schemeName = input.prefix(upTo: schemeEndIndex).dropLast()  // dropLast() to remove the ":" terminator.
-      let schemeKind = WebURL.Scheme.parse(asciiBytes: schemeName)
+    if let schemeEndIndex = findScheme(input),
+       schemeEndIndex != input.endIndex,
+       input[schemeEndIndex] == ASCII.colon.codePoint {
 
+      let schemeName = input.prefix(upTo: schemeEndIndex)
+      let schemeKind = WebURL.Scheme.parse(asciiBytes: schemeName)
       scanResults.schemeKind = schemeKind
       scanResults.schemeTerminatorIndex = schemeName.endIndex
+      
+      let tail = input.suffix(from: input.index(after: schemeEndIndex))
       return scanURLWithScheme(
-        input.suffix(from: schemeEndIndex), scheme: schemeKind, baseURL: baseURL,
+        tail, scheme: schemeKind, baseURL: baseURL,
         &scanResults, callback: &callback
       ) ? scanResults : nil
     }
@@ -1453,20 +1457,18 @@ extension URLScanner.UnprocessedMapping {
 
 // MARK: - Helper functions.
 
-/// Returns the endIndex of the scheme (i.e. index of the scheme terminator ":") if one can be parsed from `input`.
-/// Otherwise returns `nil`.
+/// Returns the endIndex of the scheme name if one can be parsed from `input`.
 ///
-private func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Collection, Input.Element == UInt8 {
+func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Collection, Input.Element == UInt8 {
 
   guard input.isEmpty == false else { return nil }
-  var cursor = input.startIndex
-
+  var slice = input[...]
+  
   // schemeStart: must begin with an ASCII alpha.
-  guard ASCII(input[cursor])?.isAlpha == true else { return nil }
+  guard ASCII(flatMap: slice.popFirst())?.isAlpha == true else { return nil }
 
   // scheme: allow all ASCII { alphaNumeric, +, -, . } characters.
-  cursor = input.index(after: cursor)
-  let _schemeEnd = input[cursor...].firstIndex(where: { byte in
+  let _schemeEnd = slice.firstIndex { byte in
     let c = ASCII(byte)
     switch c {
     case _ where c?.isAlphaNumeric == true, .plus?, .minus?, .period?:
@@ -1475,13 +1477,11 @@ private func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Coll
       assert(c != .horizontalTab && c != .lineFeed)
       return true
     }
-  })
-  // schemes end with an ASCII colon.
-  guard let schemeEnd = _schemeEnd, input[schemeEnd] == ASCII.colon.codePoint else {
-    return nil
   }
-  cursor = input.index(after: schemeEnd)
-  return cursor
+  if let schemeEnd = _schemeEnd {
+    return input[schemeEnd] == ASCII.colon.codePoint ? schemeEnd : nil
+  }
+  return input.endIndex
 }
 
 // Note: This considers the percent sign ("%") a valid URL code-point.

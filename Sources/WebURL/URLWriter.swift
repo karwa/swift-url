@@ -138,9 +138,6 @@ extension URLWriter {
 ///
 struct URLMetrics {
   
-  /// The capacity required to store the URL's code-units. Must always be present and correct.
-  var requiredCapacity: Int
-  
   /// If set, contains information about the number of code-units in the path, number of path components, etc.
   /// If not set, users may make no assumptions about the path.
   var pathMetrics: PathMetricsCollector? = nil
@@ -157,18 +154,19 @@ struct URLMetrics {
 /// to obtain an instance, write to it, and collect its results.
 ///
 struct StructureAndMetricsCollector: URLWriter {
-  private var metrics = URLMetrics(requiredCapacity: 0)
+  private var requiredCapacity: Int = 0
+  private var metrics = URLMetrics()
   private var structure = URLStructure<Int>()
   
   private init() {}
   
   static func collect(
     _ body: (inout StructureAndMetricsCollector) -> Void
-  ) -> (structure: URLStructure<Int>, metrics: URLMetrics) {
+  ) -> (requiredCapacity: Int, structure: URLStructure<Int>, metrics: URLMetrics) {
     var collector = StructureAndMetricsCollector()
     body(&collector)
-    precondition(collector.metrics.requiredCapacity >= 0)
-    return (collector.structure, collector.metrics)
+    precondition(collector.requiredCapacity >= 0)
+    return (collector.requiredCapacity, collector.structure, collector.metrics)
   }
 
   mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
@@ -178,12 +176,12 @@ struct StructureAndMetricsCollector: URLWriter {
 
   mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
     structure.schemeLength = schemeBytes.count + 1
-    metrics.requiredCapacity = structure.schemeLength
+    requiredCapacity = structure.schemeLength
   }
 
   mutating func writeAuthorityHeader() {
     structure.hasAuthority = true
-    metrics.requiredCapacity += 2
+    requiredCapacity += 2
   }
 
   mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void)
@@ -192,7 +190,7 @@ struct StructureAndMetricsCollector: URLWriter {
     usernameWriter {
       structure.usernameLength += $0.count
     }
-    metrics.requiredCapacity += structure.usernameLength
+    requiredCapacity += structure.usernameLength
   }
 
   mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
@@ -201,11 +199,11 @@ struct StructureAndMetricsCollector: URLWriter {
     passwordWriter {
       structure.passwordLength += $0.count
     }
-    metrics.requiredCapacity += structure.passwordLength
+    requiredCapacity += structure.passwordLength
   }
 
   mutating func writeCredentialsTerminator() {
-    metrics.requiredCapacity += 1
+    requiredCapacity += 1
   }
 
   mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
@@ -213,7 +211,7 @@ struct StructureAndMetricsCollector: URLWriter {
     hostnameWriter {
       structure.hostnameLength += $0.count
     }
-    metrics.requiredCapacity += structure.hostnameLength
+    requiredCapacity += structure.hostnameLength
   }
 
   mutating func writePort(_ port: UInt16) {
@@ -226,7 +224,7 @@ struct StructureAndMetricsCollector: URLWriter {
     case 0..<10: structure.portLength += 1
     default: preconditionFailure()
     }
-    metrics.requiredCapacity += structure.portLength
+    requiredCapacity += structure.portLength
   }
 
   mutating func writeKnownAuthorityString(
@@ -237,7 +235,7 @@ struct StructureAndMetricsCollector: URLWriter {
     structure.passwordLength = passwordLength
     structure.hostnameLength = hostnameLength
     structure.portLength = portLength
-    metrics.requiredCapacity += authority.count
+    requiredCapacity += authority.count
   }
 
   mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
@@ -246,12 +244,12 @@ struct StructureAndMetricsCollector: URLWriter {
     pathWriter {
       structure.pathLength += $0.count
     }
-    metrics.requiredCapacity += structure.pathLength
+    requiredCapacity += structure.pathLength
   }
 
   mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
     structure.pathLength = length
-    metrics.requiredCapacity += length
+    requiredCapacity += length
   }
 
   mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
@@ -260,7 +258,7 @@ struct StructureAndMetricsCollector: URLWriter {
     queryWriter {
       structure.queryLength += $0.count
     }
-    metrics.requiredCapacity += structure.queryLength
+    requiredCapacity += structure.queryLength
   }
 
   mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
@@ -269,7 +267,7 @@ struct StructureAndMetricsCollector: URLWriter {
     fragmentWriter {
       structure.fragmentLength += $0.count
     }
-    metrics.requiredCapacity += structure.fragmentLength
+    requiredCapacity += structure.fragmentLength
   }
   
   // Hints.

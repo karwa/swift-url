@@ -31,7 +31,7 @@ extension WebURL {
 
 fileprivate let _tempStorage = AnyURLStorage(
   URLStorage<GenericURLHeader<UInt8>>(
-    structure: .init(), metrics: .init(requiredCapacity: 0), initializingCodeUnitsWith: { _ in return 0 }
+    count: 0, structure: .init(), initializingCodeUnitsWith: { _ in return 0 }
   )!
 )
 
@@ -90,7 +90,18 @@ extension WebURL.JSModel {
   }
 
   public var scheme: String {
-    return stringForComponent(.scheme)!
+    get {
+      return stringForComponent(.scheme)!
+    }
+    set {
+      var stringToInsert = newValue
+      stringToInsert.withUTF8 { utf8 in
+        withMutableStorage(
+          { small in small.setScheme(to: utf8).1 },
+          { generic in generic.setScheme(to: utf8).1 }
+        )
+      }
+    }
   }
 
   public var username: String {
