@@ -415,6 +415,9 @@ extension URLStorage {
   /// Attempts to set the scheme component to the given value. The new value may or may not contain a trailing colon (e.g. `http`, `http:`).
   /// Colons are only accepted as the last character of the string.
   ///
+  /// - Note: Filtering ASCII tab and newline characters is not needed as those characters cannot be included in a scheme, and schemes cannot
+  ///         contain percent encoding.
+  ///
   mutating func setScheme<Input>(
     to newValue: Input
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
@@ -495,6 +498,10 @@ extension URLStorage {
     return (true, result)
   }
   
+  ///
+  /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
+  ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
+  ///
   mutating func setUsername<Input>(
     to newValue: Input
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
@@ -550,6 +557,10 @@ extension URLStorage {
     return (true, result)
   }
   
+  ///
+  /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
+  ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
+  ///
   mutating func setPassword<Input>(
     to newValue: Input
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
@@ -601,6 +612,74 @@ extension URLStorage {
       ptr += 1
       precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
       return bytesToWrite
+    }
+    return (true, result)
+  }
+  
+  /// Sets the fragment component to the given string.
+  ///
+  /// If a leading "#" character is present, it is not considered to be part of the new content.
+  /// If `filter` is `true`, ASCII tab and newline characters will be removed from the result.
+  ///
+  mutating func setFragment<Input>(
+    to newValue: Input,
+    filter: Bool = false
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+    
+    let oldStructure = header.structure
+    
+    guard newValue.isEmpty == false else {
+      guard let existingFragment = oldStructure.rangeOfComponent(.fragment) else {
+        return (true, AnyURLStorage(self))
+      }
+      var newStructure = oldStructure
+      newStructure.fragmentLength = 0
+      return (true, removeSubrange(existingFragment, newStructure: newStructure))
+    }
+    
+    var newFragmentBytes = newValue[...]
+    if newFragmentBytes.first == ASCII.numberSign.codePoint {
+      _ = newFragmentBytes.removeFirst()
+    }
+    
+    if filter {
+      return _setFragment_impl(to: FilteredURLInput<Input>(newFragmentBytes))
+    } else {
+      return _setFragment_impl(to: newFragmentBytes)
+    }
+  }
+  
+  private mutating func _setFragment_impl<Input>(
+    to newFragmentBytes: Input
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+    
+    let oldStructure = header.structure
+    var newStructure = oldStructure
+    newStructure.fragmentLength = 1 // leading "#"
+    let needsEncoding = PercentEncoding.encode(bytes: newFragmentBytes, using: URLEncodeSet.Fragment.self) {
+      newStructure.fragmentLength += $0.count
+    }
+    let subrangeToReplace = oldStructure.fragmentStart..<(oldStructure.fragmentStart + oldStructure.fragmentLength)
+    let result = replaceSubrange(
+      subrangeToReplace, withUninitializedSpace: newStructure.fragmentLength, newStructure: newStructure
+    ) { dest in
+      guard var ptr = dest.baseAddress else { return 0 }
+      // Leading "#"
+      ptr.pointee = ASCII.numberSign.codePoint
+      ptr += 1
+      // Contents.
+      if needsEncoding {
+        PercentEncoding.encode(bytes: newFragmentBytes, using: URLEncodeSet.Fragment.self) { piece in
+          ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
+          ptr += piece.count
+        }
+      } else {
+        let n = UnsafeMutableBufferPointer(start: ptr, count: newStructure.fragmentLength - 1)
+          .initialize(from: newFragmentBytes).1
+        ptr += n
+      }
+      precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
+      return newStructure.fragmentLength
     }
     return (true, result)
   }

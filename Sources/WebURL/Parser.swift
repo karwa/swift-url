@@ -1505,32 +1505,15 @@ where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
 
 /// A byte sequence with leading/trailing spaces trimmed, and which lazily skips ASCII newlines and tabs if they are present.
 ///
-struct FilteredURLInput<Base> where Base: BidirectionalCollection, Base.Element == UInt8 {
+struct FilteredURLInput<Base> where Base: Collection, Base.Element == UInt8 {
   let base: Base.SubSequence
 
   init(_ base: Base.SubSequence) {
     self.base = base
   }
-
-  static func trim<Callback: URLParserCallback>(
-    _ rawInput: Base, callback: inout Callback
-  ) -> (Base.SubSequence, needsFiltering: Bool) {
-
-    // Trim leading/trailing C0 control characters and spaces.
-    var trimmedSlice = rawInput[...]
-    let trimmedInput = trimmedSlice.trim {
-      switch ASCII($0) {
-      case ASCII.ranges.controlCharacters?, .space?: return true
-      default: return false
-      }
-    }
-    if trimmedInput.startIndex != trimmedSlice.startIndex || trimmedInput.endIndex != trimmedSlice.endIndex {
-      callback.validationError(.unexpectedC0ControlOrSpace)
-    }
-    trimmedSlice = trimmedInput
-    // Trim initial filtered bytes.
-    trimmedSlice = trimmedSlice.drop(while: filterShouldDrop)
-    return (trimmedSlice, trimmedSlice.contains(where: filterShouldDrop))
+  
+  static func needsFiltering(_ input: Base) -> Bool {
+    return input.contains(where: filterShouldDrop)
   }
 
   static func filterShouldDrop(_ byte: UInt8) -> Bool {
@@ -1540,7 +1523,7 @@ struct FilteredURLInput<Base> where Base: BidirectionalCollection, Base.Element 
   }
 }
 
-extension FilteredURLInput: BidirectionalCollection {
+extension FilteredURLInput: Collection {
   typealias Index = Base.Index
   typealias Element = Base.Element
 
@@ -1569,20 +1552,46 @@ extension FilteredURLInput: BidirectionalCollection {
   func index(after i: Base.Index) -> Base.Index {
     return filtered.index(after: i)
   }
-  func index(before i: Base.Index) -> Base.Index {
-    return filtered.index(before: i)
-  }
   func distance(from start: Base.Index, to end: Base.Index) -> Int {
     return filtered.distance(from: start, to: end)
   }
   func formIndex(after i: inout Base.Index) {
     filtered.formIndex(after: &i)
   }
+  
+  // TODO: Investigate adding a custom Iterator once we have a more comprehensive benchmark suite.
+}
+
+extension FilteredURLInput: BidirectionalCollection where Base: BidirectionalCollection {
+  
+  static func trim<Callback: URLParserCallback>(
+    _ rawInput: Base, callback: inout Callback
+  ) -> (Base.SubSequence, needsFiltering: Bool) {
+
+    // Trim leading/trailing C0 control characters and spaces.
+    var trimmedSlice = rawInput[...]
+    let trimmedInput = trimmedSlice.trim {
+      switch ASCII($0) {
+      case ASCII.ranges.controlCharacters?, .space?: return true
+      default: return false
+      }
+    }
+    if trimmedInput.startIndex != trimmedSlice.startIndex || trimmedInput.endIndex != trimmedSlice.endIndex {
+      callback.validationError(.unexpectedC0ControlOrSpace)
+    }
+    trimmedSlice = trimmedInput
+    // Trim initial filtered bytes.
+    trimmedSlice = trimmedSlice.drop(while: filterShouldDrop)
+    return (trimmedSlice, FilteredURLInput<Base.SubSequence>.needsFiltering(trimmedSlice))
+  }
+  
+  func index(before i: Base.Index) -> Base.Index {
+    return filtered.index(before: i)
+  }
+  
   func formIndex(before i: inout Base.Index) {
     filtered.formIndex(before: &i)
   }
-
-  // TODO: Investigate adding a custom Iterator once we have a more comprehensive benchmark suite.
 }
 
 /// A type which lazily transforms ASCII alpha characters to their lowercase variants.

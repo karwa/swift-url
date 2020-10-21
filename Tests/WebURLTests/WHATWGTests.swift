@@ -504,8 +504,8 @@ extension WHATWGTests {
 //      return \.search
 //    case "hostname":
 //      return \.hostname
-//    case "hash":
-//      return \.fragment
+    case "hash":
+      return \.fragment
 //    case "host":
 //      return \.hostKind
 //    case "pathname":

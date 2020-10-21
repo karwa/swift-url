@@ -167,9 +167,20 @@ extension WebURL.JSModel {
   }
 
   public var fragment: String {
-    let string = stringForComponent(.fragment)
-    guard string != "#" else { return "" }
-    return string ?? ""
+    get {
+      let string = stringForComponent(.fragment)
+      guard string != "#" else { return "" }
+      return string ?? ""
+    }
+    set {
+      var stringToInsert = newValue
+      stringToInsert.withUTF8 { utf8 in
+        withMutableStorage(
+          { small in small.setFragment(to: utf8, filter: true).1 },
+          { generic in generic.setFragment(to: utf8, filter: true).1 }
+        )
+      }
+    }
   }
 }
 
