@@ -412,8 +412,8 @@ extension URLStorage {
     return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
   }
   
-  /// Attempts to set the scheme component to the given value. The new value may or may not contain a trailing colon (e.g. `http`, `http:`).
-  /// Colons are only accepted as the last character of the string.
+  /// Attempts to set the scheme component to the given UTF8-encoded string.
+  /// The new value may or may not contain a trailing colon (e.g. `http`, `http:`). Colons are only allowed as the last character of the string.
   ///
   /// - Note: Filtering ASCII tab and newline characters is not needed as those characters cannot be included in a scheme, and schemes cannot
   ///         contain percent encoding.
@@ -498,6 +498,7 @@ extension URLStorage {
     return (true, result)
   }
   
+  /// Attempts to set the username component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
   ///
   /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
@@ -556,7 +557,8 @@ extension URLStorage {
     }
     return (true, result)
   }
-  
+ 
+  /// Attempts to set the password component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
   ///
   /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
@@ -616,9 +618,54 @@ extension URLStorage {
     return (true, result)
   }
   
-  /// Sets the fragment component to the given string.
+  /// Attempts to set the port component to the given value.
   ///
-  /// If a leading "#" character is present, it is not considered to be part of the new content.
+  mutating func setPort(
+    to newValue: UInt16?
+  ) -> (Bool, AnyURLStorage) {
+    
+    let oldStructure = header.structure
+    guard oldStructure.cannotHaveCredentialsOrPort == false else {
+      return (false, AnyURLStorage(self))
+    }
+    
+    var newValue = newValue
+    if newValue == oldStructure.schemeKind.defaultPort {
+      newValue = nil
+    }
+    guard let newPort = newValue else {
+      guard let existingPort = oldStructure.rangeOfComponent(.port) else {
+        return (true, AnyURLStorage(self))
+      }
+      var newStructure = oldStructure
+      newStructure.portLength = 0
+      return (true, removeSubrange(existingPort, newStructure: newStructure))
+    }
+    
+    // TODO: More efficient port serialization.
+    var newPortString = String(newPort)
+    
+    var newStructure = oldStructure
+    newStructure.portLength = 1 /* ":" */ + newPortString.utf8.count
+    let result = replaceSubrange(
+      oldStructure.portStart..<oldStructure.pathStart,
+      withUninitializedSpace: newStructure.portLength,
+      newStructure: newStructure
+    ) { buffer in
+      guard let ptr = buffer.baseAddress else { return 0 }
+      ptr.pointee = ASCII.colon.codePoint
+      let n = 1 + newPortString.withUTF8 { src in
+        (ptr + 1).initialize(from: src.baseAddress!, count: src.count)
+        return src.count
+      }
+      return n
+    }
+    return (true, result)
+  }
+  
+  /// Attempts to set the fragment component to the given UTF8-encoded string.
+  ///
+  /// A leading "#" character will be stripped from the given value, if present.
   /// If `filter` is `true`, ASCII tab and newline characters will be removed from the result.
   ///
   mutating func setFragment<Input>(

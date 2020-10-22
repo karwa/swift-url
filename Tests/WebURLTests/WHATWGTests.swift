@@ -516,15 +516,8 @@ extension WHATWGTests {
       return \.username
     case "protocol":
       return \.scheme
-    default:
-      return nil
-    }
-  }
-
-  private func webURLPortPropertyWithJSName(_ str: String) -> WritableKeyPath<WebURL.JSModel, UInt16?>? {
-    switch str {
-//    case "port":
-//      return \.port
+    case "port":
+      return \.port
     default:
       return nil
     }
@@ -588,13 +581,7 @@ extension WHATWGTests {
       if let stringProperty = webURLStringPropertyWithJSName(testGroup.property) {
         for testcase in testGroup.tests {
           report.recordTest { report in
-            performSetterTest(testcase, property: stringProperty, transformValue: { $0 }, &report)
-          }
-        }
-      } else if let portProperty = webURLPortPropertyWithJSName(testGroup.property) {
-        for testcase in testGroup.tests {
-          report.recordTest { report in
-            performSetterTest(testcase, property: portProperty, transformValue: { UInt16($0) }, &report)
+            performSetterTest(testcase, property: stringProperty, &report)
           }
         }
       } else {
@@ -617,9 +604,8 @@ extension WHATWGTests {
   /// 3. Sets the transformed value on the parsed URL via the `property` key-path.
   /// 4. Checks the URL's properties and values against the expected values.
   ///
-  private func performSetterTest<T>(
-    _ testcase: URLSetterTest, property: WritableKeyPath<WebURL.JSModel, T>,
-    transformValue: (String) -> T, _ report: inout WHATWG_TestReport
+  private func performSetterTest(
+    _ testcase: URLSetterTest, property: WritableKeyPath<WebURL.JSModel, String>, _ report: inout WHATWG_TestReport
   ) {
 
     testcase.comment.map { report.capture(key: "Comment", $0) }
@@ -630,21 +616,15 @@ extension WHATWGTests {
       report.expectTrue(false, "Failed to parse")
       return
     }
-    // 2. Transform the value.
-    let transformedValue = transformValue(testcase.newValue)
-    report.capture(key: "Transformed Value", transformedValue)
-    // 3. Set the value.
-    url[keyPath: property] = transformedValue
+    // 2. Set the value.
+    url[keyPath: property] = testcase.newValue
     report.capture(key: "Result", url)
     report.capture(
       key: "Expected", testcase.expected.lazy.map { "\($0): \"\($1)\"" }.joined(separator: "\n\t") as String)
-    // 4. Check all expected keys against their expected values.
+    // 3. Check all expected keys against their expected values.
     for (expected_key, expected_value) in testcase.expected {
       if let stringKey = webURLStringPropertyWithJSName(expected_key) {
         report.expectEqual(url[keyPath: stringKey], expected_value, expected_key)
-
-      } else if let portKey = webURLPortPropertyWithJSName(expected_key) {
-        report.expectEqual(url[keyPath: portKey], UInt16(expected_value), expected_key)
       }
     }
   }

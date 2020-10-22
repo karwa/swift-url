@@ -148,12 +148,35 @@ extension WebURL.JSModel {
   }
 
   public var port: String {
-    var string = stringForComponent(.port)
-    if !(string?.isEmpty ?? true) {
-      let separator = string?.removeFirst()
-      assert(separator == ":")
+    get {
+      var string = stringForComponent(.port)
+      if !(string?.isEmpty ?? true) {
+        let separator = string?.removeFirst()
+        assert(separator == ":")
+      }
+      return string ?? ""
     }
-    return string ?? ""
+    set {
+      var stringToInsert = newValue
+      stringToInsert.withUTF8 { utf8 in
+        // The JS model allows non-numeric junk to be attached to the end of the string,
+        // (e.g. "8080stuff" sets port to 8080).
+        let portString = utf8.prefix(while: { ASCII($0)?.isA(\.digits) ?? false })
+        // - No number => not an error => remove existing port.
+        // - Invalid number (e.g. overflow) => error => keep existing port.
+        var newPort: UInt16? = nil
+        if portString.isEmpty == false {
+          guard let parsedPort = UInt16(String(decoding: portString, as: UTF8.self)) else {
+            return
+          }
+          newPort = parsedPort
+        }
+        withMutableStorage(
+          { small in small.setPort(to: newPort).1 },
+          { generic in generic.setPort(to: newPort).1 }
+        )
+      }
+    }
   }
 
   public var path: String {
