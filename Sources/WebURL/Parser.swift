@@ -1370,12 +1370,11 @@ extension URLScanner.UnprocessedMapping {
     // to reject invalid hostnames.
     var hostKind: ParsedHost?
     if let hostname = hostnameRange.map({ inputString[$0] }) {
-      hostKind = ParsedHost.parse(hostname, isNotSpecial: schemeKind.isSpecial == false, callback: &callback)
+      hostKind = ParsedHost.parse(hostname, scheme: schemeKind, callback: &callback)
       guard hostKind != nil else { return nil }
     }
-    // 2.3 File URLs have some quirks.
     if schemeKind == .file {
-      // 2.3.1: If the path begins with a Windows drive letter, discard the authority (incl. base URL authority).
+      // If the path begins with a Windows drive letter, discard the authority (incl. base URL authority).
       if var pathContents = pathRange.map({ inputString[$0] }) {
         // Strip the leading slash if present.
         if let firstChar = pathContents.first, ASCII(firstChar) == .forwardSlash || ASCII(firstChar) == .backslash {
@@ -1391,14 +1390,6 @@ extension URLScanner.UnprocessedMapping {
           hostnameRange = nil
           componentsToCopyFromBase.remove(.authority)
         }
-      }
-      // 2.3.2: Replace 'localhost' with an empty/nil host.
-      // file URLs are special, so they get an implicit, empty authority when writing.
-      if let hostnameContents = hostnameRange.map({ inputString[$0] }),
-        hostnameContents.elementsEqual("localhost".utf8)
-      {
-        hostKind = nil
-        hostnameRange = nil
       }
     }
 

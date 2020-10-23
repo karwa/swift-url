@@ -450,6 +450,24 @@ let additionalTests: [AdditionalTest] = [
         ex_path: "/",
         ex_query: nil,
         ex_fragment: nil),
+  
+  // Percent-encoded/mixed-case localhost.
+  .init(input: "file://loc%61lhost/some/path",
+        ex_href: "file:///some/path",
+        ex_scheme: "file:",
+        ex_hostname: "",
+        ex_port: nil,
+        ex_path: "/some/path",
+        ex_query: nil,
+        ex_fragment: nil),
+  .init(input: "file://locAlhost/some/path",
+        ex_href: "file:///some/path",
+        ex_scheme: "file:",
+        ex_hostname: "",
+        ex_port: nil,
+        ex_path: "/some/path",
+        ex_query: nil,
+        ex_fragment: nil),
 ]
 
 extension WHATWGTests {
@@ -502,8 +520,8 @@ extension WHATWGTests {
       return \.href
 //    case "search":
 //      return \.search
-//    case "hostname":
-//      return \.hostname
+    case "hostname":
+      return \.hostname
     case "hash":
       return \.fragment
 //    case "host":

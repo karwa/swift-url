@@ -11,7 +11,7 @@ enum ParsedHost: Equatable {
 extension ParsedHost {
 
   static func parse<Bytes, Callback>(
-    _ input: Bytes, isNotSpecial: Bool = false, callback: inout Callback
+    _ input: Bytes, scheme: WebURL.Scheme, callback: inout Callback
   ) -> Self? where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Callback: URLParserCallback {
 
     guard input.isEmpty == false else {
@@ -26,7 +26,7 @@ extension ParsedHost {
       return IPv6Address.parse(ipv6Slice, callback: &callback).map { .ipv6Address($0) }
     }
 
-    if isNotSpecial {
+    if scheme.isSpecial == false {
       return validateOpaqueHostname(input, callback: &callback) ? .opaque : nil
     }
 
@@ -39,6 +39,8 @@ extension ParsedHost {
     //
     // Because we don't have IDNA transformations, reject all non-ASCII domain names and
     // lazily lowercase them.
+    // Additionally, lowercasing is deferred until after IPv4 addresses are parsed, since it doesn't
+    // care about the case of alpha characters.
     for byte in domain {
       guard let ascii = ASCII(byte) else {
         callback.validationError(.domainToASCIIFailure)
@@ -49,7 +51,7 @@ extension ParsedHost {
         return nil
       }
     }
-    let asciiDomain = domain  //LowercaseASCIITransformer(base: domain)
+    let asciiDomain = domain
 
     var ipv4Error = LastValidationError()
     switch IPv4Address.parse(asciiDomain, callback: &ipv4Error) {
@@ -61,6 +63,13 @@ extension ParsedHost {
     case .notAnIPAddress:
       break
     }
+    
+    let asciiCasefoldedDomain = LowercaseASCIITransformer(base: asciiDomain)
+    
+    if scheme == .file, asciiCasefoldedDomain.elementsEqual("localhost".utf8) {
+      return .empty
+    }
+    
     return .domain
   }
 
