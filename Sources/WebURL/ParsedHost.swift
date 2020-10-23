@@ -97,7 +97,7 @@ extension ParsedHost {
   }
 
   func write<Bytes, Writer>(bytes: Bytes, using writer: inout Writer)
-  where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Writer: URLWriter {
+  where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Writer: HostnameWriter {
     switch self {
     case .empty:
       break  // Nothing to do.

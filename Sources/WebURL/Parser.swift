@@ -180,7 +180,9 @@ extension ParsedURLString {
           writer.writeCredentialsTerminator()
         }
 
-        hostKind!.write(bytes: inputString[hostname], using: &writer)
+        writer.withHostnameWriter { hostWriter in
+          hostKind!.write(bytes: inputString[hostname], using: &hostWriter)
+        }
 
         if let port = port, port != schemeKind.defaultPort {
           writer.writePort(port)
@@ -1473,6 +1475,39 @@ func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Collection, 
     return input[schemeEnd] == ASCII.colon.codePoint ? schemeEnd : nil
   }
   return input.endIndex
+}
+
+/// Given a string, like "example.com:99/some/path?hello=world", returns the endIndex of the hostname component.
+/// This is used by the Javascript model's URL setter, which accepts a rather wide variety of inputs.
+///
+/// This is a "scan-level" operation: the discovered hostname may need additional processing before being written to a URL string.
+///
+func findEndOfHostnamePrefix<Input, Callback>(_ input: Input, scheme: WebURL.Scheme, callback cb: inout Callback) -> Input.Index?
+where Input: BidirectionalCollection, Input.Element == UInt8, Callback: URLParserCallback {
+  
+  var mapping = URLScanner<Input, Callback>.UnprocessedMapping()
+  
+  // See `URLScanner.scanAuthority`.
+  let hostname = input.prefix {
+    switch ASCII($0) {
+    case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?:
+      return false
+    case ASCII.backslash? where scheme.isSpecial:
+      return false
+    default:
+      return true
+    }
+  }
+  if scheme == .file {
+    guard case .success(_) = URLScanner.scanFileHost(hostname, &mapping, callback: &cb) else {
+      return nil
+    }
+  } else {
+    guard case .success(_) = URLScanner.scanHostname(hostname, scheme: scheme, &mapping, callback: &cb) else {
+      return nil
+    }
+  }
+  return mapping.hostnameEndIndex ?? hostname.endIndex
 }
 
 // Note: This considers the percent sign ("%") a valid URL code-point.

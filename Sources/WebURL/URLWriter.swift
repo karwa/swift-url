@@ -132,7 +132,7 @@ extension URLWriter {
   }
 }
 
-// MARK: - Writers.
+// MARK: - URLWriters.
 
 /// Information which is used to determine how a URL should be stored or written.
 ///
@@ -397,6 +397,62 @@ struct UnsafePresizedBufferWriter: URLWriter {
     writeByte(ASCII.numberSign.codePoint)
     fragmentWriter {
       writeBytes($0)
+    }
+  }
+}
+
+
+// MARK: - HostnameWriter.
+
+
+/// An interface through which `ParsedHost` writes its contents.
+///
+protocol HostnameWriter {
+  
+  /// Writes the bytes provided by `writerFunc`.
+  /// The bytes will already be percent-encoded/IDNA-transformed and not include any separators.
+  ///
+  mutating func writeHostname<T>(_ writerFunc: ((T)->Void) -> Void) where T: Collection, T.Element == UInt8
+}
+
+/// An adapter which allows any `URLWriter` to provide a limited-scope conformance to `HostnameWriter`.
+///
+struct URLHostnameWriterAdapter<Base: URLWriter>: HostnameWriter {
+  fileprivate var base: UnsafeMutablePointer<Base>
+  
+  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T : Collection, T.Element == UInt8 {
+    base.pointee.writeHostname(writerFunc)
+  }
+}
+
+extension URLWriter {
+  
+  /// Provides a `HostnameWriter` instance with a limited lifetime, which may be used to write the URL's hostname.
+  /// If called, this must always have been preceded by a call to `writeAuthorityHeader`.
+  ///
+  mutating func withHostnameWriter(_ hostnameWriter: (inout URLHostnameWriterAdapter<Self>) -> Void) {
+    withUnsafeMutablePointer(to: &self) { ptr in
+      var adapter = URLHostnameWriterAdapter(base: ptr)
+      hostnameWriter(&adapter)
+    }
+  }
+}
+
+struct HostnameLengthCounter: HostnameWriter {
+  var length: Int = 0
+  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T : Collection, T.Element == UInt8 {
+    writerFunc { piece in
+      length += piece.count
+    }
+  }
+}
+
+struct UnsafeBufferHostnameWriter: HostnameWriter {
+  var buffer: UnsafeMutableBufferPointer<UInt8>
+  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T : Collection, T.Element == UInt8 {
+    writerFunc { piece in
+      let n = buffer.initialize(from: piece).1
+      buffer = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: n))
     }
   }
 }

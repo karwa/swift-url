@@ -618,6 +618,112 @@ extension URLStorage {
     return (true, result)
   }
   
+  /// Attempts to set the hostname component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
+  ///
+  /// Setting the hostname to an empty or `nil` value is only possible when there are no other authority components (credentials or port).
+  /// An empty hostname preserves the `//` separator after the scheme, but the authority component will be empty (e.g. `unix://oldhost/some/path` -> `unix:///some/path`).
+  /// A `nil` hostname removes the `//` separator after the scheme, resulting in a so-called "path-only" URL (e.g. `unix://oldhost/some/path` -> `unix:/some/path`).
+  ///
+  mutating func setHostname<Input>(
+    to newValue: Input?,
+    filter: Bool = false
+  ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
+    
+    if filter {
+      return setHostname_impl(to: newValue.map { FilteredURLInput<Input>($0[...]) })
+    } else {
+      return setHostname_impl(to: newValue)
+    }
+  }
+
+  private mutating func setHostname_impl<Input>(
+    to newValue: Input?
+  ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
+
+    let oldStructure = header.structure
+    guard oldStructure.cannotBeABaseURL == false else {
+      return (newValue == nil, AnyURLStorage(self))
+    }
+    // Excluding 'cannotBeABaseURL' URLs doesn't mean we always have an authority separator.
+    // There are also path-only URLs (e.g. "hello:/some/path" is not a cannotBeABaseURL).
+    let hasCredentialsOrPort = oldStructure.usernameLength != 0 || oldStructure.passwordLength != 0 || oldStructure.portLength != 0
+     
+    guard let newHostnameBytes = newValue, newHostnameBytes.isEmpty == false else {
+      if oldStructure.schemeKind.isSpecial, oldStructure.schemeKind != .file {
+        return (false, AnyURLStorage(self))
+      }
+      guard hasCredentialsOrPort == false else {
+        return (false, AnyURLStorage(self))
+      }
+      switch oldStructure.rangeOfComponent(.hostname) {
+      case .none:
+        assert(oldStructure.hasAuthority == false)
+        guard newValue != nil else {
+          return (true, AnyURLStorage(self))
+        }
+        // 'nil' -> empty host. Insert authority header.
+        var newStructure = oldStructure
+        newStructure.hostnameLength = 0
+        newStructure.hasAuthority = true
+        let result = replaceSubrange(
+          oldStructure.authorityStart..<oldStructure.authorityStart,
+          withUninitializedSpace: 2,
+          newStructure: newStructure) { buffer in
+          buffer.initialize(repeating: ASCII.forwardSlash.codePoint)
+          return 2
+        }
+        return (true, result)
+        
+      case .some(var hostnameRange):
+        assert(oldStructure.hasAuthority)
+        var newStructure = oldStructure
+        newStructure.hostnameLength = 0
+        if newValue == nil {
+          // * -> 'nil' host. Remove authority header.
+          newStructure.hasAuthority = false
+          hostnameRange = (hostnameRange.lowerBound - 2)..<hostnameRange.upperBound
+        }
+        return (true, removeSubrange(hostnameRange, newStructure: newStructure))
+      }
+    }
+    
+    var callback = IgnoreValidationErrors()
+    guard let newHost = ParsedHost.parse(
+      newHostnameBytes,
+      scheme: oldStructure.schemeKind,
+      callback: &callback
+    ) else {
+      return (false, AnyURLStorage(self))
+    }
+    
+    var newStructure = oldStructure
+    newStructure.hasAuthority = true
+    
+    var counter = HostnameLengthCounter()
+    newHost.write(bytes: newHostnameBytes, using: &counter)
+    newStructure.hostnameLength = counter.length
+    
+    let writeAuthorityHeader = (oldStructure.hasAuthority == false)
+    let bytesToWrite = (writeAuthorityHeader ? 2 : 0) + newStructure.hostnameLength
+    
+    let result = replaceSubrange(
+      oldStructure.hostnameStart..<oldStructure.portStart,
+      withUninitializedSpace: bytesToWrite,
+      newStructure: newStructure
+    ) { subrangeBuffer in
+      guard var ptr = subrangeBuffer.baseAddress else { return 0 }
+      if writeAuthorityHeader {
+        // 'nil' -> non-empty host. Insert authority header.
+        ptr.initialize(repeating: ASCII.forwardSlash.codePoint, count: 2)
+        ptr = ptr + 2
+      }
+      var writer = UnsafeBufferHostnameWriter(buffer: UnsafeMutableBufferPointer(start: ptr, count: counter.length))
+      newHost.write(bytes: newHostnameBytes, using: &writer)
+      return bytesToWrite - writer.buffer.count
+    }
+    return (true, result)
+  }
+  
   /// Attempts to set the port component to the given value.
   ///
   mutating func setPort(

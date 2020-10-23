@@ -144,7 +144,23 @@ extension WebURL.JSModel {
   }
 
   public var hostname: String {
-    return stringForComponent(.hostname) ?? ""
+    get {
+      return stringForComponent(.hostname) ?? ""
+    }
+    set {
+      var stringToInsert = newValue
+      stringToInsert.withUTF8 { utf8 in
+        var callback = IgnoreValidationErrors()
+        guard let hostnameEnd = findEndOfHostnamePrefix(utf8, scheme: schemeKind, callback: &callback) else {
+          return
+        }
+        let newHostname = utf8[..<hostnameEnd]
+        withMutableStorage(
+          { small in small.setHostname(to: newHostname, filter: true).1 },
+          { generic in generic.setHostname(to: newHostname, filter: true).1 }
+        )
+      }
+    }
   }
 
   public var port: String {
