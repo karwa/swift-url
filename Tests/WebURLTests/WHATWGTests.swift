@@ -178,7 +178,7 @@ extension WHATWGTests {
           report.expectEqual(parserResult.username, expected.username)
           report.expectEqual(parserResult.password, expected.password)
           report.expectEqual(parserResult.path, expected.pathname)
-          report.expectEqual(parserResult.query, expected.search)
+          report.expectEqual(parserResult.search, expected.search)
           report.expectEqual(parserResult.fragment, expected.hash)
           // The test file doesn't include expected `origin` values for all entries.
 //          if let expectedOrigin = expected.origin {
@@ -484,7 +484,7 @@ extension WHATWGTests {
       XCTAssertEqual(test.ex_hostname ?? "", result.hostname)
       XCTAssertEqual(test.ex_port ?? "", result.port)
       XCTAssertEqual(test.ex_path ?? "", result.path)
-      XCTAssertEqual(test.ex_query ?? "", result.query)
+      XCTAssertEqual(test.ex_query ?? "", result.search)
       XCTAssertEqual(test.ex_fragment ?? "", result.fragment)
     }
     

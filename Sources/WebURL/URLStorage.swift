@@ -769,19 +769,29 @@ extension URLStorage {
     return (true, result)
   }
   
-  /// Attempts to set the fragment component to the given UTF8-encoded string.
+  /// Attempts to set the fragment component to the given UTF8-encoded string. A `nil` value removes the fragment.
   ///
-  /// A leading "#" character will be stripped from the given value, if present.
   /// If `filter` is `true`, ASCII tab and newline characters will be removed from the result.
   ///
   mutating func setFragment<Input>(
-    to newValue: Input,
+    to newValue: Input?,
     filter: Bool = false
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+    
+    if filter {
+      return _setFragment_impl(to: newValue.map { FilteredURLInput<Input>($0[...]) })
+    } else {
+      return _setFragment_impl(to: newValue)
+    }
+  }
+  
+  private mutating func _setFragment_impl<Input>(
+    to newValue: Input?
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
     
     let oldStructure = header.structure
     
-    guard newValue.isEmpty == false else {
+    guard let newFragmentBytes = newValue else {
       guard let existingFragment = oldStructure.rangeOfComponent(.fragment) else {
         return (true, AnyURLStorage(self))
       }
@@ -790,23 +800,6 @@ extension URLStorage {
       return (true, removeSubrange(existingFragment, newStructure: newStructure))
     }
     
-    var newFragmentBytes = newValue[...]
-    if newFragmentBytes.first == ASCII.numberSign.codePoint {
-      _ = newFragmentBytes.removeFirst()
-    }
-    
-    if filter {
-      return _setFragment_impl(to: FilteredURLInput<Input>(newFragmentBytes))
-    } else {
-      return _setFragment_impl(to: newFragmentBytes)
-    }
-  }
-  
-  private mutating func _setFragment_impl<Input>(
-    to newFragmentBytes: Input
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
-    let oldStructure = header.structure
     var newStructure = oldStructure
     newStructure.fragmentLength = 1 // leading "#"
     let needsEncoding = PercentEncoding.encode(bytes: newFragmentBytes, using: URLEncodeSet.Fragment.self) {

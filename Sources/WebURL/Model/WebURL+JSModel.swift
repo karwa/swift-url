@@ -199,10 +199,21 @@ extension WebURL.JSModel {
     return stringForComponent(.path) ?? ""
   }
 
-  public var query: String {
-    let string = stringForComponent(.query)
-    guard string != "?" else { return "" }
-    return string ?? ""
+  public var search: String {
+    get {
+      let string = stringForComponent(.query)
+      guard string != "?" else { return "" }
+      return string ?? ""
+    }
+//    set {
+//      var stringToInsert = newValue
+//      stringToInsert.withUTF8 { utf8 in
+//        withMutableStorage(
+//          { small in small.setQuery(to: utf8, filter: true).1 },
+//          { generic in generic.setQuery(to: utf8, filter: true).1 }
+//        )
+//      }
+//    }
   }
 
   public var fragment: String {
@@ -214,9 +225,19 @@ extension WebURL.JSModel {
     set {
       var stringToInsert = newValue
       stringToInsert.withUTF8 { utf8 in
+        // It is important that these steps happen in this order.
+        // - If the new value is empty, the fragment is removed (set to nil)
+        // - If the new value starts with a "#", it is dropped.
+        // - The remainder gets filtered of particular ASCII whitespace characters.
+        var newFragment = Optional(utf8)
+        if utf8.isEmpty {
+          newFragment = nil
+        } else if utf8.first == ASCII.numberSign.codePoint {
+          newFragment = UnsafeBufferPointer(rebasing: utf8.dropFirst())
+        }
         withMutableStorage(
-          { small in small.setFragment(to: utf8, filter: true).1 },
-          { generic in generic.setFragment(to: utf8, filter: true).1 }
+          { small in small.setFragment(to: newFragment, filter: true).1 },
+          { generic in generic.setFragment(to: newFragment, filter: true).1 }
         )
       }
     }
@@ -238,7 +259,7 @@ extension WebURL.JSModel: CustomStringConvertible {
       Hostname: \(hostname)
       Port: \(port)
       Path: \(path)
-      Query: \(query)
+      Query: \(search)
       Fragment: \(fragment)
       CannotBeABaseURL: \(cannotBeABaseURL)
       """
