@@ -769,6 +769,68 @@ extension URLStorage {
     return (true, result)
   }
   
+  /// Attempts to set the query component to the given UTF8-encoded string.
+  ///
+  /// A leading "?" character will be stripped from the given value, if present.
+  /// If `filter` is `true`, ASCII tab and newline characters will be removed from the result.
+  ///
+  mutating func setQuery<Input>(
+    to newValue: Input?,
+    filter: Bool = false
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+    
+    if filter {
+      return _setQuery_impl(to: newValue.map { FilteredURLInput<Input>($0[...]) })
+    } else {
+      return _setQuery_impl(to: newValue)
+    }
+  }
+  
+  private mutating func _setQuery_impl<Input>(
+    to newValue: Input?
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+    
+    let oldStructure = header.structure
+    
+    guard let newQueryBytes = newValue else {
+      guard let existingFragment = oldStructure.rangeOfComponent(.query) else {
+        return (true, AnyURLStorage(self))
+      }
+      var newStructure = oldStructure
+      newStructure.queryLength = 0
+      return (true, removeSubrange(existingFragment, newStructure: newStructure))
+    }
+    
+    var newStructure = oldStructure
+    newStructure.queryLength = 1 // leading "?"
+    let needsEncoding = PercentEncoding.encodeQuery(bytes: newQueryBytes, isSpecial: oldStructure.schemeKind.isSpecial) {
+      newStructure.queryLength += $0.count
+    }
+    let subrangeToReplace = oldStructure.queryStart..<oldStructure.fragmentStart
+    let result = replaceSubrange(
+      subrangeToReplace, withUninitializedSpace: newStructure.queryLength, newStructure: newStructure
+    ) { dest in
+      guard var ptr = dest.baseAddress else { return 0 }
+      // Leading "?"
+      ptr.pointee = ASCII.questionMark.codePoint
+      ptr += 1
+      // Contents.
+      if needsEncoding {
+        PercentEncoding.encodeQuery(bytes: newQueryBytes, isSpecial: oldStructure.schemeKind.isSpecial) { piece in
+          ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
+          ptr += piece.count
+        }
+      } else {
+        let n = UnsafeMutableBufferPointer(start: ptr, count: newStructure.queryLength - 1)
+          .initialize(from: newQueryBytes).1
+        ptr += n
+      }
+      precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
+      return newStructure.queryLength
+    }
+    return (true, result)
+  }
+  
   /// Attempts to set the fragment component to the given UTF8-encoded string. A `nil` value removes the fragment.
   ///
   /// If `filter` is `true`, ASCII tab and newline characters will be removed from the result.

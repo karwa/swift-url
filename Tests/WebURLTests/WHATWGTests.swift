@@ -518,8 +518,8 @@ extension WHATWGTests {
     switch str {
     case "href":
       return \.href
-//    case "search":
-//      return \.search
+    case "search":
+      return \.search
     case "hostname":
       return \.hostname
     case "hash":

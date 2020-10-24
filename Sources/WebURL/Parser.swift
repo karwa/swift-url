@@ -276,17 +276,10 @@ extension ParsedURLString {
           }
         } else {
           writer.writeQueryContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-            if schemeKind.isSpecial {
-              didEscape = PercentEncoding.encode(
-                bytes: inputString[query],
-                using: URLEncodeSet.Query_Special.self
-              ) { piece in writePiece(piece) }
-            } else {
-              didEscape = PercentEncoding.encode(
-                bytes: inputString[query],
-                using: URLEncodeSet.Query_NotSpecial.self
-              ) { piece in writePiece(piece) }
-            }
+            didEscape = PercentEncoding.encodeQuery(
+              bytes: inputString[query],
+              isSpecial: schemeKind.isSpecial
+            ) { piece in writePiece(piece) }
           }
         }
         writer.writeHint(.query, needsEscaping: didEscape)

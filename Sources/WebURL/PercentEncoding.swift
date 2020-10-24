@@ -299,6 +299,23 @@ extension Sequence where Element == UInt8 {
 
 // MARK: - URL encode sets.
 
+extension PercentEncoding {
+  
+  @discardableResult
+  static func encodeQuery<Bytes>(
+    bytes: Bytes,
+    isSpecial: Bool,
+    _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
+  ) -> Bool where Bytes: Sequence, Bytes.Element == UInt8 {
+    
+    if isSpecial {
+      return encode(bytes: bytes, using: URLEncodeSet.Query_Special.self, processChunk)
+    } else {
+      return encode(bytes: bytes, using: URLEncodeSet.Query_NotSpecial.self, processChunk)
+    }
+  }
+}
+
 enum URLEncodeSet {
 
   struct C0: PercentEncodeSet {

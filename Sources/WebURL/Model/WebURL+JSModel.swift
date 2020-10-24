@@ -205,15 +205,25 @@ extension WebURL.JSModel {
       guard string != "?" else { return "" }
       return string ?? ""
     }
-//    set {
-//      var stringToInsert = newValue
-//      stringToInsert.withUTF8 { utf8 in
-//        withMutableStorage(
-//          { small in small.setQuery(to: utf8, filter: true).1 },
-//          { generic in generic.setQuery(to: utf8, filter: true).1 }
-//        )
-//      }
-//    }
+    set {
+      var stringToInsert = newValue
+      stringToInsert.withUTF8 { utf8 in
+        // It is important that these steps happen in this order.
+        // - If the new value is empty, the fragment is removed (set to nil)
+        // - If the new value starts with a "?", it is dropped.
+        // - The remainder gets filtered of particular ASCII whitespace characters.
+        var newQuery = Optional(utf8)
+        if utf8.isEmpty {
+          newQuery = nil
+        } else if utf8.first == ASCII.questionMark.codePoint {
+          newQuery = UnsafeBufferPointer(rebasing: utf8.dropFirst())
+        }
+        withMutableStorage(
+          { small in small.setQuery(to: newQuery, filter: true).1 },
+          { generic in generic.setQuery	(to: newQuery, filter: true).1 }
+        )
+      }
+    }
   }
 
   public var fragment: String {
