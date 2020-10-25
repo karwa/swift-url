@@ -143,15 +143,12 @@ extension URLStructure {
   var fragmentStart: SizeType {
     return queryStart &+ queryLength
   }
-
-  /// Returns the range of the entire authority string, if one is present.
+  
+  /// Returns the range of bytes which contain the given component.
   ///
-  var rangeOfAuthorityString: Range<SizeType>? {
-    guard hasAuthority else { return nil }
-    return Range(uncheckedBounds: (authorityStart, pathStart))
-  }
-
-  func rangeOfComponent(_ component: WebURL.Component) -> Range<SizeType>? {
+  /// If the component is not present, this method returns an empty range starting at the place where component was expected to be found.
+  ///
+  func rangeForReplacement(of component: WebURL.Component) -> Range<SizeType> {
     let start: SizeType
     let length: SizeType
     switch component {
@@ -159,50 +156,74 @@ extension URLStructure {
       assert(schemeLength > 1)
       return Range(uncheckedBounds: (schemeStart, schemeEnd))
     case .hostname:
-      guard hasAuthority else { return nil }
       start = hostnameStart
       length = hostnameLength
-
-    // Components with leading/trailing separators.
-    //
-    // Username & Password make no distinction between empty and nil values, because lone separators are not preserved.
-    // e.g. "http://:@test.com" -> "http://test.com".
     case .username:
-      guard usernameLength != 0 else { return nil }
-      assert(hasAuthority)
       start = usernameStart
       length = usernameLength
-    // passwordLength and portLength include the leading separator, but lone separators are removed.
-    // i.e. we should never see a length of 1. A length of 0 means a nil value.
     case .password:
-      assert(passwordLength != 1)
-      guard passwordLength != 0 else { return nil }
-      assert(hasAuthority)
+      assert(passwordLength != 1, "Lone ':' separator is not a valid password component")
       start = passwordStart
       length = passwordLength
     case .port:
-      assert(portLength != 1)
-      guard portLength != 0 else { return nil }
-      assert(hasAuthority)
+      assert(portLength != 1, "Lone ':' separator is not a valid port component")
       start = portStart
       length = portLength
-    // Lone separators may be preserved for these components. We may see a length of 1.
     case .path:
-      guard pathLength != 0 else { return nil }
       start = pathStart
       length = pathLength
     case .query:
-      guard queryLength != 0 else { return nil }
       start = queryStart
       length = queryLength
     case .fragment:
-      guard fragmentLength != 0 else { return nil }
       start = fragmentStart
       length = fragmentLength
     default:
       preconditionFailure("Unknown component")
     }
     return Range(uncheckedBounds: (start, start &+ length))
+  }
+  
+  /// Returns the range of the entire authority string, if one is present.
+  ///
+  var rangeOfAuthorityString: Range<SizeType>? {
+    guard hasAuthority else { return nil }
+    return Range(uncheckedBounds: (authorityStart, pathStart))
+  }
+
+  /// Returns the range of bytes which contain the given component.
+  ///
+  /// If the component is not present, this method returns `nil`.
+  ///
+  func range(of component: WebURL.Component) -> Range<SizeType>? {
+    let range = rangeForReplacement(of: component)
+    switch component {
+    // Hostname may be empty.
+    case .hostname:
+      guard hasAuthority else { return nil }
+    // Username may not be empty.
+    case .username:
+      guard usernameLength != 0 else { return nil }
+      assert(hasAuthority)
+    // The following components always have a leading separator, so:
+    // - (length == 0) -> not present.
+    // - (length == 1) -> separator with no content (e.g. "sc://x?" has a present, empty query).
+    case .password:
+      guard passwordLength != 0 else { return nil }
+      assert(hasAuthority)
+    case .port:
+      guard portLength != 0 else { return nil }
+      assert(hasAuthority)
+    case .path:
+      guard pathLength != 0 else { return nil }
+    case .query:
+      guard queryLength != 0 else { return nil }
+    case .fragment:
+      guard fragmentLength != 0 else { return nil }
+    default:
+      assert(component == .scheme, "Unknown component")
+    }
+    return range
   }
 }
 
@@ -342,7 +363,7 @@ extension URLStorage {
   }
   
   func withComponentBytes<T>(_ component: WebURL.Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
-    guard let range = header.structure.rangeOfComponent(component) else { return block(nil) }
+    guard let range = header.structure.range(of: component) else { return block(nil) }
     return codeUnits.withElements(range: Range(uncheckedBounds: (range.lowerBound, range.upperBound)), block)
   }
 
@@ -455,7 +476,7 @@ extension URLStorage {
     }
     guard removePort else {
       let result = replaceSubrange(
-        0..<oldStructure.schemeLength, withUninitializedSpace: newStructure.schemeLength, newStructure: newStructure
+        oldStructure.rangeForReplacement(of: .scheme), withUninitializedSpace: newStructure.schemeLength, newStructure: newStructure
       ) { subrange in
         _ = subrange.initialize(from: LowercaseASCIITransformer(base: newSchemeBytes))
         subrange[subrange.count - 1] = ASCII.colon.codePoint
@@ -469,9 +490,9 @@ extension URLStorage {
       
     if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
       // Remove port first to avoid clobbering.
-      codeUnits.removeSubrange(oldStructure.portStart..<oldStructure.pathStart)
+      codeUnits.removeSubrange(oldStructure.rangeForReplacement(of: .port))
       codeUnits.unsafeReplaceSubrange(
-        0..<oldStructure.schemeLength, withUninitializedCapacity: newStructure.schemeLength
+        oldStructure.rangeForReplacement(of: .scheme), withUninitializedCapacity: newStructure.schemeLength
       ) { buffer in
         var i = buffer.initialize(from: LowercaseASCIITransformer(base: newSchemeBytes)).1
         buffer[i] = ASCII.colon.codePoint
@@ -489,9 +510,9 @@ extension URLStorage {
         (dest.baseAddress.unsafelyUnwrapped + i).pointee = ASCII.colon.codePoint
         i += 1
         i += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: i))
-          .initialize(from: UnsafeBufferPointer(rebasing: src[oldStructure.schemeLength..<oldStructure.portStart])).1
+          .initialize(from: UnsafeBufferPointer(rebasing: src[oldStructure.rangeForReplacement(of: .scheme)])).1
         i += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: i))
-          .initialize(from: UnsafeBufferPointer(rebasing: src[oldStructure.pathStart...])).1
+          .initialize(from: UnsafeBufferPointer(rebasing: src[oldStructure.rangeForReplacement(of: .port).upperBound...])).1
         return i
       }
     }
@@ -514,12 +535,12 @@ extension URLStorage {
     
     // Empty usernames are removed.
     guard newValue.isEmpty == false else {
-      guard oldStructure.usernameLength != 0 else {
+      guard let oldUsername = oldStructure.range(of: .username) else {
         return (true, AnyURLStorage(self))
       }
       var newStructure = oldStructure
       newStructure.usernameLength = 0
-      let subrangeToRemove = oldStructure.usernameStart..<(oldStructure.passwordStart + (newStructure.hasCredentialSeparator ? 0 : 1))
+      let subrangeToRemove = oldUsername.lowerBound ..< (oldUsername.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
       
       return (true, removeSubrange(subrangeToRemove, newStructure: newStructure))
     }
@@ -531,7 +552,7 @@ extension URLStorage {
     }
     let insertSeparator = (oldStructure.hasCredentialSeparator == false)
     let bytesToWrite = newStructure.usernameLength + (insertSeparator ? 1 : 0)
-    let subrangeToReplace = oldStructure.usernameStart..<oldStructure.passwordStart
+    let subrangeToReplace = oldStructure.rangeForReplacement(of: .username)
     let result = replaceSubrange(
       subrangeToReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure
     ) { dest in
@@ -574,12 +595,12 @@ extension URLStorage {
     
     // Empty passwords are removed.
     guard newValue.isEmpty == false else {
-      guard oldStructure.passwordLength != 0 else {
+      guard let oldPassword = oldStructure.range(of: .password) else {
         return (true, AnyURLStorage(self))
       }
       var newStructure = oldStructure
       newStructure.passwordLength = 0
-      let subrangeToRemove = oldStructure.passwordStart..<(oldStructure.hostnameStart - (newStructure.hasCredentialSeparator ? 1 : 0))
+      let subrangeToRemove = oldPassword.lowerBound ..< (oldPassword.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
       
       return (true, removeSubrange(subrangeToRemove, newStructure: newStructure))
     }
@@ -590,7 +611,8 @@ extension URLStorage {
       newStructure.passwordLength += $0.count
     }
     let bytesToWrite = newStructure.passwordLength + 1 // We always (over-)write the trailing "@".
-    let subrangeToReplace = oldStructure.passwordStart..<oldStructure.hostnameStart
+    var subrangeToReplace = oldStructure.rangeForReplacement(of: .password)
+    subrangeToReplace = subrangeToReplace.lowerBound ..< subrangeToReplace.upperBound + (oldStructure.hasCredentialSeparator ? 1 : 0)
     let result = replaceSubrange(
       subrangeToReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure
     ) { dest in
@@ -655,7 +677,7 @@ extension URLStorage {
       guard hasCredentialsOrPort == false else {
         return (false, AnyURLStorage(self))
       }
-      switch oldStructure.rangeOfComponent(.hostname) {
+      switch oldStructure.range(of: .hostname) {
       case .none:
         assert(oldStructure.hasAuthority == false)
         guard newValue != nil else {
@@ -707,7 +729,7 @@ extension URLStorage {
     let bytesToWrite = (writeAuthorityHeader ? 2 : 0) + newStructure.hostnameLength
     
     let result = replaceSubrange(
-      oldStructure.hostnameStart..<oldStructure.portStart,
+      oldStructure.rangeForReplacement(of: .hostname),
       withUninitializedSpace: bytesToWrite,
       newStructure: newStructure
     ) { subrangeBuffer in
@@ -740,7 +762,7 @@ extension URLStorage {
       newValue = nil
     }
     guard let newPort = newValue else {
-      guard let existingPort = oldStructure.rangeOfComponent(.port) else {
+      guard let existingPort = oldStructure.range(of: .port) else {
         return (true, AnyURLStorage(self))
       }
       var newStructure = oldStructure
@@ -754,7 +776,7 @@ extension URLStorage {
     var newStructure = oldStructure
     newStructure.portLength = 1 /* ":" */ + newPortString.utf8.count
     let result = replaceSubrange(
-      oldStructure.portStart..<oldStructure.pathStart,
+      oldStructure.rangeForReplacement(of: .port),
       withUninitializedSpace: newStructure.portLength,
       newStructure: newStructure
     ) { buffer in
@@ -793,7 +815,7 @@ extension URLStorage {
     let oldStructure = header.structure
     
     guard let newQueryBytes = newValue else {
-      guard let existingFragment = oldStructure.rangeOfComponent(.query) else {
+      guard let existingFragment = oldStructure.range(of: .query) else {
         return (true, AnyURLStorage(self))
       }
       var newStructure = oldStructure
@@ -806,7 +828,7 @@ extension URLStorage {
     let needsEncoding = PercentEncoding.encodeQuery(bytes: newQueryBytes, isSpecial: oldStructure.schemeKind.isSpecial) {
       newStructure.queryLength += $0.count
     }
-    let subrangeToReplace = oldStructure.queryStart..<oldStructure.fragmentStart
+    let subrangeToReplace = oldStructure.rangeForReplacement(of: .query)
     let result = replaceSubrange(
       subrangeToReplace, withUninitializedSpace: newStructure.queryLength, newStructure: newStructure
     ) { dest in
@@ -854,7 +876,7 @@ extension URLStorage {
     let oldStructure = header.structure
     
     guard let newFragmentBytes = newValue else {
-      guard let existingFragment = oldStructure.rangeOfComponent(.fragment) else {
+      guard let existingFragment = oldStructure.range(of: .fragment) else {
         return (true, AnyURLStorage(self))
       }
       var newStructure = oldStructure
@@ -867,7 +889,7 @@ extension URLStorage {
     let needsEncoding = PercentEncoding.encode(bytes: newFragmentBytes, using: URLEncodeSet.Fragment.self) {
       newStructure.fragmentLength += $0.count
     }
-    let subrangeToReplace = oldStructure.fragmentStart..<(oldStructure.fragmentStart + oldStructure.fragmentLength)
+    let subrangeToReplace = oldStructure.rangeForReplacement(of: .fragment)
     let result = replaceSubrange(
       subrangeToReplace, withUninitializedSpace: newStructure.fragmentLength, newStructure: newStructure
     ) { dest in
