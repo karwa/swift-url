@@ -397,7 +397,7 @@ extension URLStorage {
 
 extension URLStorage {
   
-  fileprivate mutating func replaceSubrange(
+  private mutating func replaceSubrange(
     _ subrangeToReplace: Range<Int>,
     withUninitializedSpace insertCount: Int,
     newStructure: URLStructure<Int>,
@@ -427,11 +427,84 @@ extension URLStorage {
     return newStorage
   }
   
-  fileprivate mutating func removeSubrange(
+  private mutating func removeSubrange(
     _ subrangeToRemove: Range<Int>, newStructure: URLStructure<Int>
   ) -> AnyURLStorage {
     return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
   }
+  
+  /// A generic setter which works for _some_ URL components (but not all of them).
+  ///
+  /// If the new value is `nil`, the component is removed (code-units deleted and length-key set to 0).
+  /// Otherwise, the component is replaced by `[prefix][encoded-content]`, where `prefix` is a single ASCII character and
+  /// `encoded-content` is the accumulated result of transforming the new value by the `encoder` closure.
+  /// The length-key is updated to reflect the total length of the new component, including the single-character prefix.
+  ///
+  /// This is sufficient for components which have no special logic when they are inserted/deleted (e.g. query, fragment, port).
+  /// Components such as scheme, hostname, or credentials, require more complex logic (e.g. for default port, authority header or credential separator),
+  /// and **should not be set using this method**.
+  ///
+  /// - parameters:
+  ///   - component: The component to modify.
+  ///   - newValue:  The new value of the component.
+  ///   - prefix:    A single ASCII character to write before the new value. If `newValue` is not `nil`, this is _always_ written.
+  ///   - lengthKey: The `URLStructure` field to update with the component's new length. Said length will include the single-character prefix.
+  ///
+  ///   - encoder:   A closure which encodes the new value for writing in a URL string.
+  ///   - bytes:     The bytes to encode as the component's new content.
+  ///   - scheme:    The scheme of the final URL.
+  ///   - callback:  A callback through which the `encoder` provides this function with buffers of encoded content to process.
+  ///                `callback` does not escape the pointer value, and may be called as many times as needed to encode the content.
+  ///
+  private mutating func setSimpleComponent<Input>(
+    _ component: WebURL.Component,
+    to newValue: Input?,
+    prefix: ASCII,
+    lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
+    encoder: (_ bytes: Input, _ scheme: WebURL.Scheme, _ callback: (UnsafeBufferPointer<UInt8>)->Void) -> Bool
+  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+    
+    let oldStructure = header.structure
+    
+    guard let newBytes = newValue else {
+      guard let existingFragment = oldStructure.range(of: component) else {
+        return (true, AnyURLStorage(self))
+      }
+      var newStructure = oldStructure
+      newStructure[keyPath: lengthKey] = 0
+      return (true, removeSubrange(existingFragment, newStructure: newStructure))
+    }
+    
+    var bytesToWrite = 1 // leading separator.
+    let needsEncoding = encoder(newBytes, oldStructure.schemeKind) { bytesToWrite += $0.count }
+    let subrangeToReplace = oldStructure.rangeForReplacement(of: component)
+    var newStructure = oldStructure
+    newStructure[keyPath: lengthKey] = bytesToWrite
+    
+    let result = replaceSubrange(
+      subrangeToReplace,
+      withUninitializedSpace: bytesToWrite,
+      newStructure: newStructure
+    ) { dest in
+      guard var ptr = dest.baseAddress else { return 0 }
+      ptr.pointee = prefix.codePoint
+      ptr += 1
+      if needsEncoding {
+        _ = encoder(newBytes, oldStructure.schemeKind) { piece in
+          ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
+          ptr += piece.count
+        }
+      } else {
+        let n = UnsafeMutableBufferPointer(start: ptr, count: bytesToWrite - 1).initialize(from: newBytes).1
+        ptr += n
+      }
+      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
+    }
+    return (true, result)
+  }
+}
+
+extension URLStorage {
   
   /// Attempts to set the scheme component to the given UTF8-encoded string.
   /// The new value may or may not contain a trailing colon (e.g. `http`, `http:`). Colons are only allowed as the last character of the string.
@@ -746,7 +819,7 @@ extension URLStorage {
     return (true, result)
   }
   
-  /// Attempts to set the port component to the given value.
+  /// Attempts to set the port component to the given value. A value of `nil` removes the port.
   ///
   mutating func setPort(
     to newValue: UInt16?
@@ -761,40 +834,34 @@ extension URLStorage {
     if newValue == oldStructure.schemeKind.defaultPort {
       newValue = nil
     }
-    guard let newPort = newValue else {
-      guard let existingPort = oldStructure.range(of: .port) else {
-        return (true, AnyURLStorage(self))
-      }
-      var newStructure = oldStructure
-      newStructure.portLength = 0
-      return (true, removeSubrange(existingPort, newStructure: newStructure))
-    }
     
-    // TODO: More efficient port serialization.
-    var newPortString = String(newPort)
-    
-    var newStructure = oldStructure
-    newStructure.portLength = 1 /* ":" */ + newPortString.utf8.count
-    let result = replaceSubrange(
-      oldStructure.rangeForReplacement(of: .port),
-      withUninitializedSpace: newStructure.portLength,
-      newStructure: newStructure
-    ) { buffer in
-      guard let ptr = buffer.baseAddress else { return 0 }
-      ptr.pointee = ASCII.colon.codePoint
-      let n = 1 + newPortString.withUTF8 { src in
-        (ptr + 1).initialize(from: src.baseAddress!, count: src.count)
-        return src.count
+    if let newPort = newValue {
+      // TODO: More efficient UInt16 serialisation.
+      var serialized = String(newPort)
+      return serialized.withUTF8 { ptr in
+        assert(ptr.isEmpty == false)
+        return setSimpleComponent(
+          .port,
+          to: ptr,
+          prefix: .colon,
+          lengthKey: \.portLength,
+          encoder: { bytes, _, callback in callback(bytes); return false }
+        )
       }
-      return n
+    } else {
+      return setSimpleComponent(
+        .port,
+        to: UnsafeBufferPointer?.none,
+        prefix: .colon,
+        lengthKey: \.portLength,
+        encoder: { _,_,_ in preconditionFailure("Cannot encode 'nil' contents") }
+      )
     }
-    return (true, result)
   }
   
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
-  /// A leading "?" character will be stripped from the given value, if present.
-  /// If `filter` is `true`, ASCII tab and newline characters will be removed from the result.
+  /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
   ///
   mutating func setQuery<Input>(
     to newValue: Input?,
@@ -802,60 +869,27 @@ extension URLStorage {
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
     
     if filter {
-      return _setQuery_impl(to: newValue.map { FilteredURLInput<Input>($0[...]) })
+      return setSimpleComponent(
+        .query,
+        to: newValue.map { FilteredURLInput<Input>($0[...]) },
+        prefix: .questionMark,
+        lengthKey: \.queryLength,
+        encoder: { PercentEncoding.encodeQuery(bytes: $0, isSpecial: $1.isSpecial, $2) }
+      )
     } else {
-      return _setQuery_impl(to: newValue)
+      return setSimpleComponent(
+        .query,
+        to: newValue,
+        prefix: .questionMark,
+        lengthKey: \.queryLength,
+        encoder: { PercentEncoding.encodeQuery(bytes: $0, isSpecial: $1.isSpecial, $2) }
+      )
     }
   }
   
-  private mutating func _setQuery_impl<Input>(
-    to newValue: Input?
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
-    let oldStructure = header.structure
-    
-    guard let newQueryBytes = newValue else {
-      guard let existingFragment = oldStructure.range(of: .query) else {
-        return (true, AnyURLStorage(self))
-      }
-      var newStructure = oldStructure
-      newStructure.queryLength = 0
-      return (true, removeSubrange(existingFragment, newStructure: newStructure))
-    }
-    
-    var newStructure = oldStructure
-    newStructure.queryLength = 1 // leading "?"
-    let needsEncoding = PercentEncoding.encodeQuery(bytes: newQueryBytes, isSpecial: oldStructure.schemeKind.isSpecial) {
-      newStructure.queryLength += $0.count
-    }
-    let subrangeToReplace = oldStructure.rangeForReplacement(of: .query)
-    let result = replaceSubrange(
-      subrangeToReplace, withUninitializedSpace: newStructure.queryLength, newStructure: newStructure
-    ) { dest in
-      guard var ptr = dest.baseAddress else { return 0 }
-      // Leading "?"
-      ptr.pointee = ASCII.questionMark.codePoint
-      ptr += 1
-      // Contents.
-      if needsEncoding {
-        PercentEncoding.encodeQuery(bytes: newQueryBytes, isSpecial: oldStructure.schemeKind.isSpecial) { piece in
-          ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
-          ptr += piece.count
-        }
-      } else {
-        let n = UnsafeMutableBufferPointer(start: ptr, count: newStructure.queryLength - 1)
-          .initialize(from: newQueryBytes).1
-        ptr += n
-      }
-      precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
-      return newStructure.queryLength
-    }
-    return (true, result)
-  }
-  
-  /// Attempts to set the fragment component to the given UTF8-encoded string. A `nil` value removes the fragment.
+  /// Attempts to set the query component to the given UTF8-encoded string.
   ///
-  /// If `filter` is `true`, ASCII tab and newline characters will be removed from the result.
+  /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
   ///
   mutating func setFragment<Input>(
     to newValue: Input?,
@@ -863,55 +897,22 @@ extension URLStorage {
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
     
     if filter {
-      return _setFragment_impl(to: newValue.map { FilteredURLInput<Input>($0[...]) })
+      return setSimpleComponent(
+        .fragment,
+        to: newValue.map { FilteredURLInput<Input>($0[...]) },
+        prefix: .numberSign,
+        lengthKey: \.fragmentLength,
+        encoder: { PercentEncoding.encode(bytes: $0, using: URLEncodeSet.Fragment.self, $2) }
+      )
     } else {
-      return _setFragment_impl(to: newValue)
+      return setSimpleComponent(
+        .fragment,
+        to: newValue,
+        prefix: .numberSign,
+        lengthKey: \.fragmentLength,
+        encoder: { PercentEncoding.encode(bytes: $0, using: URLEncodeSet.Fragment.self, $2) }
+      )
     }
-  }
-  
-  private mutating func _setFragment_impl<Input>(
-    to newValue: Input?
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
-    let oldStructure = header.structure
-    
-    guard let newFragmentBytes = newValue else {
-      guard let existingFragment = oldStructure.range(of: .fragment) else {
-        return (true, AnyURLStorage(self))
-      }
-      var newStructure = oldStructure
-      newStructure.fragmentLength = 0
-      return (true, removeSubrange(existingFragment, newStructure: newStructure))
-    }
-    
-    var newStructure = oldStructure
-    newStructure.fragmentLength = 1 // leading "#"
-    let needsEncoding = PercentEncoding.encode(bytes: newFragmentBytes, using: URLEncodeSet.Fragment.self) {
-      newStructure.fragmentLength += $0.count
-    }
-    let subrangeToReplace = oldStructure.rangeForReplacement(of: .fragment)
-    let result = replaceSubrange(
-      subrangeToReplace, withUninitializedSpace: newStructure.fragmentLength, newStructure: newStructure
-    ) { dest in
-      guard var ptr = dest.baseAddress else { return 0 }
-      // Leading "#"
-      ptr.pointee = ASCII.numberSign.codePoint
-      ptr += 1
-      // Contents.
-      if needsEncoding {
-        PercentEncoding.encode(bytes: newFragmentBytes, using: URLEncodeSet.Fragment.self) { piece in
-          ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
-          ptr += piece.count
-        }
-      } else {
-        let n = UnsafeMutableBufferPointer(start: ptr, count: newStructure.fragmentLength - 1)
-          .initialize(from: newFragmentBytes).1
-        ptr += n
-      }
-      precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
-      return newStructure.fragmentLength
-    }
-    return (true, result)
   }
 }
 
