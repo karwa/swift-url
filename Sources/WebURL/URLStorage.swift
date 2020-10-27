@@ -859,6 +859,55 @@ extension URLStorage {
     }
   }
   
+  /// Attempts to set the path component to the given UTF8-encoded string.
+  ///
+  /// A value of `nil` removes the path. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
+  ///
+  mutating func setPath<Input>(
+    to newValue: Input?,
+    filter: Bool = false
+  ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
+    
+    if filter {
+      return setPath(to: newValue.map { FilteredURLInput<Input>($0[...]) }, filter: false)
+    }
+    
+    let oldStructure = header.structure
+    guard oldStructure.cannotBeABaseURL == false else {
+      return (false, AnyURLStorage(self))
+    }
+    
+    guard let newPath = newValue else {
+      // URLs with special schemes must always have a path. Possibly replace this with an empty path?
+      guard schemeKind.isSpecial == false else {
+        return (false, AnyURLStorage(self))
+      }
+      return setSimpleComponent(
+        .path,
+        to: UnsafeBufferPointer?.none,
+        prefix: .forwardSlash,
+        lengthKey: \.pathLength,
+        encoder: { _,_,_ in preconditionFailure("Cannot encode nil input") }
+      )
+    }
+    
+    let pathInfo = PathMetricsCollector
+      .collectMetrics(pathString: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil)
+    var newStructure = oldStructure
+    newStructure.pathLength = pathInfo.requiredCapacity
+    let result = replaceSubrange(
+      oldStructure.rangeForReplacement(of: .path),
+      withUninitializedSpace: pathInfo.requiredCapacity,
+      newStructure: newStructure) { dest in
+      PathPreallocatedBufferWriter.writePath(
+        to: dest, pathString: newPath, schemeKind: newStructure.schemeKind,
+        baseURL: nil, needsEscaping: pathInfo.needsEscaping
+      )
+      return pathInfo.requiredCapacity
+    }
+    return (true, result)
+  }
+  
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
   /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.

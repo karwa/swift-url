@@ -550,4 +550,31 @@ extension OldURL_WHATWGTests {
     XCTAssertEqual(url.href, "http://example/?a=b+%7E")
     XCTAssertTrue(url.searchParams!.items.first! == (name: "a", value: "b ~"))
   }
+  
+  func testAdditionalSetters() {
+    // This test shows a situation where the WHATWG setter produces an invalid URL.
+    // I believe this issue has been fixed by https://github.com/whatwg/url/pull/544
+    do {
+      var url = OldURL("http://abc/C:/Windows")!
+      XCTAssertEqual(url.href, "http://abc/C:/Windows")
+      url.scheme = "file:"
+      XCTAssertEqual(url.href, "file://abc/C:/Windows")
+      XCTAssertEqual(OldURL(url.href)?.href, "file:///C:/Windows")
+    }
+    // Check that leading slashes are not trimmed when setting 'pathname'.
+    do {
+      var x = OldURL("sc://x?hello")!
+      XCTAssertEqual(x.href, "sc://x?hello")
+      XCTAssertEqual(x.pathname, "")
+      x.pathname = #"/"#
+      XCTAssertEqual(x.href, "sc://x/?hello")
+      XCTAssertEqual(x.pathname, "/")
+      x.pathname = #"/s"#
+      XCTAssertEqual(x.href, "sc://x/s?hello")
+      XCTAssertEqual(x.pathname, "/s")
+      x.pathname = #""#
+      XCTAssertEqual(x.href, "sc://x?hello")
+      XCTAssertEqual(x.pathname, "")
+    }
+  }
 }

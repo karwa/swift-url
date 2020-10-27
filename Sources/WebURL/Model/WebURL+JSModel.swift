@@ -195,8 +195,23 @@ extension WebURL.JSModel {
     }
   }
 
-  public var path: String {
-    return stringForComponent(.path) ?? ""
+  public var pathname: String {
+    get {
+      return stringForComponent(.path) ?? ""
+    }
+    set {
+      var stringToInsert = newValue
+      stringToInsert.withUTF8 { utf8 in
+        var newQuery = Optional(utf8)
+        if utf8.isEmpty {
+          newQuery = nil
+        }
+        withMutableStorage(
+          { small in small.setPath(to: newQuery, filter: true).1 },
+          { generic in generic.setPath(to: newQuery, filter: true).1 }
+        )
+      }
+    }
   }
 
   public var search: String {
@@ -220,7 +235,7 @@ extension WebURL.JSModel {
         }
         withMutableStorage(
           { small in small.setQuery(to: newQuery, filter: true).1 },
-          { generic in generic.setQuery	(to: newQuery, filter: true).1 }
+          { generic in generic.setQuery(to: newQuery, filter: true).1 }
         )
       }
     }
@@ -268,7 +283,7 @@ extension WebURL.JSModel: CustomStringConvertible {
       Password: \(password)
       Hostname: \(hostname)
       Port: \(port)
-      Path: \(path)
+      Path: \(pathname)
       Query: \(search)
       Fragment: \(fragment)
       CannotBeABaseURL: \(cannotBeABaseURL)

@@ -177,7 +177,7 @@ extension WHATWGTests {
           report.expectEqual(Int(parserResult.port), expected.port)
           report.expectEqual(parserResult.username, expected.username)
           report.expectEqual(parserResult.password, expected.password)
-          report.expectEqual(parserResult.path, expected.pathname)
+          report.expectEqual(parserResult.pathname, expected.pathname)
           report.expectEqual(parserResult.search, expected.search)
           report.expectEqual(parserResult.fragment, expected.hash)
           // The test file doesn't include expected `origin` values for all entries.
@@ -483,7 +483,7 @@ extension WHATWGTests {
       XCTAssertEqual(test.ex_scheme, result.scheme)
       XCTAssertEqual(test.ex_hostname ?? "", result.hostname)
       XCTAssertEqual(test.ex_port ?? "", result.port)
-      XCTAssertEqual(test.ex_path ?? "", result.path)
+      XCTAssertEqual(test.ex_path ?? "", result.pathname)
       XCTAssertEqual(test.ex_query ?? "", result.search)
       XCTAssertEqual(test.ex_fragment ?? "", result.fragment)
     }
@@ -526,8 +526,8 @@ extension WHATWGTests {
       return \.fragment
 //    case "host":
 //      return \.hostKind
-//    case "pathname":
-//      return \.pathname
+    case "pathname":
+      return \.pathname
     case "password":
       return \.password
     case "username":
@@ -644,6 +644,27 @@ extension WHATWGTests {
       if let stringKey = webURLStringPropertyWithJSName(expected_key) {
         report.expectEqual(url[keyPath: stringKey], expected_value, expected_key)
       }
+    }
+  }
+}
+
+extension WHATWGTests {
+  
+  func testAdditionalSetters() {
+    // Check that 'pathname' setter does not remove leading slashes.
+    do {
+      var x = WebURL("sc://x?hello")!.jsModel
+      XCTAssertEqual(x.href, "sc://x?hello")
+      XCTAssertEqual(x.pathname, "")
+      x.pathname = #"/"#
+      XCTAssertEqual(x.href, "sc://x/?hello")
+      XCTAssertEqual(x.pathname, "/")
+      x.pathname = #"/s"#
+      XCTAssertEqual(x.href, "sc://x/s?hello")
+      XCTAssertEqual(x.pathname, "/s")
+      x.pathname = #""#
+      XCTAssertEqual(x.href, "sc://x?hello")
+      XCTAssertEqual(x.pathname, "")
     }
   }
 }
