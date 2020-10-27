@@ -2,8 +2,6 @@ import Algorithms  // for Collection.longestSubrange.
 
 // MARK: - Callbacks
 
-// Note: IP Address parsers have their own callback protocol because they are
-//       useful outside of URL contexts.
 
 /// An object which is informed by the IPv4 parser if a validation error occurs.
 ///
@@ -44,7 +42,9 @@ extension IPv6AddressParserCallback {
   }
 }
 
+
 // MARK: - IPv6
+
 
 /// A 128-bit numerical identifier assigned to a device on an
 /// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
@@ -404,7 +404,9 @@ extension IPv6Address {
   }
 }
 
+
 // MARK: - IPv4
+
 
 /// A 32-bit numerical identifier assigned to a device on an
 /// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.

@@ -295,7 +295,7 @@ extension PathComponentVisitor {
     guard contentStartIdx != input.endIndex else {
       var didYield = false
       if isFileScheme {
-        baseURL?.variant.withComponentBytes(.path) {
+        baseURL?.storage.withComponentBytes(.path) {
           guard let basePath = $0?.dropFirst() else { return }  // dropFirst() due to the leading slash.
           if URLStringUtils.hasWindowsDriveLetterPrefix(basePath) {
             visitEmptyPathComponent()
@@ -412,7 +412,7 @@ extension PathComponentVisitor {
       return
     }
 
-    baseURL.variant.withComponentBytes(.path) {
+    baseURL.storage.withComponentBytes(.path) {
       guard var basePath = $0?[...] else {
         // No base path. Flush state from input string, as above.
         assert(baseURL._schemeKind.isSpecial == false, "Special URLs always have a path")

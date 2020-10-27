@@ -10,9 +10,8 @@ public protocol URLParserCallback: IPv6AddressParserCallback, IPv4ParserCallback
   mutating func validationError(_ error: ValidationError)
 }
 
-// Wrap host-parser errors in an 'AnyHostParserError'.
 extension URLParserCallback {
-  // IP address errors.
+
   public mutating func validationError(ipv4 error: IPv4Address.ValidationError) {
     let wrapped = ValidationError.AnyHostParserError.ipv4AddressError(error)
     validationError(.hostParserError(wrapped))
@@ -20,12 +19,6 @@ extension URLParserCallback {
   public mutating func validationError(ipv6 error: IPv6Address.ValidationError) {
     let wrapped = ValidationError.AnyHostParserError.ipv6AddressError(error)
     validationError(.hostParserError(wrapped))
-  }
-}
-extension ValidationError {
-  var ipv6Error: IPv6Address.ValidationError? {
-    guard case .some(.ipv6AddressError(let error)) = self.hostParserError else { return nil }
-    return error
   }
 }
 
@@ -58,7 +51,7 @@ public struct CollectValidationErrors: URLParserCallback {
 
 public struct ValidationError: Equatable {
   private var code: UInt8
-  private var hostParserError: AnyHostParserError? = nil
+  /* testable */ private(set) var hostParserError: AnyHostParserError? = nil
 
   enum AnyHostParserError: Equatable, CustomStringConvertible {
     case ipv4AddressError(IPv4Address.ValidationError)
@@ -207,13 +200,12 @@ extension ValidationError: CustomStringConvertible {
         Example: "https://#fragment"
         """#
     case .hostInvalid:
-      // FIXME: Javascript example.
       return #"""
         The host portion of the URL is an empty string when it includes credentials or a port and the basic URL parser’s state is overridden.
 
         Example:
-          const url = new URL("https://example:9000");
-          url.hostname = "";
+          var url = WebURL("https://example:9000")!.jsModel
+          url.hostname = ""
         """#
     case .portOutOfRange:
       return #"""
@@ -240,13 +232,12 @@ extension ValidationError: CustomStringConvertible {
         Example: "file://c:"
         """#
     case .unexpectedHostFileScheme:
-      // FIXME: Javascript example.
       return #"""
         The URL’s scheme is changed to "file" and the existing URL has a host.
 
         Example:
-          const url = new URL("https://example.org");
-          url.protocol = "file";
+          var url = WebURL("https://example.org")!.jsModel
+          url.scheme = "file"
         """#
     case .unexpectedEmptyPath:
       return #"""

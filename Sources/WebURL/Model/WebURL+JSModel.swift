@@ -1,59 +1,58 @@
-// Javascript-y object model.
-// Documentation comments adapted from Mozilla (https://developer.mozilla.org/en-US/docs/Web/API/URL)
-
 extension WebURL {
 
+  /// An interface to this URL with the same names and behaviour as the Javascript `URL` type.
+  ///
   var jsModel: JSModel {
-    return JSModel(variant: self.variant)
+    return JSModel(storage: self.storage)
   }
 
-  /// The `WebURL` interface is used to parse, construct, normalize, and encode URLs.
-  ///
-  /// It works by providing properties which allow you to easily read and modify the components of a URL.
-  /// You normally create a new URL object by specifying the URL as a string when calling its initializer,
-  /// or by providing a relative URL and a base URL.
-  /// You can then easily read the parsed components of the URL or make changes to the URL.
-  ///
-  /// The parser and API are designed according to the WHATWG specification (https://url.spec.whatwg.org/)
-  /// as it was on 14.06.2020. Therefore, it should match the expectations of web developers and more accurately reflect
-  /// the kinds of URLs a browser will accept or reject.
+  /// The Javascript `URL` model as described by the [WHATWG URL Specification](https://url.spec.whatwg.org/#url-class) .
   ///
   public struct JSModel {
-    var variant: AnyURLStorage
+    var storage: AnyURLStorage
 
+    /// An interface to this URL designed for Swift :)
+    ///
     var swiftModel: WebURL {
-      return WebURL(variant: self.variant)
+      return WebURL(storage: self.storage)
     }
   }
 }
 
-// In-place mutations.
+// In-place mutation hack.
 
-fileprivate let _tempStorage = AnyURLStorage(
+private let _tempStorage = AnyURLStorage(
   URLStorage<GenericURLHeader<UInt8>>(
     count: 0, structure: .init(), initializingCodeUnitsWith: { _ in return 0 }
   )!
 )
 
 extension WebURL.JSModel {
-  
-  mutating func withMutableStorage(
-    _ small: (inout URLStorage<GenericURLHeader<UInt8>>)->AnyURLStorage,
-    _ generic: (inout URLStorage<GenericURLHeader<Int>>)->AnyURLStorage
+
+  private mutating func withMutableStorage(
+    _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> AnyURLStorage,
+    _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> AnyURLStorage
   ) {
     // We need to go through a bit of a dance in order to get a unique reference to the storage.
+    // It's like if you have tape stuck to one hand and try to remove it with the other hand.
     //
-    // Basically: swap the enum to point to some read-only storage, then extract the URLStorage (which is a value)
-    // from our local variable, then set the local variable to also point to read-only storage.
-    var localRef = self.variant
-    self.variant = _tempStorage
+    // Basically:
+    // 1. Swap our storage to temporarily point to some read-only global, so our only storage reference is
+    //    via a local variable.
+    // 2. Extract the URLStorage (which is a COW value type) from local variable's payload, and set
+    //    the local to also point that read-only global.
+    // 3. Hand that extracted storage off to closure (`inout`, but `__consuming` might also work),
+    //    which returns a storage object back (possibly the same storage object).
+    // 4. We round it all off by assigning that value as our new storage. Phew.
+    var localRef = self.storage
+    self.storage = _tempStorage
     switch localRef {
-    case .generic(var storage):
+    case .generic(var extracted_storage):
       localRef = _tempStorage
-      self.variant = generic(&storage)
-    case .small(var storage):
+      self.storage = generic(&extracted_storage)
+    case .small(var extracted_storage):
       localRef = _tempStorage
-      self.variant = small(&storage)
+      self.storage = small(&extracted_storage)
     }
   }
 }
@@ -63,11 +62,11 @@ extension WebURL.JSModel {
   // Flags.
 
   var schemeKind: WebURL.Scheme {
-    return variant.schemeKind
+    return storage.schemeKind
   }
 
   public var cannotBeABaseURL: Bool {
-    return variant.cannotBeABaseURL
+    return storage.cannotBeABaseURL
   }
 
   // Components.
@@ -75,7 +74,7 @@ extension WebURL.JSModel {
 
   public var href: String {
     get {
-      return variant.entireString
+      return storage.entireString
     }
     set {
       guard let newURL = WebURL(newValue) else { return }
@@ -83,8 +82,8 @@ extension WebURL.JSModel {
     }
   }
 
-  func stringForComponent(_ component: WebURL.Component) -> String? {
-    return variant.withComponentBytes(component) { maybeBuffer in
+  private func stringForComponent(_ component: WebURL.Component) -> String? {
+    return storage.withComponentBytes(component) { maybeBuffer in
       return maybeBuffer.map { buffer in String(decoding: buffer, as: UTF8.self) }
     }
   }
@@ -110,7 +109,7 @@ extension WebURL.JSModel {
 
   public var username: String {
     get {
-    	return stringForComponent(.username) ?? ""
+      return stringForComponent(.username) ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -269,11 +268,21 @@ extension WebURL.JSModel {
   }
 }
 
-extension WebURL.JSModel: CustomStringConvertible {
+// Standard protocols.
+
+extension WebURL.JSModel: CustomStringConvertible, TextOutputStreamable {
 
   public var description: String {
-    return
-      """
+    return storage.entireString
+  }
+
+  public func write<Target>(to target: inout Target) where Target: TextOutputStream {
+    target.write(description)
+  }
+
+  /* testable */
+  var _debugDescription: String {
+    return """
       URL Constructor output:
 
       Href: \(href)
@@ -288,5 +297,23 @@ extension WebURL.JSModel: CustomStringConvertible {
       Fragment: \(fragment)
       CannotBeABaseURL: \(cannotBeABaseURL)
       """
+  }
+}
+
+extension WebURL.JSModel: Equatable, Hashable {
+
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.storage.withEntireString { lhsBuffer in
+      rhs.storage.withEntireString { rhsBuffer in
+        return (lhsBuffer.baseAddress == rhsBuffer.baseAddress && lhsBuffer.count == rhsBuffer.count)
+          || lhsBuffer.elementsEqual(rhsBuffer)
+      }
+    }
+  }
+
+  public func hash(into hasher: inout Hasher) {
+    storage.withEntireString { buffer in
+      hasher.combine(bytes: UnsafeRawBufferPointer(buffer))
+    }
   }
 }

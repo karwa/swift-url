@@ -74,7 +74,7 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
       write(to: &writer, metrics: metrics)
       return writer.bytesWritten
     }
-    return WebURL(variant: newStorage)
+    return WebURL(storage: newStorage)
   }
 
   /// Writes the URL to the given consumer.
@@ -131,7 +131,7 @@ extension ParsedURLString {
           preconditionFailure("Cannot construct a URL without a scheme")
         }
         assert(schemeKind == baseURL._schemeKind)
-        baseURL.variant.withComponentBytes(.scheme) {
+        baseURL.storage.withComponentBytes(.scheme) {
           let bytes = $0!.dropLast()  // drop terminator.
           writer.writeSchemeContents(bytes)
         }
@@ -192,7 +192,7 @@ extension ParsedURLString {
         guard let baseURL = baseURL else {
           preconditionFailure("A baseURL is required")
         }
-        baseURL.variant.withAllAuthorityComponentBytes {
+        baseURL.storage.withAllAuthorityComponentBytes {
           if let baseAuth = $0 {
             writer.writeAuthorityHeader()
             writer.writeKnownAuthorityString(
@@ -253,7 +253,7 @@ extension ParsedURLString {
         }
       } else if componentsToCopyFromBase.contains(.path) {
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
-        baseURL.variant.withComponentBytes(.path) {
+        baseURL.storage.withComponentBytes(.path) {
           if let basePath = $0 {
             writer.writePathSimple { writePiece in
               writePiece(basePath)
@@ -285,7 +285,7 @@ extension ParsedURLString {
         writer.writeHint(.query, needsEscaping: didEscape)
       } else if componentsToCopyFromBase.contains(.query) {
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
-        baseURL.variant.withComponentBytes(.query) {
+        baseURL.storage.withComponentBytes(.query) {
           if let baseQuery = $0?.dropFirst() {  // '?' separator.
             writer.writeQueryContents { writePiece in writePiece(baseQuery) }
           }
@@ -310,7 +310,7 @@ extension ParsedURLString {
         writer.writeHint(.fragment, needsEscaping: didEscape)
       } else if componentsToCopyFromBase.contains(.fragment) {
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
-        baseURL.variant.withComponentBytes(.fragment) {
+        baseURL.storage.withComponentBytes(.fragment) {
           if let baseFragment = $0?.dropFirst() {  // '#' separator.
             writer.writeFragmentContents { writePiece in writePiece(baseFragment) }
           }
@@ -980,7 +980,7 @@ extension URLScanner {
         // including 'path' in 'componentsToCopyFromBase'.
         let basePathStartsWithWindowsDriveLetter: Bool =
           baseURL.map {
-            $0.variant.withComponentBytes(.path) {
+            $0.storage.withComponentBytes(.path) {
               guard let basePath = $0 else { return false }
               return URLStringUtils.hasWindowsDriveLetterPrefix(basePath.dropFirst())
             }

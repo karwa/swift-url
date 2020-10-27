@@ -17,6 +17,13 @@ extension Array where Element == UInt16 {
   }
 }
 
+extension ValidationError {
+  public var ipv6Error: IPv6Address.ValidationError? {
+    guard case .some(.ipv6AddressError(let error)) = self.hostParserError else { return nil }
+    return error
+  }
+}
+
 final class IPv6AddressTests: XCTestCase {
 
   fileprivate func parse_pton(_ input: String) -> [UInt16]? {
