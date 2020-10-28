@@ -46,7 +46,7 @@ struct PathMetricsCollector: PathComponentVisitor {
 
   static func collectMetrics<InputString>(
     pathString input: InputString,
-    schemeKind: WebURL.Scheme,
+    schemeKind: WebURL.SchemeKind,
     baseURL: WebURL?
   ) -> PathMetricsCollector
   where InputString: BidirectionalCollection, InputString.Element == UInt8 {
@@ -93,7 +93,7 @@ struct PathPreallocatedBufferWriter: PathComponentVisitor {
   static func writePath<InputString>(
     to buffer: UnsafeMutableBufferPointer<UInt8>,
     pathString input: InputString,
-    schemeKind: WebURL.Scheme,
+    schemeKind: WebURL.SchemeKind,
     baseURL: WebURL?,
     needsEscaping: Bool = true
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
@@ -173,7 +173,7 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
 
   static func validatePathComponents(
     pathString input: Input,
-    schemeKind: WebURL.Scheme,
+    schemeKind: WebURL.SchemeKind,
     callback: inout Callback
   ) {
     var visitor = PathInputStringValidator(callback: callback, path: input)
@@ -243,7 +243,7 @@ extension PathComponentVisitor {
   ///
   fileprivate mutating func walkPathComponents<InputString>(
     pathString input: InputString,
-    schemeKind: WebURL.Scheme,
+    schemeKind: WebURL.SchemeKind,
     baseURL: WebURL?
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
 

@@ -30,7 +30,7 @@ struct URLStructure<SizeType: FixedWidthInteger> {
   var fragmentLength: SizeType
 
   var hasAuthority: Bool
-  var schemeKind: WebURL.Scheme
+  var schemeKind: WebURL.SchemeKind
   var cannotBeABaseURL: Bool
   
   func checkInvariants() -> Bool {
@@ -346,7 +346,7 @@ struct URLStorage<Header: URLHeader> {
 
 extension URLStorage {
   
-  var schemeKind: WebURL.Scheme {
+  var schemeKind: WebURL.SchemeKind {
     return header.structure.schemeKind
   }
 
@@ -461,7 +461,7 @@ extension URLStorage {
     to newValue: Input?,
     prefix: ASCII,
     lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
-    encoder: (_ bytes: Input, _ scheme: WebURL.Scheme, _ callback: (UnsafeBufferPointer<UInt8>)->Void) -> Bool
+    encoder: (_ bytes: Input, _ scheme: WebURL.SchemeKind, _ callback: (UnsafeBufferPointer<UInt8>)->Void) -> Bool
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
     
     let oldStructure = header.structure
@@ -527,7 +527,7 @@ extension URLStorage {
     
     let oldStructure = header.structure
     var newStructure = oldStructure
-    newStructure.schemeKind = WebURL.Scheme.parse(asciiBytes: newSchemeBytes)
+    newStructure.schemeKind = WebURL.SchemeKind(parsing: newSchemeBytes)
     newStructure.schemeLength = newSchemeBytes.count + 1
      
     if newStructure.schemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
@@ -1043,7 +1043,7 @@ extension AnyURLStorage {
 
 extension AnyURLStorage {
   
-  var schemeKind: WebURL.Scheme {
+  var schemeKind: WebURL.SchemeKind {
     switch self {
     case .small(let storage): return storage.schemeKind
     case .generic(let storage): return storage.schemeKind

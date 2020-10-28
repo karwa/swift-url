@@ -10,7 +10,7 @@ protocol URLWriter {
 
   /// Notes the given information about the URL. This is always the first function to be called.
   ///
-  mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool)
+  mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool)
 
   /// A function which appends the given bytes to storage.
   ///
@@ -169,7 +169,7 @@ struct StructureAndMetricsCollector: URLWriter {
     return (collector.requiredCapacity, collector.structure, collector.metrics)
   }
 
-  mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
+  mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
     structure.schemeKind = schemeKind
     structure.cannotBeABaseURL = cannotBeABaseURL
   }
@@ -318,7 +318,7 @@ struct UnsafePresizedBufferWriter: URLWriter {
   
   // URLWriter.
 
-  mutating func writeFlags(schemeKind: WebURL.Scheme, cannotBeABaseURL: Bool) {
+  mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
   }
 
   mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {

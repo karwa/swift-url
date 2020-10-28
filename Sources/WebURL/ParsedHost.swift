@@ -11,7 +11,7 @@ enum ParsedHost: Equatable {
 extension ParsedHost {
 
   static func parse<Bytes, Callback>(
-    _ input: Bytes, scheme: WebURL.Scheme, callback: inout Callback
+    _ input: Bytes, scheme: WebURL.SchemeKind, callback: inout Callback
   ) -> Self? where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Callback: URLParserCallback {
 
     guard input.isEmpty == false else {

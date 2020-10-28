@@ -6,12 +6,12 @@
 ///   For example, a URL with an "http" scheme must be used with software that speaks the HTTP protocol.
 ///   A scheme is always required, and the way in which other components are encoded depends on the scheme.
 ///   Some schemes ("http", "https", "ws", "wss", "ftp", and "file") are referred to as being "special".
-///   Scheme usage is coordinated by the [Internet Assigned Numbers Authority](https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml) .
+///   Scheme usage is coordinated by the [Internet Assigned Numbers Authority][iana-schemes].
 ///
 /// - The `hostname` is an optional component which describes which computer has the resource information.
 ///   For URLs with special schemes, the hostname may be an IP address, a _domain_, or empty.
 ///   For URLs with non-special schemes, the hostname is an opaque identifier.
-///   Domains may be resolved to IP addresses using the [Domain Name System (DNS)](https://en.wikipedia.org/wiki/Domain_Name_System) .
+///   Domains may be resolved to IP addresses using the [Domain Name System (DNS)][dns] .
 ///
 /// - Additionally, the hostname may be augmented by a `username`, `password` or `port`. Collectively, these are known as the URL's "authority".
 ///
@@ -26,10 +26,15 @@
 ///   It is typically used for client-side information and not sent to the host, although this is a scheme- and implementation-specific detail.
 ///
 /// URLs are always ASCII Strings. Non-ASCII characters must be percent-encoded, except in domains, where they are encoded as ASCII by
-/// the [IDNA transformation](https://unicode.org/reports/tr46/) .
+/// the [IDNA transformation][idna-spec] .
 ///
-/// Parsing of URL strings is compatible with the [WHATWG URL Specification](https://url.spec.whatwg.org/) as it was on 14.06.2020, although
+/// Parsing of URL strings is compatible with the [WHATWG URL Specification][url-spec] as it was on 14.06.2020, although
 /// the object model is different. The Javascript model described in the specification is available via the `.jsModel` view.
+///
+/// [iana-schemes]: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
+/// [dns]: https://en.wikipedia.org/wiki/Domain_Name_System
+/// [idna-spec]: https://unicode.org/reports/tr46/
+/// [url-spec]: https://url.spec.whatwg.org/
 ///
 public struct WebURL {
   var storage: AnyURLStorage
@@ -64,7 +69,7 @@ extension WebURL {
 
   // Flags used by the parser.
 
-  var _schemeKind: WebURL.Scheme {
+  var _schemeKind: WebURL.SchemeKind {
     return storage.schemeKind
   }
 

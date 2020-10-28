@@ -109,7 +109,7 @@ extension ParsedURLString {
 
     let cannotBeABaseURL: Bool
     fileprivate let componentsToCopyFromBase: ComponentsToCopy
-    let schemeKind: WebURL.Scheme
+    let schemeKind: WebURL.SchemeKind
 
     /// - seealso: `ParsedURLString.write(to:knownPathLength:)`.
     func write<WriterType: URLWriter>(
@@ -360,7 +360,7 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
     case success(continueFrom: (ParsableComponent, InputString.Index)?)
   }
 
-  typealias Scheme = WebURL.Scheme
+  typealias Scheme = WebURL.SchemeKind
   typealias InputSlice = InputString.SubSequence
 }
 
@@ -421,7 +421,7 @@ extension URLScanner {
 
     var cannotBeABaseURL = false
     var componentsToCopyFromBase: ComponentsToCopy = []
-    var schemeKind: WebURL.Scheme? = nil
+    var schemeKind: WebURL.SchemeKind? = nil
   }
 }
 
@@ -470,7 +470,7 @@ extension URLScanner {
        input[schemeEndIndex] == ASCII.colon.codePoint {
 
       let schemeName = input.prefix(upTo: schemeEndIndex)
-      let schemeKind = WebURL.Scheme.parse(asciiBytes: schemeName)
+      let schemeKind = WebURL.SchemeKind(parsing: schemeName)
       scanResults.schemeKind = schemeKind
       scanResults.schemeTerminatorIndex = schemeName.endIndex
       
@@ -565,7 +565,7 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   static func scanAllComponents(
-    from: ParsableComponent, _ input: InputSlice, scheme: WebURL.Scheme,
+    from: ParsableComponent, _ input: InputSlice, scheme: WebURL.SchemeKind,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> Bool {
 
@@ -608,7 +608,7 @@ extension URLScanner {
   /// If parsing doesn't fail, the next component is always `pathStart`.
   ///
   static func scanAuthority(
-    _ input: InputSlice, scheme: WebURL.Scheme,
+    _ input: InputSlice, scheme: WebURL.SchemeKind,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> ComponentParseResult {
 
@@ -1053,7 +1053,7 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   static func scanAllCannotBeABaseURLComponents(
-    _ input: InputSlice, scheme: WebURL.Scheme,
+    _ input: InputSlice, scheme: WebURL.SchemeKind,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> Bool {
 
@@ -1146,7 +1146,7 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   static func scanAllRelativeURLComponents(
-    _ input: InputSlice, baseScheme: WebURL.Scheme,
+    _ input: InputSlice, baseScheme: WebURL.SchemeKind,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> Bool {
 
@@ -1192,7 +1192,7 @@ extension URLScanner {
   }
 
   static func parseRelativeURLStart(
-    _ input: InputSlice, baseScheme: WebURL.Scheme,
+    _ input: InputSlice, baseScheme: WebURL.SchemeKind,
     _ mapping: inout UnprocessedMapping, callback: inout Callback
   ) -> ComponentParseResult {
 
@@ -1271,7 +1271,7 @@ extension URLScanner.UnprocessedMapping {
 
     var componentsToCopyFromBase = u_mapping.componentsToCopyFromBase
 
-    let schemeKind: WebURL.Scheme
+    let schemeKind: WebURL.SchemeKind
     if let scannedSchemeKind = u_mapping.schemeKind {
       schemeKind = scannedSchemeKind
     } else if componentsToCopyFromBase.contains(.scheme), let baseURL = baseURL {
@@ -1475,7 +1475,7 @@ func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Collection, 
 ///
 /// This is a "scan-level" operation: the discovered hostname may need additional processing before being written to a URL string.
 ///
-func findEndOfHostnamePrefix<Input, Callback>(_ input: Input, scheme: WebURL.Scheme, callback cb: inout Callback) -> Input.Index?
+func findEndOfHostnamePrefix<Input, Callback>(_ input: Input, scheme: WebURL.SchemeKind, callback cb: inout Callback) -> Input.Index?
 where Input: BidirectionalCollection, Input.Element == UInt8, Callback: URLParserCallback {
   
   var mapping = URLScanner<Input, Callback>.UnprocessedMapping()

@@ -61,7 +61,7 @@ extension WebURL.JSModel {
 
   // Flags.
 
-  var schemeKind: WebURL.Scheme {
+  var schemeKind: WebURL.SchemeKind {
     return storage.schemeKind
   }
 
