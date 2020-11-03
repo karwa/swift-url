@@ -826,9 +826,7 @@ extension URLScanner {
     let path = input[..<(nextComponentStartIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    if Callback.self != IgnoreValidationErrors.self {
-      PathInputStringValidator.validatePathComponents(pathString: path, schemeKind: scheme, callback: &callback)
-    }
+    PathInputStringValidator.validatePathComponents(pathString: path, schemeKind: scheme, callback: &callback)
 
     // 4. Return the next component.
     if path.isEmpty && scheme.isSpecial == false {
@@ -861,9 +859,7 @@ extension URLScanner {
     let queryEndIndex = input.firstIndex { ASCII($0) == .numberSign }
 
     // 3. Validate the query-string.
-    if Callback.self != IgnoreValidationErrors.self {
-      validateURLCodePointsAndPercentEncoding(input.prefix(upTo: queryEndIndex ?? input.endIndex), callback: &callback)
-    }
+    validateURLCodePointsAndPercentEncoding(input.prefix(upTo: queryEndIndex ?? input.endIndex), callback: &callback)
 
     // 3. Return the next component.
     mapping.queryEndIndex = queryEndIndex ?? input.endIndex
@@ -887,9 +883,7 @@ extension URLScanner {
     assert(mapping.fragmentEndIndex == nil)
 
     // 2. Validate the fragment string.
-    if Callback.self != IgnoreValidationErrors.self {
-      validateURLCodePointsAndPercentEncoding(input, callback: &callback)
-    }
+    validateURLCodePointsAndPercentEncoding(input, callback: &callback)
 
     mapping.fragmentEndIndex = input.endIndex
     return .success(continueFrom: nil)
@@ -1143,9 +1137,7 @@ extension URLScanner {
     let path = input[..<(pathEndIndex ?? input.endIndex)]
 
     // 3. Validate the path.
-    if Callback.self != IgnoreValidationErrors.self {
-      validateURLCodePointsAndPercentEncoding(path, callback: &callback)
-    }
+    validateURLCodePointsAndPercentEncoding(path, callback: &callback)
 
     // 4. Return the next component.
     if let pathEnd = pathEndIndex {
@@ -1393,7 +1385,6 @@ extension URLScanner.UnprocessedMapping {
     if schemeKind == .file {
       // If the path begins with a Windows drive letter, discard the authority (incl. base URL authority).
       if var pathContents = pathRange.map({ inputString[$0] }) {
-        // Strip the leading slash if present.
         if let firstChar = pathContents.first, ASCII(firstChar) == .forwardSlash || ASCII(firstChar) == .backslash {
           pathContents = pathContents.dropFirst()
         }
@@ -1410,7 +1401,7 @@ extension URLScanner.UnprocessedMapping {
       }
     }
 
-    // Step 3: Construct an absolute URL string from the ranges, as well as the baseURL and components to copy.
+    // Step 3: Construct a `ProcessedMapping` from that information.
     return ParsedURLString<InputString>.ProcessedMapping(
       schemeRange: schemeRange,
       usernameRange: usernameRange,
@@ -1526,10 +1517,19 @@ func findEndOfHostnamePrefix<Input, Callback>(
   return mapping.hostnameEndIndex ?? hostname.endIndex
 }
 
-// Note: This considers the percent sign ("%") a valid URL code-point.
-//
+/// Checks if `input`, which is a collection of UTF8-encoded bytes, contains any non-URL code-points or invalid percent encoding (e.g. "%XY").
+/// If it does, `callback` is informed with an appropriate `ValidationError`.
+///
+/// - Note: This method considers the percent sign ("%") to be a valid URL code-point.
+/// - Note: This method is a no-op if `callback` is an instance of `IgnoreValidationErrors`.
+///
 internal func validateURLCodePointsAndPercentEncoding<Input, Callback>(_ input: Input, callback: inout Callback)
 where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
+  
+  guard Callback.self != IgnoreValidationErrors.self else {
+    // The compiler has a tough time optimising this function away when we ignore validation errors.
+    return
+  }
 
   if URLStringUtils.hasNonURLCodePoints(input, allowPercentSign: true) {
     callback.validationError(.invalidURLCodePoint)

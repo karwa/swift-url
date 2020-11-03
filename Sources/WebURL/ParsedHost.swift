@@ -104,9 +104,7 @@ extension ParsedHost {
         return false
       }
     }
-    if Callback.self != IgnoreValidationErrors.self {
-      validateURLCodePointsAndPercentEncoding(hostname, callback: &callback)
-    }
+    validateURLCodePointsAndPercentEncoding(hostname, callback: &callback)
     return true
   }
 

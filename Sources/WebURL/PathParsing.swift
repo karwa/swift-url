@@ -176,6 +176,10 @@ where Input: BidirectionalCollection, Input.Element == UInt8, Input == Input.Sub
     schemeKind: WebURL.SchemeKind,
     callback: inout Callback
   ) {
+    guard Callback.self != IgnoreValidationErrors.self else {
+      // The compiler has a tough time optimising this function away when we ignore validation errors.
+      return
+    }
     var visitor = PathInputStringValidator(callback: callback, path: input)
     visitor.walkPathComponents(
       pathString: input,
