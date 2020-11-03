@@ -29,7 +29,7 @@ extension WebURL.SchemeKind {
   ///
   init<Bytes>(parsing schemeContent: Bytes) where Bytes: Sequence, Bytes.Element == UInt8 {
 
-    var iter = LowercaseASCIITransformer(base: schemeContent).makeIterator()
+    var iter = ASCII.Lowercased(schemeContent).makeIterator()
     switch iter.next() {
     case .h?:
       if iter.next() == .t, iter.next() == .t, iter.next() == .p {

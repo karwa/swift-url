@@ -551,7 +551,7 @@ extension URLStorage {
       let result = replaceSubrange(
         oldStructure.rangeForReplacement(of: .scheme), withUninitializedSpace: newStructure.schemeLength, newStructure: newStructure
       ) { subrange in
-        _ = subrange.initialize(from: LowercaseASCIITransformer(base: newSchemeBytes))
+        _ = subrange.initialize(from: ASCII.Lowercased(newSchemeBytes))
         subrange[subrange.count - 1] = ASCII.colon.codePoint
         return newStructure.schemeLength
       }
@@ -567,7 +567,7 @@ extension URLStorage {
       codeUnits.unsafeReplaceSubrange(
         oldStructure.rangeForReplacement(of: .scheme), withUninitializedCapacity: newStructure.schemeLength
       ) { buffer in
-        var i = buffer.initialize(from: LowercaseASCIITransformer(base: newSchemeBytes)).1
+        var i = buffer.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
         buffer[i] = ASCII.colon.codePoint
         i += 1
         return i
@@ -579,7 +579,7 @@ extension URLStorage {
     }
     let result = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
       self.codeUnits.withUnsafeBufferPointer { src in
-        var i = dest.initialize(from: LowercaseASCIITransformer(base: newSchemeBytes)).1
+        var i = dest.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
         (dest.baseAddress.unsafelyUnwrapped + i).pointee = ASCII.colon.codePoint
         i += 1
         i += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: i))
@@ -725,7 +725,7 @@ extension URLStorage {
   ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
     
     if filter {
-      return setHostname_impl(to: newValue.map { FilteredURLInput<Input>($0[...]) })
+      return setHostname_impl(to: newValue.map { ASCII.NewlineAndTabFiltered($0) })
     } else {
       return setHostname_impl(to: newValue)
     }
@@ -783,9 +783,9 @@ extension URLStorage {
     }
     
     var callback = IgnoreValidationErrors()
-    guard let newHost = ParsedHost.parse(
+    guard let newHost = ParsedHost(
       newHostnameBytes,
-      scheme: oldStructure.schemeKind,
+      schemeKind: oldStructure.schemeKind,
       callback: &callback
     ) else {
       return (false, AnyURLStorage(self))
@@ -869,7 +869,7 @@ extension URLStorage {
   ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
     
     if filter {
-      return setPath(to: newValue.map { FilteredURLInput<Input>($0[...]) }, filter: false)
+      return setPath(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
     }
     
     let oldStructure = header.structure
@@ -920,7 +920,7 @@ extension URLStorage {
     if filter {
       return setSimpleComponent(
         .query,
-        to: newValue.map { FilteredURLInput<Input>($0[...]) },
+        to: newValue.map { ASCII.NewlineAndTabFiltered($0) },
         prefix: .questionMark,
         lengthKey: \.queryLength,
         encoder: { PercentEncoding.encodeQuery(bytes: $0, isSpecial: $1.isSpecial, $2) }
@@ -948,7 +948,7 @@ extension URLStorage {
     if filter {
       return setSimpleComponent(
         .fragment,
-        to: newValue.map { FilteredURLInput<Input>($0[...]) },
+        to: newValue.map { ASCII.NewlineAndTabFiltered($0) },
         prefix: .numberSign,
         lengthKey: \.fragmentLength,
         encoder: { PercentEncoding.encode(bytes: $0, using: URLEncodeSet.Fragment.self, $2) }

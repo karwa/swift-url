@@ -59,9 +59,11 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
     ///
     static func newBuffer(minimumCapacity: Int, initialHeader: Header) -> Self {
       let buffer = Self.create(minimumCapacity: minimumCapacity) { unsafeBuffer in
-        guard var newHeader = initialHeader.withCapacity(
-          minimumCapacity: minimumCapacity, maximumCapacity: unsafeBuffer.capacity
-        ) else {
+        guard
+          var newHeader = initialHeader.withCapacity(
+            minimumCapacity: minimumCapacity, maximumCapacity: unsafeBuffer.capacity
+          )
+        else {
           preconditionFailure("Failed to create header with desireed capacity")
         }
         precondition(newHeader.capacity >= minimumCapacity)
@@ -350,7 +352,7 @@ extension ManagedArrayBuffer: AltRangeReplaceableCollection {
   @discardableResult
   mutating func append<S>(contentsOf newElements: S) -> Range<Self.Index> where S: Sequence, Self.Element == S.Element {
     let preAppendEnd = endIndex
-    
+
     var result: (S.Iterator, Int)?
     unsafeAppend(uninitializedCapacity: newElements.underestimatedCount) { ptr in
       result = ptr.initialize(from: newElements)
@@ -386,13 +388,14 @@ extension ManagedArrayBuffer {
     }
     storage.header.count = newCount
   }
-  
+
   @discardableResult
   mutating func unsafeReplaceSubrange(
     _ subrange: Range<Int>,
     withUninitializedCapacity newSubrangeCount: Int,
-    initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int) -> Range<Int> {
-    
+    initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int
+  ) -> Range<Int> {
+
     let isUnique = storage.isKnownUniqueReference()
     let result = storage.withUnsafeMutablePointerToElements { elems in
       return replaceElements(

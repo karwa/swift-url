@@ -81,14 +81,14 @@ where C: Collection, T.Element == C.Element {
     storageConstructor: storageConstructor
   )
 }
-  
+
 func replaceElements<T: BufferContainer>(
   in buffer: UnsafeMutableBufferPointer<T.Element>,
   initializedCount: Int,
   isUnique: Bool,
   subrange: Range<Int>,
   withElements newElementsCount: Int,
-  initializedWith initializer: (inout UnsafeMutableBufferPointer<T.Element>)->Int,
+  initializedWith initializer: (inout UnsafeMutableBufferPointer<T.Element>) -> Int,
   storageConstructor: (_ minimumCapacity: Int) -> T
 ) -> (bufferCount: Int, insertedCount: Int, newStorage: T?, newStorageCount: Int) {
   precondition(subrange.lowerBound >= 0, "subrange start is negative")

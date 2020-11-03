@@ -2,15 +2,21 @@
 //
 // Parsing happens in 3 steps, starting at the 'urlFromBytes' function:
 //
-// 1. 'urlFromBytes' checks to see if the bytes contain ASCII tab/newline characters.
-//    If they do, the collection is wrapped in a 'FilteredURLInput' to lazily remove them.
-//    A 'ParsedURLString' is created, which calls in to `URLScanner.scanURLString'.
+// - Prep:
+//    'urlFromBytes' trims C0 control characters and spaces from the input as the WHATWG parser does.
+//    We then need to remove all ASCII tabs and newlines: first, we try to get away with just trimming
+//    (keeping the contiguity of the content) but if that isn't possible, we remove the characters lazily
+//    using the `NewlineAndTabFiltered` wrapper.
 //
-// 2. The URLScanner scans the byte string - looking for components and marking where they start/end.
-//    The result is then processed in to a 'ParsedURLString.ProcessedMapping' and the completed 'ParsedURLString'
-//    object is returned.
+// - Parsing:
+//    A 'ParsedURLString' is initialized for either the filtered/trimmed input string.
+//    This initializer calls in to `URLScanner.scanURLString', which begins the process of scanning the byte string -
+//    looking for components and marking where they start/end. The results are normalized, validated, and stored as
+//    a 'ParsedURLString.ProcessedMapping' value. At this point, we are finished parsing, and the 'ParsedURLString'
+//    object is returned to 'urlFromBytes'.
 //
-// 3. 'urlFromBytes' calls 'constructURLObject' on the result of the previous step, which unconditionally writes
+// - Construction:
+//    'urlFromBytes' calls 'constructURLObject' on the result of the previous step, which unconditionally writes
 //    the content to freshly-allocated storage. The actual construction process involves performing a dry-run
 //    to calculate the optimal result type and produce an allocation which is correctly sized to hold the result.
 
@@ -18,22 +24,38 @@ func urlFromBytes<Bytes>(_ inputString: Bytes, baseURL: WebURL?) -> WebURL?
 where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
   var callback = IgnoreValidationErrors()
-  let (trimmedInput, needsFiltering) = FilteredURLInput.trim(inputString, callback: &callback)
-  if needsFiltering {
-    let filteredInput = FilteredURLInput<Bytes>(trimmedInput)
-    return ParsedURLString(inputString: filteredInput, baseURL: baseURL, callback: &callback)?.constructURLObject()
-  }
-  if let bufferSlice = trimmedInput as? Slice<UnsafeBufferPointer<UInt8>> {
-    return ParsedURLString(
-      inputString: UnsafeBufferPointer(rebasing: bufferSlice),
-      baseURL: baseURL,
-      callback: &callback
-    )?.constructURLObject()
-  }
-  return ParsedURLString(inputString: trimmedInput, baseURL: baseURL, callback: &callback)?.constructURLObject()
+  return inputString.withContiguousStorageIfAvailable {
+    _urlFromBytes_impl($0, baseURL: baseURL, callback: &callback)
+  } ?? _urlFromBytes_impl(inputString, baseURL: baseURL, callback: &callback)
 }
 
+private func _urlFromBytes_impl<Bytes, Callback>(
+  _ inputString: Bytes, baseURL: WebURL?, callback: inout Callback
+) -> WebURL? where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Callback: URLParserCallback {
+
+  // Trim leading/trailing C0 control characters and spaces.
+  let trimmedInput = inputString.trim {
+    switch ASCII($0) {
+    case ASCII.ranges.controlCharacters?, .space?: return true
+    default: return false
+    }
+  }
+  if trimmedInput.startIndex != inputString.startIndex || trimmedInput.endIndex != inputString.endIndex {
+    callback.validationError(.unexpectedC0ControlOrSpace)
+  }
+  return ASCII.NewlineAndTabFiltered.filterIfNeeded(trimmedInput).map(
+    left: { filtered in
+      ParsedURLString(inputString: filtered, baseURL: baseURL, callback: &callback)?.constructURLObject()
+    },
+    right: { trimmed in
+      ParsedURLString(inputString: trimmed, baseURL: baseURL, callback: &callback)?.constructURLObject()
+    }
+  ).get()
+}
+
+
 // MARK: - ParsedURLString
+
 
 /// A collection of UTF8 bytes which have been successfully parsed as a URL string.
 ///
@@ -125,7 +147,7 @@ extension ParsedURLString {
       // 2: Write scheme.
       if let inputScheme = schemeRange {
         // Scheme must be lowercased.
-        writer.writeSchemeContents(LowercaseASCIITransformer(base: inputString[inputScheme]))
+        writer.writeSchemeContents(ASCII.Lowercased(inputString[inputScheme]))
       } else {
         guard let baseURL = baseURL, componentsToCopyFromBase.contains(.scheme) else {
           preconditionFailure("Cannot construct a URL without a scheme")
@@ -466,14 +488,14 @@ extension URLScanner {
     var scanResults = UnprocessedMapping()
 
     if let schemeEndIndex = findScheme(input),
-       schemeEndIndex != input.endIndex,
-       input[schemeEndIndex] == ASCII.colon.codePoint {
-
+      schemeEndIndex != input.endIndex,
+      input[schemeEndIndex] == ASCII.colon.codePoint
+    {
       let schemeName = input.prefix(upTo: schemeEndIndex)
       let schemeKind = WebURL.SchemeKind(parsing: schemeName)
       scanResults.schemeKind = schemeKind
       scanResults.schemeTerminatorIndex = schemeName.endIndex
-      
+
       let tail = input.suffix(from: input.index(after: schemeEndIndex))
       return scanURLWithScheme(
         tail, scheme: schemeKind, baseURL: baseURL,
@@ -1365,7 +1387,7 @@ extension URLScanner.UnprocessedMapping {
     // to reject invalid hostnames.
     var hostKind: ParsedHost?
     if let hostname = hostnameRange.map({ inputString[$0] }) {
-      hostKind = ParsedHost.parse(hostname, scheme: schemeKind, callback: &callback)
+      hostKind = ParsedHost(hostname, schemeKind: schemeKind, callback: &callback)
       guard hostKind != nil else { return nil }
     }
     if schemeKind == .file {
@@ -1449,7 +1471,7 @@ func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Collection, 
 
   guard input.isEmpty == false else { return nil }
   var slice = input[...]
-  
+
   // schemeStart: must begin with an ASCII alpha.
   guard ASCII(flatMap: slice.popFirst())?.isAlpha == true else { return nil }
 
@@ -1475,11 +1497,12 @@ func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Collection, 
 ///
 /// This is a "scan-level" operation: the discovered hostname may need additional processing before being written to a URL string.
 ///
-func findEndOfHostnamePrefix<Input, Callback>(_ input: Input, scheme: WebURL.SchemeKind, callback cb: inout Callback) -> Input.Index?
-where Input: BidirectionalCollection, Input.Element == UInt8, Callback: URLParserCallback {
-  
+func findEndOfHostnamePrefix<Input, Callback>(
+  _ input: Input, scheme: WebURL.SchemeKind, callback cb: inout Callback
+) -> Input.Index? where Input: BidirectionalCollection, Input.Element == UInt8, Callback: URLParserCallback {
+
   var mapping = URLScanner<Input, Callback>.UnprocessedMapping()
-  
+
   // See `URLScanner.scanAuthority`.
   let hostname = input.prefix {
     switch ASCII($0) {
@@ -1519,142 +1542,5 @@ where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
       callback.validationError(.unescapedPercentSign)
     }
-  }
-}
-
-/// A byte sequence with leading/trailing spaces trimmed, and which lazily skips ASCII newlines and tabs if they are present.
-///
-struct FilteredURLInput<Base> where Base: Collection, Base.Element == UInt8 {
-  let base: Base.SubSequence
-
-  init(_ base: Base.SubSequence) {
-    self.base = base
-  }
-  
-  static func needsFiltering(_ input: Base) -> Bool {
-    return input.contains(where: filterShouldDrop)
-  }
-
-  static func filterShouldDrop(_ byte: UInt8) -> Bool {
-    return ASCII(byte) == .horizontalTab
-      || ASCII(byte) == .carriageReturn
-      || ASCII(byte) == .lineFeed
-  }
-}
-
-extension FilteredURLInput: Collection {
-  typealias Index = Base.Index
-  typealias Element = Base.Element
-
-  var startIndex: Index {
-    return base.startIndex
-  }
-  var endIndex: Index {
-    return base.endIndex
-  }
-  subscript(position: Base.Index) -> UInt8 {
-    return base[position]
-  }
-  subscript(bounds: Range<Base.Index>) -> FilteredURLInput<Base> {
-    return FilteredURLInput(base[bounds])
-  }
-
-  private var filtered: LazyFilterSequence<Base.SubSequence> {
-    return base.lazy.filter { Self.filterShouldDrop($0) == false }
-  }
-  var count: Int {
-    return filtered.count
-  }
-  var isEmpty: Bool {
-    return filtered.isEmpty
-  }
-  func index(after i: Base.Index) -> Base.Index {
-    return filtered.index(after: i)
-  }
-  func distance(from start: Base.Index, to end: Base.Index) -> Int {
-    return filtered.distance(from: start, to: end)
-  }
-  func formIndex(after i: inout Base.Index) {
-    filtered.formIndex(after: &i)
-  }
-  
-  // TODO: Investigate adding a custom Iterator once we have a more comprehensive benchmark suite.
-}
-
-extension FilteredURLInput: BidirectionalCollection where Base: BidirectionalCollection {
-  
-  static func trim<Callback: URLParserCallback>(
-    _ rawInput: Base, callback: inout Callback
-  ) -> (Base.SubSequence, needsFiltering: Bool) {
-
-    // Trim leading/trailing C0 control characters and spaces.
-    var trimmedSlice = rawInput[...]
-    let trimmedInput = trimmedSlice.trim {
-      switch ASCII($0) {
-      case ASCII.ranges.controlCharacters?, .space?: return true
-      default: return false
-      }
-    }
-    if trimmedInput.startIndex != trimmedSlice.startIndex || trimmedInput.endIndex != trimmedSlice.endIndex {
-      callback.validationError(.unexpectedC0ControlOrSpace)
-    }
-    trimmedSlice = trimmedInput
-    // Trim initial filtered bytes.
-    trimmedSlice = trimmedSlice.drop(while: filterShouldDrop)
-    return (trimmedSlice, FilteredURLInput<Base.SubSequence>.needsFiltering(trimmedSlice))
-  }
-  
-  func index(before i: Base.Index) -> Base.Index {
-    return filtered.index(before: i)
-  }
-  
-  func formIndex(before i: inout Base.Index) {
-    filtered.formIndex(before: &i)
-  }
-}
-
-/// A type which lazily transforms ASCII alpha characters to their lowercase variants.
-/// Non-ASCII/non-alpha characters remain unchanged.
-///
-struct LowercaseASCIITransformer<Base> where Base: Sequence, Base.Element == UInt8 {
-  var base: Base
-}
-
-extension LowercaseASCIITransformer: Sequence {
-  typealias Element = UInt8
-
-  struct Iterator: IteratorProtocol {
-    var baseIterator: Base.Iterator
-    mutating func next() -> UInt8? {
-      let byte = baseIterator.next()
-      return ASCII(flatMap: byte)?.lowercased.codePoint ?? byte
-    }
-  }
-
-  func makeIterator() -> Iterator {
-    return Iterator(baseIterator: base.makeIterator())
-  }
-}
-
-extension LowercaseASCIITransformer: Collection where Base: Collection, Base.Element == UInt8 {
-
-  var startIndex: Base.Index {
-    return base.startIndex
-  }
-  var endIndex: Base.Index {
-    return base.endIndex
-  }
-  var count: Int {
-    return base.count
-  }
-  func index(after i: Base.Index) -> Base.Index {
-    return base.index(after: i)
-  }
-  func distance(from start: Base.Index, to end: Base.Index) -> Int {
-    return base.distance(from: start, to: end)
-  }
-  subscript(position: Base.Index) -> UInt8 {
-    let byte = base[position]
-    return ASCII(base[position])?.lowercased.codePoint ?? byte
   }
 }
