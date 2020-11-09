@@ -115,11 +115,11 @@ protocol URLWriter {
   ///
   mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool)
   
-  /// Optional function which takes note of the metrics collected while writing the URL's path component.
+  /// Optional function which takes note of metrics collected while writing the URL's path component.
   /// Conformers may wish to note this information, in case they wish to write the same contents using another `URLWriter`.
   /// The default implementation does nothing.
   ///
-  mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector)
+  mutating func writePathMetricsHint(_ pathMetrics: PathMetrics)
 }
 
 extension URLWriter {
@@ -127,7 +127,7 @@ extension URLWriter {
   mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
     // Not required.
   }
-  mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector) {
+  mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
     // Not required.
   }
 }
@@ -140,7 +140,7 @@ struct URLMetrics {
   
   /// If set, contains information about the number of code-units in the path, number of path components, etc.
   /// If not set, users may make no assumptions about the path.
-  var pathMetrics: PathMetricsCollector? = nil
+  var pathMetrics: PathMetrics? = nil
   
   /// Components which are known to not require percent-encoding.
   /// If a component is not in this set, users must assume that it requires percent-encoding.
@@ -278,7 +278,7 @@ struct StructureAndMetricsCollector: URLWriter {
     }
   }
   
-  mutating func writePathMetricsHint(_ pathMetrics: PathMetricsCollector) {
+  mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
     metrics.pathMetrics = pathMetrics
   }
 }

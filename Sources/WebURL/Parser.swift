@@ -248,12 +248,12 @@ extension ParsedURLString {
           }
           writer.writeHint(.path, needsEscaping: didEscape)
         case false:
-          let pathMetrics: PathMetricsCollector
+          let pathMetrics: PathMetrics
           if let urlMetrics = metrics, let precalcPathMetrics = urlMetrics.pathMetrics {
             pathMetrics = precalcPathMetrics
           } else {
-            pathMetrics = PathMetricsCollector.collectMetrics(
-              pathString: inputString[path],
+            pathMetrics = PathMetrics(
+              parsing: inputString[path],
               schemeKind: schemeKind,
               baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
             )
@@ -263,9 +263,8 @@ extension ParsedURLString {
           assert(pathMetrics.requiredCapacity > 0)
 
           writer.writeUnsafePathInPreallocatedBuffer(length: pathMetrics.requiredCapacity) { mutBuffer in
-            PathPreallocatedBufferWriter.writePath(
-              to: mutBuffer,
-              pathString: inputString[path],
+            mutBuffer.writeNormalizedPath(
+              parsing: inputString[path],
               schemeKind: schemeKind,
               baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
               needsEscaping: pathMetrics.needsEscaping
@@ -826,7 +825,7 @@ extension URLScanner {
     let path = input[..<(nextComponentStartIndex ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    PathInputStringValidator.validatePathComponents(pathString: path, schemeKind: scheme, callback: &callback)
+    PathStringValidator.validate(pathString: path, schemeKind: scheme, callback: &callback)
 
     // 4. Return the next component.
     if path.isEmpty && scheme.isSpecial == false {

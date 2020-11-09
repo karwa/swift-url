@@ -891,16 +891,15 @@ extension URLStorage {
       )
     }
     
-    let pathInfo = PathMetricsCollector
-      .collectMetrics(pathString: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil)
+    let pathInfo = PathMetrics(parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil)
     var newStructure = oldStructure
     newStructure.pathLength = pathInfo.requiredCapacity
     let result = replaceSubrange(
       oldStructure.rangeForReplacement(of: .path),
       withUninitializedSpace: pathInfo.requiredCapacity,
       newStructure: newStructure) { dest in
-      PathPreallocatedBufferWriter.writePath(
-        to: dest, pathString: newPath, schemeKind: newStructure.schemeKind,
+      dest.writeNormalizedPath(
+        parsing: newPath, schemeKind: newStructure.schemeKind,
         baseURL: nil, needsEscaping: pathInfo.needsEscaping
       )
       return pathInfo.requiredCapacity
