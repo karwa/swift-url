@@ -413,7 +413,7 @@ extension PathMetrics {
 
     mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
       metrics.numberOfComponents += 1
-      metrics.requiredCapacity += 1 + pathComponent.count
+      metrics.requiredCapacity += 1 /* "/" */ + pathComponent.count
     }
   }
 }
