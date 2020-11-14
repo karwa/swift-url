@@ -36,7 +36,9 @@ extension PercentEncodeSet {
   }
 }
 
+
 // MARK: - Encoding.
+
 
 // TODO: Investigate a lazy collection, whose Element is an enum containing either 1 or 3 UInt8s.
 
@@ -173,87 +175,128 @@ extension PercentEncoding {
   }
 }
 
+
 // MARK: - Decoding.
+
 
 extension LazyCollectionProtocol where Element == UInt8 {
 
-  /// Returns a `Collection` which lazily decodes ASCII byte sequences of the form "%ZZ", where `ZZ` are 2 hex digits, in to bytes with the value `0xZZ`.
-  /// Non-ASCII bytes and those which do not match the percent-escaping pattern are left unchanged.
+  typealias LazilyPercentDecodedWithoutSubstitutions = LazilyPercentDecoded<Self, PassthroughEncodeSet>
+
+  /// Returns a view of this collection with percent-encoded byte sequences ("%ZZ") replaced by the byte 0xZZ.
   ///
-  /// This is a `PercentEncodeSet`-neutral decoder. If the byte sequence's encoding set may have substitutions, use `percentDecoded(using:)` instead.
+  /// This view does not account for substitutions in the source collection's encode-set.
+  /// If it is necessary to decode such substitutions, use `percentDecoded(using:)` instead and provide the encode-set to reverse.
   ///
-  var percentDecoded: LazilyPercentDecoded<Self> {
-    return LazilyPercentDecoded(base: self)
+  /// - seealso: `LazilyPercentDecoded`
+  ///
+  var percentDecoded: LazilyPercentDecodedWithoutSubstitutions {
+    return LazilyPercentDecoded(source: self)
   }
 
-  typealias LazilyPercentDecodedWithSubstitutions = LazilyPercentDecoded<
-    LazyMapSequence<LazySequence<Self.Elements>.Elements, UInt8>
-  >
-
-  /// Returns a `Collection` which lazily decodes ASCII byte sequences of the form "%ZZ", where `ZZ` are 2 hex digits, in to bytes with the value `0xZZ`.
-  /// Non-ASCII bytes and those which do not match the percent-escaping pattern are left unchanged.
+  /// Returns a view of this collection with percent-encoded byte sequences ("%ZZ") replaced by the byte 0xZZ.
   ///
-  /// This decoder is suitable to use if the encode-set may include substitutions.
+  /// This view will reverse substitutions that were made by the given encode-set when encoding the source collection.
   ///
-  func percentDecoded<EncodeSet: PercentEncodeSet>(
-    using encodeSet: EncodeSet.Type
-  ) -> LazilyPercentDecodedWithSubstitutions {
-    return self.lazy.map { byte in
-      return ASCII(byte).map(encodeSet.unsubstitute)?.codePoint ?? byte
-    }.percentDecoded
+  /// - seealso: `LazilyPercentDecoded`
+  ///
+  func percentDecoded<EncodeSet>(using encodeSet: EncodeSet.Type) -> LazilyPercentDecoded<Self, EncodeSet> {
+    return LazilyPercentDecoded(source: self)
   }
 }
 
-struct LazilyPercentDecoded<Base: Collection>: Collection, LazyCollectionProtocol where Base.Element == UInt8 {
+/// A collection which provides a view of its source collection with percent-encoded byte sequences ("%ZZ") replaced by the byte 0xZZ.
+///
+/// Some encode-sets perform substitutions as well as percent-encoding - e.g. URL form-encoding percent-encodes "+" characters but not " " (space) from the
+/// source; spaces are then substituted with "+" characters so we know that every non-percent-encoded "+" represents a space. The `EncodeSet` generic
+/// parameter is only used to reverse these substitutions; if such substitutions are not relevant to decoding,`PassthroughEncodeSet` may be given instead
+/// of specifying a particular encode-set.
+///
+struct LazilyPercentDecoded<Source, EncodeSet>: Collection, LazyCollectionProtocol
+where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
   typealias Element = UInt8
 
-  let base: Base
+  let source: Source
   let startIndex: Index
 
-  fileprivate init(base: Base) {
-    self.base = base
-    var start = Index(withoutReadingValue: base.startIndex)
-    start.advance(in: base)
-    self.startIndex = start
+  fileprivate init(source: Source) {
+    self.source = source
+    self.startIndex = Index(at: source.startIndex, in: source)
   }
 
-  struct Index: Comparable {
-    var range: Range<Base.Index>
-    var decodedValue: UInt8
+  var endIndex: Index {
+    return Index(endIndexOf: source)
+  }
 
-    init(withoutReadingValue position: Base.Index) {
-      self.range = Range(uncheckedBounds: (position, position))
+  func index(after i: Index) -> Index {
+    assert(i != endIndex, "Attempt to advance endIndex")
+    return Index(at: i.range.upperBound, in: source)
+  }
+
+  func formIndex(after i: inout Index) {
+    assert(i != endIndex, "Attempt to advance endIndex")
+    i = Index(at: i.range.upperBound, in: source)
+  }
+
+  subscript(position: Index) -> Element {
+    assert(position != endIndex, "Attempt to read element at endIndex")
+    return position.decodedValue
+  }
+}
+
+extension LazilyPercentDecoded {
+
+  /// A value which represents the location of a percent-encoded byte sequence in a source collection.
+  ///
+  /// The start index is given by `.init(at: source.startIndex, in: source)`.
+  /// Each successive index is calculated by creating a new index at the previous index's `range.upperBound`, until an index is created whose
+  /// `range.lowerBound` is the `endIndex` of the source collection.
+  ///
+  /// An index's `range` always starts at a byte which is not part of a percent-encode sequence, a percent sign, or `endIndex`, and each index
+  /// represents a single decoded byte. This decoded value is stored in the index as `decodedValue`.
+  ///
+  struct Index: Comparable {
+    let range: Range<Source.Index>
+    let decodedValue: UInt8
+
+    /// Creates an index referencing the given source collection's `endIndex`.
+    /// This index's `decodedValue` is meaningless.
+    ///
+    init(endIndexOf source: Source) {
+      self.range = Range(uncheckedBounds: (source.endIndex, source.endIndex))
       self.decodedValue = 0
     }
 
-    mutating func advance(in base: Base) {
-
-      // If the current value is or ends at endIndex, the next index _is_ endIndex.
-      guard range.upperBound != base.endIndex else {
-        self.range = Range(uncheckedBounds: (range.upperBound, range.upperBound))
-        self.decodedValue = 0
+    /// Creates an index referencing the decoded byte starting at the given source index.
+    ///
+    /// The newly-created index's successor may be obtained by creating another index starting at `range.upperBound`.
+    /// The index which starts at `source.endIndex` is given by `.init(endIndexOf:)`.
+    ///
+    init(at i: Source.Index, in source: Source) {
+      guard i != source.endIndex else {
+        self = .init(endIndexOf: source)
         return
       }
-      // Read the next byte. If it is a % sign, attempt to consume the next two bytes and decode the value.
-      let byte0 = base[range.upperBound]
-      let byte1Index = base.index(after: range.upperBound)
+      let byte0 = source[i]
+      let byte1Index = source.index(after: i)
       guard _slowPath(byte0 == ASCII.percentSign.codePoint) else {
-        self.decodedValue = byte0
-        self.range = Range(uncheckedBounds: (range.upperBound, byte1Index))
+        self.decodedValue = ASCII(byte0).map { EncodeSet.unsubstitute(character: $0).codePoint } ?? byte0
+        self.range = Range(uncheckedBounds: (i, byte1Index))
         return
       }
-      var tail = base.suffix(from: byte1Index)
-      guard let byte1 = tail.popFirst(), let decodedByte1 = ASCII(byte1).map(ASCII.parseHexDigit(ascii:)),
-        decodedByte1 != ASCII.parse_NotFound,
-        let byte2 = tail.popFirst(), let decodedByte2 = ASCII(byte2).map(ASCII.parseHexDigit(ascii:)),
-        decodedByte2 != ASCII.parse_NotFound
+      var tail = source.suffix(from: byte1Index)
+      guard let byte1 = tail.popFirst(),
+        let decodedByte1 = ASCII(byte1).map(ASCII.parseHexDigit(ascii:)), decodedByte1 != ASCII.parse_NotFound,
+        let byte2 = tail.popFirst(),
+        let decodedByte2 = ASCII(byte2).map(ASCII.parseHexDigit(ascii:)), decodedByte2 != ASCII.parse_NotFound
       else {
-        self.decodedValue = byte0
-        self.range = Range(uncheckedBounds: (range.upperBound, byte1Index))
+        self.decodedValue = EncodeSet.unsubstitute(character: .percentSign).codePoint
+        self.range = Range(uncheckedBounds: (i, byte1Index))
         return
       }
+      // decodedByte{1/2} are parsed from hex digits (i.e. in the range 0...15), so this will never overflow.
       self.decodedValue = (decodedByte1 &* 16) &+ (decodedByte2)
-      self.range = Range(uncheckedBounds: (range.upperBound, tail.startIndex))
+      self.range = Range(uncheckedBounds: (i, tail.startIndex))
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -264,27 +307,11 @@ struct LazilyPercentDecoded<Base: Collection>: Collection, LazyCollectionProtoco
       return lhs.range.lowerBound < rhs.range.lowerBound
     }
   }
-
-  var endIndex: Index {
-    return Index(withoutReadingValue: base.endIndex)
-  }
-
-  func index(after i: Index) -> Index {
-    var tmp = i
-    formIndex(after: &tmp)
-    return tmp
-  }
-
-  func formIndex(after i: inout Index) {
-    i.advance(in: base)
-  }
-
-  subscript(position: Index) -> Element {
-    return position.decodedValue
-  }
 }
 
+
 // MARK: - String APIs.
+
 
 extension Sequence where Element == UInt8 {
 
@@ -297,17 +324,27 @@ extension Sequence where Element == UInt8 {
   }
 }
 
+
 // MARK: - URL encode sets.
 
+
+/// An encode-set which does not escape or substitute any characters.
+///
+struct PassthroughEncodeSet: PercentEncodeSet {
+  static func shouldEscape(character: ASCII) -> Bool {
+    return false
+  }
+}
+
 extension PercentEncoding {
-  
+
   @discardableResult
   static func encodeQuery<Bytes>(
     bytes: Bytes,
     isSpecial: Bool,
     _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
   ) -> Bool where Bytes: Sequence, Bytes.Element == UInt8 {
-    
+
     if isSpecial {
       return encode(bytes: bytes, using: URLEncodeSet.Query_Special.self, processChunk)
     } else {
