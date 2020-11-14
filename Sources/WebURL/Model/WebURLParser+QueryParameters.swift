@@ -59,11 +59,11 @@ extension WebURL.QueryParameters {
   static func serialiseQueryString<S>(_ queryComponents: S) -> String where S: Sequence, S.Element == (String, String) {
     var output = ""
     for (name, value) in queryComponents {
-      PercentEncoding.encode(bytes: name.utf8, using: URLEncodeSet.FormEncoded.self) {
+      name.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered {
         output.append(String(decoding: $0, as: UTF8.self))
       }
       output.append("=")
-      PercentEncoding.encode(bytes: value.utf8, using: URLEncodeSet.FormEncoded.self) {
+      value.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered {
         output.append(String(decoding: $0, as: UTF8.self))
       }
       output.append("&")

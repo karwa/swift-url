@@ -22,10 +22,10 @@ protocol URLWriter {
   /// Callers typically use this as shown:
   /// ```swift
   /// writeUsername { writePiece in
-  ///   PercentEncoding.encodeIteratively(..., handlePiece: { writePiece($0) })
+  ///   newValue.lazy.percentEncoded(using: ...).writeBuffered { piece in writePiece(piece) }
   /// }
   /// ```
-  /// in this example, `writePiece` is a `WriterFunc`, and its type is inferred by the call to `PercentEncoding.encodeIteratively(...)`.
+  /// in this example, `writePiece` is a `WriterFunc`, and its type is inferred as `(UnsafeBufferPointer<UInt8>)->Void`.
   ///
   typealias WriterFunc<T> = (T) -> Void
 

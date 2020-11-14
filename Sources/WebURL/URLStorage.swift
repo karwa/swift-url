@@ -620,9 +620,10 @@ extension URLStorage {
     
     var newStructure = oldStructure
     newStructure.usernameLength = 0
-    let needsEncoding = PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) {
+    let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered {
       newStructure.usernameLength += $0.count
     }
+      
     let insertSeparator = (oldStructure.hasCredentialSeparator == false)
     let bytesToWrite = newStructure.usernameLength + (insertSeparator ? 1 : 0)
     let subrangeToReplace = oldStructure.rangeForReplacement(of: .username)
@@ -632,7 +633,7 @@ extension URLStorage {
       guard var ptr = dest.baseAddress else { return 0 }
       // Contents.
       if needsEncoding {
-        PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) { piece in
+        newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered { piece in
           ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
           ptr += piece.count
         }
@@ -680,7 +681,7 @@ extension URLStorage {
     
     var newStructure = oldStructure
     newStructure.passwordLength = 1 // leading ":"
-    let needsEncoding = PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) {
+    let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered {
       newStructure.passwordLength += $0.count
     }
     let bytesToWrite = newStructure.passwordLength + 1 // We always (over-)write the trailing "@".
@@ -695,7 +696,7 @@ extension URLStorage {
       ptr += 1
       // Contents.
       if needsEncoding {
-        PercentEncoding.encode(bytes: newValue, using: URLEncodeSet.UserInfo.self) { piece in
+        newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered { piece in
           ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
           ptr += piece.count
         }
@@ -950,7 +951,7 @@ extension URLStorage {
         to: newValue.map { ASCII.NewlineAndTabFiltered($0) },
         prefix: .numberSign,
         lengthKey: \.fragmentLength,
-        encoder: { PercentEncoding.encode(bytes: $0, using: URLEncodeSet.Fragment.self, $2) }
+        encoder: { $0.lazy.percentEncoded(using: URLEncodeSet.Fragment.self).writeBuffered($2) }
       )
     } else {
       return setSimpleComponent(
@@ -958,7 +959,7 @@ extension URLStorage {
         to: newValue,
         prefix: .numberSign,
         lengthKey: \.fragmentLength,
-        encoder: { PercentEncoding.encode(bytes: $0, using: URLEncodeSet.Fragment.self, $2) }
+        encoder: { $0.lazy.percentEncoded(using: URLEncodeSet.Fragment.self).writeBuffered($2) }
       )
     }
   }

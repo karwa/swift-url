@@ -129,11 +129,9 @@ extension ParsedHost {
       assert(bytes.isEmpty == false)
       writer.writeHostname { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
         // TODO: [performance] - store whether %-encoding was required in URLMetrics.
-        PercentEncoding.encode(
-          bytes: bytes,
-          using: URLEncodeSet.C0.self,
-          { piece in writePiece(piece) }
-        )
+        _ = bytes
+          .lazy.percentEncoded(using: URLEncodeSet.C0.self)
+          .writeBuffered { piece in writePiece(piece) }
       }
 
     // TODO: [performance] - Write IPv4+v6 addresses directly, rather than going through String.

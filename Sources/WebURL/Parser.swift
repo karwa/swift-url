@@ -171,11 +171,10 @@ extension ParsedURLString {
               writePiece(inputString[username])
             }
           } else {
-            writer.writeUsernameContents { writePiece in
-              didEscape = PercentEncoding.encode(
-                bytes: inputString[username],
-                using: URLEncodeSet.UserInfo.self
-              ) { piece in writePiece(piece) }
+            writer.writeUsernameContents { (writePiece: (UnsafeBufferPointer<UInt8>)->Void) in
+              didEscape = inputString[username]
+                .lazy.percentEncoded(using: URLEncodeSet.UserInfo.self)
+                .writeBuffered { piece in writePiece(piece) }
             }
           }
           writer.writeHint(.username, needsEscaping: didEscape)
@@ -188,11 +187,10 @@ extension ParsedURLString {
               writePiece(inputString[password])
             }
           } else {
-            writer.writePasswordContents { writePiece in
-              didEscape = PercentEncoding.encode(
-                bytes: inputString[password],
-                using: URLEncodeSet.UserInfo.self
-              ) { piece in writePiece(piece) }
+            writer.writePasswordContents { (writePiece: (UnsafeBufferPointer<UInt8>)->Void) in
+              didEscape = inputString[password]
+                .lazy.percentEncoded(using: URLEncodeSet.UserInfo.self)
+                .writeBuffered { piece in writePiece(piece) }
             }
           }
           writer.writeHint(.password, needsEscaping: didEscape)
@@ -239,11 +237,10 @@ extension ParsedURLString {
           if metrics?.componentsWhichMaySkipEscaping.contains(.path) == true {
             writer.writePathSimple { $0(inputString[path]) }
           } else {
-            writer.writePathSimple { writePiece in
-              didEscape = PercentEncoding.encode(
-                bytes: inputString[path],
-                using: URLEncodeSet.C0.self
-              ) { piece in writePiece(piece) }
+            writer.writePathSimple { (writePiece: (UnsafeBufferPointer<UInt8>)->Void) in
+              didEscape = inputString[path]
+                .lazy.percentEncoded(using: URLEncodeSet.C0.self)
+                .writeBuffered { piece in writePiece(piece) }
             }
           }
           writer.writeHint(.path, needsEscaping: didEscape)
@@ -321,11 +318,10 @@ extension ParsedURLString {
             writePiece(inputString[fragment])
           }
         } else {
-          writer.writeFragmentContents { writePiece in
-            didEscape = PercentEncoding.encode(
-              bytes: inputString[fragment],
-              using: URLEncodeSet.Fragment.self
-            ) { piece in writePiece(piece) }
+          writer.writeFragmentContents { (writePiece: (UnsafeBufferPointer<UInt8>)->Void) in
+            didEscape = inputString[fragment]
+              .lazy.percentEncoded(using: URLEncodeSet.Fragment.self)
+              .writeBuffered { piece in writePiece(piece) }
           }
         }
         writer.writeHint(.fragment, needsEscaping: didEscape)

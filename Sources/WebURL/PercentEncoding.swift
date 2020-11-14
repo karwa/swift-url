@@ -1,8 +1,4 @@
-enum PercentEncoding {}
-
-/// A set of characters which should be transformed or substituted during a percent-encoding transformation.
-///
-/// - seealso: `PercentEncoding`
+/// A set of characters which should be transformed or substituted in order to percent-encode (or percent-escape) an ASCII string.
 ///
 protocol PercentEncodeSet {
 
@@ -13,26 +9,34 @@ protocol PercentEncodeSet {
   /// An optional function which allows the encode-set to replace a non-percent-encoded character with another character.
   ///
   /// For example, the `application/x-www-form-urlencoded` encoding does not escape the space character, and instead replaces it with a "+".
-  /// Conformers must also implement the reverse substitution function, `unsubstitute(character:)`.
+  /// Conforming types must also implement the reverse substitution function, `unsubstitute(character:)`.
   ///
-  static func substitute(for character: ASCII) -> ASCII
+  /// - parameters:
+  ///   - character: The source character.
+  /// - returns:     The substitute character, or `nil` if the character should not be substituted.
+  ///
+  static func substitute(for character: ASCII) -> ASCII?
 
   /// An optional function which recovers a character from its substituted value.
   ///
   /// For example, the `application/x-www-form-urlencoded` encoding does not escape the space character, and instead replaces it with a "+".
   /// This function would thus return a space in place of a "+", so the original character can be recovered.
-  /// Conformers must also implement the substitution function, `substitute(for:)`.
+  /// Conforming types must also implement the substitution function, `substitute(for:)`.
   ///
-  static func unsubstitute(character: ASCII) -> ASCII
+  /// - parameters:
+  ///   - character: The character from the encoded string.
+  /// - returns:     The recovered original character, or `nil` if the character was not produced by this encode-set's substitution function.
+  ///
+  static func unsubstitute(character: ASCII) -> ASCII?
 }
 
 extension PercentEncodeSet {
 
-  static func substitute(for character: ASCII) -> ASCII {
-    return character
+  static func substitute(for character: ASCII) -> ASCII? {
+    return nil
   }
-  static func unsubstitute(character: ASCII) -> ASCII {
-    return character
+  static func unsubstitute(character: ASCII) -> ASCII? {
+    return nil
   }
 }
 
@@ -40,138 +44,250 @@ extension PercentEncodeSet {
 // MARK: - Encoding.
 
 
-// TODO: Investigate a lazy collection, whose Element is an enum containing either 1 or 3 UInt8s.
+extension LazyCollectionProtocol where Element == UInt8 {
 
-extension PercentEncoding {
-
-  /// Encodes the given byte sequence as an ASCII string, by means of the "percent-encoding" transformation.
-  /// The bytes are encoded in to a small buffer which is given to the provided closure to process.
+  /// Returns a wrapper over this collection which lazily percent-encodes its contents according to the given `EncodeSet`.
+  /// This collection is interpreted as UTF8-encoded text.
   ///
-  /// - Bytes which are not valid ASCII characters are _always_ encoded as the sequence "%ZZ",
-  ///   where ZZ is the byte's numerical value as a hexadecimal string.
-  /// - Bytes which are valid ASCII characters are also encoded if included in the given `EncodeSet`.
-  /// - Otherwise, the `EncodeSet` is also able to substitute ASCII characters.
+  /// Percent encoding transforms arbitrary strings to a limited set of ASCII characters which the `EncodeSet` permits.
+  /// Non-ASCII characters and ASCII characters which are not allowed in the output, are encoded by replacing each byte with the sequence "%ZZ",
+  /// where `ZZ` is the byte's value in hexadecimal.
   ///
-  /// -  important:	If the "%" character is not in the encode-set, this function will not automatically percent-encode it. This means that existing
-  ///             	percent-encoded sequences will be passed-through, rather than being double-encoded. If the byte string is truly an arbitrary
-  ///             	sequence of bytes which may by coincidence contain the same bytes as a percent-encoded sequence, the "%" character
-  ///               must be in the encode-set to preserve the original contents.
+  /// For example, the ASCII space character " " has a decimal value of 32 (0x20 hex). If the `EncodeSet` does not permit spaces in its output string,
+  /// all spaces will be replaced by the sequence "%20". So the string "hello, world" becomes "hello,%20world" when percent-encoded.
+  /// The character "✌️" is encoded in UTF8 as [0xE2, 0x9C, 0x8C, 0xEF, 0xB8, 0x8F] and since it is not ASCII, will be percent-encoded in every `EncodeSet`.
+  /// This single-character string becomes "%E2%9C%8C%EF%B8%8F" when percent-encoded,
+  ///
+  /// `EncodeSet`s are also able to substitute characters. For example, the `application/x-www-form-urlencoded` encode-set percent-encodes
+  /// the ASCII "+" character (0x2B), allowing that ASCII value to represent spaces. So the string "Swift is better than C++" becomes
+  /// "Swift+is+better+than+C%2B%2B" in this encoding.
+  ///
+  /// The `LazilyPercentEncoded` wrapper is a collection-of-collections; each byte in the source collection is represented by a collection of either 1 or 3 bytes,
+  /// depending on whether or not it was percent-encoded. The `.joined()` operator can be used if a one-dimensional collection is desired.
+  ///
+  /// -  important: Users should consider whether or not the "%" character itself should be part of their `EncodeSet`.
+  /// If it is included, a string such as "%40 Polyester" would become "%2540%20Polyester", which can be decoded to exactly recover the original string.
+  /// If it is _not_ included, strings such as the "%40" above would be copied to the output, where they would be indistinguishable from a percent-encoded byte
+  /// and subsequently decoded as a byte value (in this case, the byte 0x40 is the ASCII commercial at, meaning the decoded string would be "@ Polyester").
   ///
   /// - parameters:
-  ///     - bytes:        The sequence of bytes to encode.
-  ///     - encodeSet:    The predicate which decides if a particular ASCII character should be escaped or not.
-  ///     - processChunk: A callback which processes a chunk of encoded data. Each chunk is guaranteed to be a valid ASCII String, containing
-  ///                     only the % character, upper-case ASCII hex digits, and characters allowed by the encode set. The given pointer, and any
-  ///                     derived pointers to the same region of memory, must not escape the closure.
+  ///     - encodeSet:    The set of ASCII characters which should be percent-encoded or substituted.
   ///
-  /// - returns: `true` if any bytes from the given sequence required percent-encoding, otherwise `false`.
-  ///             Note that `false` is also returned if bytes were substituted, as long as no percent-encoding was required.
+  func percentEncoded<EncodeSet>(using encodeSet: EncodeSet.Type) -> LazilyPercentEncoded<Self, EncodeSet> {
+    return LazilyPercentEncoded(source: self, encodeSet: encodeSet)
+  }
+}
+
+struct LazilyPercentEncoded<Source, EncodeSet>: Collection
+where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
+  let source: Source
+
+  fileprivate init(source: Source, encodeSet: EncodeSet.Type) {
+    self.source = source
+  }
+
+  typealias Index = Source.Index
+
+  var startIndex: Index {
+    return source.startIndex
+  }
+
+  var endIndex: Index {
+    return source.endIndex
+  }
+
+  var isEmpty: Bool {
+    return source.isEmpty
+  }
+
+  var underestimatedCount: Int {
+    return source.underestimatedCount
+  }
+
+  var count: Int {
+    return source.count
+  }
+
+  func index(after i: Index) -> Index {
+    return source.index(after: i)
+  }
+
+  func formIndex(after i: inout Index) {
+    return source.formIndex(after: &i)
+  }
+
+  func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
+    return source.index(i, offsetBy: distance, limitedBy: limit)
+  }
+
+  func distance(from start: Index, to end: Index) -> Int {
+    return source.distance(from: start, to: end)
+  }
+
+  subscript(position: Index) -> Element {
+    let sourceByte = source[position]
+    if let asciiChar = ASCII(sourceByte), EncodeSet.shouldEscape(character: asciiChar) == false {
+      return EncodeSet.substitute(for: asciiChar).map { .substitutedByte($0.codePoint) } ?? .sourceByte(sourceByte)
+    }
+    return .percentEncodedByte(sourceByte)
+  }
+
+  enum Element: RandomAccessCollection {
+    case sourceByte(UInt8)
+    case substitutedByte(UInt8)
+    case percentEncodedByte(UInt8)
+
+    var startIndex: Int {
+      return 0
+    }
+
+    var endIndex: Int {
+      switch self {
+      case .sourceByte, .substitutedByte:
+        return 1
+      case .percentEncodedByte:
+        return 3
+      }
+    }
+
+    var count: Int {
+      return endIndex
+    }
+
+    subscript(position: Int) -> UInt8 {
+      switch self {
+      case .sourceByte(let byte):
+        assert(position == 0, "Invalid index")
+        return byte
+      case .substitutedByte(let byte):
+        assert(position == 0, "Invalid index")
+        return byte
+      case .percentEncodedByte(let byte):
+        switch position {
+        case 0: return ASCII.percentSign.codePoint
+        case 1: return ASCII.getHexDigit_upper(byte &>> 4).codePoint
+        case 2: return ASCII.getHexDigit_upper(byte).codePoint
+        default: fatalError("Invalid index")
+        }
+      }
+    }
+  }
+}
+
+extension LazilyPercentEncoded: BidirectionalCollection where Source: BidirectionalCollection {
+
+  func index(before i: Index) -> Index {
+    return source.index(before: i)
+  }
+
+  func formIndex(before i: inout Index) {
+    return source.formIndex(before: &i)
+  }
+}
+
+extension LazilyPercentEncoded: RandomAccessCollection where Source: RandomAccessCollection {}
+
+extension LazilyPercentEncoded {
+
+  /// Calls the given closure with a temporary buffer containing part of the flattened percent-encoded string. The closure is called repeatedly until
+  /// the entire string has been written.
+  ///
+  /// The string is written from start to end, so that appending the contents of each buffer to the contents of the previous buffers yields the final encoded string.
+  /// The provided buffer must not escape the closure.
+  ///
+  /// - returns: A boolean indicating whether or not the final result differs from the source contents.
+  ///            If this function returns `true`, some of the source collection's content was either percent-encoded or substituted.
+  ///            If it returns `false`, the source collection is already percent-encoded.
   ///
   @discardableResult
-  static func encode<Bytes, EncodeSet: PercentEncodeSet>(
-    bytes: Bytes,
-    using encodeSet: EncodeSet.Type,
-    _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
-  ) -> Bool where Bytes: Sequence, Bytes.Element == UInt8 {
+  func writeBuffered(_ writer: (UnsafeBufferPointer<UInt8>) -> Void) -> Bool {
 
-    return withSmallStringSizedStackBuffer { chunkBuffer -> Bool in
-      var didEncode = false
-      let chunkSize = chunkBuffer.count
-      var i = 0
-      for byte in bytes {
-        // Ensure the buffer has at least enough space for an escaped byte (%XX).
-        if i &+ 3 > chunkSize {
-          processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped, count: i))
-          i = 0
+    return withSmallStringSizedStackBuffer { buffer -> Bool in
+      let bufferSize = buffer.count
+      // TODO: This is carefully written to appease the optimizer.
+      // - precondition shouldn't be necessary.
+      //   `withSmallStringSizedStackBuffer` gives a stack pointer which is never nil.
+      // - bufferIdx is a UInt8 so the compiler knows it is never negative.
+      //   `UnsafeBufferPointer.init(start:count:)` traps on negative count, even in release mode.
+      //
+      // Check if there is still a benefit if/when progress is made on https://github.com/apple/swift/pull/34747
+      precondition(buffer.baseAddress != nil)
+      var bufferIdx: UInt8 = 0
+      var hasEncodedBytes = false
+
+      for byteGroup in self {
+        if bufferIdx &+ 3 > bufferSize {
+          writer(UnsafeBufferPointer(start: buffer.baseAddress, count: Int(truncatingIfNeeded: bufferIdx)))
+          bufferIdx = 0
         }
-        if let asciiChar = ASCII(byte), encodeSet.shouldEscape(character: asciiChar) == false {
-          chunkBuffer[i] = encodeSet.substitute(for: asciiChar).codePoint
-          i &+= 1
+        // This appears to be the fastest way to fill the buffer. The non-loop alternative would be:
+        // `UnsafeMutableBufferPointer(rebasing: buffer[bufferIdx...]).initialize(from: element)`,
+        // which introduces all kinds of potential over/underflows and preconditions
+        // that the compiler will not eliminate.
+        for byte in byteGroup {
+          buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(truncatingIfNeeded: bufferIdx)).initialize(to: byte)
+          bufferIdx &+= 1
+        }
+        guard case .sourceByte = byteGroup else {
+          hasEncodedBytes = true
           continue
         }
-        _escape(
-          byte: byte,
-          into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped + i, count: 3)
-        )
-        i &+= 3
-        didEncode = true
       }
-      // Flush the buffer.
-      processChunk(UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped, count: i))
-      return didEncode
+      writer(UnsafeBufferPointer(start: buffer.baseAddress, count: Int(truncatingIfNeeded: bufferIdx)))
+      return hasEncodedBytes
     }
   }
 
-  /// Encodes the given byte sequence as an ASCII string, by means of the "percent-encoding" transformation.
-  /// The bytes are encoded in to a small buffer which is given to the provided closure to process.
+}
+
+extension LazilyPercentEncoded where Source: BidirectionalCollection {
+
+  /// Calls the given closure with a temporary buffer containing part of the flattened percent-encoded string. The closure is called repeatedly until
+  /// the entire string has been written.
   ///
-  /// Unlike the regular `encode` function, this function processes the input sequence in reverse. The buffers given to the `processChunk` closure
-  /// are correctly-ordered, but represent a sliding window which begins at the last chunk of the input sequence and moves towards the beginning. Each
-  /// buffer of bytes may be _prepended_, so that its contents occur before all chunks yielded so far, in order to obtain the same result as calling the regular
-  /// `encode` function and _appening_ the contents of each buffer.
+  /// - important: This function is similar to `writeBuffered`, except that the string is written in parts from the end to the start.
+  ///              Each buffer's contents are in the correct order, but the buffers themselves represent a sliding window which begins at the
+  ///              chunk containing the source collection's end and ends at the chunk containing the source collection's start.
+  ///              The contents of each buffer may be _prepended_ to the contents of all previous buffers to yield the final encoded string.
   ///
-  /// - seealso: `encode(bytes:using:_:)`
+  /// The provided buffer must not escape the closure.
   ///
-  /// -  important:  If the "%" character is not in the encode-set, this function will not automatically percent-encode it. This means that existing
-  ///               percent-encoded sequences will be passed-through, rather than being double-encoded. If the byte string is truly an arbitrary
-  ///               sequence of bytes which may by coincidence contain the same bytes as a percent-encoded sequence, the "%" character
-  ///               must be in the encode-set to preserve the original contents.
-  ///
-  /// - parameters:
-  ///     - bytes:        The sequence of bytes to encode.
-  ///     - encodeSet:    The predicate which decides if a particular ASCII character should be escaped or not.
-  ///     - processChunk: A callback which processes a chunk of encoded data. Each chunk is guaranteed to be a valid ASCII String, containing
-  ///                     only the % character, upper-case ASCII hex digits, and characters allowed by the encode set. The given pointer, and any
-  ///                     derived pointers to the same region of memory, must not escape the closure.
-  ///
-  /// - returns: `true` if any bytes from the given sequence required percent-encoding, otherwise `false`.
-  ///             Note that `false` is also returned if bytes were substituted, as long as no percent-encoding was required.
+  /// - returns: A boolean indicating whether or not the final result differs from the source contents.
+  ///            If this function returns `true`, some of the source collection's content was either percent-encoded or substituted.
+  ///            If it returns `false`, the source collection is already percent-encoded.
   ///
   @discardableResult
-  static func encodeFromBack<Bytes, EncodeSet: PercentEncodeSet>(
-    bytes: Bytes,
-    using encodeSet: EncodeSet.Type,
-    _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
-  ) -> Bool where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+  func writeBufferedFromBack(_ writer: (UnsafeBufferPointer<UInt8>) -> Void) -> Bool {
 
-    return withSmallStringSizedStackBuffer { chunkBuffer -> Bool in
-      var didEncode = false
-      let chunkSize = chunkBuffer.count
-      var i = chunkBuffer.endIndex
-      for byte in bytes.reversed() {
-        // Ensure the buffer has at least enough space for an escaped byte (%XX).
-        if i < 3 {
-          processChunk(
-            UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped + i, count: chunkSize &- i)
-          )
-          i = chunkBuffer.endIndex
+    return withSmallStringSizedStackBuffer { buffer -> Bool in
+      let bufferSize = buffer.count
+      precondition(buffer.baseAddress != nil)
+      var bufferIdx = buffer.endIndex
+      var hasEncodedBytes = false
+
+      for byteGroup in self.reversed() {
+        if bufferIdx < 3 {
+          writer(
+            UnsafeBufferPointer(
+              start: buffer.baseAddress.unsafelyUnwrapped + bufferIdx,
+              count: bufferSize &- bufferIdx))
+          bufferIdx = buffer.endIndex
         }
-        if let asciiChar = ASCII(byte), encodeSet.shouldEscape(character: asciiChar) == false {
-          i &-= 1
-          chunkBuffer[i] = encodeSet.substitute(for: asciiChar).codePoint
+        for byte in byteGroup.reversed() {
+          bufferIdx &-= 1
+          buffer.baseAddress.unsafelyUnwrapped.advanced(by: bufferIdx).initialize(to: byte)
+        }
+        guard case .sourceByte = byteGroup else {
+          hasEncodedBytes = true
           continue
         }
-        i &-= 3
-        _escape(
-          byte: byte,
-          into: UnsafeMutableBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped + i, count: 3)
-        )
-        didEncode = true
       }
-      // Flush the buffer.
-      processChunk(
-        UnsafeBufferPointer(start: chunkBuffer.baseAddress.unsafelyUnwrapped + i, count: chunkSize &- i)
-      )
-      return didEncode
+      writer(
+        UnsafeBufferPointer(
+          start: buffer.baseAddress.unsafelyUnwrapped + bufferIdx,
+          count: bufferSize &- bufferIdx))
+      return hasEncodedBytes
     }
-  }
-
-  @inline(__always)
-  private static func _escape(byte: UInt8, into output: UnsafeMutableBufferPointer<UInt8>) {
-    assert(output.count >= 3)
-    output[0] = ASCII.percentSign.codePoint
-    output[1] = ASCII.getHexDigit_upper(byte &>> 4).codePoint
-    output[2] = ASCII.getHexDigit_upper(byte).codePoint
   }
 }
 
@@ -280,7 +396,7 @@ extension LazilyPercentDecoded {
       let byte0 = source[i]
       let byte1Index = source.index(after: i)
       guard _slowPath(byte0 == ASCII.percentSign.codePoint) else {
-        self.decodedValue = ASCII(byte0).map { EncodeSet.unsubstitute(character: $0).codePoint } ?? byte0
+        self.decodedValue = ASCII(byte0).flatMap { EncodeSet.unsubstitute(character: $0)?.codePoint } ?? byte0
         self.range = Range(uncheckedBounds: (i, byte1Index))
         return
       }
@@ -290,7 +406,7 @@ extension LazilyPercentDecoded {
         let byte2 = tail.popFirst(),
         let decodedByte2 = ASCII(byte2).map(ASCII.parseHexDigit(ascii:)), decodedByte2 != ASCII.parse_NotFound
       else {
-        self.decodedValue = EncodeSet.unsubstitute(character: .percentSign).codePoint
+        self.decodedValue = EncodeSet.unsubstitute(character: .percentSign)?.codePoint ?? ASCII.percentSign.codePoint
         self.range = Range(uncheckedBounds: (i, byte1Index))
         return
       }
@@ -313,11 +429,11 @@ extension LazilyPercentDecoded {
 // MARK: - String APIs.
 
 
-extension Sequence where Element == UInt8 {
+extension Collection where Element == UInt8 {
 
   func percentEncodedString<EncodeSet: PercentEncodeSet>(encodeSet: EncodeSet.Type) -> String {
     var result = ""
-    PercentEncoding.encode(bytes: self, using: encodeSet) { chunk in
+    self.lazy.percentEncoded(using: encodeSet).writeBuffered { chunk in
       result.append(String(decoding: chunk, as: UTF8.self))
     }
     return result
@@ -336,19 +452,20 @@ struct PassthroughEncodeSet: PercentEncodeSet {
   }
 }
 
-extension PercentEncoding {
+// FIXME: Rename/replace.
+enum PercentEncoding {
 
   @discardableResult
   static func encodeQuery<Bytes>(
     bytes: Bytes,
     isSpecial: Bool,
     _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
-  ) -> Bool where Bytes: Sequence, Bytes.Element == UInt8 {
+  ) -> Bool where Bytes: Collection, Bytes.Element == UInt8 {
 
     if isSpecial {
-      return encode(bytes: bytes, using: URLEncodeSet.Query_Special.self, processChunk)
+      return bytes.lazy.percentEncoded(using: URLEncodeSet.Query_Special.self).writeBuffered(processChunk)
     } else {
-      return encode(bytes: bytes, using: URLEncodeSet.Query_NotSpecial.self, processChunk)
+      return bytes.lazy.percentEncoded(using: URLEncodeSet.Query_NotSpecial.self).writeBuffered(processChunk)
     }
   }
 }
@@ -446,11 +563,11 @@ enum URLEncodeSet {
       default: return true
       }
     }
-    static func substitute(for character: ASCII) -> ASCII {
-      return character == .space ? .plus : character
+    static func substitute(for character: ASCII) -> ASCII? {
+      return character == .space ? .plus : nil
     }
-    static func unsubstitute(character: ASCII) -> ASCII {
-      return character == .plus ? .space : character
+    static func unsubstitute(character: ASCII) -> ASCII? {
+      return character == .plus ? .space : nil
     }
   }
 }

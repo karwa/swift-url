@@ -397,10 +397,9 @@ extension PathMetrics {
     ) {
       metrics.numberOfComponents += 1
       metrics.requiredCapacity += 1  // "/"
-      let thisComponentNeedsEscaping = PercentEncoding.encodeFromBack(
-        bytes: pathComponent,
-        using: URLEncodeSet.Path.self
-      ) { piece in metrics.requiredCapacity += piece.count }
+      let thisComponentNeedsEscaping = pathComponent.lazy
+        .percentEncoded(using: URLEncodeSet.Path.self)
+        .writeBufferedFromBack { piece in metrics.requiredCapacity += piece.count }
       if thisComponentNeedsEscaping {
         metrics.needsEscaping = true
       }
@@ -487,10 +486,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         return
       }
       if needsEscaping {
-        PercentEncoding.encodeFromBack(
-          bytes: pathComponent,
-          using: URLEncodeSet.Path.self
-        ) { piece in
+        pathComponent.lazy.percentEncoded(using: URLEncodeSet.Path.self).writeBufferedFromBack { piece in
           let newFront = buffer.index(front, offsetBy: -1 * piece.count)
           buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront)
             .initialize(from: piece.baseAddress!, count: piece.count)
