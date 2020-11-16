@@ -294,8 +294,8 @@ extension ParsedURLString {
           }
         } else {
           writer.writeQueryContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-            didEscape = PercentEncoding.encodeQuery(
-              bytes: inputString[query],
+            didEscape = writeBufferedPercentEncodedQuery(
+              inputString[query],
               isSpecial: schemeKind.isSpecial
             ) { piece in writePiece(piece) }
           }

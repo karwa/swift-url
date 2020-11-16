@@ -426,47 +426,39 @@ extension LazilyPercentDecoded {
 }
 
 
-// MARK: - String APIs.
-
-
-extension Collection where Element == UInt8 {
-
-  func percentEncodedString<EncodeSet: PercentEncodeSet>(encodeSet: EncodeSet.Type) -> String {
-    var result = ""
-    self.lazy.percentEncoded(using: encodeSet).writeBuffered { chunk in
-      result.append(String(decoding: chunk, as: UTF8.self))
-    }
-    return result
-  }
-}
-
-
 // MARK: - URL encode sets.
 
 
+/// Percent-encodes the given UTF8 bytes with the appropriate `PercentEncodeSet` for a URL query string in a special/not-special scheme.
+///
+/// Equivalent to:
+/// `source.lazy.percentEncoded(using: T.self).writeBuffered(writer)`,
+/// where `T` is either `URLEncodeSet.Query_Special` or `.Query_NotSpecial`.
+///
+/// - seealso: `LazilyPercentEncoded.writeBuffered`
+///
+@discardableResult
+func writeBufferedPercentEncodedQuery<Source>(
+  _ source: Source,
+  isSpecial: Bool,
+  _ writer: (UnsafeBufferPointer<UInt8>) -> Void
+) -> Bool where Source: Collection, Source.Element == UInt8 {
+
+  if isSpecial {
+    return source.lazy.percentEncoded(using: URLEncodeSet.Query_Special.self).writeBuffered(writer)
+  } else {
+    return source.lazy.percentEncoded(using: URLEncodeSet.Query_NotSpecial.self).writeBuffered(writer)
+  }
+}
+
 /// An encode-set which does not escape or substitute any characters.
+///
+/// This is useful for decoding percent-encoded strings when we don't expect any characters to have been substituted, or when
+/// the `PercentEncodeSet` used to encode the string is not known.
 ///
 struct PassthroughEncodeSet: PercentEncodeSet {
   static func shouldEscape(character: ASCII) -> Bool {
     return false
-  }
-}
-
-// FIXME: Rename/replace.
-enum PercentEncoding {
-
-  @discardableResult
-  static func encodeQuery<Bytes>(
-    bytes: Bytes,
-    isSpecial: Bool,
-    _ processChunk: (UnsafeBufferPointer<UInt8>) -> Void
-  ) -> Bool where Bytes: Collection, Bytes.Element == UInt8 {
-
-    if isSpecial {
-      return bytes.lazy.percentEncoded(using: URLEncodeSet.Query_Special.self).writeBuffered(processChunk)
-    } else {
-      return bytes.lazy.percentEncoded(using: URLEncodeSet.Query_NotSpecial.self).writeBuffered(processChunk)
-    }
   }
 }
 

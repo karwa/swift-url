@@ -923,7 +923,7 @@ extension URLStorage {
         to: newValue.map { ASCII.NewlineAndTabFiltered($0) },
         prefix: .questionMark,
         lengthKey: \.queryLength,
-        encoder: { PercentEncoding.encodeQuery(bytes: $0, isSpecial: $1.isSpecial, $2) }
+        encoder: { writeBufferedPercentEncodedQuery($0, isSpecial: $1.isSpecial, $2) }
       )
     } else {
       return setSimpleComponent(
@@ -931,7 +931,7 @@ extension URLStorage {
         to: newValue,
         prefix: .questionMark,
         lengthKey: \.queryLength,
-        encoder: { PercentEncoding.encodeQuery(bytes: $0, isSpecial: $1.isSpecial, $2) }
+        encoder: { writeBufferedPercentEncodedQuery($0, isSpecial: $1.isSpecial, $2) }
       )
     }
   }
