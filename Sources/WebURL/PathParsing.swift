@@ -367,7 +367,7 @@ struct PathMetrics {
 }
 
 extension PathMetrics {
-  
+
   /// Creates a `PathMetrics` object containing information about the shape of the given path-string if it were written in its simplified, normalized form.
   ///
   /// The metrics may also contain information about simplification/normalization steps which can be skipped when writing the path-string.
@@ -381,13 +381,13 @@ extension PathMetrics {
     parser.walkPathComponents(pathString: input, schemeKind: schemeKind, baseURL: baseURL)
     self = parser.metrics
   }
-  
+
   private init() {
     self.requiredCapacity = 0
     self.numberOfComponents = 0
     self.needsEscaping = false
   }
-  
+
   private struct Parser<InputString>: PathParser
   where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     var metrics = PathMetrics()
@@ -422,7 +422,7 @@ extension PathMetrics {
 
 
 extension UnsafeMutableBufferPointer where Element == UInt8 {
-  
+
   /// Initializes this buffer to the simplified, normalized path parsed from `input`.
   ///
   /// Returns the number of bytes written. Use `PathMetrics` to calculate the required size.
@@ -560,11 +560,11 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
     }
     validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
   }
-  
+
   fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
     // Nothing to do.
   }
-  
+
   fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
     assertionFailure("Should never be invoked without a base URL")
   }

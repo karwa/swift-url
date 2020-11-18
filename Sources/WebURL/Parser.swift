@@ -171,7 +171,7 @@ extension ParsedURLString {
               writePiece(inputString[username])
             }
           } else {
-            writer.writeUsernameContents { (writePiece: (UnsafeBufferPointer<UInt8>)->Void) in
+            writer.writeUsernameContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
               didEscape = inputString[username]
                 .lazy.percentEncoded(using: URLEncodeSet.UserInfo.self)
                 .writeBuffered { piece in writePiece(piece) }
@@ -187,7 +187,7 @@ extension ParsedURLString {
               writePiece(inputString[password])
             }
           } else {
-            writer.writePasswordContents { (writePiece: (UnsafeBufferPointer<UInt8>)->Void) in
+            writer.writePasswordContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
               didEscape = inputString[password]
                 .lazy.percentEncoded(using: URLEncodeSet.UserInfo.self)
                 .writeBuffered { piece in writePiece(piece) }
@@ -237,7 +237,7 @@ extension ParsedURLString {
           if metrics?.componentsWhichMaySkipEscaping.contains(.path) == true {
             writer.writePathSimple { $0(inputString[path]) }
           } else {
-            writer.writePathSimple { (writePiece: (UnsafeBufferPointer<UInt8>)->Void) in
+            writer.writePathSimple { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
               didEscape = inputString[path]
                 .lazy.percentEncoded(using: URLEncodeSet.C0.self)
                 .writeBuffered { piece in writePiece(piece) }
@@ -317,7 +317,7 @@ extension ParsedURLString {
             writePiece(inputString[fragment])
           }
         } else {
-          writer.writeFragmentContents { (writePiece: (UnsafeBufferPointer<UInt8>)->Void) in
+          writer.writeFragmentContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
             didEscape = inputString[fragment]
               .lazy.percentEncoded(using: URLEncodeSet.Fragment.self)
               .writeBuffered { piece in writePiece(piece) }
@@ -1519,7 +1519,7 @@ func findEndOfHostnamePrefix<Input, Callback>(
 ///
 internal func validateURLCodePointsAndPercentEncoding<Input, Callback>(_ input: Input, callback: inout Callback)
 where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
-  
+
   guard Callback.self != IgnoreValidationErrors.self else {
     // The compiler has a tough time optimising this function away when we ignore validation errors.
     return

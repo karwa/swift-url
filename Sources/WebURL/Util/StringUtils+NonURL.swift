@@ -10,12 +10,12 @@ extension String {
   ) rethrows {
     // FIXME: We actually want an SDK version check.
     // See: https://forums.swift.org/t/do-we-need-something-like-if-available/40349/16
-//    #if swift(>=5.3)
-//    if #available(macOS 10.16, iOS 14.0, watchOS 7.0, tvOS 14.0, *) {
-//      self = try String(unsafeUninitializedCapacity: capacity, initializingUTF8With: initializer)
-//      return
-//    }
-//    #endif
+    //    #if swift(>=5.3)
+    //    if #available(macOS 10.16, iOS 14.0, watchOS 7.0, tvOS 14.0, *) {
+    //      self = try String(unsafeUninitializedCapacity: capacity, initializingUTF8With: initializer)
+    //      return
+    //    }
+    //    #endif
     if capacity <= 32 {
       let newStr = try with32ByteStackBuffer { buffer -> String in
         let count = try initializer(buffer)

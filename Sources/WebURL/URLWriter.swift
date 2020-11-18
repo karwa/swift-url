@@ -105,7 +105,7 @@ protocol URLWriter {
   where T: Collection, T.Element == UInt8
 
   // Optional hints.
-  
+
   /// Optional function which notes that the given component did not require percent-encoding when writing from the input-string.
   /// This doesn't mean that the component does not _contain_ any percent-encoded contents, only that we don't need to perform an
   /// additional level of encoding when writing.
@@ -114,7 +114,7 @@ protocol URLWriter {
   /// The default implementation does nothing.
   ///
   mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool)
-  
+
   /// Optional function which takes note of metrics collected while writing the URL's path component.
   /// Conformers may wish to note this information, in case they wish to write the same contents using another `URLWriter`.
   /// The default implementation does nothing.
@@ -123,7 +123,7 @@ protocol URLWriter {
 }
 
 extension URLWriter {
-  
+
   mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
     // Not required.
   }
@@ -137,11 +137,11 @@ extension URLWriter {
 /// Information which is used to determine how a URL should be stored or written.
 ///
 struct URLMetrics {
-  
+
   /// If set, contains information about the number of code-units in the path, number of path components, etc.
   /// If not set, users may make no assumptions about the path.
   var pathMetrics: PathMetrics? = nil
-  
+
   /// Components which are known to not require percent-encoding.
   /// If a component is not in this set, users must assume that it requires percent-encoding.
   var componentsWhichMaySkipEscaping: WebURL.ComponentSet = []
@@ -157,9 +157,9 @@ struct StructureAndMetricsCollector: URLWriter {
   private var requiredCapacity: Int = 0
   private var metrics = URLMetrics()
   private var structure = URLStructure<Int>()
-  
+
   private init() {}
-  
+
   static func collect(
     _ body: (inout StructureAndMetricsCollector) -> Void
   ) -> (requiredCapacity: Int, structure: URLStructure<Int>, metrics: URLMetrics) {
@@ -269,15 +269,15 @@ struct StructureAndMetricsCollector: URLWriter {
     }
     requiredCapacity += structure.fragmentLength
   }
-  
+
   // Hints.
-  
+
   mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
     if needsEscaping == false {
       metrics.componentsWhichMaySkipEscaping.insert(component)
     }
   }
-  
+
   mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
     metrics.pathMetrics = pathMetrics
   }
@@ -299,7 +299,7 @@ struct UnsafePresizedBufferWriter: URLWriter {
   }
 
   // Underlying buffer-writing functions.
-  
+
   private mutating func writeByte(_ byte: UInt8) {
     assert(bytesWritten < buffer.count)
     (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).pointee = byte
@@ -315,7 +315,7 @@ struct UnsafePresizedBufferWriter: URLWriter {
     let count = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: bytesWritten)).initialize(from: bytes).1
     bytesWritten += count
   }
-  
+
   // URLWriter.
 
   mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
@@ -408,25 +408,25 @@ struct UnsafePresizedBufferWriter: URLWriter {
 /// An interface through which `ParsedHost` writes its contents.
 ///
 protocol HostnameWriter {
-  
+
   /// Writes the bytes provided by `writerFunc`.
   /// The bytes will already be percent-encoded/IDNA-transformed and not include any separators.
   ///
-  mutating func writeHostname<T>(_ writerFunc: ((T)->Void) -> Void) where T: Collection, T.Element == UInt8
+  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8
 }
 
 /// An adapter which allows any `URLWriter` to provide a limited-scope conformance to `HostnameWriter`.
 ///
 struct URLHostnameWriterAdapter<Base: URLWriter>: HostnameWriter {
   fileprivate var base: UnsafeMutablePointer<Base>
-  
-  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T : Collection, T.Element == UInt8 {
+
+  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
     base.pointee.writeHostname(writerFunc)
   }
 }
 
 extension URLWriter {
-  
+
   /// Provides a `HostnameWriter` instance with a limited lifetime, which may be used to write the URL's hostname.
   /// If called, this must always have been preceded by a call to `writeAuthorityHeader`.
   ///
@@ -440,7 +440,7 @@ extension URLWriter {
 
 struct HostnameLengthCounter: HostnameWriter {
   var length: Int = 0
-  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T : Collection, T.Element == UInt8 {
+  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
     writerFunc { piece in
       length += piece.count
     }
@@ -449,7 +449,7 @@ struct HostnameLengthCounter: HostnameWriter {
 
 struct UnsafeBufferHostnameWriter: HostnameWriter {
   var buffer: UnsafeMutableBufferPointer<UInt8>
-  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T : Collection, T.Element == UInt8 {
+  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
     writerFunc { piece in
       let n = buffer.initialize(from: piece).1
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: n))
