@@ -260,13 +260,12 @@ extension ParsedURLString {
           assert(pathMetrics.requiredCapacity > 0)
 
           writer.writeUnsafePathInPreallocatedBuffer(length: pathMetrics.requiredCapacity) { mutBuffer in
-            mutBuffer.writeNormalizedPath(
+            return mutBuffer.writeNormalizedPath(
               parsing: inputString[path],
               schemeKind: schemeKind,
               baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
               needsEscaping: pathMetrics.needsEscaping
             )
-            return pathMetrics.requiredCapacity
           }
         }
       } else if componentsToCopyFromBase.contains(.path) {

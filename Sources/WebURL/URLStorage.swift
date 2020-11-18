@@ -18,7 +18,7 @@
 ///  [scheme + ":"] + ["//"]? + [username]? + [":" + password]? + ["@"]? + [hostname]? + [":" + port]? + ["/" + path]? + ["?" + query]? + ["#" + fragment]?
 ///
 struct URLStructure<SizeType: FixedWidthInteger> {
-  
+
   var schemeLength: SizeType
   var usernameLength: SizeType
   var passwordLength: SizeType
@@ -32,7 +32,7 @@ struct URLStructure<SizeType: FixedWidthInteger> {
   var hasAuthority: Bool
   var schemeKind: WebURL.SchemeKind
   var cannotBeABaseURL: Bool
-  
+
   func checkInvariants() -> Bool {
     guard schemeLength >= 1 else { return false }
     guard passwordLength != 1 else { return false }
@@ -45,7 +45,7 @@ struct URLStructure<SizeType: FixedWidthInteger> {
 }
 
 extension URLStructure {
-  
+
   init() {
     self.schemeLength = 0
     self.usernameLength = 0
@@ -59,7 +59,7 @@ extension URLStructure {
     self.schemeKind = .other
     self.cannotBeABaseURL = false
   }
-  
+
   init<OtherSize: FixedWidthInteger>(copying otherStructure: URLStructure<OtherSize>) {
     if let sameTypeOtherStructure = otherStructure as? Self {
       self = sameTypeOtherStructure
@@ -82,7 +82,7 @@ extension URLStructure {
 }
 
 extension URLStructure {
-  
+
   var schemeStart: SizeType {
     assert(schemeLength >= 1, "URLs must always have a scheme")
     return 0
@@ -143,7 +143,7 @@ extension URLStructure {
   var fragmentStart: SizeType {
     return queryStart &+ queryLength
   }
-  
+
   /// Returns the range of bytes which contain the given component.
   ///
   /// If the component is not present, this method returns an empty range starting at the place where component was expected to be found.
@@ -183,7 +183,7 @@ extension URLStructure {
     }
     return Range(uncheckedBounds: (start, start &+ length))
   }
-  
+
   /// Returns the range of the entire authority string, if one is present.
   ///
   var rangeOfAuthorityString: Range<SizeType>? {
@@ -233,7 +233,7 @@ extension URLStructure {
   var hasCredentialSeparator: Bool {
     return usernameLength != 0 || passwordLength != 0
   }
-  
+
   var cannotHaveCredentialsOrPort: Bool {
     return schemeKind == .file || cannotBeABaseURL || hostnameLength == 0
   }
@@ -265,19 +265,19 @@ extension URLStructure {
 /// But very bad things are likely to happen if that logic ever goes out of sync. So headers **must** double-check it.
 ///
 protocol URLHeader: ManagedBufferHeader {
-  
+
   /// Returns a `AnyURLStorage` which erases this header type from the given `URLStorage` instance.
   ///
   /// - Note: This means the only types that may conform to this protocol are those supported by `AnyURLStorage`.
   ///
   static func eraseToAnyURLStorage(_ storage: URLStorage<Self>) -> AnyURLStorage
-  
+
   /// Creates a new header with the given count and structure. The header does not assume any available capacity beyond `count`.
   ///
   /// This initializer must return `nil` if it is unable to store the given count and structure.
   ///
   init?(count: Int, structure: URLStructure<Int>)
-  
+
   /// Updates the header's structure and metrics to reflect some prior change to the associated code-units.
   ///
   /// This method only updates metadata about the represented URL structure; it **does not** update the header's `count` or `capacity`,
@@ -285,7 +285,7 @@ protocol URLHeader: ManagedBufferHeader {
   /// (because it models a limits subset of URL strings), this method returns `false` and does not update the URL structure data.
   ///
   mutating func copyStructure(from newStructure: URLStructure<Int>) -> Bool
-  
+
   /// The structure of the URL string contained in this header's associated buffer.
   ///
   var structure: URLStructure<Int> { get }
@@ -308,15 +308,15 @@ protocol URLHeader: ManagedBufferHeader {
 ///   that was created).
 ///
 struct URLStorage<Header: URLHeader> {
-  
+
   var codeUnits: ManagedArrayBuffer<Header, UInt8>
-  
+
   var header: Header {
     get { return codeUnits.header }
     _modify { yield &codeUnits.header }
     set { codeUnits.header = newValue }
   }
-  
+
   /// Allocates new storage, with the capacity sufficient for storing `count` code-units, and initializes the header using the given `structure`.
   /// The `initializer` closure is invoked to write the code-units, and must return the number of code-units initialized.
   ///
@@ -325,7 +325,7 @@ struct URLStorage<Header: URLHeader> {
   init?(
     count: Int,
     structure: URLStructure<Int>,
-    initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>)->Int
+    initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
     guard let header = Header(count: count, structure: structure) else {
       return nil
@@ -334,7 +334,7 @@ struct URLStorage<Header: URLHeader> {
     assert(self.codeUnits.count == 0)
     assert(self.codeUnits.header.capacity >= count)
     self.codeUnits.unsafeAppend(uninitializedCapacity: count) { buffer in
-			var buffer = buffer
+      var buffer = buffer
       return initializer(&buffer)
     }
   }
@@ -345,7 +345,7 @@ struct URLStorage<Header: URLHeader> {
 
 
 extension URLStorage {
-  
+
   var schemeKind: WebURL.SchemeKind {
     return header.structure.schemeKind
   }
@@ -353,7 +353,7 @@ extension URLStorage {
   var cannotBeABaseURL: Bool {
     return header.structure.cannotBeABaseURL
   }
-  
+
   func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) -> T) -> T {
     return codeUnits.withUnsafeBufferPointer(block)
   }
@@ -361,7 +361,7 @@ extension URLStorage {
   var entireString: String {
     return withEntireString { String(decoding: $0, as: UTF8.self) }
   }
-  
+
   func withComponentBytes<T>(_ component: WebURL.Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
     guard let range = header.structure.range(of: component) else { return block(nil) }
     return codeUnits.withElements(range: Range(uncheckedBounds: (range.lowerBound, range.upperBound)), block)
@@ -396,16 +396,30 @@ extension URLStorage {
 
 
 extension URLStorage {
-  
+
+  /// Replaces the given range of code-units with an uninitialized space, which is then initialized by the given closure.
+  /// The URL's structure is also replaced with the given new structure. If the existing storage is not optimal for the new structure,
+  /// the storage will be replaced with the optimal kind.
+  ///
+  /// - parameters:
+  ///   - subrangeToReplace:  The range of code-units to replace
+  ///   - insertCount:        The size of the uninitialized space to replace the subrange with. If 0, the subrange's contents are removed.
+  ///   - newStructure:       The new structure of the URL after replacement.
+  ///   - initializer:        A closure which initializes the new content of the given subrange and returns the number of elements initialized.
+  ///                         The initializer **must** initialize exactly `insertCount` elements, or this method will trap.
+  ///
+  /// - returns: An `AnyURLStorage` with the given range of code-units replaced and with the new structure. If the existing storage was already optimal
+  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
+  ///
   private mutating func replaceSubrange(
     _ subrangeToReplace: Range<Int>,
     withUninitializedSpace insertCount: Int,
     newStructure: URLStructure<Int>,
-    initializer: (inout UnsafeMutableBufferPointer<UInt8>)->Int
+    initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) -> AnyURLStorage {
-    
+
     let newCount = codeUnits.count - subrangeToReplace.count + insertCount
-    
+
     if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
       codeUnits.unsafeReplaceSubrange(
         subrangeToReplace, withUninitializedCapacity: insertCount, initializingWith: initializer
@@ -426,31 +440,46 @@ extension URLStorage {
     }
     return newStorage
   }
-  
+
+  /// Removes the given range of code-units.
+  /// The URL's structure is also replaced with the given new structure. If the existing storage is not optimal for the new structure,
+  /// the storage will be replaced with the optimal kind.
+  ///
+  /// - parameters:
+  ///   - subrangeToRemove:  The range of code-units to remove
+  ///   - newStructure:      The new structure of the URL after removing the given code-units.
+  ///
+  /// - returns: An `AnyURLStorage` with the given range of code-units removed and with the new structure. If the existing storage was already optimal
+  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
+  ///
   private mutating func removeSubrange(
     _ subrangeToRemove: Range<Int>, newStructure: URLStructure<Int>
   ) -> AnyURLStorage {
     return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
   }
-  
-  /// A generic setter which works for _some_ URL components (but not all of them).
+
+  /// A generic setter which works for _some_ URL components.
   ///
-  /// If the new value is `nil`, the component is removed (code-units deleted and length-key set to 0).
+  /// This is sufficient for components which do not change other components when they are modified.
+  /// For example, the query, fragment and port components may be changed without modifying any other parts of the URL.
+  /// However, components such as scheme, hostname, username and password require more complex logic
+  /// (e.g. when changing the scheme, the port component may also need to be modified; the hostname setter needs to deal with the "//" authority sigil,
+  /// and credentials have additional logic for separators). This setter is sufficient for the former kind of components, but **does not include component-specific
+  /// logic for the latter kind**.
+  ///
+  /// If the new value is `nil`, the component is removed (code-units deleted and `URLStructure`'s length-key set to 0).
   /// Otherwise, the component is replaced by `[prefix][encoded-content]`, where `prefix` is a single ASCII character and
   /// `encoded-content` is the accumulated result of transforming the new value by the `encoder` closure.
-  /// The length-key is updated to reflect the total length of the new component, including the single-character prefix.
+  /// The `URLStructure`'s length-key is updated to reflect the total length of the new component, including the single-character prefix.
   ///
-  /// This is sufficient for components which have no special logic when they are inserted/deleted (e.g. query, fragment, port).
-  /// Components such as scheme, hostname, or credentials, require more complex logic (e.g. for default port, authority header or credential separator),
-  /// and **should not be set using this method**.
   ///
   /// - parameters:
   ///   - component: The component to modify.
   ///   - newValue:  The new value of the component.
   ///   - prefix:    A single ASCII character to write before the new value. If `newValue` is not `nil`, this is _always_ written.
   ///   - lengthKey: The `URLStructure` field to update with the component's new length. Said length will include the single-character prefix.
-  ///
   ///   - encoder:   A closure which encodes the new value for writing in a URL string.
+  ///
   ///   - bytes:     The bytes to encode as the component's new content.
   ///   - scheme:    The scheme of the final URL.
   ///   - callback:  A callback through which the `encoder` provides this function with buffers of encoded content to process.
@@ -461,11 +490,11 @@ extension URLStorage {
     to newValue: Input?,
     prefix: ASCII,
     lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
-    encoder: (_ bytes: Input, _ scheme: WebURL.SchemeKind, _ callback: (UnsafeBufferPointer<UInt8>)->Void) -> Bool
+    encoder: (_ bytes: Input, _ scheme: WebURL.SchemeKind, _ callback: (UnsafeBufferPointer<UInt8>) -> Void) -> Bool
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
+
     let oldStructure = header.structure
-    
+
     guard let newBytes = newValue else {
       guard let existingFragment = oldStructure.range(of: component) else {
         return (true, AnyURLStorage(self))
@@ -474,13 +503,13 @@ extension URLStorage {
       newStructure[keyPath: lengthKey] = 0
       return (true, removeSubrange(existingFragment, newStructure: newStructure))
     }
-    
-    var bytesToWrite = 1 // leading separator.
+
+    var bytesToWrite = 1  // leading separator.
     let needsEncoding = encoder(newBytes, oldStructure.schemeKind) { bytesToWrite += $0.count }
     let subrangeToReplace = oldStructure.rangeForReplacement(of: component)
     var newStructure = oldStructure
     newStructure[keyPath: lengthKey] = bytesToWrite
-    
+
     let result = replaceSubrange(
       subrangeToReplace,
       withUninitializedSpace: bytesToWrite,
@@ -505,9 +534,9 @@ extension URLStorage {
 }
 
 extension URLStorage {
-  
+
   /// Attempts to set the scheme component to the given UTF8-encoded string.
-  /// The new value may or may not contain a trailing colon (e.g. `http`, `http:`). Colons are only allowed as the last character of the string.
+  /// The new value may contain a trailing colon (e.g. `http`, `http:`). Colons are only allowed as the last character of the string.
   ///
   /// - Note: Filtering ASCII tab and newline characters is not needed as those characters cannot be included in a scheme, and schemes cannot
   ///         contain percent encoding.
@@ -515,21 +544,20 @@ extension URLStorage {
   mutating func setScheme<Input>(
     to newValue: Input
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
-    guard let idx = findScheme(newValue), // Checks scheme contents.
-          idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex, // No content after scheme.
-          idx != newValue.startIndex // Scheme cannot be empty.
+
+    guard let idx = findScheme(newValue),  // Checks scheme contents.
+      idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex,  // No content after scheme.
+      idx != newValue.startIndex  // Scheme cannot be empty.
     else {
       return (false, AnyURLStorage(self))
     }
-    
     let newSchemeBytes = newValue[..<idx]
-    
+
     let oldStructure = header.structure
     var newStructure = oldStructure
     newStructure.schemeKind = WebURL.SchemeKind(parsing: newSchemeBytes)
     newStructure.schemeLength = newSchemeBytes.count + 1
-     
+
     if newStructure.schemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
       return (false, AnyURLStorage(self))
     }
@@ -539,59 +567,67 @@ extension URLStorage {
     if oldStructure.schemeKind == .file, oldStructure.hostnameLength == 0 {
       return (false, AnyURLStorage(self))
     }
-    // The operation is valid.
- 		
-    // If we have a port and it's the default port for the new scheme, remove it.
-    let removePort: Bool = withComponentBytes(.port) {
+    // The operation is semantically valid.
+
+    // If the current port is the default for the new scheme, it must be removed as part of the scheme change operation
+    // (e.g. "http://example.com:21" -> "ftp://example.com").
+    // If we don't need to remove the port, this operation is just a simple code-unit replacement.
+    let mustRemovePort: Bool = withComponentBytes(.port) {
       guard let portBytes = $0 else { return false }
-      assert(portBytes.count > 1, "port string should include leading separator")
+      assert(portBytes.count > 1, "invalid URLStructure: port must either be nil or >1 character")
       return newStructure.schemeKind.isDefaultPortString(portBytes.dropFirst())
     }
-    guard removePort else {
+    guard mustRemovePort else {
       let result = replaceSubrange(
-        oldStructure.rangeForReplacement(of: .scheme), withUninitializedSpace: newStructure.schemeLength, newStructure: newStructure
+        oldStructure.rangeForReplacement(of: .scheme),
+        withUninitializedSpace: newStructure.schemeLength,
+        newStructure: newStructure
       ) { subrange in
-        _ = subrange.initialize(from: ASCII.Lowercased(newSchemeBytes))
-        subrange[subrange.count - 1] = ASCII.colon.codePoint
-        return newStructure.schemeLength
+        let bytesWritten = subrange.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
+        subrange[bytesWritten] = ASCII.colon.codePoint
+        return bytesWritten + 1
       }
       return (true, result)
     }
-    
+
     newStructure.portLength = 0
     let newCount = header.count + (newStructure.schemeLength - oldStructure.schemeLength) - oldStructure.portLength
-      
+
     if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
       // Remove port first to avoid clobbering.
       codeUnits.removeSubrange(oldStructure.rangeForReplacement(of: .port))
       codeUnits.unsafeReplaceSubrange(
-        oldStructure.rangeForReplacement(of: .scheme), withUninitializedCapacity: newStructure.schemeLength
+        oldStructure.rangeForReplacement(of: .scheme),
+        withUninitializedCapacity: newStructure.schemeLength
       ) { buffer in
-        var i = buffer.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
-        buffer[i] = ASCII.colon.codePoint
-        i += 1
-        return i
+        let bytesWritten = buffer.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
+        buffer[bytesWritten] = ASCII.colon.codePoint
+        return bytesWritten + 1
       }
       guard header.copyStructure(from: newStructure) else {
-        preconditionFailure("AnyURLStorage.isOptimalStorageType returned true for an incompatible header/string")
+        preconditionFailure("Failed to update URL structure")
       }
       return (true, AnyURLStorage(self))
     }
+    // swift-format-ignore
     let result = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
       self.codeUnits.withUnsafeBufferPointer { src in
-        var i = dest.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
-        (dest.baseAddress.unsafelyUnwrapped + i).pointee = ASCII.colon.codePoint
-        i += 1
-        i += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: i))
-          .initialize(from: UnsafeBufferPointer(rebasing: src[oldStructure.rangeForReplacement(of: .scheme)])).1
-        i += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: i))
-          .initialize(from: UnsafeBufferPointer(rebasing: src[oldStructure.rangeForReplacement(of: .port).upperBound...])).1
-        return i
+        let srcSchemeRange = oldStructure.rangeForReplacement(of: .scheme)
+        let srcPortRange = oldStructure.rangeForReplacement(of: .port)
+
+        var bytesWritten = dest.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
+        dest[bytesWritten] = ASCII.colon.codePoint
+        bytesWritten += 1
+        bytesWritten += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: bytesWritten))
+          .initialize(from: UnsafeBufferPointer(rebasing: src[srcSchemeRange.upperBound..<srcPortRange.lowerBound])).1
+        bytesWritten += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: bytesWritten))
+          .initialize(from: UnsafeBufferPointer(rebasing: src[srcPortRange.upperBound...])).1
+        return bytesWritten
       }
     }
     return (true, result)
   }
-  
+
   /// Attempts to set the username component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
   ///
   /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
@@ -600,59 +636,50 @@ extension URLStorage {
   mutating func setUsername<Input>(
     to newValue: Input
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
+
     let oldStructure = header.structure
     guard oldStructure.cannotHaveCredentialsOrPort == false else {
       return (false, AnyURLStorage(self))
     }
-    
-    // Empty usernames are removed.
+    // The operation is semantically valid.
+
     guard newValue.isEmpty == false else {
       guard let oldUsername = oldStructure.range(of: .username) else {
         return (true, AnyURLStorage(self))
       }
       var newStructure = oldStructure
       newStructure.usernameLength = 0
-      let subrangeToRemove = oldUsername.lowerBound ..< (oldUsername.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
-      
-      return (true, removeSubrange(subrangeToRemove, newStructure: newStructure))
+      let toRemove = oldUsername.lowerBound..<(oldUsername.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
+      return (true, removeSubrange(toRemove, newStructure: newStructure))
     }
-    
+
     var newStructure = oldStructure
     newStructure.usernameLength = 0
     let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered {
       newStructure.usernameLength += $0.count
     }
-      
-    let insertSeparator = (oldStructure.hasCredentialSeparator == false)
-    let bytesToWrite = newStructure.usernameLength + (insertSeparator ? 1 : 0)
-    let subrangeToReplace = oldStructure.rangeForReplacement(of: .username)
-    let result = replaceSubrange(
-      subrangeToReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure
-    ) { dest in
+    let shouldAddSeparator = (oldStructure.hasCredentialSeparator == false)
+    let bytesToWrite = newStructure.usernameLength + (shouldAddSeparator ? 1 : 0)
+    let toReplace = oldStructure.rangeForReplacement(of: .username)
+    let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       guard var ptr = dest.baseAddress else { return 0 }
-      // Contents.
       if needsEncoding {
         newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered { piece in
           ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
           ptr += piece.count
         }
       } else {
-        let n = UnsafeMutableBufferPointer(start: ptr, count: newStructure.usernameLength)
-          .initialize(from: newValue).1
-        ptr += n
+        ptr += UnsafeMutableBufferPointer(start: ptr, count: newStructure.usernameLength).initialize(from: newValue).1
       }
-      // Trailing "@".
-      if insertSeparator {
+      if shouldAddSeparator {
         ptr.pointee = ASCII.commercialAt.codePoint
         ptr += 1
       }
-      precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
-      return bytesToWrite
+      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
     return (true, result)
   }
- 
+
   /// Attempts to set the password component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
   ///
   /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
@@ -661,59 +688,53 @@ extension URLStorage {
   mutating func setPassword<Input>(
     to newValue: Input
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
+
     let oldStructure = header.structure
     guard oldStructure.cannotHaveCredentialsOrPort == false else {
       return (false, AnyURLStorage(self))
     }
-    
-    // Empty passwords are removed.
+    // The operation is semantically valid.
+
     guard newValue.isEmpty == false else {
       guard let oldPassword = oldStructure.range(of: .password) else {
         return (true, AnyURLStorage(self))
       }
       var newStructure = oldStructure
       newStructure.passwordLength = 0
-      let subrangeToRemove = oldPassword.lowerBound ..< (oldPassword.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
-      
-      return (true, removeSubrange(subrangeToRemove, newStructure: newStructure))
+      let toRemove = oldPassword.lowerBound..<(oldPassword.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
+      return (true, removeSubrange(toRemove, newStructure: newStructure))
     }
-    
+
     var newStructure = oldStructure
-    newStructure.passwordLength = 1 // leading ":"
+    newStructure.passwordLength = 1  // leading ":"
     let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered {
       newStructure.passwordLength += $0.count
     }
-    let bytesToWrite = newStructure.passwordLength + 1 // We always (over-)write the trailing "@".
-    var subrangeToReplace = oldStructure.rangeForReplacement(of: .password)
-    subrangeToReplace = subrangeToReplace.lowerBound ..< subrangeToReplace.upperBound + (oldStructure.hasCredentialSeparator ? 1 : 0)
-    let result = replaceSubrange(
-      subrangeToReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure
-    ) { dest in
+    let bytesToWrite = newStructure.passwordLength + 1  // Always write the trailing "@".
+    var toReplace = oldStructure.rangeForReplacement(of: .password)
+    toReplace = toReplace.lowerBound..<toReplace.upperBound + (oldStructure.hasCredentialSeparator ? 1 : 0)
+
+    let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       guard var ptr = dest.baseAddress else { return 0 }
-      // Leading ":"
       ptr.pointee = ASCII.colon.codePoint
       ptr += 1
-      // Contents.
       if needsEncoding {
         newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered { piece in
           ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
           ptr += piece.count
         }
       } else {
-        let n = UnsafeMutableBufferPointer(start: ptr, count: newStructure.passwordLength - 1)
+        // swift-format-ignore
+        ptr += UnsafeMutableBufferPointer(start: ptr, count: newStructure.passwordLength - 1)
           .initialize(from: newValue).1
-        ptr += n
       }
-      // Trailing "@".
       ptr.pointee = ASCII.commercialAt.codePoint
       ptr += 1
-      precondition(ptr == dest.baseAddress.unsafelyUnwrapped + dest.count)
-      return bytesToWrite
+      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
     return (true, result)
   }
-  
+
   /// Attempts to set the hostname component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
   ///
   /// Setting the hostname to an empty or `nil` value is only possible when there are no other authority components (credentials or port).
@@ -724,17 +745,10 @@ extension URLStorage {
     to newValue: Input?,
     filter: Bool = false
   ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
-    
-    if filter {
-      return setHostname_impl(to: newValue.map { ASCII.NewlineAndTabFiltered($0) })
-    } else {
-      return setHostname_impl(to: newValue)
-    }
-  }
 
-  private mutating func setHostname_impl<Input>(
-    to newValue: Input?
-  ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
+    guard filter == false || newValue == nil else {
+      return setHostname(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
+    }
 
     let oldStructure = header.structure
     guard oldStructure.cannotBeABaseURL == false else {
@@ -742,8 +756,9 @@ extension URLStorage {
     }
     // Excluding 'cannotBeABaseURL' URLs doesn't mean we always have an authority separator.
     // There are also path-only URLs (e.g. "hello:/some/path" is not a cannotBeABaseURL).
-    let hasCredentialsOrPort = oldStructure.usernameLength != 0 || oldStructure.passwordLength != 0 || oldStructure.portLength != 0
-     
+    let hasCredentialsOrPort =
+      oldStructure.usernameLength != 0 || oldStructure.passwordLength != 0 || oldStructure.portLength != 0
+
     guard let newHostnameBytes = newValue, newHostnameBytes.isEmpty == false else {
       if oldStructure.schemeKind.isSpecial, oldStructure.schemeKind != .file {
         return (false, AnyURLStorage(self))
@@ -757,127 +772,128 @@ extension URLStorage {
         guard newValue != nil else {
           return (true, AnyURLStorage(self))
         }
-        // 'nil' -> empty host. Insert authority header.
+        // 'nil' -> empty host. Insert authority sigil.
         var newStructure = oldStructure
         newStructure.hostnameLength = 0
         newStructure.hasAuthority = true
         let result = replaceSubrange(
           oldStructure.authorityStart..<oldStructure.authorityStart,
           withUninitializedSpace: 2,
-          newStructure: newStructure) { buffer in
+          newStructure: newStructure
+        ) { buffer in
           buffer.initialize(repeating: ASCII.forwardSlash.codePoint)
           return 2
         }
         return (true, result)
-        
+
       case .some(var hostnameRange):
         assert(oldStructure.hasAuthority)
         var newStructure = oldStructure
         newStructure.hostnameLength = 0
         if newValue == nil {
-          // * -> 'nil' host. Remove authority header.
+          // * -> 'nil' host. Remove authority sigil.
           newStructure.hasAuthority = false
           hostnameRange = (hostnameRange.lowerBound - 2)..<hostnameRange.upperBound
         }
         return (true, removeSubrange(hostnameRange, newStructure: newStructure))
       }
     }
-    
+
     var callback = IgnoreValidationErrors()
-    guard let newHost = ParsedHost(
-      newHostnameBytes,
-      schemeKind: oldStructure.schemeKind,
-      callback: &callback
-    ) else {
+    guard let newHost = ParsedHost(newHostnameBytes, schemeKind: oldStructure.schemeKind, callback: &callback) else {
       return (false, AnyURLStorage(self))
     }
-    
+
     var newStructure = oldStructure
     newStructure.hasAuthority = true
-    
+
     var counter = HostnameLengthCounter()
     newHost.write(bytes: newHostnameBytes, using: &counter)
     newStructure.hostnameLength = counter.length
-    
-    let writeAuthorityHeader = (oldStructure.hasAuthority == false)
-    let bytesToWrite = (writeAuthorityHeader ? 2 : 0) + newStructure.hostnameLength
-    
+
+    let shouldAddAuthoritySigil = (oldStructure.hasAuthority == false)
+    let bytesToWrite = (shouldAddAuthoritySigil ? 2 : 0) + newStructure.hostnameLength
+
     let result = replaceSubrange(
       oldStructure.rangeForReplacement(of: .hostname),
       withUninitializedSpace: bytesToWrite,
       newStructure: newStructure
-    ) { subrangeBuffer in
-      guard var ptr = subrangeBuffer.baseAddress else { return 0 }
-      if writeAuthorityHeader {
+    ) { dest in
+      guard var ptr = dest.baseAddress else { return 0 }
+      if shouldAddAuthoritySigil {
         // 'nil' -> non-empty host. Insert authority header.
         ptr.initialize(repeating: ASCII.forwardSlash.codePoint, count: 2)
         ptr = ptr + 2
       }
       var writer = UnsafeBufferHostnameWriter(buffer: UnsafeMutableBufferPointer(start: ptr, count: counter.length))
       newHost.write(bytes: newHostnameBytes, using: &writer)
-      return bytesToWrite - writer.buffer.count
+      ptr = writer.buffer.baseAddress.unsafelyUnwrapped
+      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
     return (true, result)
   }
-  
+
   /// Attempts to set the port component to the given value. A value of `nil` removes the port.
   ///
   mutating func setPort(
     to newValue: UInt16?
   ) -> (Bool, AnyURLStorage) {
-    
+
     let oldStructure = header.structure
     guard oldStructure.cannotHaveCredentialsOrPort == false else {
       return (false, AnyURLStorage(self))
     }
-    
+
     var newValue = newValue
     if newValue == oldStructure.schemeKind.defaultPort {
       newValue = nil
     }
-    
-    if let newPort = newValue {
-      // TODO: More efficient UInt16 serialisation.
-      var serialized = String(newPort)
-      return serialized.withUTF8 { ptr in
-        assert(ptr.isEmpty == false)
-        return setSimpleComponent(
-          .port,
-          to: ptr,
-          prefix: .colon,
-          lengthKey: \.portLength,
-          encoder: { bytes, _, callback in callback(bytes); return false }
-        )
-      }
-    } else {
+
+    guard let newPort = newValue else {
       return setSimpleComponent(
         .port,
         to: UnsafeBufferPointer?.none,
         prefix: .colon,
         lengthKey: \.portLength,
-        encoder: { _,_,_ in preconditionFailure("Cannot encode 'nil' contents") }
+        encoder: { _, _, _ in preconditionFailure("Cannot encode 'nil' contents") }
+      )
+    }
+    // TODO: More efficient UInt16 serialisation.
+    var serialized = String(newPort)
+    return serialized.withUTF8 { ptr in
+      assert(ptr.isEmpty == false)
+      return setSimpleComponent(
+        .port,
+        to: ptr,
+        prefix: .colon,
+        lengthKey: \.portLength,
+        encoder: { bytes, _, callback in
+          callback(bytes)
+          return false
+        }
       )
     }
   }
-  
+
   /// Attempts to set the path component to the given UTF8-encoded string.
   ///
-  /// A value of `nil` removes the path. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
+  /// A value of `nil` removes the path.
+  /// If `filter` is `true`, ASCII tab and newline characters in the given value will be ignored.
   ///
   mutating func setPath<Input>(
     to newValue: Input?,
     filter: Bool = false
   ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
-    
-    if filter {
+
+    guard filter == false || newValue == nil else {
       return setPath(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
     }
-    
+
     let oldStructure = header.structure
     guard oldStructure.cannotBeABaseURL == false else {
       return (false, AnyURLStorage(self))
     }
-    
+
     guard let newPath = newValue else {
       // URLs with special schemes must always have a path. Possibly replace this with an empty path?
       guard schemeKind.isSpecial == false else {
@@ -888,26 +904,26 @@ extension URLStorage {
         to: UnsafeBufferPointer?.none,
         prefix: .forwardSlash,
         lengthKey: \.pathLength,
-        encoder: { _,_,_ in preconditionFailure("Cannot encode nil input") }
+        encoder: { _, _, _ in preconditionFailure("Cannot encode nil input") }
       )
     }
-    
+
     let pathInfo = PathMetrics(parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil)
     var newStructure = oldStructure
     newStructure.pathLength = pathInfo.requiredCapacity
     let result = replaceSubrange(
       oldStructure.rangeForReplacement(of: .path),
       withUninitializedSpace: pathInfo.requiredCapacity,
-      newStructure: newStructure) { dest in
-      dest.writeNormalizedPath(
+      newStructure: newStructure
+    ) { dest in
+      return dest.writeNormalizedPath(
         parsing: newPath, schemeKind: newStructure.schemeKind,
         baseURL: nil, needsEscaping: pathInfo.needsEscaping
       )
-      return pathInfo.requiredCapacity
     }
     return (true, result)
   }
-  
+
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
   /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
@@ -916,26 +932,19 @@ extension URLStorage {
     to newValue: Input?,
     filter: Bool = false
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
-    if filter {
-      return setSimpleComponent(
-        .query,
-        to: newValue.map { ASCII.NewlineAndTabFiltered($0) },
-        prefix: .questionMark,
-        lengthKey: \.queryLength,
-        encoder: { writeBufferedPercentEncodedQuery($0, isSpecial: $1.isSpecial, $2) }
-      )
-    } else {
-      return setSimpleComponent(
-        .query,
-        to: newValue,
-        prefix: .questionMark,
-        lengthKey: \.queryLength,
-        encoder: { writeBufferedPercentEncodedQuery($0, isSpecial: $1.isSpecial, $2) }
-      )
+
+    guard filter == false || newValue == nil else {
+      return setQuery(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
     }
+    return setSimpleComponent(
+      .query,
+      to: newValue,
+      prefix: .questionMark,
+      lengthKey: \.queryLength,
+      encoder: { writeBufferedPercentEncodedQuery($0, isSpecial: $1.isSpecial, $2) }
+    )
   }
-  
+
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
   /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
@@ -944,24 +953,17 @@ extension URLStorage {
     to newValue: Input?,
     filter: Bool = false
   ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
-    
-    if filter {
-      return setSimpleComponent(
-        .fragment,
-        to: newValue.map { ASCII.NewlineAndTabFiltered($0) },
-        prefix: .numberSign,
-        lengthKey: \.fragmentLength,
-        encoder: { $0.lazy.percentEncoded(using: URLEncodeSet.Fragment.self).writeBuffered($2) }
-      )
-    } else {
-      return setSimpleComponent(
-        .fragment,
-        to: newValue,
-        prefix: .numberSign,
-        lengthKey: \.fragmentLength,
-        encoder: { $0.lazy.percentEncoded(using: URLEncodeSet.Fragment.self).writeBuffered($2) }
-      )
+
+    guard filter == false || newValue == nil else {
+      return setFragment(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
     }
+    return setSimpleComponent(
+      .fragment,
+      to: newValue,
+      prefix: .numberSign,
+      lengthKey: \.fragmentLength,
+      encoder: { $0.lazy.percentEncoded(using: URLEncodeSet.Fragment.self).writeBuffered($2) }
+    )
   }
 }
 
@@ -990,7 +992,7 @@ enum AnyURLStorage {
 // Allocation/Optimal storage types.
 
 extension AnyURLStorage {
-  
+
   /// Creates a new URL storage object, with the header best suited for a string with the given size and structure.
   ///
   /// The initializer closure must initialize exactly `count` code-units.
@@ -998,9 +1000,9 @@ extension AnyURLStorage {
   init(
     optimalStorageForCapacity count: Int,
     structure: URLStructure<Int>,
-    initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>)->Int
+    initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
-    
+
     if count <= UInt8.max {
       let newStorage = URLStorage<GenericURLHeader<UInt8>>(
         count: count, structure: structure, initializingCodeUnitsWith: initializer
@@ -1019,7 +1021,7 @@ extension AnyURLStorage {
     }
     self = .generic(_genericStorage)
   }
-  
+
   static func isOptimalStorageType<T>(
     _ type: URLStorage<T>.Type, requiredCapacity: Int, structure: URLStructure<Int>
   ) -> Bool {
@@ -1033,7 +1035,7 @@ extension AnyURLStorage {
 // Erasure.
 
 extension AnyURLStorage {
-  
+
   init<T>(_ storage: URLStorage<T>) {
     self = T.eraseToAnyURLStorage(storage)
   }
@@ -1042,7 +1044,7 @@ extension AnyURLStorage {
 // Forwarding.
 
 extension AnyURLStorage {
-  
+
   var schemeKind: WebURL.SchemeKind {
     switch self {
     case .small(let storage): return storage.schemeKind
@@ -1063,7 +1065,7 @@ extension AnyURLStorage {
     case .generic(let storage): return storage.entireString
     }
   }
-  
+
   func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) -> T) -> T {
     switch self {
     case .small(let storage): return storage.withEntireString(block)
@@ -1125,17 +1127,17 @@ struct GenericURLHeader<SizeType: FixedWidthInteger> {
   private var _count: SizeType
   private var _capacity: SizeType
   private var _structure: URLStructure<SizeType>
-  
+
   init(_count: SizeType, _capacity: SizeType, structure: URLStructure<SizeType>) {
     self._count = _count
     self._capacity = _capacity
     self._structure = structure
   }
-  
+
   init() {
     self = .init(_count: 0, _capacity: 0, structure: .init())
   }
-  
+
   private static func closestAddressableCapacity(to idealCapacity: Int) -> SizeType {
     if idealCapacity <= Int(SizeType.max) {
       return SizeType(idealCapacity)
@@ -1143,23 +1145,23 @@ struct GenericURLHeader<SizeType: FixedWidthInteger> {
       return SizeType.max
     }
   }
-  
+
   private static func supports(count: Int) -> Bool {
     return Int(Self.closestAddressableCapacity(to: count)) >= count
   }
 }
 
 extension GenericURLHeader: ManagedBufferHeader {
-  
+
   var count: Int {
     get { return Int(_count) }
     set { _count = SizeType(newValue) }
   }
-  
+
   var capacity: Int {
     return Int(_capacity)
   }
-  
+
   func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self? {
     let newCapacity = Self.closestAddressableCapacity(to: maximumCapacity)
     guard newCapacity >= minimumCapacity else {
@@ -1170,11 +1172,11 @@ extension GenericURLHeader: ManagedBufferHeader {
 }
 
 extension GenericURLHeader: URLHeader where SizeType: AnyURLStorageErasableGenericHeaderSize {
-  
+
   static func eraseToAnyURLStorage(_ storage: URLStorage<Self>) -> AnyURLStorage {
     return SizeType._eraseToAnyURLStorage(storage)
   }
-  
+
   init?(count: Int, structure: URLStructure<Int>) {
     guard Self.supports(count: count) else { return nil }
     let sz_count = SizeType(truncatingIfNeeded: count)
@@ -1184,12 +1186,12 @@ extension GenericURLHeader: URLHeader where SizeType: AnyURLStorageErasableGener
       structure: URLStructure<SizeType>(copying: structure)
     )
   }
-  
+
   mutating func copyStructure(from newStructure: URLStructure<Int>) -> Bool {
     self._structure = .init(copying: newStructure)
     return true
   }
-  
+
   var structure: URLStructure<Int> {
     return URLStructure(copying: _structure)
   }

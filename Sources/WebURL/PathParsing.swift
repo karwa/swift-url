@@ -425,15 +425,18 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
   
   /// Initializes this buffer to the simplified, normalized path parsed from `input`.
   ///
-  /// This method will fail at runtime if this buffer is not precisely sized to fit the resulting path-string. Use `PathMetrics` to calculate the required size.
+  /// Returns the number of bytes written. Use `PathMetrics` to calculate the required size.
+  /// Currently, this method fails at runtime if the buffer is not precisely sized to fit the resulting path-string, so the returned value is always equal to `self.count`.
   ///
   func writeNormalizedPath<InputString>(
     parsing input: InputString,
     schemeKind: WebURL.SchemeKind,
     baseURL: WebURL?,
     needsEscaping: Bool = true
-  ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
-    PathWriter.writePath(to: self, pathString: input, schemeKind: schemeKind, baseURL: baseURL, needsEscaping: needsEscaping)
+  ) -> Int where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+    return PathWriter.writePath(
+      to: self, pathString: input, schemeKind: schemeKind, baseURL: baseURL, needsEscaping: needsEscaping
+    )
   }
 
   /// A `PathParser` which writes a properly percent-encoded, normalised URL path string
@@ -451,7 +454,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       schemeKind: WebURL.SchemeKind,
       baseURL: WebURL?,
       needsEscaping: Bool = true
-    ) {
+    ) -> Int {
       // Checking this now allows the implementation to use `.baseAddress.unsafelyUnwrapped`.
       precondition(buffer.baseAddress != nil)
       var visitor = PathWriter(buffer: buffer, front: buffer.endIndex, needsEscaping: needsEscaping)
@@ -460,8 +463,9 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         schemeKind: schemeKind,
         baseURL: baseURL
       )
-      // Checking this now allows the implementation to omit bounds checks.
-      precondition(visitor.front == buffer.startIndex, "Buffer was incorrectly sized")
+      // Checking this now allows the implementation to be safe when omitting bounds checks.
+      precondition(visitor.front == 0, "Buffer was incorrectly sized")
+      return buffer.count - visitor.front
     }
 
     private mutating func prependSlash(_ n: Int = 1) {
