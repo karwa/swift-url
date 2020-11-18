@@ -22,7 +22,9 @@ extension WebURL {
 extension WebURL.SchemeKind {
 
   /// Determines the `SchemeKind` for the given scheme content.
-  /// Note that the ":" terminator must not be included in the content.
+  ///
+  /// This initializer does not determine whether a given scheme string is valid or not; it only detects certain known schemes and returns `.other` for everything
+  /// else. Note that the ":" terminator must not be included in the content; "http" will be recognized, but "http:" won't. This initializer is case-insensitive.
   ///
   /// - parameters:
   ///     - schemeContent: The scheme content, as a sequence of UTF8-encoded bytes.
@@ -34,7 +36,7 @@ extension WebURL.SchemeKind {
     case .h?:
       if iter.next() == .t, iter.next() == .t, iter.next() == .p {
         if let char = iter.next() {
-          self = (char == .s) ? .https : .other
+          self = (char == .s && iter.next() == nil) ? .https : .other
         } else {
           self = .http
         }
@@ -58,7 +60,7 @@ extension WebURL.SchemeKind {
     case .w?:
       if iter.next() == .s {
         if let char = iter.next() {
-          self = (char == .s) ? .wss : .other
+          self = (char == .s && iter.next() == nil) ? .wss : .other
         } else {
           self = .ws
         }
@@ -75,7 +77,7 @@ extension WebURL.SchemeKind {
 
   /// Whether or not this scheme is considered "special".
   ///
-  /// URLs with special schemes may have additional constraints and normalisation rules.
+  /// URLs with special schemes may have additional constraints or normalisation rules.
   ///
   var isSpecial: Bool {
     if case .other = self { return false }
