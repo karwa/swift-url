@@ -1,4 +1,5 @@
 import XCTest
+import Checkit
 
 @testable import WebURL
 
@@ -25,5 +26,42 @@ final class ASCIITests: XCTestCase {
       }
     }
   }
+}
 
+
+// MARK: - Lazy views.
+
+
+extension ASCIITests {
+  
+  func testLazyLowercase() {
+    let testData: [(String, String, isEmpty: Bool)] = [
+      ("hElLo, wOrLd! ✌️ PEAcE :)", "hello, world! ✌️ peace :)", false),
+      ("no change 0123456789", "no change 0123456789", false),
+      ("№ 🅰️$©ℹ️ℹ️", "№ 🅰️$©ℹ️ℹ️", false),
+      ("", "", true),
+    ]
+    for (testString, expected, isEmpty) in testData {
+      // Check that it works.
+      XCTAssertEqualElements(ASCII.Lowercased(testString.utf8), expected.utf8)
+      XCTAssertEqual(ASCII.Lowercased(testString.utf8).isEmpty, isEmpty)
+      // Check Collection conformances.
+      CollectionChecker.check(ASCII.NewlineAndTabFiltered(testString.utf8))
+    }
+  }
+  
+  func testLazyNewlineAndTabFilter() {
+    let testData: [(String, String, isEmpty: Bool)] = [
+      ("\thello\nworld\n", "helloworld", false),
+      ("\t\n\n\t", "", true),
+      ("no change 0123456789", "no change 0123456789", false),
+    ]
+    for (testString, expected, isEmpty) in testData {
+      // Check that it works.
+      XCTAssertEqualElements(ASCII.NewlineAndTabFiltered(testString.utf8), expected.utf8)
+      XCTAssertEqual(ASCII.NewlineAndTabFiltered(testString.utf8).isEmpty, isEmpty)
+      // Check Collection conformances.
+      CollectionChecker.check(ASCII.NewlineAndTabFiltered(testString.utf8))
+    }
+  }
 }

@@ -11,7 +11,7 @@ let package = Package(
   ],
   dependencies: [
     // Swift-checkit for testing protocol conformances.
-    .package(url: "https://github.com/karwa/swift-checkit.git", from: "0.0.1"),
+    .package(url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
   ],
   targets: [
     .target(name: "Algorithms"),
@@ -22,7 +22,7 @@ let package = Package(
     
     .target(name: "WebURL", dependencies: ["Algorithms"]),
     .target(name: "URLTestUtils", dependencies: ["WebURL"]),
-    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "URLTestUtils"]),
+    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "URLTestUtils", "Checkit"]),
     
     .target(name: "URLBenchmarks", dependencies: ["WebURL", "OldURL"]),
   ]
