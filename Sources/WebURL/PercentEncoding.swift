@@ -78,7 +78,7 @@ extension LazyCollectionProtocol where Element == UInt8 {
   }
 }
 
-struct LazilyPercentEncoded<Source, EncodeSet>: Collection
+struct LazilyPercentEncoded<Source, EncodeSet>: Collection, LazyCollectionProtocol
 where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
   let source: Source
 
@@ -537,6 +537,24 @@ enum URLEncodeSet {
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b00101100_00000000_10000000_00000000_00000000_00000000_00000000_00000000
       let hi: UInt64 = 0b00010000_00000000_00000000_00000000_01111000_00000000_00000000_00000001
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+  }
+  
+  /// This encode-set is not used for any particular component, but can be used to encode data which is compatible with the escaping for
+  /// the path, query, and fragment. It should give the same results as Javascript's `.encodeURIComponent()` method.
+  ///
+  struct Component: PercentEncodeSet {
+    @inline(__always)
+    static func shouldEscape(character: ASCII) -> Bool {
+      if UserInfo.shouldEscape(character: character) { return true }
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b00000000_00000000_00011000_01110000_00000000_00000000_00000000_00000000
+      let hi: UInt64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
       if character.codePoint < 64 {
         return lo & (1 &<< character.codePoint) != 0
       } else {

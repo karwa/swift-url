@@ -8,3 +8,12 @@ func XCTAssertEqualElements<Left: Sequence, Right: Sequence>(
   XCTAssertTrue(left.elementsEqual(right), file: file, line: line)
 }
 
+/// A String containing all 128 ASCII characters (`0..<128`), in order.
+///
+let stringWithEveryASCIICharacter: String = {
+  let asciiChars: Range<UInt8> = 0..<128
+  let str = String(asciiChars.lazy.map { Character(UnicodeScalar($0)) })
+  precondition(str.utf8.elementsEqual(asciiChars))
+  return str
+}()
+
