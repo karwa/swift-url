@@ -124,7 +124,10 @@ extension WHATWGTests {
     let url = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("urltestdata.json")
     let data = try Data(contentsOf: url)
     let array = try JSONSerialization.jsonObject(with: data, options: []) as! NSArray
-    assert(array.count == 627, "Incorrect number of test cases.")
+    assert(
+      array.count == 648,
+      "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
+    )
 
     var report = WHATWG_TestReport()
     report.expectedFailures = [
@@ -139,9 +142,9 @@ extension WHATWGTests {
       312,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
       412,  // domain2ascii: Hosts and percent-encoding.
       413,  // domain2ascii: Hosts and percent-encoding.
-      621,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      622,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      626,  // domain2ascii: Empty host after the domain to ASCII.
+      636,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      637,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      641,  // domain2ascii: Empty host after the domain to ASCII.
     ]
     for item in array {
       if let sectionName = item as? String {
@@ -162,7 +165,7 @@ extension WHATWGTests {
           }
           
           let _parserResult = WebURL(expected.input!, base: expected.base!)?.jsModel
-          report.capture(key: "actual", _parserResult as Any)
+          report.capture(key: "actual", _parserResult?._debugDescription ?? "<nil>")
           
           // Compare results.
           guard let parserResult = _parserResult else {
@@ -202,9 +205,7 @@ extension WHATWGTests {
     let reportPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(
       "url_whatwg_constructor_report.txt")
     try reportString.data(using: .utf8)!.write(to: reportPath)
-    print("ℹ️ Report written to \(reportPath)")
-    
-    testAdditional()
+    print("ℹ️ Report written to \(reportPath)")    
   }
 }
 
@@ -487,8 +488,6 @@ extension WHATWGTests {
       XCTAssertEqual(test.ex_query ?? "", result.search)
       XCTAssertEqual(test.ex_fragment ?? "", result.fragment)
     }
-    
-    
   }
 }
 
