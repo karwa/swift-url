@@ -746,6 +746,7 @@ extension URLStorage {
     filter: Bool = false
   ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
 
+    precondition(newValue != nil, "Removing authority sigil has not been tested")
     guard filter == false || newValue == nil else {
       return setHostname(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
     }
@@ -821,7 +822,8 @@ extension URLStorage {
     ) { dest in
       guard var ptr = dest.baseAddress else { return 0 }
       if shouldAddAuthoritySigil {
-        // 'nil' -> non-empty host. Insert authority header.
+        // 'nil' -> non-empty host. Insert authority sigil.
+        // TODO: Strip discriminator from path if present.
         ptr.initialize(repeating: ASCII.forwardSlash.codePoint, count: 2)
         ptr = ptr + 2
       }
@@ -908,7 +910,9 @@ extension URLStorage {
       )
     }
 
-    let pathInfo = PathMetrics(parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil)
+    let pathInfo = PathMetrics(
+      parsing: newPath, schemeKind: oldStructure.schemeKind, hasAuthority: oldStructure.hasAuthority, baseURL: nil
+    )
     var newStructure = oldStructure
     newStructure.pathLength = pathInfo.requiredCapacity
     let result = replaceSubrange(
@@ -917,7 +921,7 @@ extension URLStorage {
       newStructure: newStructure
     ) { dest in
       return dest.writeNormalizedPath(
-        parsing: newPath, schemeKind: newStructure.schemeKind,
+        parsing: newPath, schemeKind: newStructure.schemeKind, hasAuthority: newStructure.hasAuthority,
         baseURL: nil, needsEscaping: pathInfo.needsEscaping
       )
     }

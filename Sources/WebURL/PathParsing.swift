@@ -33,6 +33,11 @@ private protocol PathParser {
   /// This method exists as an optimisation, since empty components have no content to percent-encode/transform.
   ///
   mutating func visitEmptyPathComponents(_ n: Int)
+  
+  /// A callback which is invoked when the parser needs to inject a "." path component in order to disambiguate a path with leading slashes from an authority.
+  /// Conformers should prepand a "." path component (including leading path terminator).
+  ///
+  mutating func visitInjectedDotPathComponent()
 
   /// A callback which is invoked when the parser yields a path component originating from the base URL's path.
   /// These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters will already have been normalized.
@@ -85,6 +90,9 @@ extension PathParser {
   /// For example, consider the input `"a/b/../c/"`, which normalizes to the path string `"/a/c/"`.
   /// This method yields the components `["", "c", "a"]`, and path construction by prepending proceeds as follows: `"/" -> "/c/" -> "/a/c/"`.
   ///
+  /// The `hasAuthority` parameter indicates whether the destination URL string already includes an authority sigil. If `false`, paths with 2 leading slashes
+  /// will be prefixed by an injected "/." component to avoid the resulting URL string appearing as though it includes an authority.
+  ///
   /// - Note:
   /// If the input string is empty, and the scheme **is not** special, no callbacks will be called (the path is `nil`).
   /// If the input string is empty, and the scheme **is** special, the result is an implicit root path (`/`).
@@ -93,6 +101,7 @@ extension PathParser {
   fileprivate mutating func walkPathComponents(
     pathString input: InputString,
     schemeKind: WebURL.SchemeKind,
+    hasAuthority: Bool,
     baseURL: WebURL?
   ) {
 
@@ -168,6 +177,9 @@ extension PathParser {
     //   - If at the end of the path, they force a trailing slash/empty component.
     //     (even if they have popped all other components, the result is an empty path, not a nil path)
     // - Consecutive empty components at the start of a file URL get collapsed.
+    // - If the URL we are writing to does not have an authority sigil, we are not allowed to emit 2 leading slashes
+    //   and must prefix them with a "/." component.
+    //   (This only applies to non-special URLs, as special URLs always have an authority.)
 
     // Iterate the path components in reverse, so we can skip components which later get popped.
     var path = input[contentStartIdx...]
@@ -176,7 +188,7 @@ extension PathParser {
     var didYieldComponent = false
 
     // Consume components separated by terminators.
-    // Since we stripped the initial slash, this loop never sees the initial path component
+    // Since we trimmed the initial slash, this will *not* consume the first path component from the input string,
     // unless it is empty and the scheme is not file.
     while let componentTerminatorIndex = path.lastIndex(where: isPathComponentTerminator) {
 
@@ -218,17 +230,19 @@ extension PathParser {
       visitInputPathComponent(pathComponent, isLeadingWindowsDriveLetter: false)
       didYieldComponent = true
     }
+    // path now contains the first path component from the input string.
 
-    // If the remainder (first component) is empty, if means the path begins with a '//'.
-    // This can't be a file URL, because we would have stripped that.
-    assert(path.isEmpty ? isFileScheme == false : true)
-
+    if path.isEmpty {
+      assert(isFileScheme == false) // file URLs strip leading slashes, so we can't be one of those.
+      assert(input.prefix(2).allSatisfy(isPathComponentTerminator))
+    }
     switch path {
+    // input string starts with "../" or "./":
+    // If we have a base URL, it could affect the popcount, otherwise just make sure we don't have a null path.
     case _ where URLStringUtils.isDoubleDotPathSegment(path):
       popcount += 1
       fallthrough
     case _ where URLStringUtils.isSingleDotPathSegment(path):
-      // Ensure we have a trailing slash.
       if !didYieldComponent {
         trailingEmptyCount = max(trailingEmptyCount, 1)
       }
@@ -247,30 +261,32 @@ extension PathParser {
       popcount -= 1
       break  // Popped out.
     }
-
-    // The leading component has now been processed.
-    // If there is no base URL to carry state forward to, we need to flush anything that was deferred.
+    
+    // The input string has now been entirely consumed, but we have some state remaining (trailing empties, popcount)
+    // that we carry to the base path.
     path = path.prefix(0)
-    guard let baseURL = baseURL else {
-      if didYieldComponent == false {
-        // If we haven't yielded anything yet, it's because the leading component was popped-out or skipped.
-        // Make sure we have at least (or for files, exactly) 1 trailing empty to yield when we flush.
-        trailingEmptyCount = isFileScheme ? 1 : max(trailingEmptyCount, 1)
-      }
-      __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
-      return
-    }
-
-    baseURL.storage.withComponentBytes(.path) {
+    
+    accessOptionalResource(from: baseURL, using: { $0.storage.withComponentBytes(.path, $1) }) {
       guard var basePath = $0?[...] else {
-        // No base path. Flush state from input string, as above.
-        assert(baseURL._schemeKind.isSpecial == false, "Special URLs always have a path")
+        // Either baseURL is nil, or baseURL.path is nil. Flush all state from the input string.
+        // This is the start of the resulting path-string.
+        assert(baseURL?._schemeKind.isSpecial != true, "Special URLs always have a path")
+
         if didYieldComponent == false {
+          // If we haven't yielded anything yet, it's because the leading component was popped-out or skipped.
+          // Make sure we have at least (or for files, exactly) 1 trailing empty to yield when we flush.
           trailingEmptyCount = isFileScheme ? 1 : max(trailingEmptyCount, 1)
         }
+        // If writing 2 slashes at the start of the path, we may need to inject a discriminator.
+        let needsHostDiscriminator = (hasAuthority == false) &&
+          (didYieldComponent ? trailingEmptyCount != 0 : trailingEmptyCount > 1)
         __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
+        if needsHostDiscriminator {
+          visitInjectedDotPathComponent()
+        }
         return
       }
+      
       // Trim the leading slash.
       if basePath.first == ASCII.forwardSlash.codePoint {
         basePath = basePath.dropFirst()
@@ -298,7 +314,8 @@ extension PathParser {
         basePath = basePath[..<(basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex)]
       }
 
-      // Consume remaining components. Continue to observe popcount and trailing empties.
+      // Consume remaining components.
+      // Since we trimmed the initial slash, this will *not* consume the first path component from basePath.
       while let componentTerminatorIndex = basePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
         let pathComponent = basePath[basePath.index(after: componentTerminatorIndex)..<basePath.endIndex]
         defer { basePath = basePath.prefix(upTo: componentTerminatorIndex) }
@@ -317,7 +334,9 @@ extension PathParser {
         visitBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
         didYieldComponent = true
       }
-      // We're left with the leading path component from the base URL (i.e. the very start of the resulting path).
+      // basePath now contains the first path component from the base URL.
+
+      assert(URLStringUtils.isDoubleDotPathSegment(basePath) == false)
 
       guard popcount == 0 else {
         // Leading Windows drive letters cannot be popped-out.
@@ -327,8 +346,13 @@ extension PathParser {
           visitBasePathComponent(UnsafeBufferPointer(rebasing: basePath))
           return
         }
-        if !isFileScheme {
+        let needsHostDiscriminator = (hasAuthority == false) &&
+          (didYieldComponent ? trailingEmptyCount != 0 : trailingEmptyCount > 1)
+        if isFileScheme == false {
           __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
+        }
+        if needsHostDiscriminator {
+          visitInjectedDotPathComponent()
         }
         if didYieldComponent == false {
           visitEmptyPathComponent()
@@ -336,13 +360,21 @@ extension PathParser {
         return
       }
 
-      assert(URLStringUtils.isDoubleDotPathSegment(basePath) == false)
-      assert(URLStringUtils.isSingleDotPathSegment(basePath) == false)
+      if URLStringUtils.isSingleDotPathSegment(basePath) {
+        // Single-dot path components may appear in normalized paths, but only at the start as host/path discriminators.
+        // Ignore the discriminator and add it only if the new path needs it.
+        basePath = basePath.prefix(0)
+      }
 
       if basePath.isEmpty {
         // We are at the very start of the path. File URLs discard empties.
-        if !isFileScheme {
+        let needsHostDiscriminator = (hasAuthority == false) &&
+          (didYieldComponent ? trailingEmptyCount != 0 : trailingEmptyCount > 1)
+        if isFileScheme == false {
           __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
+        }
+        if needsHostDiscriminator {
+          visitInjectedDotPathComponent()
         }
         if didYieldComponent == false {
           // If we still didn't yield anything and basePath is empty, any components have been popped to a net zero result.
@@ -375,10 +407,11 @@ extension PathMetrics {
   init<InputString>(
     parsing input: InputString,
     schemeKind: WebURL.SchemeKind,
+    hasAuthority: Bool,
     baseURL: WebURL?
   ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     var parser = Parser<InputString>()
-    parser.walkPathComponents(pathString: input, schemeKind: schemeKind, baseURL: baseURL)
+    parser.walkPathComponents(pathString: input, schemeKind: schemeKind, hasAuthority: hasAuthority, baseURL: baseURL)
     self = parser.metrics
   }
 
@@ -409,6 +442,11 @@ extension PathMetrics {
       metrics.numberOfComponents += n
       metrics.requiredCapacity += n
     }
+    
+    mutating func visitInjectedDotPathComponent() {
+      metrics.numberOfComponents += 1
+      metrics.requiredCapacity += 2 // "/."
+    }
 
     mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
       metrics.numberOfComponents += 1
@@ -431,11 +469,12 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
   func writeNormalizedPath<InputString>(
     parsing input: InputString,
     schemeKind: WebURL.SchemeKind,
+    hasAuthority: Bool,
     baseURL: WebURL?,
     needsEscaping: Bool = true
   ) -> Int where InputString: BidirectionalCollection, InputString.Element == UInt8 {
     return PathWriter.writePath(
-      to: self, pathString: input, schemeKind: schemeKind, baseURL: baseURL, needsEscaping: needsEscaping
+      to: self, pathString: input, schemeKind: schemeKind, hasAuthority: hasAuthority, baseURL: baseURL, needsEscaping: needsEscaping
     )
   }
 
@@ -452,6 +491,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       to buffer: UnsafeMutableBufferPointer<UInt8>,
       pathString input: InputString,
       schemeKind: WebURL.SchemeKind,
+      hasAuthority: Bool,
       baseURL: WebURL?,
       needsEscaping: Bool = true
     ) -> Int {
@@ -461,6 +501,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       visitor.walkPathComponents(
         pathString: input,
         schemeKind: schemeKind,
+        hasAuthority: hasAuthority,
         baseURL: baseURL
       )
       // Checking this now allows the implementation to be safe when omitting bounds checks.
@@ -511,6 +552,14 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
       prependSlash(n)
     }
+    
+    mutating func visitInjectedDotPathComponent() {
+      front = buffer.index(front, offsetBy: -2)
+      buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
+        .initialize(to: ASCII.forwardSlash.codePoint)
+      buffer.baseAddress.unsafelyUnwrapped.advanced(by: front &+ 1)
+        .initialize(to: ASCII.period.codePoint)
+    }
 
     fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
       front = buffer.index(front, offsetBy: -1 * pathComponent.count)
@@ -549,7 +598,8 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
       return
     }
     var visitor = PathStringValidator(callback: callback, path: input)
-    visitor.walkPathComponents(pathString: input, schemeKind: schemeKind, baseURL: nil)
+    // hasAuthority does not matter for input string validation.
+    visitor.walkPathComponents(pathString: input, schemeKind: schemeKind, hasAuthority: true, baseURL: nil)
   }
 
   fileprivate mutating func visitInputPathComponent(
@@ -562,6 +612,10 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
   }
 
   fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
+    // Nothing to do.
+  }
+  
+  fileprivate func visitInjectedDotPathComponent() {
     // Nothing to do.
   }
 

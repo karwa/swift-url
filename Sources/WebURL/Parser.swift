@@ -160,8 +160,10 @@ extension ParsedURLString {
       }
 
       // 3: Write authority.
+      var hasAuthority = false
       if let hostname = hostnameRange {
         writer.writeAuthorityHeader()
+        hasAuthority = true
 
         var hasCredentials = false
         if let username = usernameRange, username.isEmpty == false {
@@ -222,11 +224,13 @@ extension ParsedURLString {
               hostnameLength: $3,
               portLength: $4
             )
+            hasAuthority = true
           }
         }
       } else if schemeKind == .file {
         // 'file:' URLs get an implicit authority.
         writer.writeAuthorityHeader()
+        hasAuthority = true
       }
 
       // 4: Write path.
@@ -252,6 +256,7 @@ extension ParsedURLString {
             pathMetrics = PathMetrics(
               parsing: inputString[path],
               schemeKind: schemeKind,
+              hasAuthority: hasAuthority,
               baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
             )
           }
@@ -263,6 +268,7 @@ extension ParsedURLString {
             return mutBuffer.writeNormalizedPath(
               parsing: inputString[path],
               schemeKind: schemeKind,
+              hasAuthority: hasAuthority,
               baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
               needsEscaping: pathMetrics.needsEscaping
             )
