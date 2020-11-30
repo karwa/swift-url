@@ -154,7 +154,7 @@ extension WHATWGTests {
         report.recordTest { report in
           report.capture(key: "expected", expected)
           
-          // base URL parsing must always succeed.
+          // Parsing the base URL must always succeed.
           guard let _ = WebURL(expected.base!, base: nil) else {
             report.expectTrue(false)
             return
@@ -164,30 +164,34 @@ extension WHATWGTests {
             report.expectTrue(WebURL("about:blank", base: expected.input!) == nil)
           }
           
-          let _parserResult = WebURL(expected.input!, base: expected.base!)?.jsModel
-          report.capture(key: "actual", _parserResult?._debugDescription ?? "<nil>")
-          
-          // Compare results.
-          guard let parserResult = _parserResult else {
-            report.expectTrue(expected.failure == true)
+          guard let parserResult = WebURL(expected.input!, base: expected.base!)?.jsModel else {
+            report.capture(key: "actual", "<nil>")
+            report.expectTrue(expected.failure == true, "failure")
             return
           }
-          report.expectFalse(expected.failure == true)
-          report.expectEqual(parserResult.scheme, expected.protocol)
-          report.expectEqual(parserResult.href, expected.href)
-//          report.expectEqual(parserResult.host, expected.host)
-          report.expectEqual(parserResult.hostname, expected.hostname)
-          report.expectEqual(Int(parserResult.port), expected.port)
-          report.expectEqual(parserResult.username, expected.username)
-          report.expectEqual(parserResult.password, expected.password)
-          report.expectEqual(parserResult.pathname, expected.pathname)
-          report.expectEqual(parserResult.search, expected.search)
-          report.expectEqual(parserResult.fragment, expected.hash)
-          // The test file doesn't include expected `origin` values for all entries.
-//          if let expectedOrigin = expected.origin {
-//            report.expectEqual(parserResult.origin.serialized, expectedOrigin)
-//          }
-          // Check idempotence.
+          report.capture(key: "actual", parserResult._debugDescription)
+          report.expectFalse(expected.failure == true, "failure")
+          
+          // Compare properties.
+          func checkProperties(url: WebURL.JSModel) {
+            report.expectEqual(url.scheme, expected.protocol, "protocol")
+            report.expectEqual(url.href, expected.href, "href")
+  //          report.expectEqual(parserResult.host, expected.host)
+            report.expectEqual(url.hostname, expected.hostname, "hostname")
+            report.expectEqual(Int(url.port), expected.port, "port")
+            report.expectEqual(url.username, expected.username, "username")
+            report.expectEqual(url.password, expected.password, "password")
+            report.expectEqual(url.pathname, expected.pathname, "pathname")
+            report.expectEqual(url.search, expected.search, "search")
+            report.expectEqual(url.fragment, expected.hash, "fragment")
+            // The test file doesn't include expected `origin` values for all entries.
+  //          if let expectedOrigin = expected.origin {
+  //            report.expectEqual(parserResult.origin.serialized, expectedOrigin)
+  //          }
+          }
+          checkProperties(url: parserResult)
+          
+          // Check idempotence: parse the href again and check all properties.
           var serialized = parserResult.href
           serialized.makeContiguousUTF8()
           guard let reparsed = WebURL(serialized, base: nil)?.jsModel else {
@@ -195,6 +199,7 @@ extension WHATWGTests {
             return
           }
           report.expectEqual(parserResult.href, reparsed.href)
+          checkProperties(url: reparsed)
         }
       } else {
         assertionFailure("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")
