@@ -474,6 +474,55 @@ let additionalTests: [AdditionalTest] = [
         ex_path: "/some/path",
         ex_query: nil,
         ex_fragment: nil),
+  // Double slash at start of base path (with host - not related to idempotence fix from Aug 2020).
+  .init(input: "path",
+        base: "non-spec://host/..//p",
+        ex_href: "non-spec://host//path",
+        ex_scheme: "non-spec:",
+        ex_hostname: "host",
+        ex_port: nil,
+        ex_path: "//path",
+        ex_query: nil,
+        ex_fragment: nil),
+  
+  // Path idempotence fixes from Aug 2020.
+  .init(input: "hello",
+        base: "web+demo:/.//not-a-host/test",
+        ex_href: "web+demo:/.//not-a-host/hello",
+        ex_scheme: "web+demo:",
+        ex_hostname: "",
+        ex_port: nil,
+        ex_path: "//not-a-host/hello",
+        ex_query: nil,
+        ex_fragment: nil),
+  .init(input: "hello/..",
+        base: "web+demo:/.//not-a-host/test",
+        ex_href: "web+demo:/.//not-a-host/",
+        ex_scheme: "web+demo:",
+        ex_hostname: "",
+        ex_port: nil,
+        ex_path: "//not-a-host/",
+        ex_query: nil,
+        ex_fragment: nil),
+  .init(input: "hello/../..",
+        base: "web+demo:/.//not-a-host/test",
+        ex_href: "web+demo:/.//",
+        ex_scheme: "web+demo:",
+        ex_hostname: "",
+        ex_port: nil,
+        ex_path: "//",
+        ex_query: nil,
+        ex_fragment: nil),
+  .init(input: "hello/../../..",
+        base: "web+demo:/.//not-a-host/test",
+        ex_href: "web+demo:/",
+        ex_scheme: "web+demo:",
+        ex_hostname: "",
+        ex_port: nil,
+        ex_path: "/",
+        ex_query: nil,
+        ex_fragment: nil),
+
 ]
 
 extension WHATWGTests {
@@ -669,6 +718,57 @@ extension WHATWGTests {
       x.pathname = #""#
       XCTAssertEqual(x.href, "sc://x?hello")
       XCTAssertEqual(x.pathname, "")
+    }
+    // Check that 'hostname' setter removes path sigil.
+    do {
+      func check_has_path_sigil(url: WebURL.JSModel) {
+        XCTAssertEqual(url.description, "web+demo:/.//not-a-host/test")
+        XCTAssertEqual(url.storage.structure.sigil, .path)
+        XCTAssertEqual(url.hostname, "")
+        XCTAssertEqual(url.pathname, "//not-a-host/test")
+      }
+      func check_has_auth_sigil(url: WebURL.JSModel, hostname: String) {
+        XCTAssertEqual(url.description, "web+demo://\(hostname)//not-a-host/test")
+        XCTAssertEqual(url.storage.structure.sigil, .authority)
+        XCTAssertEqual(url.hostname, hostname)
+        XCTAssertEqual(url.pathname, "//not-a-host/test")
+      }
+      
+      var test_url = WebURL("web+demo:/.//not-a-host/test")!.jsModel
+      check_has_path_sigil(url: test_url)
+      test_url.hostname = "host"
+      check_has_auth_sigil(url: test_url, hostname: "host")
+      test_url.hostname = ""
+      check_has_auth_sigil(url: test_url, hostname: "")
+      // We don't yet expose any way to remove an authority, so go down to URLStorage.
+      switch test_url.storage {
+      case .generic(var storage): test_url.storage = storage.setHostname(to: UnsafeBufferPointer?.none).1
+      case .small(var storage): test_url.storage = storage.setHostname(to: UnsafeBufferPointer?.none).1
+      }
+      check_has_path_sigil(url: test_url)
+    }
+    
+    // TODO [testing]: This test needs to be more comprehensive, and we need tests like this exercising all major
+    // paths in all setters.
+    
+    // Checks what happens when a scheme change requires the port to be removed, and the resulting URL
+    // has a different optimal storage type to the original (i.e. suddenly becomes less than 255 bytes).
+    // It's such a niche case that we'd otherwise never see it.
+    do {
+      var url = WebURL("ws://hostnamewhichtakesustotheedge:443?hellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellop")!.jsModel
+      switch url.storage {
+      case .generic(_): break
+      default: XCTFail("Unexpected storage type")
+      }
+      url.scheme = "wss"
+      switch url.storage {
+      case .small(_): break
+      default: XCTFail("Unexpected storage type")
+      }
+      XCTAssertEqual(
+        url.description,
+        "wss://hostnamewhichtakesustotheedge/?hellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellop"
+      )
     }
   }
 }

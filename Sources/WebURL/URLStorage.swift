@@ -878,7 +878,6 @@ extension URLStorage {
     filter: Bool = false
   ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
 
-    precondition(newValue != nil, "Removing authority sigil has not been tested")
     guard filter == false || newValue == nil else {
       return setHostname(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
     }
