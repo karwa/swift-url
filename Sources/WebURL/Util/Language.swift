@@ -1,4 +1,3 @@
-
 /// Accesses a scoped optional resource from an optional root object.
 ///
 /// Consider the following example type:

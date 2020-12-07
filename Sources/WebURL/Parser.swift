@@ -245,18 +245,20 @@ extension ParsedURLString {
           }
         }
         writer.writeHint(.path, needsEscaping: didEscape)
-      
+
       case .some(let path):
-        let pathMetrics = metrics?.pathMetrics ?? PathMetrics(
-          parsing: inputString[path],
-          schemeKind: schemeKind,
-          baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
-        )
+        let pathMetrics =
+          metrics?.pathMetrics
+          ?? PathMetrics(
+            parsing: inputString[path],
+            schemeKind: schemeKind,
+            baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
+          )
         assert(pathMetrics.requiredCapacity > 0)
         writer.writePathMetricsHint(pathMetrics)
         writer.writeHint(.path, needsEscaping: pathMetrics.needsEscaping)
-        
-        if pathMetrics.requiresSigil && hasAuthority == false {
+
+        if pathMetrics.requiresSigil && (hasAuthority == false) {
           writer.writePathSigil()
         }
         writer.writeUnsafePath(length: pathMetrics.requiredCapacity) { buffer in
@@ -267,27 +269,28 @@ extension ParsedURLString {
             needsEscaping: pathMetrics.needsEscaping
           )
         }
-        
+
       case .none where componentsToCopyFromBase.contains(.path):
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
         baseURL.storage.withComponentBytes(.path) {
           if let basePath = $0 {
-            precondition(hasAuthority == false || componentsToCopyFromBase.contains(.authority),
-              "An input string which copies the base URL's path must either have its own authority" +
-              "(thus does not need a path sigil) or match the authority/path sigil from the base URL")
-            if case .path = baseURL.storage.structure.sigil, hasAuthority == false {
+            precondition(
+              (hasAuthority == false) || componentsToCopyFromBase.contains(.authority),
+              "An input string which copies the base URL's path must either have its own authority"
+                + "(thus does not need a path sigil) or match the authority/path sigil from the base URL")
+            if case .path = baseURL.storage.structure.sigil, (hasAuthority == false) {
               writer.writePathSigil()
             }
             writer.writePath { writePiece in writePiece(basePath) }
           }
         }
-        
+
       case .none where schemeKind.isSpecial:
         // Special URLs always have a path.
         writer.writePath { writePiece in
           writePiece(CollectionOfOne(ASCII.forwardSlash.codePoint))
         }
-        
+
       default:
         break
       }

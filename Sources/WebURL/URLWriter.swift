@@ -38,7 +38,7 @@ protocol URLWriter {
   /// If called, this must always be the immediate successor to `writeSchemeContents`.
   ///
   mutating func writeAuthoritySigil()
-  
+
   /// Appends the path sigil (`/.`) to storage.
   /// If called, this must always be the immediate successor to `writeSchemeContents`.
   ///
@@ -191,7 +191,7 @@ struct StructureAndMetricsCollector: URLWriter {
     structure.sigil = .authority
     requiredCapacity += Sigil.authority.length
   }
-  
+
   mutating func writePathSigil() {
     precondition(structure.sigil == .none)
     structure.sigil = .path
@@ -345,7 +345,7 @@ struct UnsafePresizedBufferWriter: URLWriter {
   mutating func writeAuthoritySigil() {
     writeByte(ASCII.forwardSlash.codePoint, count: 2)
   }
-  
+
   mutating func writePathSigil() {
     writeByte(ASCII.forwardSlash.codePoint)
     writeByte(ASCII.period.codePoint)

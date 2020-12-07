@@ -35,14 +35,14 @@ private protocol PathParser {
   ///   - pathComponent: The path component yielded by the parser.
   ///
   mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>)
-  
+
   /// A callback which is invoked when the parser yields a number of consecutive empty path components.
   /// Note that this does not imply that path components yielded via other callbacks are non-empty.
   ///
   /// This method exists as an optimisation, since empty components have no content to percent-encode/transform.
   ///
   mutating func visitEmptyPathComponents(_ n: Int)
-  
+
   /// A callback which is invoked when the parser yields a path sigil ("/.") in order to disambiguate a path with leading slashes from an authority.
   /// Conformers should ensure that a "/." is prepended to the path string if it is written to a URL without an authority sigil.
   ///
@@ -231,7 +231,7 @@ extension PathParser {
     // path now contains the first path component from the input string.
 
     if path.isEmpty {
-      assert(isFileScheme == false) // file URLs strip leading slashes, so we can't be one of those.
+      assert(isFileScheme == false)  // file URLs strip leading slashes, so we can't be one of those.
       assert(input.prefix(2).allSatisfy(isPathComponentTerminator))
     }
     switch path {
@@ -254,17 +254,17 @@ extension PathParser {
       popcount -= 1
     case _ where path.isEmpty:
       trailingEmptyCount += 1
-      
+
     default:
       __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
       visitInputPathComponent(path, isLeadingWindowsDriveLetter: false)
       didYieldComponent = true
     }
-    
+
     // The input string has now been entirely consumed, but we have some state remaining (trailing empties, popcount)
     // that we carry to the base path.
     path = path.prefix(0)
-    
+
     accessOptionalResource(from: baseURL, using: { $0.storage.withComponentBytes(.path, $1) }) {
       guard var basePath = $0?[...] else {
         // Either baseURL is nil, or baseURL.path is nil. Flush all state from the input string.
@@ -275,7 +275,7 @@ extension PathParser {
           // If we haven't yielded anything yet, the first component was popped-out, skipped ("."), or deferred (empty).
           // Make sure we at least write an empty path.
           if isFileScheme {
-            trailingEmptyCount = 1 // File URLs collapse leading empties.
+            trailingEmptyCount = 1  // File URLs collapse leading empties.
           } else if trailingEmptyCount == 0 {
             trailingEmptyCount = 1
           }
@@ -288,9 +288,9 @@ extension PathParser {
         }
         return
       }
-      
+
       precondition(basePath.first == ASCII.forwardSlash.codePoint, "Normalized base paths must start with a /")
-      
+
       // Drop the last path component.
       guard !(isFileScheme && URLStringUtils.isWindowsDriveLetter(basePath.dropFirst())) else {
         // Do not drop Windows drive letters. This handles the very specific case of a base path
@@ -308,11 +308,12 @@ extension PathParser {
 
         assert(URLStringUtils.isDoubleDotPathSegment(pathComponent) == false)
         assert(URLStringUtils.isSingleDotPathSegment(pathComponent) == false)
-        
+
         // Windows drive letters (which must be the first path component and hence the end of our walk)
         // cannot be popped out.
         if isFileScheme, componentTerminatorIndex == basePath.startIndex,
-           URLStringUtils.isWindowsDriveLetter(pathComponent) {
+          URLStringUtils.isWindowsDriveLetter(pathComponent)
+        {
           if didYieldComponent == false {
             trailingEmptyCount = max(1, trailingEmptyCount)
           }
@@ -333,17 +334,17 @@ extension PathParser {
         didYieldComponent = true
       }
       precondition(basePath.isEmpty, "Normalized base paths must start with a /")
-      
+
       if didYieldComponent == false {
         // If we still haven't yielded anything, the entire path has been popped-out or deferred (empty).
         // Make sure we at least write an empty path.
         if isFileScheme {
-          trailingEmptyCount = 1 // File URLs collapse leading empties.
+          trailingEmptyCount = 1  // File URLs collapse leading empties.
         } else if trailingEmptyCount == 0 {
           trailingEmptyCount = 1
         }
       }
-      
+
       // Determine if the path needs to be prefixed with a sigil, then flush remaining state.
       let needsPathSigil = (didYieldComponent ? trailingEmptyCount != 0 : trailingEmptyCount > 1)
       __flushTrailingEmpties(&trailingEmptyCount, &didYieldComponent)
@@ -359,16 +360,16 @@ extension PathParser {
 // MARK: - PathMetrics.
 
 struct PathMetrics {
-  
+
   /// The precise length of the simplified, escaped path string, in bytes.
   private(set) var requiredCapacity: Int
-  
+
   /// The number of components in the simplified path.
   private(set) var numberOfComponents: Int
-  
+
   /// Whether or not the simplified path must be prefixed with a path sigil if it is written to a URL without an authority sigil.
   private(set) var requiresSigil: Bool
-  
+
   /// Whether any components in the simplified path need percent-encoding.
   private(set) var needsEscaping: Bool
 }
@@ -417,7 +418,7 @@ extension PathMetrics {
       metrics.numberOfComponents += n
       metrics.requiredCapacity += n
     }
-    
+
     mutating func visitPathSigil() {
       metrics.requiresSigil = true
     }
@@ -523,7 +524,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
       prependSlash(n)
     }
-    
+
     fileprivate func visitPathSigil() {
       // URLWriter is reponsible for writing its own path sigil.
     }
@@ -581,7 +582,7 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
   fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
     // Nothing to do.
   }
-  
+
   fileprivate func visitPathSigil() {
     // Nothing to do.
   }
@@ -596,7 +597,7 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
 
 
 extension URLStringUtils where T: Sequence, T.Element == UInt8 {
-  
+
   static func doesNormalizedPathRequirePathSigil(_ path: T) -> Bool {
     var iter = path.makeIterator()
     guard iter.next() == ASCII.forwardSlash.codePoint, iter.next() == ASCII.forwardSlash.codePoint else {

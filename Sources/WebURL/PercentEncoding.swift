@@ -544,7 +544,7 @@ enum URLEncodeSet {
       }
     }
   }
-  
+
   /// This encode-set is not used for any particular component, but can be used to encode data which is compatible with the escaping for
   /// the path, query, and fragment. It should give the same results as Javascript's `.encodeURIComponent()` method.
   ///
