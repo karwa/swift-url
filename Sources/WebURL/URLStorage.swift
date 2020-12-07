@@ -701,63 +701,24 @@ extension URLStorage {
     }
     // The operation is semantically valid.
 
-    // If the current port is the default for the new scheme, it must be removed as part of the scheme change operation
-    // (e.g. "http://example.com:21" -> "ftp://example.com").
-    // If we don't need to remove the port, this operation is just a simple code-unit replacement.
-    let mustRemovePort: Bool = withComponentBytes(.port) {
-      guard let portBytes = $0 else { return false }
-      assert(portBytes.count > 1, "invalid URLStructure: port must either be nil or >1 character")
-      return newStructure.schemeKind.isDefaultPortString(portBytes.dropFirst())
-    }
-    guard mustRemovePort else {
-      let result = replaceSubrange(
-        oldStructure.rangeForReplacingCodeUnits(of: .scheme),
-        withUninitializedSpace: newStructure.schemeLength,
-        newStructure: newStructure
-      ) { subrange in
-        let bytesWritten = subrange.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
-        subrange[bytesWritten] = ASCII.colon.codePoint
-        return bytesWritten + 1
-      }
-      return (true, result)
-    }
-
-    newStructure.portLength = 0
-    let newCount = header.count + (newStructure.schemeLength - oldStructure.schemeLength) - oldStructure.portLength
-
-    if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
-      // Remove port first to avoid clobbering.
-      codeUnits.removeSubrange(oldStructure.rangeForReplacingCodeUnits(of: .port))
-      codeUnits.unsafeReplaceSubrange(
-        oldStructure.rangeForReplacingCodeUnits(of: .scheme),
-        withUninitializedCapacity: newStructure.schemeLength
-      ) { buffer in
-        let bytesWritten = buffer.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
-        buffer[bytesWritten] = ASCII.colon.codePoint
-        return bytesWritten + 1
-      }
-      guard header.copyStructure(from: newStructure) else {
-        preconditionFailure("Failed to update URL structure")
-      }
-      return (true, AnyURLStorage(self))
-    }
-    // swift-format-ignore
-    let result = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
-      self.codeUnits.withUnsafeBufferPointer { src in
-        let srcSchemeRange = oldStructure.rangeForReplacingCodeUnits(of: .scheme)
-        let srcPortRange = oldStructure.rangeForReplacingCodeUnits(of: .port)
-
-        var bytesWritten = dest.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
+    var commands: [ReplaceSubrangeOperation] = [
+      .replace(subrange: oldStructure.rangeForReplacingCodeUnits(of: .scheme), withCount: newStructure.schemeLength) {
+        dest in
+        let bytesWritten = dest.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
         dest[bytesWritten] = ASCII.colon.codePoint
-        bytesWritten += 1
-        bytesWritten += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: bytesWritten))
-          .initialize(from: UnsafeBufferPointer(rebasing: src[srcSchemeRange.upperBound..<srcPortRange.lowerBound])).1
-        bytesWritten += UnsafeMutableBufferPointer(rebasing: dest.suffix(from: bytesWritten))
-          .initialize(from: UnsafeBufferPointer(rebasing: src[srcPortRange.upperBound...])).1
-        return bytesWritten
+        return bytesWritten + 1
+      }
+    ]
+    // If the current port is the default for the new scheme, it must be removed.
+    withComponentBytes(.port) {
+      guard let portBytes = $0 else { return }
+      assert(portBytes.count > 1, "invalid URLStructure: port must either be nil or >1 character")
+      if newStructure.schemeKind.isDefaultPortString(portBytes.dropFirst()) {
+        newStructure.portLength = 0
+        commands.append(.remove(subrange: oldStructure.rangeForReplacingCodeUnits(of: .port)))
       }
     }
-    return (true, result)
+    return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
   }
 
   /// Attempts to set the username component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
