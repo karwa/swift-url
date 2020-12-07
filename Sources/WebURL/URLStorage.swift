@@ -15,7 +15,10 @@
 /// An object which can store the structure of any normalized URL string whose size is not greater than `SizeType.max`.
 ///
 /// The stored URL must be of the format:
-///  [scheme + ":"] + ["//"]? + [username]? + [":" + password]? + ["@"]? + [hostname]? + [":" + port]? + ["/" + path]? + ["?" + query]? + ["#" + fragment]?
+///  [scheme + ":"] + [sigil]? + [username]? + [":" + password]? + ["@"]? + [hostname]? + [":" + port]? + ["/" + path]? + ["?" + query]? + ["#" + fragment]?
+///
+///  If present, `sigil` must be either "//" to mark the beginning of an authority, or "/." to mark the beginning of the path.
+///  A URL with an authority component requires an authority sigil; a URL without only an authority only requires a path sigil if the beginning if the path begins with "//".
 ///
 struct URLStructure<SizeType: FixedWidthInteger> {
 
@@ -24,24 +27,18 @@ struct URLStructure<SizeType: FixedWidthInteger> {
   var passwordLength: SizeType
   var hostnameLength: SizeType
   var portLength: SizeType
-  // if path, query or fragment are not 0, they must contain their leading separators ('/', '?', '#').
   var pathLength: SizeType
   var queryLength: SizeType
   var fragmentLength: SizeType
 
-  var hasAuthority: Bool
+  var sigil: Sigil?
   var schemeKind: WebURL.SchemeKind
   var cannotBeABaseURL: Bool
+}
 
-  func checkInvariants() -> Bool {
-    guard schemeLength >= 1 else { return false }
-    guard passwordLength != 1 else { return false }
-    guard portLength != 1 else { return false }
-    guard pathLength != 1 else { return false }
-    guard queryLength != 1 else { return false }
-    guard fragmentLength != 1 else { return false }
-    return true
-  }
+enum Sigil {
+  case authority
+  case path
 }
 
 extension URLStructure {
@@ -55,7 +52,7 @@ extension URLStructure {
     self.pathLength = 0
     self.queryLength = 0
     self.fragmentLength = 0
-    self.hasAuthority = false
+    self.sigil = .none
     self.schemeKind = .other
     self.cannotBeABaseURL = false
   }
@@ -74,7 +71,7 @@ extension URLStructure {
       pathLength: SizeType(otherStructure.pathLength),
       queryLength: SizeType(otherStructure.queryLength),
       fragmentLength: SizeType(otherStructure.fragmentLength),
-      hasAuthority: otherStructure.hasAuthority,
+      sigil: otherStructure.sigil,
       schemeKind: otherStructure.schemeKind,
       cannotBeABaseURL: otherStructure.cannotBeABaseURL
     )
@@ -83,24 +80,35 @@ extension URLStructure {
 
 extension URLStructure {
 
+  /// The code-unit offset where the scheme starts. Always 0.
+  ///
   var schemeStart: SizeType {
-    assert(schemeLength >= 1, "URLs must always have a scheme")
     return 0
   }
+
+  /// The code-unit offset after the scheme terminator.
+  /// For example, the string in `codeUnits[schemeStart..<schemeEnd]` may be `https:` or `myscheme:`.
+  ///
   var schemeEnd: SizeType {
     assert(schemeLength >= 1, "URLs must always have a scheme")
     return schemeStart &+ schemeLength
   }
-
-  // Authority may or may not be present.
-  // - If present, it starts at schemeEnd + 2 ('//').
-  //   - It may be an empty string for non-special URLs ("pop://?hello").
-  // - If not present, do not add double solidus ("pop:?hello").
-
-  var authorityStart: SizeType {
-    return schemeEnd &+ (hasAuthority ? 2 : 0 /* // */)
+  
+  /// The code-unit offset after the sigil, if there is one.
+  ///
+  /// If `sigil` is `.authority`, the authority components have meaningful values and begin at this point;
+  /// otherwise, the path and subsequent components begin here.
+  ///
+  var afterSigil: SizeType {
+    return schemeEnd &+ (sigil == .none ? 0 : 2)
   }
 
+	// Authority components.
+  // Only meaningful if sigil == .authority.
+
+  var authorityStart: SizeType {
+    return afterSigil
+  }
   var usernameStart: SizeType {
     return authorityStart
   }
@@ -114,41 +122,78 @@ extension URLStructure {
     return hostnameStart &+ hostnameLength
   }
 
-  // Components with leading separators.
-  // The 'start' position is the offset of the separator character ('/','?','#'), and
-  // this additional character is included in the component's length.
-  // Non-present components have a length of 0.
-
-  // For example, "pop://example.com" has a queryLength of 0, but "pop://example.com?" has a queryLength of 1.
-  // The former has a 'nil'' query component, the latter has an empty query component.
-  // The parser has to preserve the separator, even if the component is empty.
-
-  /// Returns the end of the authority section, if one is present.
-  /// Any trailing components (path, query, fragment) start from here.
+  // Other components.
+  // A length of 0 means the component is not present at all (not even a separator).
+  
+  /// Returns the code-unit offset where the path starts, or would start if present.
   ///
   var pathStart: SizeType {
-    return hasAuthority ? (portStart &+ portLength) : schemeEnd
+    return sigil == .authority ? portStart &+ portLength : afterSigil
   }
 
-  /// Returns the position of the leading '?' in the query-string, if one is present. Otherwise, returns the position after the path.
-  /// All query strings start with a '?'.
+  /// Returns the code-unit offset where the query starts, or would start if present.
+  /// If present, the first character of the query is '?'.
   ///
   var queryStart: SizeType {
     return pathStart &+ pathLength
   }
 
-  /// Returns the position of the leading '#' in the fragment, if one is present. Otherwise, returns the position after the query-string.
-  /// All fragments start with a '#'.
+  /// Returns the code-unit offset where the fragment starts, or would start if present.
+  /// If present, the first character of the fragment is "#".
   ///
   var fragmentStart: SizeType {
     return queryStart &+ queryLength
   }
+  
+  var hasAuthority: Bool {
+    if case .authority = sigil {
+      return true
+    } else {
+      return false
+    }
+  }
+  
+  var hasPathSigil: Bool {
+    if case .path = sigil {
+      return true
+    } else {
+      return false
+    }
+  }
+  
+  // If the string has credentials, it must contain a '@' separating them from the hostname.
+  var hasCredentialSeparator: Bool {
+    return usernameLength != 0 || passwordLength != 0
+  }
 
-  /// Returns the range of bytes which contain the given component.
+  /// The range of code-units covering all authority components, if an authority is present.
   ///
+  var rangeOfAuthorityString: Range<SizeType>? {
+    guard hasAuthority else { return nil }
+    return Range(uncheckedBounds: (authorityStart, pathStart))
+  }
+  
+  /// The range of code-units which must be replaced in order to change the URL's sigil.
+  /// If the URL does not contain a sigil, this property returns an empty range starting at the place where the sigil is expected to be found.
+  ///
+  var rangeForReplacingSigil: Range<SizeType> {
+    let start = schemeEnd
+    let length: SizeType
+    switch sigil {
+    case .none: length = 0
+    case .authority, .path: length = 2
+    }
+    return Range(uncheckedBounds: (start, start &+ length))
+  }
+
+  /// Returns the range of code-units which must be replaced in order to change the content of the given component.
   /// If the component is not present, this method returns an empty range starting at the place where component was expected to be found.
   ///
-  func rangeForReplacement(of component: WebURL.Component) -> Range<SizeType> {
+  /// - important: Replacing/inserting code-units alone may not be sufficient to produce a normalised URL string.
+  ///              For example, inserting a `username` where there was none before may require a credentials separator (@) to be inserted
+  ///              between the credentials and the hostname, removing an authority may require the introduction of a path sigil, etc.
+  ///
+  func rangeForReplacingCodeUnits(of component: WebURL.Component) -> Range<SizeType> {
     let start: SizeType
     let length: SizeType
     switch component {
@@ -179,60 +224,47 @@ extension URLStructure {
       start = fragmentStart
       length = fragmentLength
     default:
-      preconditionFailure("Unknown component")
+      preconditionFailure("Invalid component")
     }
     return Range(uncheckedBounds: (start, start &+ length))
   }
 
-  /// Returns the range of the entire authority string, if one is present.
-  ///
-  var rangeOfAuthorityString: Range<SizeType>? {
-    guard hasAuthority else { return nil }
-    return Range(uncheckedBounds: (authorityStart, pathStart))
-  }
-
-  /// Returns the range of bytes which contain the given component.
-  ///
+  /// Returns the range of bytes containing the content of the given component.
   /// If the component is not present, this method returns `nil`.
   ///
   func range(of component: WebURL.Component) -> Range<SizeType>? {
-    let range = rangeForReplacement(of: component)
+    let range = rangeForReplacingCodeUnits(of: component)
     switch component {
-    // Hostname may be empty.
+    case .scheme:
+      break
+    // Hostname may be empty. Presence is indicated by authority sigil.
     case .hostname:
       guard hasAuthority else { return nil }
-    // Username may not be empty.
+    // Other components may not be empty. A length of 0 means "not present"/nil.
     case .username:
       guard usernameLength != 0 else { return nil }
-      assert(hasAuthority)
-    // The following components always have a leading separator, so:
-    // - (length == 0) -> not present.
-    // - (length == 1) -> separator with no content (e.g. "sc://x?" has a present, empty query).
+      assert(hasAuthority, "Cannot have a username without an authority")
     case .password:
       guard passwordLength != 0 else { return nil }
-      assert(hasAuthority)
+      assert(hasAuthority, "Cannot have a password without an authority")
     case .port:
       guard portLength != 0 else { return nil }
-      assert(hasAuthority)
+      assert(hasAuthority, "Cannot have a port without an authority")
     case .path:
       guard pathLength != 0 else { return nil }
+      assert(hasPathSigil ? pathLength >= 2 : true, "path sigil means the path must start with //")
     case .query:
       guard queryLength != 0 else { return nil }
     case .fragment:
       guard fragmentLength != 0 else { return nil }
     default:
-      assert(component == .scheme, "Unknown component")
+      preconditionFailure("Invalid component")
     }
     return range
   }
 }
 
 extension URLStructure {
-
-  // If the string has credentials, it must contain a '@' separating them from the hostname.
-  var hasCredentialSeparator: Bool {
-    return usernameLength != 0 || passwordLength != 0
-  }
 
   var cannotHaveCredentialsOrPort: Bool {
     return schemeKind == .file || cannotBeABaseURL || hostnameLength == 0
@@ -246,23 +278,20 @@ extension URLStructure {
 /// A `ManagedBufferHeader` which stores information about a URL string.
 ///
 /// URLs are stored in `URLStorage` objects, which are managed buffers containing the string's contiguous code-units, prefixed by
-/// an instance of a type conforming to `URLHeader`. The `AnyURLStorage` wrapper allows this header type to be erased, so that the
+/// a header conforming to `URLHeader`. The `AnyURLStorage` wrapper allows this header type to be erased, so that the
 /// optimal header can be chosen for a given URL string.
 ///
 /// For example, small URL strings might wish to store their header information in a smaller integer type than `Int64` on 64-bit platforms.
-/// Similarly, some common URL patterns (e.g. `file://` URLs with only a path) might warrant their own headers: with the string's structure essentially
-/// being completely described by the header type, we might decide to store some other information in the header, such as path metrics.
+/// Similarly, some common URL patterns might warrant their own headers: with the URL's structure essentially being encoded in the header type.
 ///
 /// When a URL String is parsed, or when a mutation on an already-parsed URL is planned, the parser or setter function first calculates
-/// a _required capacity_, and a `URLStructure<Int>`.
+/// a _required capacity_, and a `URLStructure<Int>` describing the new URL string.
 ///
 /// - For mutations, `AnyURLStorage.isOptimalStorageType(_:requiredCapacity:structure:)` is consulted to check if the existing
-///   header type is also the desired header for the result. If it is, the capacity is sufficient and the storage reference is unique, the modification happens in-place.
+///   header type is also the desired header for the result. If it is, the capacity is sufficient, and the storage reference is unique, the modification happens in-place.
 /// - Otherwise, if the storage types do not match, or there is no existing storage to mutate (in the case of the parser),
 ///   `AnyURLStorage(optimalStorageForCapacity:structure:initializingCodeUnitsWith:)` is used to create storage with a compatible
 ///   header type.
-///
-/// But very bad things are likely to happen if that logic ever goes out of sync. So headers **must** double-check it.
 ///
 protocol URLHeader: ManagedBufferHeader {
 
@@ -293,12 +322,14 @@ protocol URLHeader: ManagedBufferHeader {
 
 /// The primary type responsible for URL storage.
 ///
-/// `URLStorage` wraps a `ManagedArrayBuffer` containing the string's contiguous code-units, together with a header structure that encodes the URL's
-/// structure. It composes operations on each component in to URL-level operations (such as getting or setting the 'username' component).
-/// `URLStorage` is a value-type, with attempted mutations happening in-place where possible and copying to new storage only when the buffer is shared
-/// or if its capacity is insufficient to hold the result.
+/// URLs are stored in `URLStorage` objects, which are managed buffers containing the string's contiguous code-units, prefixed by
+/// a header conforming to `URLHeader`. The `AnyURLStorage` wrapper allows this header type to be erased, so that the
+/// optimal header can be chosen for a given URL string.
 ///
-/// Mutating functions must take care of the following notes:
+/// `URLStorage` has value semantics via `ManagedArrayBuffer`, with attempted mutations happening in-place where possible
+/// and copying to new storage only when the buffer is shared or if the existing header does not support the new structure.
+///
+/// Mutating functions must take care to observe the following:
 ///
 /// - The header type may not be able to support arbitrary URLs. Setters should calculate the `URLStructure`
 ///   of the final URL string and call `AnyURLStorage.isOptimalStorageType(_:for:)` before making any changes.
@@ -346,14 +377,6 @@ struct URLStorage<Header: URLHeader> {
 
 extension URLStorage {
 
-  var schemeKind: WebURL.SchemeKind {
-    return header.structure.schemeKind
-  }
-
-  var cannotBeABaseURL: Bool {
-    return header.structure.cannotBeABaseURL
-  }
-
   func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) -> T) -> T {
     return codeUnits.withUnsafeBufferPointer(block)
   }
@@ -364,7 +387,7 @@ extension URLStorage {
 
   func withComponentBytes<T>(_ component: WebURL.Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
     guard let range = header.structure.range(of: component) else { return block(nil) }
-    return codeUnits.withElements(range: Range(uncheckedBounds: (range.lowerBound, range.upperBound)), block)
+    return codeUnits.withElements(range: range, block)
   }
 
   func withAllAuthorityComponentBytes<T>(
@@ -506,7 +529,7 @@ extension URLStorage {
 
     var bytesToWrite = 1  // leading separator.
     let needsEncoding = encoder(newBytes, oldStructure.schemeKind) { bytesToWrite += $0.count }
-    let subrangeToReplace = oldStructure.rangeForReplacement(of: component)
+    let subrangeToReplace = oldStructure.rangeForReplacingCodeUnits(of: component)
     var newStructure = oldStructure
     newStructure[keyPath: lengthKey] = bytesToWrite
 
@@ -579,7 +602,7 @@ extension URLStorage {
     }
     guard mustRemovePort else {
       let result = replaceSubrange(
-        oldStructure.rangeForReplacement(of: .scheme),
+        oldStructure.rangeForReplacingCodeUnits(of: .scheme),
         withUninitializedSpace: newStructure.schemeLength,
         newStructure: newStructure
       ) { subrange in
@@ -595,9 +618,9 @@ extension URLStorage {
 
     if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
       // Remove port first to avoid clobbering.
-      codeUnits.removeSubrange(oldStructure.rangeForReplacement(of: .port))
+      codeUnits.removeSubrange(oldStructure.rangeForReplacingCodeUnits(of: .port))
       codeUnits.unsafeReplaceSubrange(
-        oldStructure.rangeForReplacement(of: .scheme),
+        oldStructure.rangeForReplacingCodeUnits(of: .scheme),
         withUninitializedCapacity: newStructure.schemeLength
       ) { buffer in
         let bytesWritten = buffer.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
@@ -612,8 +635,8 @@ extension URLStorage {
     // swift-format-ignore
     let result = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
       self.codeUnits.withUnsafeBufferPointer { src in
-        let srcSchemeRange = oldStructure.rangeForReplacement(of: .scheme)
-        let srcPortRange = oldStructure.rangeForReplacement(of: .port)
+        let srcSchemeRange = oldStructure.rangeForReplacingCodeUnits(of: .scheme)
+        let srcPortRange = oldStructure.rangeForReplacingCodeUnits(of: .port)
 
         var bytesWritten = dest.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
         dest[bytesWritten] = ASCII.colon.codePoint
@@ -660,7 +683,7 @@ extension URLStorage {
     }
     let shouldAddSeparator = (oldStructure.hasCredentialSeparator == false)
     let bytesToWrite = newStructure.usernameLength + (shouldAddSeparator ? 1 : 0)
-    let toReplace = oldStructure.rangeForReplacement(of: .username)
+    let toReplace = oldStructure.rangeForReplacingCodeUnits(of: .username)
     let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       guard var ptr = dest.baseAddress else { return 0 }
       if needsEncoding {
@@ -711,7 +734,7 @@ extension URLStorage {
       newStructure.passwordLength += $0.count
     }
     let bytesToWrite = newStructure.passwordLength + 1  // Always write the trailing "@".
-    var toReplace = oldStructure.rangeForReplacement(of: .password)
+    var toReplace = oldStructure.rangeForReplacingCodeUnits(of: .password)
     toReplace = toReplace.lowerBound..<toReplace.upperBound + (oldStructure.hasCredentialSeparator ? 1 : 0)
 
     let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
@@ -1048,19 +1071,24 @@ extension AnyURLStorage {
 // Forwarding.
 
 extension AnyURLStorage {
-
-  var schemeKind: WebURL.SchemeKind {
+  
+  var structure: URLStructure<Int> {
     switch self {
-    case .small(let storage): return storage.schemeKind
-    case .generic(let storage): return storage.schemeKind
+    case .small(let storage): return storage.header.structure
+    case .generic(let storage): return storage.header.structure
     }
   }
 
+  var schemeKind: WebURL.SchemeKind {
+    return structure.schemeKind
+  }
+
   var cannotBeABaseURL: Bool {
-    switch self {
-    case .small(let storage): return storage.cannotBeABaseURL
-    case .generic(let storage): return storage.cannotBeABaseURL
-    }
+    return structure.cannotBeABaseURL
+  }
+  
+  var pathIncludesDiscriminator: Bool {
+    return structure.hasPathSigil
   }
 
   var entireString: String {

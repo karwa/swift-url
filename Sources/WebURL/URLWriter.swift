@@ -37,11 +37,16 @@ protocol URLWriter {
   /// Appends the authority header (`//`) to storage.
   /// If called, this must always be the immediate successor to `writeSchemeContents`.
   ///
-  mutating func writeAuthorityHeader()
+  mutating func writeAuthoritySigil()
+  
+  /// Appends the path sigil (`/.`) to storage.
+  /// If called, this must always be the immediate successor to `writeSchemeContents`.
+  ///
+  mutating func writePathSigil()
 
   /// Appends the bytes provided by `usernameWriter`.
   /// The content must already be percent-encoded and not include any separators.
-  /// If called, this must always be the immediate successor to `writeAuthorityHeader`.
+  /// If called, this must always be the immediate successor to `writeAuthoritySigil`.
   ///
   mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
   where T: Collection, T.Element == UInt8
@@ -60,7 +65,7 @@ protocol URLWriter {
 
   /// Appends the bytes given by `hostnameWriter`.
   /// The content must already be percent-encoded/IDNA-transformed and not include any separators.
-  /// If called, this must always have been preceded by a call to `writeAuthorityHeader`.
+  /// If called, this must always have been preceded by a call to `writeAuthoritySigil`.
   ///
   mutating func writeHostname<T>(_ hostnameWriter: (WriterFunc<T>) -> Void) where T: Collection, T.Element == UInt8
 
@@ -71,7 +76,7 @@ protocol URLWriter {
 
   /// Appends an entire authority string (username + password + hostname + port) to storage.
   /// The content must already be percent-encoded/IDNA-transformed.
-  /// If called, this must always be the immediate successor to `writeAuthorityHeader`.
+  /// If called, this must always be the immediate successor to `writeAuthoritySigil`.
   ///
   /// - important: `passwordLength` and `portLength` include their required leading separators (so a port component of `:8080` has a length of 5).
   ///
@@ -80,17 +85,19 @@ protocol URLWriter {
     usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
   )
 
-  /// Appends the bytes given by `pathWriter`.
+  /// Appends the bytes given by `writer`.
   /// The content must already be percent-encoded. No separators are added before or after the content.
   ///
-  mutating func writePathSimple<T>(_ pathWriter: (WriterFunc<T>) -> Void)
+  mutating func writePath<T>(_ writer: (WriterFunc<T>) -> Void)
   where T: Collection, T.Element == UInt8
 
   /// Appends an uninitialized space of size `length` and calls the given closure to allow for the path content to be written out of order.
   /// The `writer` closure must return the number of bytes written (`bytesWritten`), and all bytes from `0..<bytesWritten` must be initialized.
   /// Content written in to the buffer must already be percent-encoded. No separators are added before or after the content.
   ///
-  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int)
+  mutating func writeUnsafePath(
+    length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
+  )
 
   /// Appends the query separator character (`?`), followed by the bytes provided by `queryWriter`.
   /// The content must already be percent-encoded.
@@ -179,8 +186,15 @@ struct StructureAndMetricsCollector: URLWriter {
     requiredCapacity = structure.schemeLength
   }
 
-  mutating func writeAuthorityHeader() {
-    structure.hasAuthority = true
+  mutating func writeAuthoritySigil() {
+    precondition(structure.sigil == .none)
+    structure.sigil = .authority
+    requiredCapacity += 2
+  }
+  
+  mutating func writePathSigil() {
+    precondition(structure.sigil == .none)
+    structure.sigil = .path
     requiredCapacity += 2
   }
 
@@ -238,16 +252,18 @@ struct StructureAndMetricsCollector: URLWriter {
     requiredCapacity += authority.count
   }
 
-  mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
+  mutating func writePath<T>(_ writer: ((T) -> Void) -> Void)
   where T: Collection, T.Element == UInt8 {
     structure.pathLength = 0
-    pathWriter {
+    writer {
       structure.pathLength += $0.count
     }
     requiredCapacity += structure.pathLength
   }
 
-  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
+  mutating func writeUnsafePath(
+    length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
+  ) {
     structure.pathLength = length
     requiredCapacity += length
   }
@@ -326,8 +342,13 @@ struct UnsafePresizedBufferWriter: URLWriter {
     writeByte(ASCII.colon.codePoint)
   }
 
-  mutating func writeAuthorityHeader() {
+  mutating func writeAuthoritySigil() {
     writeByte(ASCII.forwardSlash.codePoint, count: 2)
+  }
+  
+  mutating func writePathSigil() {
+    writeByte(ASCII.forwardSlash.codePoint)
+    writeByte(ASCII.period.codePoint)
   }
 
   mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
@@ -370,14 +391,14 @@ struct UnsafePresizedBufferWriter: URLWriter {
     writeBytes(authority)
   }
 
-  mutating func writePathSimple<T>(_ pathWriter: ((T) -> Void) -> Void)
+  mutating func writePath<T>(_ writer: ((T) -> Void) -> Void)
   where T: Collection, T.Element == UInt8 {
-    pathWriter { piece in
+    writer { piece in
       writeBytes(piece)
     }
   }
 
-  mutating func writeUnsafePathInPreallocatedBuffer(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
+  mutating func writeUnsafePath(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
     let space = UnsafeMutableBufferPointer(start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten, count: length)
     let pathBytesWritten = writer(space)
     assert(pathBytesWritten == length)
@@ -428,7 +449,7 @@ struct URLHostnameWriterAdapter<Base: URLWriter>: HostnameWriter {
 extension URLWriter {
 
   /// Provides a `HostnameWriter` instance with a limited lifetime, which may be used to write the URL's hostname.
-  /// If called, this must always have been preceded by a call to `writeAuthorityHeader`.
+  /// If called, this must always have been preceded by a call to `writeAuthoritySigil`.
   ///
   mutating func withHostnameWriter(_ hostnameWriter: (inout URLHostnameWriterAdapter<Self>) -> Void) {
     withUnsafeMutablePointer(to: &self) { ptr in

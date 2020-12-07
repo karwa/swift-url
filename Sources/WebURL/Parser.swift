@@ -162,7 +162,7 @@ extension ParsedURLString {
       // 3: Write authority.
       var hasAuthority = false
       if let hostname = hostnameRange {
-        writer.writeAuthorityHeader()
+        writer.writeAuthoritySigil()
         hasAuthority = true
 
         var hasCredentials = false
@@ -216,7 +216,7 @@ extension ParsedURLString {
         }
         baseURL.storage.withAllAuthorityComponentBytes {
           if let baseAuth = $0 {
-            writer.writeAuthorityHeader()
+            writer.writeAuthoritySigil()
             writer.writeKnownAuthorityString(
               baseAuth,
               usernameLength: $1,
@@ -229,65 +229,67 @@ extension ParsedURLString {
         }
       } else if schemeKind == .file {
         // 'file:' URLs get an implicit authority.
-        writer.writeAuthorityHeader()
+        writer.writeAuthoritySigil()
         hasAuthority = true
       }
 
       // 4: Write path.
-      if let path = pathRange {
-        switch cannotBeABaseURL {
-        case true:
-          var didEscape = false
-          if metrics?.componentsWhichMaySkipEscaping.contains(.path) == true {
-            writer.writePathSimple { $0(inputString[path]) }
-          } else {
-            writer.writePathSimple { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-              didEscape = inputString[path]
-                .lazy.percentEncoded(using: URLEncodeSet.C0.self)
-                .writeBuffered { piece in writePiece(piece) }
-            }
-          }
-          writer.writeHint(.path, needsEscaping: didEscape)
-        case false:
-          let pathMetrics: PathMetrics
-          if let urlMetrics = metrics, let precalcPathMetrics = urlMetrics.pathMetrics {
-            pathMetrics = precalcPathMetrics
-          } else {
-            pathMetrics = PathMetrics(
-              parsing: inputString[path],
-              schemeKind: schemeKind,
-              hasAuthority: hasAuthority,
-              baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
-            )
-          }
-          writer.writeHint(.path, needsEscaping: pathMetrics.needsEscaping)
-          writer.writePathMetricsHint(pathMetrics)
-          assert(pathMetrics.requiredCapacity > 0)
-
-          writer.writeUnsafePathInPreallocatedBuffer(length: pathMetrics.requiredCapacity) { mutBuffer in
-            return mutBuffer.writeNormalizedPath(
-              parsing: inputString[path],
-              schemeKind: schemeKind,
-              hasAuthority: hasAuthority,
-              baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
-              needsEscaping: pathMetrics.needsEscaping
-            )
+      switch pathRange {
+      case .some(let path) where cannotBeABaseURL:
+        var didEscape = false
+        if metrics?.componentsWhichMaySkipEscaping.contains(.path) == true {
+          writer.writePath { $0(inputString[path]) }
+        } else {
+          writer.writePath { writePiece in
+            didEscape = inputString[path].lazy.percentEncoded(using: URLEncodeSet.C0.self).writeBuffered(writePiece)
           }
         }
-      } else if componentsToCopyFromBase.contains(.path) {
+        writer.writeHint(.path, needsEscaping: didEscape)
+      
+      case .some(let path):
+        let pathMetrics = metrics?.pathMetrics ?? PathMetrics(
+          parsing: inputString[path],
+          schemeKind: schemeKind,
+          baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
+        )
+        assert(pathMetrics.requiredCapacity > 0)
+        writer.writePathMetricsHint(pathMetrics)
+        writer.writeHint(.path, needsEscaping: pathMetrics.needsEscaping)
+        
+        if pathMetrics.requiresSigil && hasAuthority == false {
+          writer.writePathSigil()
+        }
+        writer.writeUnsafePath(length: pathMetrics.requiredCapacity) { buffer in
+          return buffer.writeNormalizedPath(
+            parsing: inputString[path],
+            schemeKind: schemeKind,
+            baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
+            needsEscaping: pathMetrics.needsEscaping
+          )
+        }
+        
+      case .none where componentsToCopyFromBase.contains(.path):
         guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
         baseURL.storage.withComponentBytes(.path) {
           if let basePath = $0 {
-            writer.writePathSimple { writePiece in
-              writePiece(basePath)
+            precondition(hasAuthority == false || componentsToCopyFromBase.contains(.authority),
+              "An input string which copies the base URL's path must either have its own authority" +
+              "(thus does not need a path sigil) or match the authority/path sigil from the base URL")
+            if case .path = baseURL.storage.structure.sigil, hasAuthority == false {
+              writer.writePathSigil()
             }
+            writer.writePath { writePiece in writePiece(basePath) }
           }
         }
-      } else if schemeKind.isSpecial {
-        // Special URLs always have a '/' following the authority, even if they have no path.
-        writer.writePathSimple { writePiece in
+        
+      case .none where schemeKind.isSpecial:
+        // Special URLs always have a path.
+        writer.writePath { writePiece in
           writePiece(CollectionOfOne(ASCII.forwardSlash.codePoint))
         }
+        
+      default:
+        break
       }
 
       // 5: Write query.
