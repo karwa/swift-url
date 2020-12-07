@@ -271,6 +271,25 @@ extension URLStructure {
   }
 }
 
+extension Sigil {
+  
+  var length: Int {
+    return 2
+  }
+  
+  func unsafeWrite(to buffer: UnsafeMutableBufferPointer<UInt8>) -> Int {
+    guard let ptr = buffer.baseAddress else { return 0 }
+    switch self {
+    case .authority:
+      ptr.initialize(repeating: ASCII.forwardSlash.codePoint, count: 2)
+    case .path:
+      ptr[0] = ASCII.forwardSlash.codePoint
+      ptr[1] = ASCII.period.codePoint
+    }
+    return 2
+  }
+}
+
 
 // MARK: - URLStorage.
 
@@ -424,6 +443,9 @@ extension URLStorage {
   /// The URL's structure is also replaced with the given new structure. If the existing storage is not optimal for the new structure,
   /// the storage will be replaced with the optimal kind.
   ///
+  /// This method fails at runtime if the `initializer` closure does not initialize exactly `insertCount` code-units.
+  /// `initializer`'s return value should be calculated independently as it writes to the buffer, to ensure that it does not leave uninitialized gaps.
+  ///
   /// - parameters:
   ///   - subrangeToReplace:  The range of code-units to replace
   ///   - insertCount:        The size of the uninitialized space to replace the subrange with. If 0, the subrange's contents are removed.
@@ -448,7 +470,7 @@ extension URLStorage {
         subrangeToReplace, withUninitializedCapacity: insertCount, initializingWith: initializer
       )
       guard header.copyStructure(from: newStructure) else {
-        preconditionFailure("AnyURLStorage.isOptimalStorageType returned true for an incompatible header/string")
+        preconditionFailure("Header didn't accept the new structure")
       }
       return AnyURLStorage(self)
     }
@@ -457,13 +479,13 @@ extension URLStorage {
         dest.initialize(from: src, replacingSubrange: subrangeToReplace, withElements: insertCount) { rgnStart, count in
           var rgnPtr = UnsafeMutableBufferPointer(start: rgnStart, count: count)
           let written = initializer(&rgnPtr)
-          precondition(written == count)
+          precondition(written == count, "Subrange initializer did not initialize the expected number of code-units")
         }
       }
     }
     return newStorage
   }
-
+  
   /// Removes the given range of code-units.
   /// The URL's structure is also replaced with the given new structure. If the existing storage is not optimal for the new structure,
   /// the storage will be replaced with the optimal kind.
@@ -479,6 +501,92 @@ extension URLStorage {
     _ subrangeToRemove: Range<Int>, newStructure: URLStructure<Int>
   ) -> AnyURLStorage {
     return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
+  }
+  
+  /// A command object which represents a replacement operation on some URL code-units.
+  ///
+  struct ReplaceSubrangeOperation {
+    var subrange: Range<Int>
+    var insertedCount: Int
+    var writer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+
+    /// - seealso: `URLStorage.replaceSubrange`
+    static func replace(
+      subrange: Range<Int>, withCount: Int, writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+    ) -> Self {
+      return .init(subrange: subrange, insertedCount: withCount, writer: writer)
+    }
+    
+    /// - seealso: `URLStorage.removeSubrange`
+    static func remove(subrange: Range<Int>) -> Self {
+      return .replace(subrange: subrange, withCount: 0, writer: { _ in return 0 })
+    }
+  }
+  
+  /// Performs the given list of code-unit replacement operations while updating the URL's header to reflect the given structure.
+  /// If the current storage type supports the new structure, the operations will be performed in-place.
+  /// Otherwise, appropriate storage will be allocated and initialized with the result of applying the given operations to this storage's code-units.
+  ///
+  /// - parameters:
+  ///   - commands:      The list of code-unit replacement operations to perform.
+  ///                    This list must be sorted by the operations' subrange, and operations may not work on overlapping subranges.
+  ///   - newStructure:  The new structure of the URL after all replacement operations have been performed.
+  ///
+  /// - returns: An `AnyURLStorage` with the new code-units and structure. If the existing storage was already optimal
+  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
+  ///
+  private mutating func multiReplaceSubrange(
+    commands: [ReplaceSubrangeOperation],
+    newStructure: URLStructure<Int>
+  ) -> AnyURLStorage {
+    
+    let newCount = commands.reduce(into: codeUnits.count) { c, op in
+      c += (op.insertedCount - op.subrange.count)
+    }
+    
+    if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
+      // Perform the operations in reverse order to avoid clobbering.
+      for command in commands.reversed() {
+        codeUnits.unsafeReplaceSubrange(
+          command.subrange,
+          withUninitializedCapacity: command.insertedCount,
+          initializingWith: command.writer
+        )
+      }
+      guard header.copyStructure(from: newStructure) else {
+        preconditionFailure("Header didn't accept new structure")
+      }
+      return AnyURLStorage(self)
+    }
+    let newStorage = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
+      return codeUnits.withUnsafeBufferPointer { src in
+        let srcBase = src.baseAddress.unsafelyUnwrapped
+        var destHead = dest.baseAddress.unsafelyUnwrapped
+        var srcIdx = 0
+        for command in commands {
+          // Copy from src until command range.
+          let bytesToCopyFromSrc = command.subrange.lowerBound - srcIdx
+          destHead.initialize(from: srcBase + srcIdx, count: bytesToCopyFromSrc)
+          destHead += bytesToCopyFromSrc
+          srcIdx += bytesToCopyFromSrc
+          assert(srcIdx == command.subrange.lowerBound)
+          // Execute command.
+          var buffer = UnsafeMutableBufferPointer(start: destHead, count: command.insertedCount)
+          let actualBytesWritten = command.writer(&buffer)
+          precondition(actualBytesWritten == command.insertedCount,
+                       "Subrange initializer did not initialize the expected number of code-units")
+          destHead += actualBytesWritten
+          // Advance srcIdx to command end.
+          srcIdx = command.subrange.upperBound
+        }
+        // Copy from end of last command until end of src.
+        let bytesToCopyFromSrc = src.endIndex - srcIdx
+        destHead.initialize(from: srcBase + srcIdx, count: bytesToCopyFromSrc)
+        destHead += bytesToCopyFromSrc
+        return dest.baseAddress.unsafelyUnwrapped.distance(to: destHead)
+      }
+    }
+    return newStorage
   }
 
   /// A generic setter which works for _some_ URL components.
@@ -778,8 +886,8 @@ extension URLStorage {
     guard oldStructure.cannotBeABaseURL == false else {
       return (newValue == nil, AnyURLStorage(self))
     }
-    // Excluding 'cannotBeABaseURL' URLs doesn't mean we always have an authority separator.
-    // There are also path-only URLs (e.g. "hello:/some/path" is not a cannotBeABaseURL).
+    // Excluding 'cannotBeABaseURL' URLs doesn't mean we always have an authority sigil.
+    // Path-only URLs (e.g. "hello:/some/path") can be base URLs.
     let hasCredentialsOrPort =
       oldStructure.usernameLength != 0 || oldStructure.passwordLength != 0 || oldStructure.portLength != 0
 
@@ -792,34 +900,51 @@ extension URLStorage {
       }
       switch oldStructure.range(of: .hostname) {
       case .none:
-        assert(oldStructure.hasAuthority == false)
+        // 'nil' -> 'nil'.
         guard newValue != nil else {
           return (true, AnyURLStorage(self))
         }
-        // 'nil' -> empty host. Insert authority sigil.
+        // 'nil' -> empty host.
+        // Insert authority sigil, overwriting path sigil if present.
         var newStructure = oldStructure
+        newStructure.sigil = .authority
         newStructure.hostnameLength = 0
-        newStructure.hasAuthority = true
+        assert(oldStructure.sigil != .authority, "A URL without a hostname cannot have an authority sigil")
         let result = replaceSubrange(
-          oldStructure.authorityStart..<oldStructure.authorityStart,
-          withUninitializedSpace: 2,
-          newStructure: newStructure
-        ) { buffer in
-          buffer.initialize(repeating: ASCII.forwardSlash.codePoint)
-          return 2
-        }
+          oldStructure.rangeForReplacingSigil,
+          withUninitializedSpace: Sigil.authority.length,
+          newStructure: newStructure,
+          initializer: { return Sigil.authority.unsafeWrite(to: $0) }
+        )
         return (true, result)
 
-      case .some(var hostnameRange):
-        assert(oldStructure.hasAuthority)
+      case .some(let hostnameRange):
+        precondition(oldStructure.sigil == .authority, "A URL with a hostname must have an authority sigil")
         var newStructure = oldStructure
         newStructure.hostnameLength = 0
+        
+        var commands: [ReplaceSubrangeOperation] = []
+        // hostname -> 'nil'.
+        // Remove authority sigil, replacing it with a path sigil if necessary.
         if newValue == nil {
-          // * -> 'nil' host. Remove authority sigil.
-          newStructure.hasAuthority = false
-          hostnameRange = (hostnameRange.lowerBound - 2)..<hostnameRange.upperBound
+          let needsPathSigil = withComponentBytes(.path) { pathBytes -> Bool in
+            return pathBytes.map { URLStringUtils.doesNormalizedPathRequirePathSigil($0) } ?? false
+          }
+          if needsPathSigil {
+            commands.append(
+              .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.path.length) {
+                return Sigil.path.unsafeWrite(to: $0)
+            })
+            newStructure.sigil = .path
+          } else {
+            commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
+            newStructure.sigil = .none
+          }
         }
-        return (true, removeSubrange(hostnameRange, newStructure: newStructure))
+        // hostname -> empty hostname.
+        // Preserve authority sigil, only remove the hostname contents.
+        commands.append(.remove(subrange: hostnameRange))
+        return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
       }
     }
 
@@ -827,35 +952,32 @@ extension URLStorage {
     guard let newHost = ParsedHost(newHostnameBytes, schemeKind: oldStructure.schemeKind, callback: &callback) else {
       return (false, AnyURLStorage(self))
     }
-
-    var newStructure = oldStructure
-    newStructure.hasAuthority = true
-
+    
     var counter = HostnameLengthCounter()
     newHost.write(bytes: newHostnameBytes, using: &counter)
+    
+    // * -> valid, non-nil host.
+    // Always write authority sigil, overwriting path sigil if present.
+
+    var newStructure = oldStructure
     newStructure.hostnameLength = counter.length
+    newStructure.sigil = .authority
 
-    let shouldAddAuthoritySigil = (oldStructure.hasAuthority == false)
-    let bytesToWrite = (shouldAddAuthoritySigil ? 2 : 0) + newStructure.hostnameLength
+    let commands: [ReplaceSubrangeOperation] = [
+      .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.authority.length) {
+        return Sigil.authority.unsafeWrite(to: $0)
+      },
+      .replace(subrange: oldStructure.rangeForReplacingCodeUnits(of: .hostname), withCount: newStructure.hostnameLength)
+        { dest in
+          guard var ptr = dest.baseAddress else { return 0 }
+          var writer = UnsafeBufferHostnameWriter(buffer: UnsafeMutableBufferPointer(start: ptr, count: counter.length))
+          newHost.write(bytes: newHostnameBytes, using: &writer)
+          ptr = writer.buffer.baseAddress.unsafelyUnwrapped
+          return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
+        }
+    ]
 
-    let result = replaceSubrange(
-      oldStructure.rangeForReplacement(of: .hostname),
-      withUninitializedSpace: bytesToWrite,
-      newStructure: newStructure
-    ) { dest in
-      guard var ptr = dest.baseAddress else { return 0 }
-      if shouldAddAuthoritySigil {
-        // 'nil' -> non-empty host. Insert authority sigil.
-        // TODO: Strip discriminator from path if present.
-        ptr.initialize(repeating: ASCII.forwardSlash.codePoint, count: 2)
-        ptr = ptr + 2
-      }
-      var writer = UnsafeBufferHostnameWriter(buffer: UnsafeMutableBufferPointer(start: ptr, count: counter.length))
-      newHost.write(bytes: newHostnameBytes, using: &writer)
-      ptr = writer.buffer.baseAddress.unsafelyUnwrapped
-      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
-    }
-    return (true, result)
+    return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
   }
 
   /// Attempts to set the port component to the given value. A value of `nil` removes the port.
@@ -921,34 +1043,51 @@ extension URLStorage {
 
     guard let newPath = newValue else {
       // URLs with special schemes must always have a path. Possibly replace this with an empty path?
-      guard schemeKind.isSpecial == false else {
+      guard oldStructure.schemeKind.isSpecial == false else {
         return (false, AnyURLStorage(self))
       }
-      return setSimpleComponent(
-        .path,
-        to: UnsafeBufferPointer?.none,
-        prefix: .forwardSlash,
-        lengthKey: \.pathLength,
-        encoder: { _, _, _ in preconditionFailure("Cannot encode nil input") }
-      )
+      guard let existingPath = oldStructure.range(of: .path) else {
+        precondition(oldStructure.hasPathSigil == false, "Cannot have a path sigil without a path")
+        return (true, AnyURLStorage(self))
+      }
+      var commands: [ReplaceSubrangeOperation] = []
+      var newStructure = oldStructure
+      if oldStructure.hasPathSigil {
+        commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
+        newStructure.sigil = .none
+      }
+      commands.append(.remove(subrange: existingPath))
+      newStructure.pathLength = 0
+      return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
     }
 
-    let pathInfo = PathMetrics(
-      parsing: newPath, schemeKind: oldStructure.schemeKind, hasAuthority: oldStructure.hasAuthority, baseURL: nil
-    )
+    let pathInfo = PathMetrics(parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil)
     var newStructure = oldStructure
     newStructure.pathLength = pathInfo.requiredCapacity
-    let result = replaceSubrange(
-      oldStructure.rangeForReplacement(of: .path),
-      withUninitializedSpace: pathInfo.requiredCapacity,
-      newStructure: newStructure
-    ) { dest in
-      return dest.writeNormalizedPath(
-        parsing: newPath, schemeKind: newStructure.schemeKind, hasAuthority: newStructure.hasAuthority,
-        baseURL: nil, needsEscaping: pathInfo.needsEscaping
-      )
+    
+    var commands: [ReplaceSubrangeOperation] = []
+    switch (oldStructure.sigil, pathInfo.requiresSigil) {
+    case (.authority, _), (.path, true), (.none, false):
+      break
+    case (.path, false):
+      newStructure.sigil = .none
+      commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
+    case (.none, true):
+      newStructure.sigil = .path
+      commands.append(.replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.path.length) {
+        return Sigil.path.unsafeWrite(to: $0)
+      })
     }
-    return (true, result)
+    commands.append(
+      .replace(
+        subrange: oldStructure.rangeForReplacingCodeUnits(of: .path),
+        withCount: pathInfo.requiredCapacity,
+        writer: { dest in
+          return dest.writeNormalizedPath(
+            parsing: newPath, schemeKind: newStructure.schemeKind,
+            baseURL: nil, needsEscaping: pathInfo.needsEscaping
+          ) }))
+    return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
   }
 
   /// Attempts to set the query component to the given UTF8-encoded string.

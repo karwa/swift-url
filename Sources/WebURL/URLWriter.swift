@@ -189,13 +189,13 @@ struct StructureAndMetricsCollector: URLWriter {
   mutating func writeAuthoritySigil() {
     precondition(structure.sigil == .none)
     structure.sigil = .authority
-    requiredCapacity += 2
+    requiredCapacity += Sigil.authority.length
   }
   
   mutating func writePathSigil() {
     precondition(structure.sigil == .none)
     structure.sigil = .path
-    requiredCapacity += 2
+    requiredCapacity += Sigil.path.length
   }
 
   mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void)
