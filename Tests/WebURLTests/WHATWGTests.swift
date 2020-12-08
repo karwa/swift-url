@@ -742,8 +742,8 @@ extension WHATWGTests {
       check_has_auth_sigil(url: test_url, hostname: "")
       // We don't yet expose any way to remove an authority, so go down to URLStorage.
       switch test_url.storage {
-      case .generic(var storage): test_url.storage = storage.setHostname(to: UnsafeBufferPointer?.none).1
-      case .small(var storage): test_url.storage = storage.setHostname(to: UnsafeBufferPointer?.none).1
+      case .generic(var storage): test_url.storage = storage.setHostname(to: UnsafeBufferPointer?.none).0
+      case .small(var storage): test_url.storage = storage.setHostname(to: UnsafeBufferPointer?.none).0
       }
       check_has_path_sigil(url: test_url)
     }

@@ -100,8 +100,8 @@ extension WebURL.JSModel {
         // but everything after the ":" gets silently dropped.
         let newSchemeBytes = UnsafeBufferPointer(rebasing: utf8.prefix(while: { $0 != ASCII.colon.codePoint }))
         withMutableStorage(
-          { small in small.setScheme(to: newSchemeBytes).1 },
-          { generic in generic.setScheme(to: newSchemeBytes).1 }
+          { small in small.setScheme(to: newSchemeBytes).0 },
+          { generic in generic.setScheme(to: newSchemeBytes).0 }
         )
       }
     }
@@ -115,8 +115,8 @@ extension WebURL.JSModel {
       var stringToInsert = newValue
       stringToInsert.withUTF8 { utf8 in
         withMutableStorage(
-          { small in small.setUsername(to: utf8).1 },
-          { generic in generic.setUsername(to: utf8).1 }
+          { small in small.setUsername(to: utf8).0 },
+          { generic in generic.setUsername(to: utf8).0 }
         )
       }
     }
@@ -135,8 +135,8 @@ extension WebURL.JSModel {
       var stringToInsert = newValue
       stringToInsert.withUTF8 { utf8 in
         withMutableStorage(
-          { small in small.setPassword(to: utf8).1 },
-          { generic in generic.setPassword(to: utf8).1 }
+          { small in small.setPassword(to: utf8).0 },
+          { generic in generic.setPassword(to: utf8).0 }
         )
       }
     }
@@ -155,8 +155,8 @@ extension WebURL.JSModel {
         }
         let newHostname = utf8[..<hostnameEnd]
         withMutableStorage(
-          { small in small.setHostname(to: newHostname, filter: true).1 },
-          { generic in generic.setHostname(to: newHostname, filter: true).1 }
+          { small in small.setHostname(to: newHostname, filter: true).0 },
+          { generic in generic.setHostname(to: newHostname, filter: true).0 }
         )
       }
     }
@@ -187,8 +187,8 @@ extension WebURL.JSModel {
           newPort = parsedPort
         }
         withMutableStorage(
-          { small in small.setPort(to: newPort).1 },
-          { generic in generic.setPort(to: newPort).1 }
+          { small in small.setPort(to: newPort).0 },
+          { generic in generic.setPort(to: newPort).0 }
         )
       }
     }
@@ -233,8 +233,8 @@ extension WebURL.JSModel {
           newQuery = UnsafeBufferPointer(rebasing: utf8.dropFirst())
         }
         withMutableStorage(
-          { small in small.setQuery(to: newQuery, filter: true).1 },
-          { generic in generic.setQuery(to: newQuery, filter: true).1 }
+          { small in small.setQuery(to: newQuery, filter: true) },
+          { generic in generic.setQuery(to: newQuery, filter: true) }
         )
       }
     }
@@ -260,8 +260,8 @@ extension WebURL.JSModel {
           newFragment = UnsafeBufferPointer(rebasing: utf8.dropFirst())
         }
         withMutableStorage(
-          { small in small.setFragment(to: newFragment, filter: true).1 },
-          { generic in generic.setFragment(to: newFragment, filter: true).1 }
+          { small in small.setFragment(to: newFragment, filter: true) },
+          { generic in generic.setFragment(to: newFragment, filter: true) }
         )
       }
     }

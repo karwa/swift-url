@@ -8,13 +8,13 @@ extension URLStorage {
   ///
   mutating func setScheme<Input>(
     to newValue: Input
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+  ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     guard let idx = findScheme(newValue),  // Checks scheme contents.
       idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex,  // No content after scheme.
       idx != newValue.startIndex  // Scheme cannot be empty.
     else {
-      return (false, AnyURLStorage(self))
+      return (AnyURLStorage(self), .error(.invalidScheme))
     }
     let newSchemeBytes = newValue[..<idx]
 
@@ -24,13 +24,13 @@ extension URLStorage {
     newStructure.schemeLength = newSchemeBytes.count + 1
 
     if newStructure.schemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
-      return (false, AnyURLStorage(self))
+      return (AnyURLStorage(self), .error(.changeOfSchemeSpecialness))
     }
     if newStructure.schemeKind == .file, oldStructure.hasCredentialSeparator || oldStructure.portLength != 0 {
-      return (false, AnyURLStorage(self))
+      return (AnyURLStorage(self), .error(.newSchemeCannotHaveCredentialsOrPort))
     }
     if oldStructure.schemeKind == .file, oldStructure.hostnameLength == 0 {
-      return (false, AnyURLStorage(self))
+      return (AnyURLStorage(self), newStructure.schemeKind == .file ? nil : .error(.newSchemeCannotHaveEmptyHostname))
     }
     // The operation is semantically valid.
 
@@ -51,7 +51,7 @@ extension URLStorage {
         commands.append(.remove(subrange: oldStructure.rangeForReplacingCodeUnits(of: .port)))
       }
     }
-    return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
+    return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
   }
 
   /// Attempts to set the username component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
@@ -61,22 +61,22 @@ extension URLStorage {
   ///
   mutating func setUsername<Input>(
     to newValue: Input
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+  ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
     guard oldStructure.cannotHaveCredentialsOrPort == false else {
-      return (false, AnyURLStorage(self))
+      return (AnyURLStorage(self), .error(.cannotHaveCredentialsOrPort))
     }
     // The operation is semantically valid.
 
     guard newValue.isEmpty == false else {
       guard let oldUsername = oldStructure.range(of: .username) else {
-        return (true, AnyURLStorage(self))
+        return (AnyURLStorage(self), nil)
       }
       var newStructure = oldStructure
       newStructure.usernameLength = 0
       let toRemove = oldUsername.lowerBound..<(oldUsername.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
-      return (true, removeSubrange(toRemove, newStructure: newStructure))
+      return (removeSubrange(toRemove, newStructure: newStructure), nil)
     }
 
     var newStructure = oldStructure
@@ -103,7 +103,7 @@ extension URLStorage {
       }
       return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
-    return (true, result)
+    return (result, nil)
   }
 
   /// Attempts to set the password component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
@@ -113,22 +113,22 @@ extension URLStorage {
   ///
   mutating func setPassword<Input>(
     to newValue: Input
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+  ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
     guard oldStructure.cannotHaveCredentialsOrPort == false else {
-      return (false, AnyURLStorage(self))
+      return (AnyURLStorage(self), .error(.cannotHaveCredentialsOrPort))
     }
     // The operation is semantically valid.
 
     guard newValue.isEmpty == false else {
       guard let oldPassword = oldStructure.range(of: .password) else {
-        return (true, AnyURLStorage(self))
+        return (AnyURLStorage(self), nil)
       }
       var newStructure = oldStructure
       newStructure.passwordLength = 0
       let toRemove = oldPassword.lowerBound..<(oldPassword.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
-      return (true, removeSubrange(toRemove, newStructure: newStructure))
+      return (removeSubrange(toRemove, newStructure: newStructure), nil)
     }
 
     var newStructure = oldStructure
@@ -158,7 +158,7 @@ extension URLStorage {
       ptr += 1
       return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
-    return (true, result)
+    return (result, nil)
   }
 
   /// Attempts to set the hostname component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
@@ -170,7 +170,7 @@ extension URLStorage {
   mutating func setHostname<Input>(
     to newValue: Input?,
     filter: Bool = false
-  ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
+  ) -> (AnyURLStorage, URLSetterError?) where Input: BidirectionalCollection, Input.Element == UInt8 {
 
     guard filter == false || newValue == nil else {
       return setHostname(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
@@ -178,7 +178,7 @@ extension URLStorage {
 
     let oldStructure = header.structure
     guard oldStructure.cannotBeABaseURL == false else {
-      return (newValue == nil, AnyURLStorage(self))
+      return (AnyURLStorage(self), .error(.cannotSetHostOnCannotBeABaseURL))
     }
     // Excluding 'cannotBeABaseURL' URLs doesn't mean we always have an authority sigil.
     // Path-only URLs (e.g. "hello:/some/path") can be base URLs.
@@ -187,16 +187,16 @@ extension URLStorage {
 
     guard let newHostnameBytes = newValue, newHostnameBytes.isEmpty == false else {
       if oldStructure.schemeKind.isSpecial, oldStructure.schemeKind != .file {
-        return (false, AnyURLStorage(self))
+        return (AnyURLStorage(self), .error(.schemeDoesNotSupportNilOrEmptyHostnames))
       }
       guard hasCredentialsOrPort == false else {
-        return (false, AnyURLStorage(self))
+        return (AnyURLStorage(self), .error(.cannotSetHostnameWithCredentialsOrPort))
       }
       switch oldStructure.range(of: .hostname) {
       case .none:
         // 'nil' -> 'nil'.
         guard newValue != nil else {
-          return (true, AnyURLStorage(self))
+          return (AnyURLStorage(self), nil)
         }
         // 'nil' -> empty host.
         // Insert authority sigil, overwriting path sigil if present.
@@ -210,7 +210,7 @@ extension URLStorage {
           newStructure: newStructure,
           initializer: { return Sigil.authority.unsafeWrite(to: $0) }
         )
-        return (true, result)
+        return (result, nil)
 
       case .some(let hostnameRange):
         precondition(oldStructure.sigil == .authority, "A URL with a hostname must have an authority sigil")
@@ -238,13 +238,13 @@ extension URLStorage {
         // hostname -> empty hostname.
         // Preserve authority sigil, only remove the hostname contents.
         commands.append(.remove(subrange: hostnameRange))
-        return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
+        return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
       }
     }
 
     var callback = IgnoreValidationErrors()
     guard let newHost = ParsedHost(newHostnameBytes, schemeKind: oldStructure.schemeKind, callback: &callback) else {
-      return (false, AnyURLStorage(self))
+      return (AnyURLStorage(self), .error(.invalidHostname))
     }
 
     var counter = HostnameLengthCounter()
@@ -271,18 +271,18 @@ extension URLStorage {
       },
     ]
 
-    return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
+    return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
   }
 
   /// Attempts to set the port component to the given value. A value of `nil` removes the port.
   ///
   mutating func setPort(
     to newValue: UInt16?
-  ) -> (Bool, AnyURLStorage) {
+  ) -> (AnyURLStorage, URLSetterError?) {
 
     let oldStructure = header.structure
     guard oldStructure.cannotHaveCredentialsOrPort == false else {
-      return (false, AnyURLStorage(self))
+      return (AnyURLStorage(self), .error(.cannotHaveCredentialsOrPort))
     }
 
     var newValue = newValue
@@ -291,17 +291,18 @@ extension URLStorage {
     }
 
     guard let newPort = newValue else {
-      return setSimpleComponent(
+      let result = setSimpleComponent(
         .port,
         to: UnsafeBufferPointer?.none,
         prefix: .colon,
         lengthKey: \.portLength,
         encoder: { _, _, _ in preconditionFailure("Cannot encode 'nil' contents") }
       )
+      return (result, nil)
     }
     // TODO: More efficient UInt16 serialisation.
     var serialized = String(newPort)
-    return serialized.withUTF8 { ptr in
+    let result = serialized.withUTF8 { ptr -> AnyURLStorage in
       assert(ptr.isEmpty == false)
       return setSimpleComponent(
         .port,
@@ -314,6 +315,7 @@ extension URLStorage {
         }
       )
     }
+    return (result, nil)
   }
 
   /// Attempts to set the path component to the given UTF8-encoded string.
@@ -393,7 +395,7 @@ extension URLStorage {
   mutating func setQuery<Input>(
     to newValue: Input?,
     filter: Bool = false
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
 
     guard filter == false || newValue == nil else {
       return setQuery(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
@@ -414,7 +416,7 @@ extension URLStorage {
   mutating func setFragment<Input>(
     to newValue: Input?,
     filter: Bool = false
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
 
     guard filter == false || newValue == nil else {
       return setFragment(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
@@ -426,5 +428,34 @@ extension URLStorage {
       lengthKey: \.fragmentLength,
       encoder: { $0.lazy.percentEncoded(using: URLEncodeSet.Fragment.self).writeBuffered($2) }
     )
+  }
+}
+
+
+// MARK: - Errors.
+
+
+/// An error which may be returned when a `URLStorage` setter operation fails.
+///
+struct URLSetterError: Error {
+  
+  enum Value {
+    // scheme.
+    case invalidScheme
+    case changeOfSchemeSpecialness
+    case newSchemeCannotHaveCredentialsOrPort
+    case newSchemeCannotHaveEmptyHostname
+    // credentials and port.
+    case cannotHaveCredentialsOrPort
+    // hostname.
+    case cannotSetHostOnCannotBeABaseURL
+    case schemeDoesNotSupportNilOrEmptyHostnames
+    case cannotSetHostnameWithCredentialsOrPort
+    case invalidHostname
+  }
+  private var _value: Value
+  
+  static func error(_ v: Value) -> Self {
+    return .init(_value: v)
   }
 }

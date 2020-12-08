@@ -623,17 +623,17 @@ extension URLStorage {
     prefix: ASCII,
     lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
     encoder: (_ bytes: Input, _ scheme: WebURL.SchemeKind, _ callback: (UnsafeBufferPointer<UInt8>) -> Void) -> Bool
-  ) -> (Bool, AnyURLStorage) where Input: Collection, Input.Element == UInt8 {
+  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
 
     guard let newBytes = newValue else {
       guard let existingFragment = oldStructure.range(of: component) else {
-        return (true, AnyURLStorage(self))
+        return AnyURLStorage(self)
       }
       var newStructure = oldStructure
       newStructure[keyPath: lengthKey] = 0
-      return (true, removeSubrange(existingFragment, newStructure: newStructure))
+      return removeSubrange(existingFragment, newStructure: newStructure)
     }
 
     var bytesToWrite = 1  // leading separator.
@@ -642,7 +642,7 @@ extension URLStorage {
     var newStructure = oldStructure
     newStructure[keyPath: lengthKey] = bytesToWrite
 
-    let result = replaceSubrange(
+    return replaceSubrange(
       subrangeToReplace,
       withUninitializedSpace: bytesToWrite,
       newStructure: newStructure
@@ -661,7 +661,6 @@ extension URLStorage {
       }
       return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
-    return (true, result)
   }
 }
 
