@@ -1,5 +1,4 @@
 import Foundation
-import OldURL
 import WebURL
 
 // This is a really simple benchmark.
@@ -31,13 +30,6 @@ func doTest(iterations: Int, _ test: () -> Void) {
     """)
 }
 
-sleep(1)
-print("OldURL")
-doTest(iterations: 1_000) {
-  for str in testURLs {
-    _ = OldURL(str)
-  }
-}
 sleep(1)
 print("NSURL")
 doTest(iterations: 1_000) {
