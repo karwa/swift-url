@@ -125,7 +125,7 @@ extension WHATWGTests {
     let data = try Data(contentsOf: url)
     let array = try JSONSerialization.jsonObject(with: data, options: []) as! NSArray
     assert(
-      array.count == 648,
+      array.count == 662,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
 
@@ -140,11 +140,11 @@ extension WHATWGTests {
       294,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
       295,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
       312,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
-      412,  // domain2ascii: Hosts and percent-encoding.
       413,  // domain2ascii: Hosts and percent-encoding.
-      636,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      637,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      641,  // domain2ascii: Empty host after the domain to ASCII.
+      414,  // domain2ascii: Hosts and percent-encoding.
+      650,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      651,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      655,  // domain2ascii: Empty host after the domain to ASCII.
     ]
     for item in array {
       if let sectionName = item as? String {
