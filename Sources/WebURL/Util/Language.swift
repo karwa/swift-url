@@ -36,7 +36,7 @@
 ///
 func accessOptionalResource<Root, Argument, Result>(
   from root: Root?, using accessor: (Root, (Argument?) -> Result) -> Result, _ handler: (Argument?) -> Result
-) -> Result? {
+) -> Result {
   guard let root = root else {
     return handler(nil)
   }
