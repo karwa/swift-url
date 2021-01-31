@@ -2,7 +2,7 @@ extension WebURL {
 
   /// An interface to this URL with the same names and behaviour as the Javascript `URL` type.
   ///
-  var jsModel: JSModel {
+  public var jsModel: JSModel {
     return JSModel(storage: self.storage)
   }
 
