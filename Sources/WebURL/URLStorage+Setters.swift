@@ -357,7 +357,9 @@ extension URLStorage {
       return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
     }
 
-    let pathInfo = PathMetrics(parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil)
+    let pathInfo = PathMetrics(
+      parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil,
+      absolutePathsCopyWindowsDriveFromBase: false)
     var newStructure = oldStructure
     newStructure.pathLength = pathInfo.requiredCapacity
 
@@ -382,7 +384,9 @@ extension URLStorage {
         writer: { dest in
           return dest.writeNormalizedPath(
             parsing: newPath, schemeKind: newStructure.schemeKind,
-            baseURL: nil, needsEscaping: pathInfo.needsEscaping
+            baseURL: nil,
+            absolutePathsCopyWindowsDriveFromBase: false,
+            needsEscaping: pathInfo.needsEscaping
           )
         }))
     return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
@@ -438,7 +442,7 @@ extension URLStorage {
 /// An error which may be returned when a `URLStorage` setter operation fails.
 ///
 struct URLSetterError: Error {
-  
+
   enum Value {
     // scheme.
     case invalidScheme
@@ -454,7 +458,7 @@ struct URLSetterError: Error {
     case invalidHostname
   }
   private var _value: Value
-  
+
   static func error(_ v: Value) -> Self {
     return .init(_value: v)
   }

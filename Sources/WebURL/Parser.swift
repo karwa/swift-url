@@ -133,6 +133,8 @@ extension ParsedURLString {
     fileprivate let componentsToCopyFromBase: ComponentsToCopy
     let schemeKind: WebURL.SchemeKind
 
+    let absolutePathsCopyWindowsDriveFromBase: Bool
+
     /// - seealso: `ParsedURLString.write(to:knownPathLength:)`.
     func write<WriterType: URLWriter>(
       inputString: InputString,
@@ -252,7 +254,8 @@ extension ParsedURLString {
           ?? PathMetrics(
             parsing: inputString[path],
             schemeKind: schemeKind,
-            baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil
+            baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
+            absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase
           )
         assert(pathMetrics.requiredCapacity > 0)
         writer.writePathMetricsHint(pathMetrics)
@@ -266,6 +269,7 @@ extension ParsedURLString {
             parsing: inputString[path],
             schemeKind: schemeKind,
             baseURL: componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
+            absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase,
             needsEscaping: pathMetrics.needsEscaping
           )
         }
@@ -278,7 +282,7 @@ extension ParsedURLString {
               (hasAuthority == false) || componentsToCopyFromBase.contains(.authority),
               "An input string which copies the base URL's path must either have its own authority"
                 + "(thus does not need a path sigil) or match the authority/path sigil from the base URL")
-            if case .path = baseURL.storage.structure.sigil, (hasAuthority == false) {
+            if case .path = baseURL.storage.structure.sigil, hasAuthority == false {
               writer.writePathSigil()
             }
             writer.writePath { writePiece in writePiece(basePath) }
@@ -449,6 +453,8 @@ extension URLScanner {
     var cannotBeABaseURL = false
     var componentsToCopyFromBase: ComponentsToCopy = []
     var schemeKind: WebURL.SchemeKind? = nil
+
+    var absolutePathsCopyWindowsDriveFromBase = false
   }
 }
 
@@ -966,19 +972,19 @@ extension URLScanner {
         return .success(continueFrom: (.path, cursor))
       }
       assert(mapping.componentsToCopyFromBase.isEmpty || mapping.componentsToCopyFromBase == [.scheme])
-      mapping.componentsToCopyFromBase.formUnion([.authority, .path])
+      mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
 
       guard cursor != input.endIndex else {
-        mapping.componentsToCopyFromBase.insert(.query)
         return .success(continueFrom: nil)
       }
       switch ASCII(input[cursor]) {
       case .questionMark?:
+        mapping.componentsToCopyFromBase.remove(.query)
         return .success(continueFrom: (.query, input.index(after: cursor)))
       case .numberSign?:
-        mapping.componentsToCopyFromBase.insert(.query)
         return .success(continueFrom: (.fragment, input.index(after: cursor)))
       default:
+        mapping.componentsToCopyFromBase.remove(.query)
         if URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
           callback.validationError(.unexpectedWindowsDriveLetter)
         }
@@ -992,28 +998,17 @@ extension URLScanner {
 
     guard cursor != input.endIndex, let c1 = ASCII(input[cursor]), c1 == .forwardSlash || c1 == .backslash else {
       // 1 slash. e.g. "file:/usr/lib/Swift". Absolute path.
-
-      if baseScheme == .file, URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) == false {
-        // This string does not begin with a Windows drive letter.
-        // If baseURL's path *does*, we are relative to it, rather than being absolute.
-        // The appended-path-iteration function handles this case for us, which we opt-in to
-        // by having a non-empty path in a special-scheme URL (meaning a guaranteed non-nil path) and
-        // including 'path' in 'componentsToCopyFromBase'.
-        let basePathStartsWithWindowsDriveLetter: Bool =
-          baseURL.map {
-            $0.storage.withComponentBytes(.path) {
-              guard let basePath = $0 else { return false }
-              return URLStringUtils.hasWindowsDriveLetterPrefix(basePath.dropFirst())
-            }
-          } ?? false
-        if basePathStartsWithWindowsDriveLetter {
-          mapping.componentsToCopyFromBase.formUnion([.path])
-        } else {
-          // No Windows drive letters anywhere. Copy the host and parse our path normally.
-          mapping.componentsToCopyFromBase.formUnion([.authority])
-        }
+      guard baseScheme == .file else {
+        return .success(continueFrom: (.path, cursor))
       }
-      return scanPath(input, scheme: .file, &mapping, callback: &callback)
+      mapping.componentsToCopyFromBase.formUnion([.authority])
+
+      // Absolute paths in path-only URLs are still relative to the base URL's Windows drive letter (if it has one).
+      // The path parser knows how to handle this.
+      mapping.absolutePathsCopyWindowsDriveFromBase = true
+      mapping.componentsToCopyFromBase.formUnion([.path])
+
+      return .success(continueFrom: (.path, cursor))
     }
 
     cursor = input.index(after: cursor)
@@ -1053,11 +1048,10 @@ extension URLScanner {
     // 3. Brief validation of the hostname. Will be fully validated at construction time.
     if URLStringUtils.isWindowsDriveLetter(hostname) {
       // TODO: Only if not in setter-mode.
+      // FIXME: 'input' is in the authority position of its containing string.
+      //        This requires logic in ProcessedMapping to adjust the path range.
       callback.validationError(.unexpectedWindowsDriveLetterHost)
       return .success(continueFrom: (.path, input.startIndex))
-    }
-    if hostname.isEmpty {
-      return .success(continueFrom: (.pathStart, input.startIndex))
     }
 
     // 4. Return the next component.
@@ -1288,8 +1282,6 @@ extension URLScanner.UnprocessedMapping {
     assert(checkStructuralInvariants())
     let u_mapping = self  // TODO: This is being kept around temporarily in case I decide to move the function.
 
-    var componentsToCopyFromBase = u_mapping.componentsToCopyFromBase
-
     let schemeKind: WebURL.SchemeKind
     if let scannedSchemeKind = u_mapping.schemeKind {
       schemeKind = scannedSchemeKind
@@ -1308,7 +1300,7 @@ extension URLScanner.UnprocessedMapping {
     var passwordRange: Range<InputString.Index>?
     var hostnameRange: Range<InputString.Index>?
     var portRange: Range<InputString.Index>?
-    let pathRange: Range<InputString.Index>?
+    var pathRange: Range<InputString.Index>?
     let queryRange: Range<InputString.Index>?
     let fragmentRange: Range<InputString.Index>?
 
@@ -1387,21 +1379,21 @@ extension URLScanner.UnprocessedMapping {
       hostKind = ParsedHost(hostname, schemeKind: schemeKind, callback: &callback)
       guard hostKind != nil else { return nil }
     }
+
+    // FIXME: This is too fragile.
+
     if schemeKind == .file {
-      // If the path begins with a Windows drive letter, discard the authority (incl. base URL authority).
-      if var pathContents = pathRange.map({ inputString[$0] }) {
-        if let firstChar = pathContents.first, ASCII(firstChar) == .forwardSlash || ASCII(firstChar) == .backslash {
-          pathContents = pathContents.dropFirst()
+      // We may have a Windows drive letter in the authority position ("file://C:/foo").
+      // If so, drop the leading slash so it is treated as an absolute path with Windows drive.
+      if var pathContents = pathRange.map({ inputString[$0] }), hostnameRange == nil {
+        let isPathSeparator: (UInt8?) -> Bool = {
+          $0 == ASCII.forwardSlash.codePoint || $0 == ASCII.backslash.codePoint
         }
-        if URLStringUtils.hasWindowsDriveLetterPrefix(pathContents) {
-          switch hostKind {
-          case .none, .some(.empty): break
-          default: callback.validationError(.unexpectedHostFileScheme)
-          }
-          // file URLs are special, so they get an implicit, empty authority when writing.
-          hostKind = nil
-          hostnameRange = nil
-          componentsToCopyFromBase.remove(.authority)
+        if isPathSeparator(pathContents.popFirst()),
+          isPathSeparator(pathContents.first),
+          URLStringUtils.hasWindowsDriveLetterPrefix(pathContents.dropFirst())
+        {
+          pathRange = pathContents.startIndex..<pathContents.endIndex
         }
       }
     }
@@ -1418,8 +1410,9 @@ extension URLScanner.UnprocessedMapping {
       hostKind: hostKind,
       port: port,
       cannotBeABaseURL: u_mapping.cannotBeABaseURL,
-      componentsToCopyFromBase: componentsToCopyFromBase,
-      schemeKind: schemeKind
+      componentsToCopyFromBase: u_mapping.componentsToCopyFromBase,
+      schemeKind: schemeKind,
+      absolutePathsCopyWindowsDriveFromBase: u_mapping.absolutePathsCopyWindowsDriveFromBase
     )
   }
 

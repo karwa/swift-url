@@ -150,7 +150,7 @@ extension URLStringUtils where T: Collection, T.Element == UInt8 {
   ///
   /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
   ///
-  static func isNormalisedWindowsDriveLetter(_ bytes: T) -> Bool {
+  static func isNormalizedWindowsDriveLetter(_ bytes: T) -> Bool {
     isWindowsDriveLetter(bytes) && (bytes.dropFirst().first.map { ASCII($0) == .colon } ?? false)
   }
 
@@ -209,7 +209,7 @@ extension URLStringUtils where T: Collection, T.Element == UInt8 {
     return true
   }
 
-  /// Returns `true` if `bytes` contains two U+002F (/) codepoints only.
+  /// Returns `true` if `bytes` begins with two U+002F (/) codepoints.
   /// Otherwise, `false`.
   ///
   static func hasDoubleSolidusPrefix(_ bytes: T) -> Bool {
