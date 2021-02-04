@@ -2,14 +2,22 @@ import XCTest
 
 @testable import WebURL
 
+// Data files:
+//
+// Constructor tests:
+// https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json
+// at version 33e4ac09029c463ea6ee57d6f33477a9043e98e8
+// Adjusted to remove an invalid surrogate pair which Foundation's JSON parser refuses to parse.
+//
+// Setter tests:
+// https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json
+// at version 050308a616a8388f1ad5d6e87eac0270fd35023f (unaltered).
+
 final class WHATWGTests: XCTestCase {}
 
 // WHATWG URL Constructor Tests.
 // Creates a URL object from a (input: String, base: String) pair, and checks that it has the expected
 // properties (host, port, path, etc).
-//
-// Data file from:
-// https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json as of 15.06.2020
 //
 extension WHATWGTests {
 
@@ -121,7 +129,7 @@ extension WHATWGTests {
     let data = try Data(contentsOf: url)
     let array = try JSONSerialization.jsonObject(with: data, options: []) as! NSArray
     assert(
-      array.count == 662,
+      array.count == 665,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
     let expectedFailures: Set<Int> = [
@@ -136,9 +144,9 @@ extension WHATWGTests {
       286,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
       369,  // domain2ascii: Hosts and percent-encoding.
       370,  // domain2ascii: Hosts and percent-encoding.
-      564,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      565,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      568,  // domain2ascii: Empty host after the domain to ASCII.
+      566,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      567,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      570,  // domain2ascii: Empty host after the domain to ASCII.
     ]
     
     var report = SimpleTestReport()
@@ -221,9 +229,6 @@ extension WHATWGTests {
 // Creates a URL object from an input String (which must not fail), and modifies one property.
 // Checks the resulting (serialised) URL and that the property now returns the expected value,
 // including making any necessary transformations or ignoring invalid new-values.
-//
-// Data file from:
-// https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json as of 15.06.2020
 //
 extension WHATWGTests {
 
