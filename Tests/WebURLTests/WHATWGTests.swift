@@ -128,30 +128,36 @@ extension WHATWGTests {
       array.count == 662,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
-
-    var report = WHATWG_TestReport()
-    report.expectedFailures = [
+    let expectedFailures: Set<Int> = [
       // These test failures are due to us not having implemented the `domain2ascii` transform,
       // often in combination with other features (e.g. with percent encoding).
       //
-      272,  // domain2ascii: (no-break, zero-width, zero-width-no-break) are name-prepped away to nothing.
-      276,  // domain2ascii: U+3002 is mapped to U+002E (dot).
-      286,  // domain2ascii: fullwidth input should be converted to ASCII and NOT IDN-ized.
-      294,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
-      295,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
-      312,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
-      413,  // domain2ascii: Hosts and percent-encoding.
-      414,  // domain2ascii: Hosts and percent-encoding.
-      650,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      651,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      655,  // domain2ascii: Empty host after the domain to ASCII.
+      261,  // domain2ascii: (no-break, zero-width, zero-width-no-break) are name-prepped away to nothing.
+      263,  // domain2ascii: U+3002 is mapped to U+002E (dot).
+      269,  // domain2ascii: fullwidth input should be converted to ASCII and NOT IDN-ized.
+      274,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
+      275,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
+      286,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
+      369,  // domain2ascii: Hosts and percent-encoding.
+      370,  // domain2ascii: Hosts and percent-encoding.
+      564,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      565,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      568,  // domain2ascii: Empty host after the domain to ASCII.
     ]
+    
+    var report = SimpleTestReport()
     for item in array {
       if let sectionName = item as? String {
-        report.recordSection(sectionName)
+        report.markSection(sectionName)
+        
       } else if let rawTestInfo = item as? [String: Any] {
         let expected = URLConstructorTestCase(from: rawTestInfo)
-        report.recordTest { report in
+        report.performTest { report, testNumber in
+          
+          if expectedFailures.contains(testNumber) {
+            report.expectedResult = .fail
+          }
+          
           report.capture(key: "expected", expected)
           
           // Parsing the base URL must always succeed.
@@ -166,11 +172,11 @@ extension WHATWGTests {
           
           guard let parserResult = WebURL(expected.input!, base: expected.base!)?.jsModel else {
             report.capture(key: "actual", "<nil>")
-            report.expectTrue(expected.failure == true, "failure")
+            report.expectTrue(expected.failure == true, "whatwg-expected-failure")
             return
           }
           report.capture(key: "actual", parserResult._debugDescription)
-          report.expectFalse(expected.failure == true, "failure")
+          report.expectFalse(expected.failure == true, "whatwg-expected-failure")
           
           // Compare properties.
           func checkProperties(url: WebURL.JSModel) {
@@ -203,15 +209,15 @@ extension WHATWGTests {
           checkProperties(url: reparsed)
         }
       } else {
-        assertionFailure("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")
+        XCTFail("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")
       }
     }
+    XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
 
-    let reportString = report.generateReport()
-    let reportPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(
-      "url_whatwg_constructor_report.txt")
-    try reportString.data(using: .utf8)!.write(to: reportPath)
-    print("ℹ️ Report written to \(reportPath)")    
+    // Generate a report file because the XCTest ones really aren't that helpful.
+    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_wpt_constructor.txt")
+    try report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
+    print("ℹ️ Report written to \(reportURL)")
   }
 }
 
@@ -799,21 +805,31 @@ let additionalTests: [AdditionalTest] = [
 
 extension WHATWGTests {
 
-  func testAdditional() {
-    
+  func testAdditional() throws {
+    var report = SimpleTestReport()
     for test in additionalTests {
-      guard let result = WebURL(test.input, base: test.base)?.jsModel else {
-        XCTAssertTrue(test.ex_fail, "Test failed: \(test)")
-        continue
+      report.performTest { checker, _ in
+        checker.capture(key: "expected", test)
+        guard let result = WebURL(test.input, base: test.base)?.jsModel else {
+          checker.expectTrue(test.ex_fail, "Expected failure")
+          return
+        }
+        checker.capture(key: "actual", result._debugDescription)
+        checker.expectEqual(test.ex_href, result.href, "href")
+        checker.expectEqual(test.ex_scheme, result.scheme, "scheme")
+        checker.expectEqual(test.ex_hostname ?? "", result.hostname, "hostname")
+        checker.expectEqual(test.ex_port ?? "", result.port, "port")
+        checker.expectEqual(test.ex_path ?? "", result.pathname, "pathname")
+        checker.expectEqual(test.ex_query ?? "", result.search, "query")
+        checker.expectEqual(test.ex_fragment ?? "", result.fragment, "fragment")
       }
-      XCTAssertEqual(test.ex_href, result.href)
-      XCTAssertEqual(test.ex_scheme, result.scheme)
-      XCTAssertEqual(test.ex_hostname ?? "", result.hostname)
-      XCTAssertEqual(test.ex_port ?? "", result.port)
-      XCTAssertEqual(test.ex_path ?? "", result.pathname)
-      XCTAssertEqual(test.ex_query ?? "", result.search)
-      XCTAssertEqual(test.ex_fragment ?? "", result.fragment)
     }
+    XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
+    
+    // Generate a report file because the XCTest ones really aren't that helpful.
+    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_constructor_more.txt")
+    try report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
+    print("ℹ️ Report written to \(reportURL)")
   }
 }
 
@@ -907,8 +923,8 @@ extension WHATWGTests {
     }
 
     // Run the tests.
-    var report = WHATWG_TestReport()
-    report.expectedFailures = [
+    var report = SimpleTestReport()
+    let expectedFailures: Set<Int> = [
       // The 'port' tests are a little special.
       // The JS URL model exposes `port` as a String, and these XFAIL-ed tests
       // check that parsing stops when it encounters an invalid character/overflows/etc.
@@ -920,22 +936,23 @@ extension WHATWGTests {
       //96,  // IDNA Nontransitional_Processing.
     ]
     for testGroup in testGroups {
-      report.recordSection(testGroup.property)
+      report.markSection(testGroup.property)
       if let stringProperty = webURLStringPropertyWithJSName(testGroup.property) {
         for testcase in testGroup.tests {
-          report.recordTest { report in
+          report.performTest { report, _ in
             performSetterTest(testcase, property: stringProperty, &report)
           }
         }
       } else {
-        report.advanceTestIndex()
+        report.skipTest()
 //        assertionFailure("Unhandled test cases for property: \(testGroup.property)")
 //        report.expectTrue(false)
       }
     }
-
+    XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
+    
     let reportString = report.generateReport()
-    let reportPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("url_whatwg_setter_report.txt")
+    let reportPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_wpt_setters.txt")
     try reportString.data(using: .utf8)!.write(to: reportPath)
     print("ℹ️ Report written to \(reportPath)")
   }
@@ -948,7 +965,7 @@ extension WHATWGTests {
   /// 4. Checks the URL's properties and values against the expected values.
   ///
   private func performSetterTest(
-    _ testcase: URLSetterTest, property: WritableKeyPath<WebURL.JSModel, String>, _ report: inout WHATWG_TestReport
+    _ testcase: URLSetterTest, property: WritableKeyPath<WebURL.JSModel, String>, _ report: inout SimpleTestReport.TestCase
   ) {
 
     testcase.comment.map { report.capture(key: "Comment", $0) }
