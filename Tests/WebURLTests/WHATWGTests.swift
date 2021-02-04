@@ -219,7 +219,7 @@ extension WHATWGTests {
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
 
     // Generate a report file because the XCTest ones really aren't that helpful.
-    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_wpt_constructor.txt")
+    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_constructor_wpt.txt")
     try report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
   }
@@ -355,7 +355,7 @@ extension WHATWGTests {
     }
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
     
-    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_wpt_setters.txt")
+    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_setters_wpt.txt")
     try report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
   }

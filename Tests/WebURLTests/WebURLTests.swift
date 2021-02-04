@@ -1,22 +1,45 @@
 import XCTest
 @testable import WebURL
 
-struct AdditionalTest {
-  let input: String
-  var base: String? = nil
+class WebURLTests: XCTestCase {}
+
+extension WebURLTests {
   
-  var ex_href: String? = nil
-  var ex_scheme: String? = nil
-  var ex_hostname: String? = nil
-  var ex_port: String? = nil
-  var ex_path: String? = nil
-  var ex_query: String? = nil
-  var ex_fragment: String? = nil
-  
-  var ex_fail: Bool = false
+  fileprivate struct ConstructorTest: CustomStringConvertible {
+    let input: String
+    var base: String? = nil
+    
+    var ex_href: String? = nil
+    var ex_scheme: String? = nil
+    var ex_hostname: String? = nil
+    var ex_port: String? = nil
+    var ex_pathname: String? = nil
+    var ex_query: String? = nil
+    var ex_fragment: String? = nil
+    
+    var ex_fail: Bool = false
+    
+    var description: String {
+      return """
+      {
+        .input:  \(input)
+        .base:   \(base ?? "<nil>")
+
+        .expected:
+          - href:     \(ex_href ?? "<nil>")
+          - scheme:   \(ex_scheme ?? "<nil>")
+          - hostname: \(ex_hostname ?? "<nil>")
+          - port:     \(ex_port ?? "<nil>")
+          - pathname: \(ex_pathname ?? "<nil>")
+          - query:    \(ex_query ?? "<nil>")
+          - fragment: \(ex_fragment ?? "<nil>")
+      }
+      """
+    }
+  }
 }
 
-let additionalTests: [AdditionalTest] = [
+fileprivate let additionalTests: [WebURLTests.ConstructorTest] = [
   
 // MARK: == PATHS ==
   
@@ -26,7 +49,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil,
         ex_fail: false),
@@ -36,7 +59,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil,
         ex_fail: false),
@@ -47,7 +70,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/a/b/",
+        ex_pathname: "/a/b/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -56,7 +79,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/a/",
+        ex_pathname: "/a/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -65,7 +88,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/a/b/...",
+        ex_pathname: "/a/b/...",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -74,7 +97,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/a/b/",
+        ex_pathname: "/a/b/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -83,7 +106,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "http:",
         ex_hostname: "example.com",
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -92,7 +115,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "http:",
         ex_hostname: "example.com",
         ex_port: nil,
-        ex_path: "///",
+        ex_pathname: "///",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -101,7 +124,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "non-special:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/a/b/",
+        ex_pathname: "/a/b/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -110,7 +133,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "non-special:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/a/b/1/",
+        ex_pathname: "/a/b/1/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -119,7 +142,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "non-special:",
         ex_hostname: "somehost",
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -128,7 +151,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "http:",
         ex_hostname: "example.com",
         ex_port: nil,
-        ex_path: "/1/2/",
+        ex_pathname: "/1/2/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -146,7 +169,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/C:",
+        ex_pathname: "/C:",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:./D|/../foo", base: "about:blank",
@@ -154,7 +177,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:./D|/../foo", base: "file:///bar",
@@ -162,7 +185,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:./D|/../foo", base: "file:///bar/",
@@ -170,7 +193,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/bar/foo",
+        ex_pathname: "/bar/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:D|/../foo", base: "file:///bar/",
@@ -178,7 +201,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:./D:/../foo", base: "file:///C:/base1/base2/",
@@ -186,7 +209,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/C:/base1/base2/foo",
+        ex_pathname: "/C:/base1/base2/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:D|/../foo", base: "file:///C:/base1/base2/",
@@ -194,7 +217,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:./D|/../foo", base: "file:///bar/baz/qux/",
@@ -202,7 +225,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/bar/baz/qux/foo",
+        ex_pathname: "/bar/baz/qux/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:../../../D|/../foo", base: "file:///bar/baz/qux/",
@@ -210,7 +233,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "foo", base: "file:///C:/base1/base2/base3",
@@ -218,7 +241,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/C:/base1/base2/foo",
+        ex_pathname: "/C:/base1/base2/foo",
         ex_query: nil,
         ex_fragment: nil),
     
@@ -236,7 +259,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:/.././D|/../foo", base: "file:///bar/baz/qux/",
@@ -244,7 +267,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:/abc/def/../.././D|/../foo", base: "file:///bar/baz/qux/",
@@ -252,7 +275,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:/abc/def/../../ghi/./D|/../foo", base: "file:///bar/baz/qux/",
@@ -260,7 +283,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/ghi/foo",
+        ex_pathname: "/ghi/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:/D|/../foo", base: "file:///C:/base1/base2/",
@@ -268,7 +291,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:/./D|/../foo", base: "file:///C:/base1/base2/",
@@ -276,7 +299,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/C:/foo",
+        ex_pathname: "/C:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "not-file:/abc/def/../.././D|/../foo", base: "not-file:///bar/baz/qux/",
@@ -284,7 +307,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "not-file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/foo",
+        ex_pathname: "/foo",
         ex_query: nil,
         ex_fragment: nil),
   // Absolute paths which don't have their own drive letter are still relative to the base URL drive.
@@ -294,7 +317,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/C:/hello",
+        ex_pathname: "/C:/hello",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:/hello", base: "file:///C:/bar/",
@@ -302,7 +325,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/C:/hello",
+        ex_pathname: "/C:/hello",
         ex_query: nil,
         ex_fragment: nil),
   // But absolute paths from URLs with authorities are never relative to the base URL drive.
@@ -312,7 +335,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/hello",
+        ex_pathname: "/hello",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -329,7 +352,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file://D|/../foo", base: "file:///C:/bar/baz/qux",
@@ -337,7 +360,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file://./D|/../foo", base: "file:///C:/bar/baz/qux",
@@ -345,7 +368,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: ".",
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "not-file://D|/../foo", base: "not-file:///C:/bar/baz/qux",
@@ -353,7 +376,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "not-file:",
         ex_hostname: "D|",
         ex_port: nil,
-        ex_path: "/foo",
+        ex_pathname: "/foo",
         ex_query: nil,
         ex_fragment: nil),
   // 3+ slashes.
@@ -362,7 +385,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/foo",
+        ex_pathname: "/D:/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "///usr/bin/x", base: "file:///C:/foo/bar/baz/",
@@ -370,7 +393,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/usr/bin/x",
+        ex_pathname: "/usr/bin/x",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:///usr/bin/x", base: "file:///C:/foo/bar/baz/",
@@ -378,7 +401,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/usr/bin/x",
+        ex_pathname: "/usr/bin/x",
         ex_query: nil,
         ex_fragment: nil),
   // Leading empty components disqualify a potential Windows drive.
@@ -387,7 +410,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "///////////foo",
+        ex_pathname: "///////////foo",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -400,7 +423,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/D:/base1/C|/foo",
+        ex_pathname: "/D:/base1/C|/foo",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file:////C:/../..", base: "about:blank",
@@ -408,7 +431,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -422,7 +445,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: "hostname",
         ex_port: nil,
-        ex_path: "/o1/pop",
+        ex_pathname: "/o1/pop",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "/pop", base: "file://hostname/o1/o2?someQuery",
@@ -430,7 +453,7 @@ let additionalTests: [AdditionalTest] = [
       ex_scheme: "file:",
       ex_hostname: "hostname",
       ex_port: nil,
-      ex_path: "/pop",
+      ex_pathname: "/pop",
       ex_query: nil,
       ex_fragment: nil),
   .init(input: "pop", base: "http://hostname/o1/o2?someQuery",
@@ -438,7 +461,7 @@ let additionalTests: [AdditionalTest] = [
       ex_scheme: "http:",
       ex_hostname: "hostname",
       ex_port: nil,
-      ex_path: "/o1/pop",
+      ex_pathname: "/o1/pop",
       ex_query: nil,
       ex_fragment: nil),
   .init(input: "/pop", base: "http://hostname/o1/o2?someQuery",
@@ -446,7 +469,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "http:",
         ex_hostname: "hostname",
         ex_port: nil,
-        ex_path: "/pop",
+        ex_pathname: "/pop",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "pop", base: "non-special://hostname/o1/o2?someQuery",
@@ -454,7 +477,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "non-special:",
         ex_hostname: "hostname",
         ex_port: nil,
-        ex_path: "/o1/pop",
+        ex_pathname: "/o1/pop",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "/pop", base: "non-special://hostname/o1/o2?someQuery",
@@ -462,7 +485,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "non-special:",
         ex_hostname: "hostname",
         ex_port: nil,
-        ex_path: "/pop",
+        ex_pathname: "/pop",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -475,7 +498,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "sc:",
         ex_hostname: "a",
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "../..///.", base: "sc://a",
@@ -483,7 +506,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "sc:",
         ex_hostname: "a",
         ex_port: nil,
-        ex_path: "///",
+        ex_pathname: "///",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -493,7 +516,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "sc:",
         ex_hostname: "a",
         ex_port: nil,
-        ex_path: "/////b",
+        ex_pathname: "/////b",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -503,7 +526,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "../b/..", base: "file:///a",
@@ -511,7 +534,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: nil,
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -521,7 +544,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: "",
         ex_port: nil,
-        ex_path: "/some/path",
+        ex_pathname: "/some/path",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "file://locAlhost/some/path",
@@ -529,7 +552,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "file:",
         ex_hostname: "",
         ex_port: nil,
-        ex_path: "/some/path",
+        ex_pathname: "/some/path",
         ex_query: nil,
         ex_fragment: nil),
   // Double slash at start of base path (with host - not related to idempotence fix from Aug 2020).
@@ -539,7 +562,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "non-spec:",
         ex_hostname: "host",
         ex_port: nil,
-        ex_path: "//path",
+        ex_pathname: "//path",
         ex_query: nil,
         ex_fragment: nil),
   
@@ -550,7 +573,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "web+demo:",
         ex_hostname: "",
         ex_port: nil,
-        ex_path: "//not-a-host/hello",
+        ex_pathname: "//not-a-host/hello",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "hello/..",
@@ -559,7 +582,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "web+demo:",
         ex_hostname: "",
         ex_port: nil,
-        ex_path: "//not-a-host/",
+        ex_pathname: "//not-a-host/",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "hello/../..",
@@ -568,7 +591,7 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "web+demo:",
         ex_hostname: "",
         ex_port: nil,
-        ex_path: "//",
+        ex_pathname: "//",
         ex_query: nil,
         ex_fragment: nil),
   .init(input: "hello/../../..",
@@ -577,33 +600,63 @@ let additionalTests: [AdditionalTest] = [
         ex_scheme: "web+demo:",
         ex_hostname: "",
         ex_port: nil,
-        ex_path: "/",
+        ex_pathname: "/",
         ex_query: nil,
         ex_fragment: nil),
 
 ]
 
-class WebURLTests: XCTestCase {}
+
 
 extension WebURLTests {
 
+  /// These tests use the same methodology as the WPT constructor tests, with the goal that anything not overly implementation-specific
+  /// can be upstreamed.
+  ///
   func testURLConstructor() throws {
     var report = SimpleTestReport()
     for test in additionalTests {
-      report.performTest { checker, _ in
-        checker.capture(key: "expected", test)
-        guard let result = WebURL(test.input, base: test.base)?.jsModel else {
-          checker.expectTrue(test.ex_fail, "Expected failure")
+      report.performTest { reporter, _ in
+        reporter.capture(key: "Test Case", test)
+        
+        // Parsing the base URL must always succeed.
+        if let baseURLString = test.base, WebURL(baseURLString, base: nil) == nil {
+          reporter.fail("base URL failed to parse")
           return
         }
-        checker.capture(key: "actual", result._debugDescription)
-        checker.expectEqual(test.ex_href, result.href, "href")
-        checker.expectEqual(test.ex_scheme, result.scheme, "scheme")
-        checker.expectEqual(test.ex_hostname ?? "", result.hostname, "hostname")
-        checker.expectEqual(test.ex_port ?? "", result.port, "port")
-        checker.expectEqual(test.ex_path ?? "", result.pathname, "pathname")
-        checker.expectEqual(test.ex_query ?? "", result.search, "query")
-        checker.expectEqual(test.ex_fragment ?? "", result.fragment, "fragment")
+        // If failure = true, parsing "about:blank" against input must fail.
+        if test.ex_fail {
+          reporter.expectTrue(WebURL("about:blank", base: test.input) == nil)
+        }
+        
+        guard let result = WebURL(test.input, base: test.base)?.jsModel else {
+          reporter.capture(key: "Actual Result", "<nil>")
+          reporter.expectTrue(test.ex_fail, "Expected failure")
+          return
+        }
+        
+        func checkProperties(_ url: WebURL.JSModel) {
+          reporter.expectEqual(test.ex_href, url.href, "href")
+          reporter.expectEqual(test.ex_scheme, url.scheme, "scheme")
+          reporter.expectEqual(test.ex_hostname ?? "", url.hostname, "hostname")
+          reporter.expectEqual(test.ex_port ?? "", url.port, "port")
+          reporter.expectEqual(test.ex_pathname ?? "", url.pathname, "pathname")
+          reporter.expectEqual(test.ex_query ?? "", url.search, "query")
+          reporter.expectEqual(test.ex_fragment ?? "", url.fragment, "fragment")
+        }
+        reporter.capture(key: "Actual Result", result._debugDescription)
+        checkProperties(result)
+        
+        // Check idempotence: parse the href again and check all properties.
+        var serialized = result.href
+        serialized.makeContiguousUTF8()
+        guard let reparsed = WebURL(serialized, base: nil)?.jsModel else {
+          reporter.fail("idempotence")
+          return
+        }
+        reporter.capture(key: "Reparsed", reparsed._debugDescription)
+        reporter.expectEqual(result.href, reparsed.href)
+        checkProperties(reparsed)
       }
     }
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
