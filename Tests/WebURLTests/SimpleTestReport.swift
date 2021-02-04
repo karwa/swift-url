@@ -5,7 +5,7 @@ struct SimpleTestReport {
     case pass, fail
   }
   
-  struct TestCase {
+  struct Reporter {
     var expectedResult = Result.pass
     fileprivate var actualResult   = Result.pass
     fileprivate var capturedData   = [(String, Any)]()
@@ -14,7 +14,7 @@ struct SimpleTestReport {
   
   struct Section {
     var name: String?
-    var testcases: [TestCase?] = []
+    var reporters: [Reporter?] = []
   }
   
   var testIndex: Int = 0
@@ -28,22 +28,23 @@ struct SimpleTestReport {
   
   /// Marks a test as "skipped". The test index is advanced, so that later indexes remain aligned to the correct tests, but no result (expected/unexpected) is recorded.
   ///
-  mutating func skipTest() {
-    sections[sections.count - 1].testcases.append(nil)
-    testIndex += 1
+  mutating func skipTest(count: Int = 1) {
+    precondition(count >= 0)
+    sections[sections.count - 1].reporters.append(contentsOf: repeatElement(nil, count: count))
+    testIndex += count
   }
   
-  /// Performs a test. The given closure is invoked with a mutable `TestCase` object and test index.
-  /// Refer to `TestCase`'s API to find out how to make testable assertions that will be logged in the test report.
+  /// Performs a test. The given closure is invoked with a mutable `Reporter` object and test index.
+  /// Refer to `Reporter`'s API to find out how to make testable assertions that will be logged in the test report.
   ///
-  mutating func performTest(_ test: (inout TestCase, Int) throws -> Void) {
-    var testcase = TestCase()
+  mutating func performTest(_ test: (inout Reporter, Int) throws -> Void) {
+    var reporter = Reporter()
     do {
-      try test(&testcase, testIndex)
+      try test(&reporter, testIndex)
     } catch {
-      testcase.uncaughtError(error)
+      reporter.uncaughtError(error)
     }
-    sections[sections.count - 1].testcases.append(testcase)
+    sections[sections.count - 1].reporters.append(reporter)
     testIndex += 1
   }
   
@@ -51,14 +52,14 @@ struct SimpleTestReport {
   ///
   var hasUnexpectedResults: Bool {
     return sections.contains { section in
-      section.testcases.contains { testcase in
-        testcase?.actualResult != testcase?.expectedResult
+      section.reporters.contains { reporter in
+        reporter?.actualResult != reporter?.expectedResult
       }
     }
   }
 }
 
-extension SimpleTestReport.TestCase {
+extension SimpleTestReport.Reporter {
   
   /// Captures the given test artefact for inclusion in the test report.
   ///
@@ -66,30 +67,26 @@ extension SimpleTestReport.TestCase {
     capturedData.append((key, object))
   }
   
+  mutating func fail(_ key: String? = nil) {
+    actualResult = .fail
+    key.map { failureKeys.append($0) }
+  }
+  
   mutating func expectEqual<T: Equatable>(_ lhs: T, _ rhs: T, _ key: String? = nil) {
-    if lhs != rhs {
-      actualResult = .fail
-      key.map { failureKeys.append($0) }
-    }
+    if lhs != rhs { fail(key) }
   }
 
   mutating func expectTrue(_ lhs: Bool, _ key: String? = nil) {
-    if lhs == false {
-      actualResult = .fail
-      key.map { failureKeys.append($0) }
-    }
+    if lhs == false { fail(key) }
   }
 
   mutating func expectFalse(_ lhs: Bool, _ key: String? = nil) {
-    if lhs == true {
-      actualResult = .fail
-      key.map { failureKeys.append($0) }
-    }
+    if lhs == true { fail(key) }
   }
   
   mutating fileprivate func uncaughtError(_ error: Error) {
     capture(key: "__uncaught_error", error)
-    actualResult = .fail
+    fail()
   }
 }
 
@@ -105,13 +102,13 @@ extension SimpleTestReport {
     var tests_xFail_aPass = 0
     var tests_skipped = 0
     
-    for maybeTestcase in sections.lazy.map({ $0.testcases }).joined() {
+    for reporter in sections.lazy.map({ $0.reporters }).joined() {
       defer { tests_count += 1 }
-      guard let testcase = maybeTestcase else {
+      guard let reporter = reporter else {
         tests_skipped += 1
         continue
       }
-      switch (testcase.expectedResult, testcase.actualResult) {
+      switch (reporter.expectedResult, reporter.actualResult) {
       case (.pass, .pass): tests_xPass_aPass += 1
       case (.fail, .fail): tests_xFail_aFail += 1
       case (.pass, .fail): tests_xPass_aFail += 1
@@ -130,6 +127,7 @@ extension SimpleTestReport {
       Fail: \(tests_xFail_aFail + tests_xPass_aFail) (\(tests_xFail_aFail) expected)
       \(tests_skipped) Tests skipped.
       ---------------------------------------------
+      
       """, to: &output)
     
     func printLine() {
@@ -152,26 +150,26 @@ extension SimpleTestReport {
         }
       }
       
-      for testcase in section.testcases {
+      for reporter in section.reporters {
         defer { testNumber += 1 }
-        guard let testcase = testcase, testcase.actualResult != testcase.expectedResult else { continue }
+        guard let reporter = reporter, reporter.actualResult != reporter.expectedResult else { continue }
         printSectionNameIfNeeded()
         
         print("[\(testNumber)]:", to: &output)
         print("", to: &output)
-        print("Expected: \(testcase.expectedResult). Actual: \(testcase.actualResult)", to: &output)
+        print("Expected: \(reporter.expectedResult). Actual: \(reporter.actualResult)", to: &output)
         
-        if !testcase.failureKeys.isEmpty {
+        if !reporter.failureKeys.isEmpty {
           print("", to: &output)
           print("Failed checks:", to: &output)
-          testcase.failureKeys.forEach {
+          reporter.failureKeys.forEach {
             print("- \($0)", to: &output)
           }
         }
-        if !testcase.capturedData.isEmpty {
+        if !reporter.capturedData.isEmpty {
           print("", to: &output)
           print("Captured data:", to: &output)
-          testcase.capturedData.forEach {
+          reporter.capturedData.forEach {
             let (key, value) = $0
             print("- \(key):", to: &output)
             print(value, to: &output)

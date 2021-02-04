@@ -283,19 +283,18 @@ extension WebURL.JSModel: CustomStringConvertible, TextOutputStreamable {
   /* testable */
   var _debugDescription: String {
     return """
-      URL Constructor output:
-
-      Href: \(href)
-
-      Scheme: \(scheme) (\(schemeKind))
-      Username: \(username)
-      Password: \(password)
-      Hostname: \(hostname)
-      Port: \(port)
-      Path: \(pathname)
-      Query: \(search)
-      Fragment: \(fragment)
-      CannotBeABaseURL: \(cannotBeABaseURL)
+      {
+        .href:     \(href)
+        .protocol: \(scheme) (\(schemeKind))
+        .username: \(username)
+        .password: \(password)
+        .hostname: \(hostname)
+        .port:     \(port)
+        .pathname: \(pathname)
+        .search:   \(search)
+        .hash:     \(fragment)
+        .cannotBeABaseURL: \(cannotBeABaseURL)
+      }
       """
   }
 }
