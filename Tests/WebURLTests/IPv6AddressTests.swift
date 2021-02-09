@@ -1,4 +1,4 @@
-import URLTestUtils
+import WebURLTestSupport
 import XCTest
 
 @testable import WebURL

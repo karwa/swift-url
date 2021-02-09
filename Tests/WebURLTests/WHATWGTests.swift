@@ -1,5 +1,5 @@
 import XCTest
-
+import WebURLTestSupport
 @testable import WebURL
 
 // Data files:
@@ -21,113 +21,9 @@ final class WHATWGTests: XCTestCase {}
 //
 extension WHATWGTests {
 
-  // Data structure to parse the test description in to.
-  struct URLConstructorTestCase: CustomStringConvertible {
-    var input: String? = nil
-    var base: String? = nil
-    var href: String? = nil
-    var origin: String? = nil
-    var `protocol`: String? = nil
-    var username: String? = nil
-    var password: String? = nil
-    var host: String? = nil
-    var hostname: String? = nil
-    var pathname: String? = nil
-    var search: String? = nil
-    var hash: String? = nil
-    var searchParams: String? = nil
-    var port: Int? = nil
-    var failure: Bool? = nil
-
-    private init() {}
-
-    init(from dict: [String: Any]) {
-      self.init()
-
-      // Populate String keys
-      let stringKeys: [(String, WritableKeyPath<Self, String?>)] = [
-        ("input", \.input),
-        ("base", \.base),
-        ("href", \.href),
-        ("origin", \.origin),
-        ("protocol", \.protocol),
-        ("username", \.username),
-        ("password", \.password),
-        ("host", \.host),
-        ("hostname", \.hostname),
-        ("pathname", \.pathname),
-        ("search", \.search),
-        ("hash", \.hash),
-        ("searchParams", \.searchParams),
-      ]
-      for (name, keyPath) in stringKeys {
-        let value = dict[name]
-        if let str = value.flatMap({ $0 as? String }) {
-          self[keyPath: keyPath] = str
-        } else if value != nil {
-          fatalError("Did not decode type: \(type(of: value)) for name: \(name)")
-        }
-      }
-      // Populate Int keys ('port').
-      let intKeys: [(String, WritableKeyPath<Self, Int?>)] = [
-        ("port", \.port)
-      ]
-      for (name, kp) in intKeys {
-        let value = dict[name]
-        if let str = value.flatMap({ $0 as? String }) {
-          if str.isEmpty == false {
-            self[keyPath: kp] = Int(str)!
-          }
-        } else if value != nil {
-          fatalError("Did not decode type: \(type(of: value)) for name: \(name)")
-        }
-      }
-      // Populate Bool keys ('failure').
-      let boolKeys: [(String, WritableKeyPath<Self, Bool?>)] = [
-        ("failure", \.failure)
-      ]
-      for (name, kp) in boolKeys {
-        let value = dict[name]
-        if let bool = value.flatMap({ $0 as? NSNumber }) {
-          self[keyPath: kp] = bool.boolValue
-        } else if value != nil {
-          fatalError("Did not decode type: \(type(of: value)) for name: \(name)")
-        }
-      }
-    }
-
-    public var description: String {
-      guard failure != true else {
-        return """
-        {
-          .input:    \(input!)
-          .base:     \(base ?? "<nil>")
-            -- expected failure --
-        }
-        """
-      }
-      return """
-      {
-        .href:     \(href ?? "<nil>")
-        .protocol: \(`protocol` ?? "<nil>")
-        .username: \(username ?? "<nil>")
-        .password: \(password ?? "<nil>")
-        .host:     \(host ?? "<nil>")
-        .hostname: \(hostname ?? "<nil>")
-        .origin:   \(origin ?? "<nil>")
-        .port:     \(port.map { String($0) } ?? "<nil>")
-        .pathname: \(pathname ?? "<nil>")
-        .search:   \(search ?? "<nil>")
-        .hash:     \(hash ?? "<nil>")
-      }
-      """
-    }
-  }
-
   func testURLConstructor() throws {
     let url = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("urltestdata.json")
-    let data = try Data(contentsOf: url)
-    let array = try JSONSerialization.jsonObject(with: data, options: []) as! NSArray
+    let array = try JSONDecoder().decode([URLConstructorTestFileEntry].self, from: try Data(contentsOf: url))
     assert(
       array.count == 665,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
@@ -146,54 +42,57 @@ extension WHATWGTests {
       370,  // domain2ascii: Hosts and percent-encoding.
       566,  // domain2ascii: IDNA ignored code points in file URLs hosts.
       567,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      
+      // FIXME: This one needs another look. We should not accept any IDNA-encoded domain names, even if they are _already_ encoded.
+      
       570,  // domain2ascii: Empty host after the domain to ASCII.
     ]
     
     var report = SimpleTestReport()
     for item in array {
-      if let sectionName = item as? String {
-        report.markSection(sectionName)
+      switch item {
+      case .sectionHeader(let name):
+        report.markSection(name)
         
-      } else if let rawTestInfo = item as? [String: Any] {
-        let expected = URLConstructorTestCase(from: rawTestInfo)
+      case .test(let testcase):
         report.performTest { reporter, testNumber in
           
           if expectedFailures.contains(testNumber) {
             reporter.expectedResult = .fail
           }
           
-          reporter.capture(key: "expected", expected)
+          reporter.capture(key: "expected", testcase)
           
           // Parsing the base URL must always succeed.
-          guard let _ = WebURL(expected.base!, base: nil) else {
-            reporter.expectTrue(false)
+          guard let _ = WebURL(testcase.base, base: nil) else {
+            reporter.fail("baseURL")
             return
           }
           // If failure = true, parsing "about:blank" against input must fail.
-          if expected.failure == true {
-            reporter.expectTrue(WebURL("about:blank", base: expected.input!) == nil)
+          if testcase.failure == true {
+            reporter.expectTrue(WebURL("about:blank", base: testcase.input) == nil)
           }
           
-          guard let parserResult = WebURL(expected.input!, base: expected.base!)?.jsModel else {
+          guard let parserResult = WebURL(testcase.input, base: testcase.base)?.jsModel else {
             reporter.capture(key: "actual", "<nil>")
-            reporter.expectTrue(expected.failure == true, "whatwg-expected-failure")
+            reporter.expectTrue(testcase.failure, "whatwg-expected-failure")
             return
           }
           reporter.capture(key: "actual", parserResult._debugDescription)
-          reporter.expectFalse(expected.failure == true, "whatwg-expected-failure")
+          reporter.expectFalse(testcase.failure, "whatwg-expected-failure")
           
           // Compare properties.
           func checkProperties(url: WebURL.JSModel) {
-            reporter.expectEqual(url.scheme, expected.protocol, "protocol")
-            reporter.expectEqual(url.href, expected.href, "href")
+            reporter.expectEqual(url.scheme, testcase.protocol, "protocol")
+            reporter.expectEqual(url.href, testcase.href, "href")
   //          report.expectEqual(parserResult.host, expected.host)
-            reporter.expectEqual(url.hostname, expected.hostname, "hostname")
-            reporter.expectEqual(Int(url.port), expected.port, "port")
-            reporter.expectEqual(url.username, expected.username, "username")
-            reporter.expectEqual(url.password, expected.password, "password")
-            reporter.expectEqual(url.pathname, expected.pathname, "pathname")
-            reporter.expectEqual(url.search, expected.search, "search")
-            reporter.expectEqual(url.fragment, expected.hash, "fragment")
+            reporter.expectEqual(url.hostname, testcase.hostname, "hostname")
+            reporter.expectEqual(url.port, testcase.port, "port")
+            reporter.expectEqual(url.username, testcase.username, "username")
+            reporter.expectEqual(url.password, testcase.password, "password")
+            reporter.expectEqual(url.pathname, testcase.pathname, "pathname")
+            reporter.expectEqual(url.search, testcase.search, "search")
+            reporter.expectEqual(url.fragment, testcase.expectedValues?.hash, "fragment")
             // The test file doesn't include expected `origin` values for all entries.
   //          if let expectedOrigin = expected.origin {
   //            report.expectEqual(parserResult.origin.serialized, expectedOrigin)
@@ -205,15 +104,13 @@ extension WHATWGTests {
           var serialized = parserResult.href
           serialized.makeContiguousUTF8()
           guard let reparsed = WebURL(serialized, base: nil)?.jsModel else {
-            reporter.expectTrue(false)
+            reporter.fail("reparse")
             return
           }
           reporter.capture(key: "reparsed", reparsed._debugDescription)
           reporter.expectEqual(parserResult.href, reparsed.href)
           checkProperties(url: reparsed)
         }
-      } else {
-        XCTFail("👽 - Unexpected item found. Type: \(type(of: item)). Value: \(item)")
       }
     }
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")

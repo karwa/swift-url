@@ -7,6 +7,7 @@ let package = Package(
   name: "swift-url",
   products: [
     .library(name: "WebURL", targets: ["WebURL"]),
+    .library(name: "WebURLTestSupport", targets: ["WebURLTestSupport"]),
     .executable(name: "URLBenchmarks", targets: ["URLBenchmarks"]),
   ],
   dependencies: [
@@ -18,8 +19,8 @@ let package = Package(
     .testTarget(name: "AlgorithmsTests", dependencies: ["Algorithms", "Checkit"]),
     
     .target(name: "WebURL", dependencies: ["Algorithms"]),
-    .target(name: "URLTestUtils", dependencies: ["WebURL"]),
-    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "URLTestUtils", "Checkit"]),
+    .target(name: "WebURLTestSupport", dependencies: ["WebURL"]),
+    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "WebURLTestSupport", "Checkit"]),
     
     .target(name: "URLBenchmarks", dependencies: ["WebURL"]),
   ]
