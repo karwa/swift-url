@@ -1,11 +1,16 @@
 
-struct SimpleTestReport {
+/// An object which captures data and results from individual tests, allowing for summary reports to be generated.
+///
+/// Tests can be added and organised via functions such as  `performTest`, `markSection`, and `skipTest`, and summary
+/// data can be accessed via properties such as `hasUnexpectedResults` and `generateReport`.
+///
+public struct SimpleTestReport {
   
-  enum Result {
+  public enum Result {
     case pass, fail
   }
   
-  struct Reporter {
+  public struct Reporter {
     var expectedResult = Result.pass
     fileprivate var actualResult   = Result.pass
     fileprivate var capturedData   = [(String, Any)]()
@@ -17,40 +22,40 @@ struct SimpleTestReport {
     var reporters: [Reporter?] = []
   }
   
-  var testIndex: Int = 0
   var sections: [Section] = [.init()]
+  
+  public init() {
+  }
   
   /// Marks the start of a named test section. All tests executed after this method is called will belong to this section, until the next section is marked.
   ///
-  mutating func markSection(_ name: String) {
+  public mutating func markSection(_ name: String) {
     sections.append(Section(name: name))
   }
   
   /// Marks a test as "skipped". The test index is advanced, so that later indexes remain aligned to the correct tests, but no result (expected/unexpected) is recorded.
   ///
-  mutating func skipTest(count: Int = 1) {
+  public mutating func skipTest(count: Int = 1) {
     precondition(count >= 0)
     sections[sections.count - 1].reporters.append(contentsOf: repeatElement(nil, count: count))
-    testIndex += count
   }
   
   /// Performs a test. The given closure is invoked with a mutable `Reporter` object and test index.
   /// Refer to `Reporter`'s API to find out how to make testable assertions that will be logged in the test report.
   ///
-  mutating func performTest(_ test: (inout Reporter, Int) throws -> Void) {
+  public mutating func performTest(_ test: (inout Reporter) throws -> Void) {
     var reporter = Reporter()
     do {
-      try test(&reporter, testIndex)
+      try test(&reporter)
     } catch {
       reporter.uncaughtError(error)
     }
     sections[sections.count - 1].reporters.append(reporter)
-    testIndex += 1
   }
   
   /// Whether or not this report contains any unexpected test results (unexpected passes or failures).
   ///
-  var hasUnexpectedResults: Bool {
+  public var hasUnexpectedResults: Bool {
     return sections.contains { section in
       section.reporters.contains { reporter in
         reporter?.actualResult != reporter?.expectedResult
@@ -63,24 +68,24 @@ extension SimpleTestReport.Reporter {
   
   /// Captures the given test artefact for inclusion in the test report.
   ///
-  mutating func capture(key: String, _ object: Any) {
+  public mutating func capture(key: String, _ object: Any) {
     capturedData.append((key, object))
   }
   
-  mutating func fail(_ key: String? = nil) {
+  public mutating func fail(_ key: String? = nil) {
     actualResult = .fail
     key.map { failureKeys.append($0) }
   }
   
-  mutating func expectEqual<T: Equatable>(_ lhs: T, _ rhs: T, _ key: String? = nil) {
+  public mutating func expectEqual<T: Equatable>(_ lhs: T, _ rhs: T, _ key: String? = nil) {
     if lhs != rhs { fail(key) }
   }
 
-  mutating func expectTrue(_ lhs: Bool, _ key: String? = nil) {
+  public mutating func expectTrue(_ lhs: Bool, _ key: String? = nil) {
     if lhs == false { fail(key) }
   }
 
-  mutating func expectFalse(_ lhs: Bool, _ key: String? = nil) {
+  public mutating func expectFalse(_ lhs: Bool, _ key: String? = nil) {
     if lhs == true { fail(key) }
   }
   
@@ -92,7 +97,7 @@ extension SimpleTestReport.Reporter {
 
 extension SimpleTestReport {
   
-  func generateReport() -> String {
+  public func generateReport() -> String {
     
     // Gather cumulative stats.
     var tests_count = 0

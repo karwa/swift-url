@@ -23,12 +23,12 @@ extension WHATWGTests {
 
   func testURLConstructor() throws {
     let url = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("urltestdata.json")
-    let array = try JSONDecoder().decode([URLConstructorTestFileEntry].self, from: try Data(contentsOf: url))
+    let fileContents = try JSONDecoder().decode([URLConstructorTest.FileEntry].self, from: try Data(contentsOf: url))
     assert(
-      array.count == 665,
+      fileContents.count == 665,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
-    let expectedFailures: Set<Int> = [
+    var harness = URLConstructorTest.WebURLReportHarness(expectedFailures: [
       // These test failures are due to us not having implemented the `domain2ascii` transform,
       // often in combination with other features (e.g. with percent encoding).
       //
@@ -46,78 +46,15 @@ extension WHATWGTests {
       // FIXME: This one needs another look. We should not accept any IDNA-encoded domain names, even if they are _already_ encoded.
       
       570,  // domain2ascii: Empty host after the domain to ASCII.
-    ]
+    ])
     
-    var report = SimpleTestReport()
-    for item in array {
-      switch item {
-      case .sectionHeader(let name):
-        report.markSection(name)
-        
-      case .test(let testcase):
-        report.performTest { reporter, testNumber in
-          
-          if expectedFailures.contains(testNumber) {
-            reporter.expectedResult = .fail
-          }
-          
-          reporter.capture(key: "expected", testcase)
-          
-          // Parsing the base URL must always succeed.
-          guard let _ = WebURL(testcase.base, base: nil) else {
-            reporter.fail("baseURL")
-            return
-          }
-          // If failure = true, parsing "about:blank" against input must fail.
-          if testcase.failure == true {
-            reporter.expectTrue(WebURL("about:blank", base: testcase.input) == nil)
-          }
-          
-          guard let parserResult = WebURL(testcase.input, base: testcase.base)?.jsModel else {
-            reporter.capture(key: "actual", "<nil>")
-            reporter.expectTrue(testcase.failure, "whatwg-expected-failure")
-            return
-          }
-          reporter.capture(key: "actual", parserResult._debugDescription)
-          reporter.expectFalse(testcase.failure, "whatwg-expected-failure")
-          
-          // Compare properties.
-          func checkProperties(url: WebURL.JSModel) {
-            reporter.expectEqual(url.scheme, testcase.protocol, "protocol")
-            reporter.expectEqual(url.href, testcase.href, "href")
-  //          report.expectEqual(parserResult.host, expected.host)
-            reporter.expectEqual(url.hostname, testcase.hostname, "hostname")
-            reporter.expectEqual(url.port, testcase.port, "port")
-            reporter.expectEqual(url.username, testcase.username, "username")
-            reporter.expectEqual(url.password, testcase.password, "password")
-            reporter.expectEqual(url.pathname, testcase.pathname, "pathname")
-            reporter.expectEqual(url.search, testcase.search, "search")
-            reporter.expectEqual(url.fragment, testcase.expectedValues?.hash, "fragment")
-            // The test file doesn't include expected `origin` values for all entries.
-  //          if let expectedOrigin = expected.origin {
-  //            report.expectEqual(parserResult.origin.serialized, expectedOrigin)
-  //          }
-          }
-          checkProperties(url: parserResult)
-          
-          // Check idempotence: parse the href again and check all properties.
-          var serialized = parserResult.href
-          serialized.makeContiguousUTF8()
-          guard let reparsed = WebURL(serialized, base: nil)?.jsModel else {
-            reporter.fail("reparse")
-            return
-          }
-          reporter.capture(key: "reparsed", reparsed._debugDescription)
-          reporter.expectEqual(parserResult.href, reparsed.href)
-          checkProperties(url: reparsed)
-        }
-      }
-    }
-    XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
+    harness.runTests(fileContents)
+    XCTAssert(harness.entriesSeen == 665, "Unexpected number of tests executed.")
+    XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     // Generate a report file because the XCTest ones really aren't that helpful.
     let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_constructor_wpt.txt")
-    try report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
+    try harness.report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
   }
 }
@@ -243,7 +180,7 @@ extension WHATWGTests {
       report.markSection(testGroup.property)
       if let webURLProperty = webURLStringPropertyWithJSName(testGroup.property) {
         for testcase in testGroup.tests {
-          report.performTest { reporter, _ in performSetterTest(property: webURLProperty, testcase, &reporter) }
+          report.performTest { reporter in performSetterTest(property: webURLProperty, testcase, &reporter) }
         }
       } else {
         // No corresponding WebURL.JSModel property to test.

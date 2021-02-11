@@ -44,6 +44,27 @@ public struct URLValues: Equatable, Hashable {
   }
 }
 
+extension URLValues: CustomStringConvertible {
+  
+  public var description: String {
+    return """
+    {
+      .href:     \(href)
+      .protocol: \(`protocol`)
+      .username: \(username)
+      .password: \(password)
+      .host:     \(host)
+      .hostname: \(hostname)
+      .origin:   \(origin ?? "<not present>")
+      .port:     \(port)
+      .pathname: \(pathname)
+      .search:   \(search)
+      .hash:     \(hash)
+    }
+    """
+  }
+}
+
 import WebURL
 
 extension WebURL.JSModel {

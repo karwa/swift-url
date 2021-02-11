@@ -1,4 +1,5 @@
 import XCTest
+import WebURLTestSupport
 @testable import WebURL
 
 class WebURLTests: XCTestCase {}
@@ -616,7 +617,7 @@ extension WebURLTests {
   func testURLConstructor() throws {
     var report = SimpleTestReport()
     for test in additionalTests {
-      report.performTest { reporter, _ in
+      report.performTest { reporter in
         reporter.capture(key: "Test Case", test)
         
         // Parsing the base URL must always succeed.
