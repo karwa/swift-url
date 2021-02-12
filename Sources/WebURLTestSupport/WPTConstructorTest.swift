@@ -199,6 +199,13 @@ public protocol _URLConstructorTest_Harness {
   mutating func reportTestResult(_ result: URLConstructorTest.Result)
 }
 
+extension URLConstructorTest.Harness {
+  
+  public nonmutating func reportNonTestEntry(_ entry: URLConstructorTest.FileEntry) {
+  	// Default: no-op.
+  }
+}
+
 extension URLConstructorTest {
 
   /// The set of sub-tests which a URL constructor test failed (if any).
@@ -250,6 +257,13 @@ extension URLConstructorTest {
     /// The set of subtests, run as part of the URL constructor test, that failed.
     /// If empty, the URL parser appeared to behave in accordance with the URL standard for the `input` and `base` values in `testcase`.
     public var failures: SubtestFailures
+    
+    public init(testNumber: Int, testcase: Testcase, propertyValues: URLValues?, failures: SubtestFailures) {
+      self.testNumber = testNumber
+      self.testcase = testcase
+      self.propertyValues = propertyValues
+      self.failures = failures
+    }
   }
 }
 
