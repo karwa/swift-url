@@ -8,7 +8,7 @@ extension WebURLTests {
   
   fileprivate struct ConstructorTest: CustomStringConvertible {
     let input: String
-    var base: String? = nil
+    var base: String
     
     var ex_href: String? = nil
     var ex_scheme: String? = nil
@@ -24,7 +24,7 @@ extension WebURLTests {
       return """
       {
         .input:  \(input)
-        .base:   \(base ?? "<nil>")
+        .base:   \(base)
 
         .expected:
           - href:     \(ex_href ?? "<nil>")
@@ -45,7 +45,7 @@ fileprivate let additionalTests: [WebURLTests.ConstructorTest] = [
 // MARK: == PATHS ==
   
   // Single-dot components are skipped and do not affect popcount.
-  .init(input: "file:/a/./..", base: nil,
+  .init(input: "file:/a/./..", base: "about:blank",
         ex_href: "file:///",
         ex_scheme: "file:",
         ex_hostname: nil,
@@ -55,7 +55,7 @@ fileprivate let additionalTests: [WebURLTests.ConstructorTest] = [
         ex_fragment: nil,
         ex_fail: false),
   
-  .init(input: "file:/a/./././..", base: nil,
+  .init(input: "file:/a/./././..", base: "about:blank",
         ex_href: "file:///",
         ex_scheme: "file:",
         ex_hostname: nil,
@@ -491,7 +491,7 @@ fileprivate let additionalTests: [WebURLTests.ConstructorTest] = [
         ex_fragment: nil),
   
   // File URLs with invalid hostnames should fail to parse, even if the path begins with a Windows drive letter.
-  .init(input: "file://^/C:/hello", ex_fail: true),
+  .init(input: "file://^/C:/hello", base: "about:blank", ex_fail: true),
   
   // Check we do not fail to yield a path when the input contributes nothing and the base URL has a 'nil' path.
   .init(input: "..", base: "sc://a",
@@ -540,7 +540,7 @@ fileprivate let additionalTests: [WebURLTests.ConstructorTest] = [
         ex_fragment: nil),
   
   // Percent-encoded/mixed-case localhost.
-  .init(input: "file://loc%61lhost/some/path",
+  .init(input: "file://loc%61lhost/some/path", base: "about:blank",
         ex_href: "file:///some/path",
         ex_scheme: "file:",
         ex_hostname: "",
@@ -548,7 +548,7 @@ fileprivate let additionalTests: [WebURLTests.ConstructorTest] = [
         ex_pathname: "/some/path",
         ex_query: nil,
         ex_fragment: nil),
-  .init(input: "file://locAlhost/some/path",
+  .init(input: "file://locAlhost/some/path", base: "about:blank",
         ex_href: "file:///some/path",
         ex_scheme: "file:",
         ex_hostname: "",
@@ -621,7 +621,7 @@ extension WebURLTests {
         reporter.capture(key: "Test Case", test)
         
         // Parsing the base URL must always succeed.
-        if let baseURLString = test.base, WebURL(baseURLString, base: nil) == nil {
+        if WebURL(test.base, base: nil) == nil {
           reporter.fail("base URL failed to parse")
           return
         }
