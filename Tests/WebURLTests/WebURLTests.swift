@@ -610,6 +610,48 @@ fileprivate let additionalTests: [WebURLTests.ConstructorTest] = [
 
 
 extension WebURLTests {
+  
+  // Converting tests to the WPT format (this comment for posterity's sake):
+  //
+  // - 'origin' is not included, because it hasn't been implemented in the WebURL model yet.
+  //   I may come back to this and re-generate the files once it has.
+  //
+  // - 'host' is using the same value as 'hostname'. Again, isn't implemented on WebURL.JSModel yet, but
+  //   none of these tests include hosts with ports, so luckily this works.
+  //
+  // - JSONEncoder emits keys in the wrong order. I found a project on GitHub with a JSON key sorter and adjusted it
+  //   so it sorts in the order of the WPT tests.
+  //   See: https://github.com/karwa/json_sort or https://karwa.github.io/json_sort/ for the live version.
+  
+  func testConversion() throws {
+    var ported: [URLConstructorTest.FileEntry] = []
+    for old_test in additionalTests {
+      
+      var expectedValues: URLValues?
+      if old_test.ex_fail == false {
+        expectedValues = URLValues(
+          href: old_test.ex_href!,
+          origin: nil,
+          protocol: old_test.ex_scheme!,
+          username: "", password: "",
+          host: old_test.ex_hostname ?? "", hostname: old_test.ex_hostname ?? "",
+          port: old_test.ex_port ?? "",
+          pathname: old_test.ex_pathname ?? "",
+          search: old_test.ex_query ?? "",
+          hash: old_test.ex_fragment ?? "")
+      }
+      let new_test = URLConstructorTest.Testcase(
+        input: old_test.input, base: old_test.base, expectedValues: expectedValues
+      )
+      ported.append(.testcase(new_test))
+    }
+    
+    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_constructor_ported.json")
+    let enc = JSONEncoder()
+    enc.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+    try enc.encode(ported).write(to: reportURL)
+    print("ℹ️ Report written to \(reportURL)")
+  }
 
   /// These tests use the same methodology as the WPT constructor tests, with the goal that anything not overly implementation-specific
   /// can be upstreamed.

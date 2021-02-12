@@ -68,6 +68,12 @@ extension URLConstructorTest {
     public subscript(dynamicMember dynamicMember: KeyPath<URLValues, String?>) -> String? {
       expectedValues?[keyPath: dynamicMember]
     }
+    
+    public init(input: String, base: String, expectedValues: URLValues?) {
+      self.input = input
+      self.base = base
+      self.expectedValues = expectedValues
+    }
   }
 }
 
