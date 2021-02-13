@@ -8,7 +8,6 @@ let package = Package(
   products: [
     .library(name: "WebURL", targets: ["WebURL"]),
     .library(name: "WebURLTestSupport", targets: ["WebURLTestSupport"]),
-    .executable(name: "URLBenchmarks", targets: ["URLBenchmarks"]),
   ],
   dependencies: [
     // Swift-checkit for testing protocol conformances.
@@ -21,7 +20,5 @@ let package = Package(
     .target(name: "WebURL", dependencies: ["Algorithms"]),
     .target(name: "WebURLTestSupport", dependencies: ["WebURL"]),
     .testTarget(name: "WebURLTests", dependencies: ["WebURL", "WebURLTestSupport", "Checkit"]),
-    
-    .target(name: "URLBenchmarks", dependencies: ["WebURL"]),
   ]
 )
