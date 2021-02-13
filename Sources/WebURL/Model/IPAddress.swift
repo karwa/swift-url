@@ -1,5 +1,6 @@
 import Algorithms  // for Collection.longestSubrange.
 
+
 // MARK: - Callbacks
 
 
@@ -15,29 +16,28 @@ public protocol IPv6AddressParserCallback {
   mutating func validationError(ipv6 error: IPv6Address.ValidationError)
 }
 
-/// A view which allows an `IPv6AddressParserCallback` to accept IPv4 parser errors,
-/// by wrapping them in an IPv6 `invalidIPv4Address` error.
+/// A view which allows an `IPv6AddressParserCallback` to accept IPv4 parser errors, by wrapping them in an IPv6 `invalidIPv4Address` error.
+/// This view contains a mutable reference to the underlying v6 callback, meaning it **must not escape** the context where that reference is valid.
 ///
-/// This allows a single object to conform to both `IPv6AddressParserCallback` and `IPv4AddressParserCallback`, without
-/// having to choose to always/never wrap IPv4 as v6 errors. With this, v4 errors are wrapped only when appropriate (i.e. when encountered via
-/// the IPv6 parser).
+/// This allows a single object to conform to both `IPv6AddressParserCallback` and `IPv4AddressParserCallback`, while giving IPv4 errors
+/// encountered via the v6 parser a distinct representation from those encountered via the v4 parser.
 ///
 fileprivate struct IPParserCallbackv4Tov6<Base>: IPv4ParserCallback where Base: IPv6AddressParserCallback {
-  var v6Handler: Base
-  public mutating func validationError(ipv4 error: IPv4Address.ValidationError) {
-    v6Handler.validationError(ipv6: .invalidIPv4Address(error))
+  var v6Handler: UnsafeMutablePointer<Base>
+  func validationError(ipv4 error: IPv4Address.ValidationError) {
+    v6Handler.pointee.validationError(ipv6: .invalidIPv4Address(error))
   }
 }
+
 extension IPv6AddressParserCallback {
 
-  fileprivate var wrappingIPv4Errors: IPParserCallbackv4Tov6<Self> {
-    get { fatalError("wrappingIPv4Errors is a modify-only view") }
-    _modify {
-      var view = IPParserCallbackv4Tov6(v6Handler: self)
-      yield &view
-      // Unfortunately, this view can trigger COW (at least at -Onone),
-      // so we need to copy back.
-      self = view.v6Handler
+  /// See documentation for `IPParserCallbackv4Tov6`.
+  fileprivate mutating func wrappingIPv4Errors<Result>(
+    _ perform: (inout IPParserCallbackv4Tov6<Self>)->Result
+  ) -> Result {
+    return withUnsafeMutablePointer(to: &self) { ptr in
+      var adapter = IPParserCallbackv4Tov6(v6Handler: ptr)
+      return perform(&adapter)
     }
   }
 }
@@ -312,9 +312,9 @@ extension IPv6Address {
             callback.validationError(ipv6: .invalidPositionForIPv4Address)
             return nil
           }
-
-          guard let value = IPv4Address.parse_simple(input[pieceStartIndex...], callback: &callback.wrappingIPv4Errors)
-          else {
+          guard let value =  callback.wrappingIPv4Errors({ cb in
+            IPv4Address.parse_simple(input[pieceStartIndex...], callback: &cb)
+          }) else {
             return nil
           }
           addressBuffer[pieceIndex] = UInt16(truncatingIfNeeded: value.rawAddress >> 16)
