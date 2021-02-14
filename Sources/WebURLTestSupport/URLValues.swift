@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import WebURL
+
 /// A storage type for the properties exposed in the WHATWG URL model.
 ///
 public struct URLValues: Equatable, Hashable {
@@ -26,7 +28,7 @@ public struct URLValues: Equatable, Hashable {
   public var pathname: String
   public var search: String
   public var hash: String
-  
+
   public static var allTestableURLProperties: [(name: String, keyPath: KeyPath<URLValues, String>)] {
     return [
       ("href", \.href),
@@ -35,7 +37,7 @@ public struct URLValues: Equatable, Hashable {
       ("username", \.username), ("password", \.password),
       // TODO: 'host' not yet supported by WebURL.
       ("hostname", \.hostname), ("port", \.port),
-      ("pathname", \.pathname), ("search", \.search), ("hash", \.hash)
+      ("pathname", \.pathname), ("search", \.search), ("hash", \.hash),
     ]
   }
 
@@ -58,27 +60,26 @@ public struct URLValues: Equatable, Hashable {
 }
 
 extension URLValues: CustomStringConvertible {
-  
+
   public var description: String {
     return """
-    {
-      .href:     \(href)
-      .protocol: \(`protocol`)
-      .username: \(username)
-      .password: \(password)
-      .host:     \(host)
-      .hostname: \(hostname)
-      .origin:   \(origin ?? "<not present>")
-      .port:     \(port)
-      .pathname: \(pathname)
-      .search:   \(search)
-      .hash:     \(hash)
-    }
-    """
+      {
+        .href:     \(href)
+        .protocol: \(`protocol`)
+        .username: \(username)
+        .password: \(password)
+        .host:     \(host)
+        .hostname: \(hostname)
+        .origin:   \(origin ?? "<not present>")
+        .port:     \(port)
+        .pathname: \(pathname)
+        .search:   \(search)
+        .hash:     \(hash)
+      }
+      """
   }
 }
 
-import WebURL
 
 extension WebURL.JSModel {
   public var urlValues: URLValues {
@@ -93,11 +94,11 @@ extension WebURL.JSModel {
 
 
 extension URLValues {
-  
+
   public static func diff(_ lhs: URLValues?, _ rhs: URLValues?) -> [KeyPath<URLValues, String>] {
     switch (lhs, rhs) {
-    case (.none, .none):                   return []
-    case (.some, .none), (.none, .some):   return allTestableURLProperties.map { $0.keyPath }
+    case (.none, .none): return []
+    case (.some, .none), (.none, .some): return allTestableURLProperties.map { $0.keyPath }
     case (.some(let lhs), .some(let rhs)): return rhs.unequalURLProperties(comparedWith: lhs)
     }
   }

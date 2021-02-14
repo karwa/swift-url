@@ -19,13 +19,13 @@ public enum URLConstructorTest {}
 
 
 extension URLConstructorTest {
-  
+
   /// An entry in a WPT URL constructor test file; either a comment as a string or a test case as an object.
   ///
   public enum FileEntry: Equatable, Hashable, Codable {
     case comment(String)
     case testcase(Testcase)
-    
+
     public init(from decoder: Decoder) throws {
       if let testcase = try? Testcase(from: decoder) {
         self = .testcase(testcase)
@@ -33,7 +33,7 @@ extension URLConstructorTest {
         self = .comment(try decoder.singleValueContainer().decode(String.self))
       }
     }
-    
+
     public func encode(to encoder: Encoder) throws {
       switch self {
       case .comment(let header):
@@ -70,18 +70,18 @@ extension URLConstructorTest {
     public var input: String
     public var base: String
     public var expectedValues: URLValues? = nil
-    
+
     public var failure: Bool {
       return expectedValues == nil
     }
-    
+
     public subscript(dynamicMember dynamicMember: KeyPath<URLValues, String>) -> String? {
       expectedValues?[keyPath: dynamicMember]
     }
     public subscript(dynamicMember dynamicMember: KeyPath<URLValues, String?>) -> String? {
       expectedValues?[keyPath: dynamicMember]
     }
-    
+
     public init(input: String, base: String, expectedValues: URLValues?) {
       self.input = input
       self.base = base
@@ -91,13 +91,13 @@ extension URLConstructorTest {
 }
 
 extension URLConstructorTest.Testcase: Equatable, Hashable, Codable {
-  
+
   enum CodingKeys: String, CodingKey {
     case input = "input"
     case base = "base"
-    
+
     case failure = "failure"
-    
+
     case href = "href"
     case origin = "origin"
     case `protocol` = "protocol"
@@ -110,12 +110,12 @@ extension URLConstructorTest.Testcase: Equatable, Hashable, Codable {
     case search = "search"
     case hash = "hash"
   }
-  
+
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     self.input = try container.decode(String.self, forKey: .input)
     self.base = try container.decode(String.self, forKey: .base)
-    
+
     if let xfail = try? container.decode(Bool.self, forKey: .failure) {
       assert(xfail, "A failure key means the test is expected to fail; is always 'true' if present")
       self.expectedValues = nil
@@ -135,7 +135,7 @@ extension URLConstructorTest.Testcase: Equatable, Hashable, Codable {
       )
     }
   }
-  
+
   public func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(input, forKey: .input)
@@ -158,35 +158,35 @@ extension URLConstructorTest.Testcase: Equatable, Hashable, Codable {
 }
 
 extension URLConstructorTest.Testcase: CustomStringConvertible {
-      
+
   public var description: String {
     guard let expectedValues = expectedValues else {
       return """
+        {
+          .input:    \(input)
+          .base:     \(base)
+            -- expected failure --
+        }
+        """
+    }
+    return """
       {
         .input:    \(input)
         .base:     \(base)
-          -- expected failure --
+
+        .href:     \(expectedValues.href)
+        .protocol: \(expectedValues.`protocol`)
+        .username: \(expectedValues.username)
+        .password: \(expectedValues.password)
+        .host:     \(expectedValues.host)
+        .hostname: \(expectedValues.hostname)
+        .origin:   \(expectedValues.origin ?? "<not present>")
+        .port:     \(expectedValues.port)
+        .pathname: \(expectedValues.pathname)
+        .search:   \(expectedValues.search)
+        .hash:     \(expectedValues.hash)
       }
       """
-    }
-    return """
-    {
-      .input:    \(input)
-      .base:     \(base)
-
-      .href:     \(expectedValues.href)
-      .protocol: \(expectedValues.`protocol`)
-      .username: \(expectedValues.username)
-      .password: \(expectedValues.password)
-      .host:     \(expectedValues.host)
-      .hostname: \(expectedValues.hostname)
-      .origin:   \(expectedValues.origin ?? "<not present>")
-      .port:     \(expectedValues.port)
-      .pathname: \(expectedValues.pathname)
-      .search:   \(expectedValues.search)
-      .hash:     \(expectedValues.hash)
-    }
-    """
   }
 }
 
@@ -202,16 +202,16 @@ extension URLConstructorTest {
 }
 
 public protocol _URLConstructorTest_Harness {
-  
+
   /// Parses the given input string, relative to the given base URL, in accordance with the WHATWG URL Standard, and returns
   /// a `URLValues` containing values for the properties specified in the standard. If parsing fails, returns `nil`.
   ///
   func parseURL(_ input: String, base: String?) -> URLValues?
-  
+
   /// A callback that is invoked when the harness encounters an entry in the constructor test file that is not a test case (e.g. a comment).
   ///
   mutating func reportNonTestEntry(_ entry: URLConstructorTest.FileEntry)
-  
+
   /// A callback that is invoked after the harness executes a URL constructor test, providing the results of that test.
   /// This callback is invoked with the results of every test that is executed, including those whose results are not unexpected.
   ///
@@ -219,9 +219,9 @@ public protocol _URLConstructorTest_Harness {
 }
 
 extension URLConstructorTest.Harness {
-  
+
   public nonmutating func reportNonTestEntry(_ entry: URLConstructorTest.FileEntry) {
-  	// Default: no-op.
+    // Default: no-op.
   }
 }
 
@@ -234,25 +234,25 @@ extension URLConstructorTest {
     public init(rawValue: UInt8) {
       self.rawValue = rawValue
     }
-    
+
     /// No failures.
     public static var noFailures: Self { .init(rawValue: 0) }
-    
+
     /// Parsing the base URL must always succeed.
     public static var baseURLFailedToParse: Self { .init(rawValue: 1 << 0) }
-    
+
     /// A URL which fails to parse with a valid base must also fail to parse with no base (i.e. when used as a base itself).
     public static var inputDidNotFailWhenUsedAsBaseURL: Self { .init(rawValue: 1 << 1) }
-    
+
     /// URL failed to parse but wasn't an expected failure.
     public static var unexpectedFailureToParse: Self { .init(rawValue: 1 << 2) }
-    
+
     /// URL was parsed successfully parsed, but was expected to fail.
     public static var unexpectedSuccessfulParse: Self { .init(rawValue: 1 << 3) }
-    
+
     /// The parsed URL's properties do not match the expected values.
     public static var propertyMismatch: Self { .init(rawValue: 1 << 4) }
-    
+
     /// The URL was parsed, serialised, and re-parsed, and produced a different result the second time around.
     public static var notIdempotent: Self { .init(rawValue: 1 << 5) }
   }
@@ -263,20 +263,20 @@ extension URLConstructorTest {
   /// The result of executing a URL constructor test.
   ///
   public struct Result: Equatable, Hashable {
-    
+
     /// The number of tests that have been run prior to this test.
     public var testNumber: Int
-    
+
     /// The test that was run.
     public var testcase: Testcase
-    
+
     /// The URL record properties formed by parsing the `input` and `base` values specified in `testcase`.
     public var propertyValues: URLValues?
-    
+
     /// The set of subtests, run as part of the URL constructor test, that failed.
     /// If empty, the URL parser appeared to behave in accordance with the URL standard for the `input` and `base` values in `testcase`.
     public var failures: SubtestFailures
-    
+
     public init(testNumber: Int, testcase: Testcase, propertyValues: URLValues?, failures: SubtestFailures) {
       self.testNumber = testNumber
       self.testcase = testcase
@@ -287,11 +287,11 @@ extension URLConstructorTest {
 }
 
 extension URLConstructorTest.Harness {
-  
+
   /// Runs the given collection of URL constructor tests.
   ///
   public mutating func runTests(_ tests: [URLConstructorTest.FileEntry]) {
-  
+
     var index = 0
     for entry in tests {
       guard case .testcase(let testcase) = entry else {
@@ -308,7 +308,7 @@ extension URLConstructorTest.Harness {
       if testcase.failure && parseURL("about:blank", base: testcase.input) != nil {
         failures.insert(.inputDidNotFailWhenUsedAsBaseURL)
       }
-      
+
       guard let parsedVals = parseURL(testcase.input, base: testcase.base) else {
         if !testcase.failure { failures.insert(.unexpectedFailureToParse) }
         let result = URLConstructorTest.Result(
@@ -323,7 +323,7 @@ extension URLConstructorTest.Harness {
         )
         reportTestResult(result)
       }
-      
+
       if let expectedValues = testcase.expectedValues {
         if !parsedVals.unequalURLProperties(comparedWith: expectedValues).isEmpty {
           failures.insert(.propertyMismatch)
@@ -331,7 +331,7 @@ extension URLConstructorTest.Harness {
       } else {
         failures.insert(.unexpectedSuccessfulParse)
       }
-      
+
       // Check idempotence: parse the href again and check all properties.
       var serialized = parsedVals.href
       serialized.makeContiguousUTF8()

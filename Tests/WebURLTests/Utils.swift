@@ -30,4 +30,3 @@ let stringWithEveryASCIICharacter: String = {
   precondition(str.utf8.elementsEqual(asciiChars))
   return str
 }()
-

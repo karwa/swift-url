@@ -14,7 +14,6 @@
 
 import Algorithms  // for Collection.longestSubrange.
 
-
 // MARK: - Callbacks
 
 
@@ -47,7 +46,7 @@ extension IPv6AddressParserCallback {
 
   /// See documentation for `IPParserCallbackv4Tov6`.
   fileprivate mutating func wrappingIPv4Errors<Result>(
-    _ perform: (inout IPParserCallbackv4Tov6<Self>)->Result
+    _ perform: (inout IPParserCallbackv4Tov6<Self>) -> Result
   ) -> Result {
     return withUnsafeMutablePointer(to: &self) { ptr in
       var adapter = IPParserCallbackv4Tov6(v6Handler: ptr)
@@ -326,9 +325,11 @@ extension IPv6Address {
             callback.validationError(ipv6: .invalidPositionForIPv4Address)
             return nil
           }
-          guard let value =  callback.wrappingIPv4Errors({ cb in
-            IPv4Address.parse_simple(input[pieceStartIndex...], callback: &cb)
-          }) else {
+          guard
+            let value = callback.wrappingIPv4Errors({ cb in
+              IPv4Address.parse_simple(input[pieceStartIndex...], callback: &cb)
+            })
+          else {
             return nil
           }
           addressBuffer[pieceIndex] = UInt16(truncatingIfNeeded: value.rawAddress >> 16)

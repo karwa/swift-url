@@ -40,14 +40,14 @@ final class IPv4AddressTests: XCTestCase {
   }
 
   func testBasic() {
-    // 192.255.2.5 
+    // 192.255.2.5
     //  = (192 * 256^3) + (255 * 256^2) + (2 * 256) + (5 * 1)
-    //  = 3221225472 + 16711680 + 512 + 5 
+    //  = 3221225472 + 16711680 + 512 + 5
     //  = 3237937669
     let expectedRawAddress: UInt32 = 3_237_937_669
 
     let strings = [
-      "3237937669",  // 1 component, decimal. 
+      "3237937669",  // 1 component, decimal.
       "0xC0.077601005",  // 2 components, hex/octal.
       "192.0xff.01005",  // 3 components, decimal/hex/octal.
       "192.255.2.5",  // 4 components, decimal.
@@ -136,7 +136,7 @@ final class IPv4AddressTests: XCTestCase {
     }
 
     // Next, test that we parse the correct value with any valid number of trailing zeroes.
-    // "234.011.0" = "234.9.0.0" (the 9 is shifted up to the second byte and the lowest bytes are all zero) = 2538 (big-endian). 
+    // "234.011.0" = "234.9.0.0" (the 9 is shifted up to the second byte and the lowest bytes are all zero) = 2538 (big-endian).
     let valid_trailingZeroes = [
       "234.011.0",
       "234.011.0.",
@@ -161,7 +161,7 @@ final class IPv4AddressTests: XCTestCase {
       XCTAssertEqual(addr.serialized, "234.9.0.0")
     }
 
-    // Lastly, test that we reject an invalid number of trailing zeroes. 
+    // Lastly, test that we reject an invalid number of trailing zeroes.
     let invalid_trailingZeroes = [
       "234.011.0.0.0",
       "234.011.0.0.0.",
