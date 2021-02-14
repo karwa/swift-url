@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
 import Checkit
+import XCTest
 
 @testable import WebURL
 
@@ -47,7 +47,7 @@ final class ASCIITests: XCTestCase {
 
 
 extension ASCIITests {
-  
+
   func testLazyLowercase() {
     let testData: [(String, String, isEmpty: Bool)] = [
       ("hElLo, wOrLd! ✌️ PEAcE :)", "hello, world! ✌️ peace :)", false),
@@ -63,7 +63,7 @@ extension ASCIITests {
       CollectionChecker.check(ASCII.NewlineAndTabFiltered(testString.utf8))
     }
   }
-  
+
   func testLazyNewlineAndTabFilter() {
     let testData: [(String, String, isEmpty: Bool)] = [
       ("\thello\nworld\n", "helloworld", false),

@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
 import WebURLTestSupport
+import XCTest
+
 @testable import WebURL
 
 class WebURLTests: XCTestCase {}
@@ -24,7 +25,8 @@ extension WebURLTests {
   /// can be upstreamed.
   ///
   func testURLConstructor() throws {
-    let url = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("additional_constructor_tests.json")
+    let url = URL(fileURLWithPath: #file).deletingLastPathComponent()
+      .appendingPathComponent("additional_constructor_tests.json")
     let fileContents = try JSONDecoder().decode([URLConstructorTest.FileEntry].self, from: try Data(contentsOf: url))
     assert(
       fileContents.count == 79,
@@ -34,7 +36,7 @@ extension WebURLTests {
     harness.runTests(fileContents)
     XCTAssert(harness.entriesSeen == 79, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
-    
+
     // Generate a report file because the XCTest ones really aren't that helpful.
     let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_constructor_more.txt")
     try harness.report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
@@ -43,7 +45,7 @@ extension WebURLTests {
 }
 
 extension WebURLTests {
-  
+
   func testJSModelSetters() {
     // Check that 'pathname' setter does not remove leading slashes.
     do {
@@ -74,7 +76,7 @@ extension WebURLTests {
         XCTAssertEqual(url.hostname, hostname)
         XCTAssertEqual(url.pathname, "//not-a-host/test")
       }
-      
+
       var test_url = WebURL("web+demo:/.//not-a-host/test")!.jsModel
       check_has_path_sigil(url: test_url)
       test_url.hostname = "host"
@@ -88,15 +90,17 @@ extension WebURLTests {
       }
       check_has_path_sigil(url: test_url)
     }
-    
+
     // TODO [testing]: This test needs to be more comprehensive, and we need tests like this exercising all major
     // paths in all setters.
-    
+
     // Checks what happens when a scheme change requires the port to be removed, and the resulting URL
     // has a different optimal storage type to the original (i.e. suddenly becomes less than 255 bytes).
     // It's such a niche case that we'd otherwise never see it.
     do {
-      var url = WebURL("ws://hostnamewhichtakesustotheedge:443?hellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellop")!.jsModel
+      var url = WebURL(
+        "ws://hostnamewhichtakesustotheedge:443?hellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellop"
+      )!.jsModel
       switch url.storage {
       case .generic(_): break
       default: XCTFail("Unexpected storage type")

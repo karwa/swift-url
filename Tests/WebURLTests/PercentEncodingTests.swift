@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
 import Checkit
+import XCTest
 
 @testable import WebURL
 
 final class PercentEncodingTests: XCTestCase {}
 
 extension PercentEncodingTests {
-  
+
   func testEncodeSet_Component() {
     let testData: [String] = [
       stringWithEveryASCIICharacter,
       stringWithEveryASCIICharacter + "😎✈️🏝🍹" + stringWithEveryASCIICharacter.shuffled(),
       "%00this is not percent-encoded: %20",
       "nochange0123456789",
-      ""
+      "",
     ]
     for input in testData {
       let encodedUTF8 = input.utf8.lazy.percentEncoded(using: URLEncodeSet.Component.self).joined()
@@ -51,7 +51,7 @@ extension PercentEncodingTests {
       // things that look like percent-encode sequences (maybe someone really meant to write "%20").
       XCTAssertEqualElements(encodedUTF8.percentDecoded, input.utf8)
     }
-    
+
     // An important feature of the component encode-set is that it includes the % sign itself (U+0025).
     XCTAssertTrue(URLEncodeSet.Component.shouldEscape(character: .percentSign))
   }

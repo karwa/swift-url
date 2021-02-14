@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
 import WebURLTestSupport
+import XCTest
+
 @testable import WebURL
 
 // Data files:
@@ -56,12 +57,12 @@ extension WHATWGTests {
       370,  // domain2ascii: Hosts and percent-encoding.
       566,  // domain2ascii: IDNA ignored code points in file URLs hosts.
       567,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      
+
       // FIXME: This one needs another look. We should not accept any IDNA-encoded domain names, even if they are _already_ encoded.
-      
+
       570,  // domain2ascii: Empty host after the domain to ASCII.
     ])
-    
+
     harness.runTests(fileContents)
     XCTAssert(harness.entriesSeen == 665, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
@@ -84,34 +85,34 @@ extension WHATWGTests {
     var property: String
     var tests: [URLSetterTest]
   }
-  
+
   private struct URLSetterTest: CustomStringConvertible {
     var comment: String?
     var href: String
     var newValue: String
     var expected: [String: String]
-    
+
     var description: String {
       var result = """
-      {
-        .comment:   \(comment ?? "(none)")
+        {
+          .comment:   \(comment ?? "(none)")
 
-        .starting href:   \(href)
-        .property set to: \(newValue)
+          .starting href:   \(href)
+          .property set to: \(newValue)
 
-        .expected result:
+          .expected result:
 
-      """
+        """
       for (key, value) in expected {
         result += "    - \(key): \(value)\n"
       }
       result += """
-      }
-      """
+        }
+        """
       return result
     }
   }
-  
+
   private var testedJSProperties: [String] {
     // No tests for "href". We include "host" but skip the actual tests, as a reminder to one day support them.
     return ["search", "host", "hostname", "hash", "pathname", "password", "username", "protocol", "port"]
@@ -123,8 +124,8 @@ extension WHATWGTests {
       return \.href
     case "search":
       return \.search
-//    case "host":
-//      return \.hostKind
+    //    case "host":
+    //      return \.hostKind
     case "hostname":
       return \.hostname
     case "hash":
@@ -154,7 +155,7 @@ extension WHATWGTests {
       dict.count == 9,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
-    
+
     // The JSON data is in the format:
     // {
     // "property" : [
@@ -175,17 +176,18 @@ extension WHATWGTests {
         XCTFail("No tests in group: \(property)")
         continue
       }
-      testGroups.append(URLSetterTestGroup(
-        property: property,
-        tests: rawTestsForProperty.map { rawTest in
-          URLSetterTest(
-            comment: rawTest["comment"] as? String,
-            href: rawTest["href"] as! String,
-            newValue: rawTest["new_value"] as! String,
-            expected: rawTest["expected"] as! [String: String]
-          )
-        }
-      ))
+      testGroups.append(
+        URLSetterTestGroup(
+          property: property,
+          tests: rawTestsForProperty.map { rawTest in
+            URLSetterTest(
+              comment: rawTest["comment"] as? String,
+              href: rawTest["href"] as! String,
+              newValue: rawTest["new_value"] as! String,
+              expected: rawTest["expected"] as! [String: String]
+            )
+          }
+        ))
     }
 
     // Run the tests.
@@ -202,7 +204,7 @@ extension WHATWGTests {
       }
     }
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
-    
+
     let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_setters_wpt.txt")
     try report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
@@ -239,27 +241,27 @@ extension WHATWGTests {
 }
 
 
-#if false // Mutable query parameters have not been implemented for WebURL yet.
+#if false  // Mutable query parameters have not been implemented for WebURL yet.
 
-// These are not technically WHATWG test cases, but they test
-// functionality exposed via the JS/OldURL model.
-//
-extension OldURL_WHATWGTests {
+  // These are not technically WHATWG test cases, but they test
+  // functionality exposed via the JS/OldURL model.
+  //
+  extension OldURL_WHATWGTests {
 
-  func testSearchParamsEscaping() {
-    var url = OldURL("http://example/?a=b ~")!
-    // Query string is escaped with the "query" escape set.
-    XCTAssertEqual(url.href, "http://example/?a=b%20~")
+    func testSearchParamsEscaping() {
+      var url = OldURL("http://example/?a=b ~")!
+      // Query string is escaped with the "query" escape set.
+      XCTAssertEqual(url.href, "http://example/?a=b%20~")
 
-    // We can read through "searchParams", see the expected value, and 'href' doesn't change.
-    XCTAssertTrue(url.searchParams!.items.first! == (name: "a", value: "b ~"))
-    XCTAssertEqual(url.href, "http://example/?a=b%20~")
+      // We can read through "searchParams", see the expected value, and 'href' doesn't change.
+      XCTAssertTrue(url.searchParams!.items.first! == (name: "a", value: "b ~"))
+      XCTAssertEqual(url.href, "http://example/?a=b%20~")
 
-    // Modifying via searchParams re-escapes with the "application/x-www-form-urlencoded" escape set.
-    // But we read the same value out of it.
-    url.searchParams!.items.sort { $0.name < $1.name }
-    XCTAssertEqual(url.href, "http://example/?a=b+%7E")
-    XCTAssertTrue(url.searchParams!.items.first! == (name: "a", value: "b ~"))
+      // Modifying via searchParams re-escapes with the "application/x-www-form-urlencoded" escape set.
+      // But we read the same value out of it.
+      url.searchParams!.items.sort { $0.name < $1.name }
+      XCTAssertEqual(url.href, "http://example/?a=b+%7E")
+      XCTAssertTrue(url.searchParams!.items.first! == (name: "a", value: "b ~"))
+    }
   }
-}
 #endif
