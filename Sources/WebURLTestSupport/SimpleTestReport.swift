@@ -18,41 +18,41 @@
 /// data can be accessed via properties such as `hasUnexpectedResults` and `generateReport`.
 ///
 public struct SimpleTestReport {
-  
+
   public enum Result {
     case pass, fail
   }
-  
+
   public struct Reporter {
     var expectedResult = Result.pass
-    fileprivate var actualResult   = Result.pass
-    fileprivate var capturedData   = [(String, Any)]()
-    fileprivate var failureKeys    = [String]()
+    fileprivate var actualResult = Result.pass
+    fileprivate var capturedData = [(String, Any)]()
+    fileprivate var failureKeys = [String]()
   }
-  
+
   struct Section {
     var name: String?
     var reporters: [Reporter?] = []
   }
-  
+
   var sections: [Section] = [.init()]
-  
+
   public init() {
   }
-  
+
   /// Marks the start of a named test section. All tests executed after this method is called will belong to this section, until the next section is marked.
   ///
   public mutating func markSection(_ name: String) {
     sections.append(Section(name: name))
   }
-  
+
   /// Marks a test as "skipped". The test index is advanced, so that later indexes remain aligned to the correct tests, but no result (expected/unexpected) is recorded.
   ///
   public mutating func skipTest(count: Int = 1) {
     precondition(count >= 0)
     sections[sections.count - 1].reporters.append(contentsOf: repeatElement(nil, count: count))
   }
-  
+
   /// Performs a test. The given closure is invoked with a mutable `Reporter` object and test index.
   /// Refer to `Reporter`'s API to find out how to make testable assertions that will be logged in the test report.
   ///
@@ -65,7 +65,7 @@ public struct SimpleTestReport {
     }
     sections[sections.count - 1].reporters.append(reporter)
   }
-  
+
   /// Whether or not this report contains any unexpected test results (unexpected passes or failures).
   ///
   public var hasUnexpectedResults: Bool {
@@ -78,18 +78,18 @@ public struct SimpleTestReport {
 }
 
 extension SimpleTestReport.Reporter {
-  
+
   /// Captures the given test artefact for inclusion in the test report.
   ///
   public mutating func capture(key: String, _ object: Any) {
     capturedData.append((key, object))
   }
-  
+
   public mutating func fail(_ key: String? = nil) {
     actualResult = .fail
     key.map { failureKeys.append($0) }
   }
-  
+
   public mutating func expectEqual<T: Equatable>(_ lhs: T, _ rhs: T, _ key: String? = nil) {
     if lhs != rhs { fail(key) }
   }
@@ -101,7 +101,7 @@ extension SimpleTestReport.Reporter {
   public mutating func expectFalse(_ lhs: Bool, _ key: String? = nil) {
     if lhs == true { fail(key) }
   }
-  
+
   mutating fileprivate func uncaughtError(_ error: Error) {
     capture(key: "__uncaught_error", error)
     fail()
@@ -109,9 +109,9 @@ extension SimpleTestReport.Reporter {
 }
 
 extension SimpleTestReport {
-  
+
   public func generateReport() -> String {
-    
+
     // Gather cumulative stats.
     var tests_count = 0
     var tests_xPass_aFail = 0
@@ -119,7 +119,7 @@ extension SimpleTestReport {
     var tests_xFail_aFail = 0
     var tests_xFail_aPass = 0
     var tests_skipped = 0
-    
+
     for reporter in sections.lazy.map({ $0.reporters }).joined() {
       defer { tests_count += 1 }
       guard let reporter = reporter else {
@@ -133,7 +133,7 @@ extension SimpleTestReport {
       case (.fail, .pass): tests_xFail_aPass += 1
       }
     }
-    
+
     var output = ""
     print(
       """
@@ -145,13 +145,13 @@ extension SimpleTestReport {
       Fail: \(tests_xFail_aFail + tests_xPass_aFail) (\(tests_xFail_aFail) expected)
       \(tests_skipped) Tests skipped.
       ---------------------------------------------
-      
+
       """, to: &output)
-    
+
     func printLine() {
       print(String(repeating: "=", count: 30), to: &output)
     }
-    
+
     var testNumber = 0
     for section in sections {
       // Only print the section name if it contains an unexpected result.
@@ -167,16 +167,16 @@ extension SimpleTestReport {
           hasPrintedName = true
         }
       }
-      
+
       for reporter in section.reporters {
         defer { testNumber += 1 }
         guard let reporter = reporter, reporter.actualResult != reporter.expectedResult else { continue }
         printSectionNameIfNeeded()
-        
+
         print("[\(testNumber)]:", to: &output)
         print("", to: &output)
         print("Expected: \(reporter.expectedResult). Actual: \(reporter.actualResult)", to: &output)
-        
+
         if !reporter.failureKeys.isEmpty {
           print("", to: &output)
           print("Failed checks:", to: &output)
@@ -194,7 +194,7 @@ extension SimpleTestReport {
             print("", to: &output)
           }
         }
-        
+
         print("", to: &output)
       }
     }

@@ -15,14 +15,14 @@
 import WebURL
 
 extension URLConstructorTest {
-  
+
   /// A harness for running a series of `URLConstructorTest`s with the `WebURL` parser and accumulating the results in a `SimpleTestReport`.
   ///
   public struct WebURLReportHarness {
     public private(set) var report = SimpleTestReport()
     public private(set) var entriesSeen = 0
     public let expectedFailures: Set<Int>
-    
+
     public init(expectedFailures: Set<Int> = []) {
       self.expectedFailures = expectedFailures
     }
@@ -30,11 +30,11 @@ extension URLConstructorTest {
 }
 
 extension URLConstructorTest.WebURLReportHarness: URLConstructorTest.Harness {
-  
+
   public func parseURL(_ input: String, base: String?) -> URLValues? {
     return WebURL(input, base: base)?.jsModel.urlValues
   }
-  
+
   public mutating func reportNonTestEntry(_ entry: URLConstructorTest.FileEntry) {
     entriesSeen += 1
     switch entry {
@@ -42,13 +42,13 @@ extension URLConstructorTest.WebURLReportHarness: URLConstructorTest.Harness {
     case .testcase: assertionFailure("Unexpected test in reportNonTestEntry")
     }
   }
-  
+
   public mutating func reportTestResult(_ result: URLConstructorTest.Result) {
     entriesSeen += 1
     report.performTest { reporter in
       reporter.capture(key: "Testcase", result.testcase)
       reporter.capture(key: "Result", result.propertyValues?.description ?? "nil")
-      
+
       if expectedFailures.contains(result.testNumber) {
         reporter.expectedResult = .fail
       }
