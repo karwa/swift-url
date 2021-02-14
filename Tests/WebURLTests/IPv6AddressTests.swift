@@ -1,4 +1,18 @@
-import URLTestUtils
+// Copyright The swift-url Contributors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import WebURLTestSupport
 import XCTest
 
 @testable import WebURL
@@ -14,6 +28,13 @@ import XCTest
 extension Array where Element == UInt16 {
   init(fromIPv6Address addr: IPv6Address.AddressType) {
     self = [addr.0, addr.1, addr.2, addr.3, addr.4, addr.5, addr.6, addr.7]
+  }
+}
+
+extension ValidationError {
+  public var ipv6Error: IPv6Address.ValidationError? {
+    guard case .some(.ipv6AddressError(let error)) = self.hostParserError else { return nil }
+    return error
   }
 }
 

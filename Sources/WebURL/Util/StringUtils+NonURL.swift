@@ -1,3 +1,17 @@
+// Copyright The swift-url Contributors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // - General (non URL-related) String utilities.
 
 // -- String Creation.
@@ -8,12 +22,14 @@ extension String {
     _unsafeUninitializedCapacity capacity: Int,
     initializingUTF8With initializer: (_ buffer: UnsafeMutableBufferPointer<UInt8>) throws -> Int
   ) rethrows {
-    #if swift(>=5.3)
-      if #available(macOS 9999, iOS 14.0, *) {
-        self = try String(unsafeUninitializedCapacity: capacity, initializingUTF8With: initializer)
-        return
-      }
-    #endif
+    // FIXME: We actually want an SDK version check.
+    // See: https://forums.swift.org/t/do-we-need-something-like-if-available/40349/16
+    //    #if swift(>=5.3)
+    //    if #available(macOS 10.16, iOS 14.0, watchOS 7.0, tvOS 14.0, *) {
+    //      self = try String(unsafeUninitializedCapacity: capacity, initializingUTF8With: initializer)
+    //      return
+    //    }
+    //    #endif
     if capacity <= 32 {
       let newStr = try with32ByteStackBuffer { buffer -> String in
         let count = try initializer(buffer)
@@ -63,8 +79,6 @@ private func with32ByteStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<UIn
   }
 }
 
-// -- UTF8 stuff.
-
 extension StringProtocol {
 
   @inlinable @inline(__always)
@@ -75,36 +89,5 @@ extension StringProtocol {
       var substring = self as! Substring
       return try substring.withUTF8(body)
     }
-  }
-}
-
-// swift-format-ignore
-extension Unicode.UTF8 {
-
-  /// If the first byte in `bytes` is a UTF8-encoded codepoint's header byte, returns
-  /// the `SubSequence` of the entire codepoint. This function does not validate the codepoint.
-  ///
-  /// - parameters:
-  ///   - bytes: The byte string to inspect. Must not be empty. The first byte will be
-  ///            taken as the header, and the function will return `nil` if `bytes`
-  ///            does not contain the entire codepoint.
-  /// - returns: The bytes which make up the codepoint's UTF8 representation.
-  ///            Returns `nil` if the first byte in `bytes` is a continuation byte,
-  ///            not a UTF8 header byte, or if `bytes` does not contain
-  ///            the entire codepoint promised by the header.
-  ///
-  static func rangeOfEncodedCodePoint<C>(fromStartOf bytes: C) -> C.SubSequence?
-  where C: Collection, C.Element == UInt8 {
-    let startIdx = bytes.startIndex
-    let byte = bytes[startIdx]
-    var end: C.Index?
-    // ASCII.
-    if _fastPath(byte & 0b1000_0000 == 0b0000_0000) { end = bytes.index(after: startIdx) }
-    // Valid UTF8 sequences.
-    else if byte & 0b1110_0000 == 0b1100_0000 { end = bytes.index(startIdx, offsetBy: 2, limitedBy: bytes.endIndex) }
-    else if byte & 0b1111_0000 == 0b1110_0000 { end = bytes.index(startIdx, offsetBy: 3, limitedBy: bytes.endIndex) }
-    else if byte & 0b1111_1000 == 0b1111_0000 { end = bytes.index(startIdx, offsetBy: 4, limitedBy: bytes.endIndex) }
-    // Continuation bytes or invalid UTF8.
-    return end.map { bytes[Range(uncheckedBounds: (startIdx, $0))] }
   }
 }

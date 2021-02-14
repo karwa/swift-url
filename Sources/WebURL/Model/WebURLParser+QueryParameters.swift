@@ -1,4 +1,18 @@
-extension WebURLParser {
+// Copyright The swift-url Contributors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+extension WebURL {
 
   public struct QueryParameters {
     public var items: [(name: String, value: String)] = []
@@ -6,7 +20,7 @@ extension WebURLParser {
   }
 }
 
-extension WebURLParser.QueryParameters {
+extension WebURL.QueryParameters {
 
   /// Parses a `QueryParameters` object from an `application/x-www-form-urlencoded`-formatted String.
   ///
@@ -19,15 +33,22 @@ extension WebURLParser.QueryParameters {
       let name: String
       let value: String
       if let separatorIdx = byteSequence.firstIndex(of: ASCII.equalSign.codePoint) {
-        name = PercentEscaping.decodeFormEncodedString(
-          utf8: byteSequence[Range(uncheckedBounds: (byteSequence.startIndex, separatorIdx))]
+        name = String(
+          decoding: byteSequence[Range(uncheckedBounds: (byteSequence.startIndex, separatorIdx))]
+            .lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self),
+          as: UTF8.self
         )
         let valueStartIdx = byteSequence.index(after: separatorIdx)
-        value = PercentEscaping.decodeFormEncodedString(
-          utf8: byteSequence[Range(uncheckedBounds: (valueStartIdx, byteSequence.endIndex))]
+        value = String(
+          decoding: byteSequence[Range(uncheckedBounds: (valueStartIdx, byteSequence.endIndex))]
+            .lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self),
+          as: UTF8.self
         )
       } else {
-        name = PercentEscaping.decodeFormEncodedString(utf8: byteSequence)
+        name = String(
+          decoding: byteSequence.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self),
+          as: UTF8.self
+        )
         value = ""
       }
       items.append((name, value))
@@ -52,9 +73,13 @@ extension WebURLParser.QueryParameters {
   static func serialiseQueryString<S>(_ queryComponents: S) -> String where S: Sequence, S.Element == (String, String) {
     var output = ""
     for (name, value) in queryComponents {
-      PercentEscaping.encodeIterativelyAsStringForForm(bytes: name.utf8) { output.append($0) }
+      name.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered {
+        output.append(String(decoding: $0, as: UTF8.self))
+      }
       output.append("=")
-      PercentEscaping.encodeIterativelyAsStringForForm(bytes: value.utf8) { output.append($0) }
+      value.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered {
+        output.append(String(decoding: $0, as: UTF8.self))
+      }
       output.append("&")
     }
     if !output.isEmpty { output.removeLast() }
@@ -66,6 +91,6 @@ extension WebURLParser.QueryParameters {
   /// Conforms to https://url.spec.whatwg.org/#urlencoded-serializing as of 27.06.2020
   ///
   var serialized: String {
-    return WebURLParser.QueryParameters.serialiseQueryString(items)
+    return WebURL.QueryParameters.serialiseQueryString(items)
   }
 }

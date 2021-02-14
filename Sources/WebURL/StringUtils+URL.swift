@@ -1,3 +1,17 @@
+// Copyright The swift-url Contributors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 /// A namespace for String-related, domain-specific utility functions used by `WebURLParser`.
 /// These often don't involve actual `Swift.String`s from the standard library,
 /// but instead consider UTF8-encoded byte sequences or individual ASCII codepoints.
@@ -150,7 +164,7 @@ extension URLStringUtils where T: Collection, T.Element == UInt8 {
   ///
   /// https://url.spec.whatwg.org/#url-miscellaneous as of 14.06.2020
   ///
-  static func isNormalisedWindowsDriveLetter(_ bytes: T) -> Bool {
+  static func isNormalizedWindowsDriveLetter(_ bytes: T) -> Bool {
     isWindowsDriveLetter(bytes) && (bytes.dropFirst().first.map { ASCII($0) == .colon } ?? false)
   }
 
@@ -209,7 +223,7 @@ extension URLStringUtils where T: Collection, T.Element == UInt8 {
     return true
   }
 
-  /// Returns `true` if `bytes` contains two U+002F (/) codepoints only.
+  /// Returns `true` if `bytes` begins with two U+002F (/) codepoints.
   /// Otherwise, `false`.
   ///
   static func hasDoubleSolidusPrefix(_ bytes: T) -> Bool {

@@ -1,9 +1,22 @@
+// Copyright The swift-url Contributors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import Algorithms  // for Collection.longestSubrange.
+
 
 // MARK: - Callbacks
 
-// Note: IP Address parsers have their own callback protocol because they are
-//       useful outside of URL contexts.
 
 /// An object which is informed by the IPv4 parser if a validation error occurs.
 ///
@@ -17,36 +30,37 @@ public protocol IPv6AddressParserCallback {
   mutating func validationError(ipv6 error: IPv6Address.ValidationError)
 }
 
-/// A view which allows an `IPv6AddressParserCallback` to accept IPv4 parser errors,
-/// by wrapping them in an IPv6 `invalidIPv4Address` error.
+/// A view which allows an `IPv6AddressParserCallback` to accept IPv4 parser errors, by wrapping them in an IPv6 `invalidIPv4Address` error.
+/// This view contains a mutable reference to the underlying v6 callback, meaning it **must not escape** the context where that reference is valid.
 ///
-/// This allows a single object to conform to both `IPv6AddressParserCallback` and `IPv4AddressParserCallback`, without
-/// having to choose to always/never wrap IPv4 as v6 errors. With this, v4 errors are wrapped only when appropriate (i.e. when encountered via
-/// the IPv6 parser).
+/// This allows a single object to conform to both `IPv6AddressParserCallback` and `IPv4AddressParserCallback`, while giving IPv4 errors
+/// encountered via the v6 parser a distinct representation from those encountered via the v4 parser.
 ///
 fileprivate struct IPParserCallbackv4Tov6<Base>: IPv4ParserCallback where Base: IPv6AddressParserCallback {
-  var v6Handler: Base
-  public mutating func validationError(ipv4 error: IPv4Address.ValidationError) {
-    v6Handler.validationError(ipv6: .invalidIPv4Address(error))
+  var v6Handler: UnsafeMutablePointer<Base>
+  func validationError(ipv4 error: IPv4Address.ValidationError) {
+    v6Handler.pointee.validationError(ipv6: .invalidIPv4Address(error))
   }
 }
+
 extension IPv6AddressParserCallback {
 
-  fileprivate var wrappingIPv4Errors: IPParserCallbackv4Tov6<Self> {
-    get { fatalError("wrappingIPv4Errors is a modify-only view") }
-    _modify {
-      var view = IPParserCallbackv4Tov6(v6Handler: self)
-      yield &view
-      // Unfortunately, this view can trigger COW (at least at -Onone),
-      // so we need to copy back.
-      self = view.v6Handler
+  /// See documentation for `IPParserCallbackv4Tov6`.
+  fileprivate mutating func wrappingIPv4Errors<Result>(
+    _ perform: (inout IPParserCallbackv4Tov6<Self>)->Result
+  ) -> Result {
+    return withUnsafeMutablePointer(to: &self) { ptr in
+      var adapter = IPParserCallbackv4Tov6(v6Handler: ptr)
+      return perform(&adapter)
     }
   }
 }
 
+
 // MARK: - IPv6
 
-/// A 128-bit numerical identifier assigned to a device on an 
+
+/// A 128-bit numerical identifier assigned to a device on an
 /// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
 ///
 public struct IPv6Address {
@@ -71,7 +85,7 @@ public struct IPv6Address {
   // Network byte order.
 
   /// The network address (i.e. in network byte order).
-  /// 
+  ///
   public var networkAddress: AddressType {
     return (
       rawAddress.0.bigEndian, rawAddress.1.bigEndian,
@@ -171,7 +185,7 @@ extension IPv6Address {
     }
 
     // Note: These are deliberately not public, because we don't want to make the set of possible errors API.
-    //       They are 'internal' for testing purposes only.  
+    //       They are 'internal' for testing purposes only.
     internal static var emptyInput: Self { Self(errorCode: 1) }
     // -
     internal static var unexpectedLeadingColon: Self { Self(errorCode: 2) }
@@ -221,7 +235,7 @@ extension IPv6Address {
   }
 
   /// Parses an IPv6 address from a UTF-8 string.
-  /// 
+  ///
   /// TODO: Add description of accepted formats.
   ///
   /// - parameters:
@@ -231,8 +245,8 @@ extension IPv6Address {
   /// - returns:
   ///     Either the successfully-parsed address, or `.none` if parsing fails.
   ///
-  public static func parse<Callback>(_ input: UnsafeBufferPointer<UInt8>, callback: inout Callback) -> Self?
-  where Callback: IPv6AddressParserCallback {
+  public static func parse<Bytes, Callback>(_ input: Bytes, callback: inout Callback) -> Self?
+  where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv6AddressParserCallback {
     guard input.isEmpty == false else {
       callback.validationError(ipv6: .emptyInput)
       return nil
@@ -312,13 +326,9 @@ extension IPv6Address {
             callback.validationError(ipv6: .invalidPositionForIPv4Address)
             return nil
           }
-
-          guard
-            let value = IPv4Address.parse_simple(
-              UnsafeBufferPointer(rebasing: input[pieceStartIndex...]),
-              callback: &callback.wrappingIPv4Errors
-            )
-          else {
+          guard let value =  callback.wrappingIPv4Errors({ cb in
+            IPv4Address.parse_simple(input[pieceStartIndex...], callback: &cb)
+          }) else {
             return nil
           }
           addressBuffer[pieceIndex] = UInt16(truncatingIfNeeded: value.rawAddress >> 16)
@@ -408,47 +418,49 @@ extension IPv6Address {
   }
 }
 
+
 // MARK: - IPv4
 
-  /// A 32-bit numerical identifier assigned to a device on an 
-  /// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.
+
+/// A 32-bit numerical identifier assigned to a device on an
+/// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.
+///
+public struct IPv4Address {
+
+  // Host byte order.
+
+  /// The raw address (i.e. in host byte order).
   ///
-  public struct IPv4Address {
+  public var rawAddress: UInt32
 
-    // Host byte order.
-
-    /// The raw address (i.e. in host byte order).
-    ///
-    public var rawAddress: UInt32
-
-    /// Creates a value with the given raw address.
-    ///
-    /// - parameters:
-    ///     - rawAddress:   The address value in host byte order.
-    ///
-    @inlinable
-    public init(rawAddress: UInt32) {
-      self.rawAddress = rawAddress
-    }
-
-    // Network byte order.
-
-    /// The network address (i.e. in network byte order).
-    /// 
-    public var networkAddress: UInt32 {
-      return rawAddress.bigEndian
-    }
-
-    /// Creates a value with the given network address.
-    ///
-    /// - parameters:
-    ///     - networkAddress:   The address value in network byte order.
-    ///
-    @inlinable
-    public init(networkAddress: UInt32) {
-      self.init(rawAddress: networkAddress.bigEndian)
-    }
+  /// Creates a value with the given raw address.
+  ///
+  /// - parameters:
+  ///     - rawAddress:   The address value in host byte order.
+  ///
+  @inlinable
+  public init(rawAddress: UInt32) {
+    self.rawAddress = rawAddress
   }
+
+  // Network byte order.
+
+  /// The network address (i.e. in network byte order).
+  ///
+  public var networkAddress: UInt32 {
+    return rawAddress.bigEndian
+  }
+
+  /// Creates a value with the given network address.
+  ///
+  /// - parameters:
+  ///     - networkAddress:   The address value in network byte order.
+  ///
+  @inlinable
+  public init(networkAddress: UInt32) {
+    self.init(rawAddress: networkAddress.bigEndian)
+  }
+}
 
 // Standard protocols.
 
@@ -520,7 +532,7 @@ extension IPv4Address {
     }
 
     // Note: These are deliberately not public, because we don't want to make the set of possible errors API.
-    //       They are 'internal' for testing purposes only.  
+    //       They are 'internal' for testing purposes only.
     internal static var emptyInput: Self { Self(errorCode: 1) }
     // -
     internal static var pieceBeginsWithInvalidCharacter: Self { Self(errorCode: 3) }  // full only.
@@ -565,7 +577,7 @@ extension IPv4Address {
   }
 
   /// Parses an IPv4 address from a UTF-8 string.
-  /// 
+  ///
   /// The given string may have 1, 2, 3 or 4 pieces, separated by a '.',
   /// and each piece may be specified in octal, decimal, or hexadecimal notation.
   /// A single trailing '.' is permitted.
@@ -577,9 +589,9 @@ extension IPv4Address {
   ///     A result object containing either the successfully-parsed address, or a failure flag communicating whether parsing
   ///     failed because the string was not in the correct format.
   ///
-  public static func parse<Callback>(
-    _ input: UnsafeBufferPointer<UInt8>, callback: inout Callback
-  ) -> ParseResult where Callback: IPv4ParserCallback {
+  public static func parse<Bytes, Callback>(
+    _ input: Bytes, callback: inout Callback
+  ) -> ParseResult where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4ParserCallback {
     guard input.isEmpty == false else {
       callback.validationError(ipv4: .emptyInput)
       return .failure
@@ -709,7 +721,7 @@ extension IPv4Address {
   }
 
   /// Parses an IPv4 address from a UTF-8 string.
-  /// 
+  ///
   /// This simplified parser accepts only the 4-piece decimal notation ("a.b.c.d").
   /// Trailing '.'s are not permitted.
   ///
@@ -720,9 +732,9 @@ extension IPv4Address {
   /// - returns:
   ///     Either the successfully-parsed address, or `.none` if parsing failed.
   ///
-  public static func parse_simple<Callback>(
-    _ input: UnsafeBufferPointer<UInt8>, callback: inout Callback
-  ) -> Self? where Callback: IPv4ParserCallback {
+  public static func parse_simple<Bytes, Callback>(
+    _ input: Bytes, callback: inout Callback
+  ) -> Self? where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4ParserCallback {
 
     var result = UInt32(0)
     var idx = input.startIndex
