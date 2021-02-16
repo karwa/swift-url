@@ -83,7 +83,7 @@ extension ParsedHost {
     let asciiDomain = domain
 
     var ipv4Error = LastValidationError()
-    switch IPv4Address.parse(asciiDomain, callback: &ipv4Error) {
+    switch IPv4Address.parse(utf8: asciiDomain, callback: &ipv4Error) {
     case .success(let address):
       self = .ipv4Address(address)
       return

@@ -17,7 +17,9 @@ import XCTest
 
 @testable import WebURL
 
-// Helpers.
+
+// MARK: - Helpers.
+
 
 #if canImport(Glibc)
   import Glibc
@@ -283,9 +285,9 @@ extension IPv6AddressTests {
       
       // Serialize with libc. It should return the same String.
       let libcStr = ntop_pieces(Array(fromIPv6Pieces: expected))
-      // Exception: if the address <= UInt32.max, libc may print this as an embedded IPv4 address on some platforms
-      // (e.g. it prints "::198.135.80.188", we print "::c687:50bc").
       if libcStr?.contains(".") == true {
+        // Exception: if the address <= UInt32.max, libc may print this as an embedded IPv4 address on some platforms
+        // (e.g. it prints "::198.135.80.188", we print "::c687:50bc").
         XCTAssertTrue(Array(fromIPv6Pieces: expected).dropLast(2).allSatisfy { $0 == 0 })
       } else {
         XCTAssertEqual(libcStr, address.serialized)
