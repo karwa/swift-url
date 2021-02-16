@@ -45,7 +45,7 @@ extension ParsedHost {
         callback.validationError(.unclosedIPv6Address)
         return nil
       }
-      guard let result = IPv6Address.parse(ipv6Slice, callback: &callback) else {
+      guard let result = IPv6Address.parse(utf8: ipv6Slice, callback: &callback) else {
         return nil
       }
       self = .ipv6Address(result)

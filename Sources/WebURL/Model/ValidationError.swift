@@ -65,13 +65,14 @@ public struct CollectValidationErrors: URLParserCallback {
 
 public struct ValidationError: Equatable {
   private var code: UInt8
-  /* testable */ private(set) var hostParserError: AnyHostParserError? = nil
+  /* testable */ @usableFromInline private(set) var hostParserError: AnyHostParserError? = nil
 
+  @usableFromInline
   enum AnyHostParserError: Equatable, CustomStringConvertible {
     case ipv4AddressError(IPv4Address.ValidationError)
     case ipv6AddressError(IPv6Address.ValidationError)
 
-    var description: String {
+    @usableFromInline var description: String {
       switch self {
       case .ipv4AddressError(let error):
         return error.description
