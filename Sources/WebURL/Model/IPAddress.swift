@@ -1032,11 +1032,27 @@ extension IPv4Address {
   /// The textual representation of this address, in dotted decimal notation, as defined by [RFC 4001](https://tools.ietf.org/html/rfc4001#page-7).
   ///
   public var serialized: String {
-    // 15 bytes is the maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX"),
-    // but is also happily the small-string size on 64-bit platforms.
-    return String(_unsafeUninitializedCapacity: 15) { stringBuffer in
-      return withUnsafeBytes(of: octets) { __rawAddressBytes -> Int in
-        let addressBytes = __rawAddressBytes.bindMemory(to: UInt8.self)
+    var direct = serializedDirect
+    return String(_unsafeUninitializedCapacity: Int(direct.count)) { stringBuffer in
+      withUnsafeBytes(of: &direct.buffer) { codeunits in
+        UnsafeMutableRawBufferPointer(stringBuffer).copyMemory(
+          from: UnsafeRawBufferPointer(rebasing: codeunits.prefix(Int(direct.count)))
+        )
+      }
+      return Int(direct.count)
+    }
+  }
+  
+  var serializedDirect: (buffer: (UInt64, UInt64), count: UInt8) {
+    
+    // The maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX") is 15 bytes.
+    var result: (UInt64, UInt64) = (0, 0)
+    
+    let count = withUnsafeMutableBytes(of: &result) { rawStringBuffer -> Int in
+      let stringBuffer = rawStringBuffer.bindMemory(to: UInt8.self)
+
+      return withUnsafeBytes(of: octets) { rawAddressBytes -> Int in
+        let addressBytes = rawAddressBytes.bindMemory(to: UInt8.self)
         var stringBufferIdx = stringBuffer.startIndex
         for i in 0..<4 {
           stringBufferIdx &+= ASCII.insertDecimalString(
@@ -1053,5 +1069,6 @@ extension IPv4Address {
         return stringBufferIdx
       }
     }
+    return (result, UInt8(truncatingIfNeeded: count))
   }
 }
