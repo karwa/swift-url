@@ -82,20 +82,20 @@ extension IPv6AddressParserCallback {
 ///    rather than `0x08 0x26` (which is what the little-endian integer actually looks like in memory).
 ///
 public enum OctetArrangement {
-  
+
   /// Offers consistent numeric values across machines of different endianness, by adjusting the binary representation when reading or writing multi-byte integers.
   /// Also known as host byte order (i.e. the integers that you read and write are expected to be in host byte order).
   ///
   case numeric
-  
+
   /// Offers consistent binary representations across machines of different endianness, although each machine may interpret those bits as a different numeric value.
   /// Also known as network byte order (i.e. the integers that you read and write are expected to be in network byte order).
   ///
   case binary
- 
+
   /// A synonym for `.numeric`.
   @inlinable public static var hostOrder: Self { return .numeric }
-  
+
   /// A synonym for `.binary`.
   @inlinable public static var networkOrder: Self { return .binary }
 }
@@ -108,20 +108,22 @@ public enum OctetArrangement {
 /// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
 ///
 public struct IPv6Address {
-  
-  public typealias Octets = (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-                             UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8)
-  
+
+  public typealias Octets = (
+    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8
+  )
+
   public var octets: Octets
-  
+
   /// Creates an address with the given octets.
   @inlinable
   public init(octets: Octets = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)) {
     self.octets = octets
   }
-  
+
   public typealias UInt16Pieces = (UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16)
-  
+
   /// Creates an address from the given 16-bit integer pieces.
   ///
   /// - seealso: `OctetArrangement`
@@ -155,21 +157,27 @@ public struct IPv6Address {
       case .binary:
         return networkOrder
       case .numeric:
-        return (UInt16(bigEndian: networkOrder.0), UInt16(bigEndian: networkOrder.1), UInt16(bigEndian: networkOrder.2),
-                UInt16(bigEndian: networkOrder.3), UInt16(bigEndian: networkOrder.4), UInt16(bigEndian: networkOrder.5),
-                UInt16(bigEndian: networkOrder.6), UInt16(bigEndian: networkOrder.7))
+        return (
+          UInt16(bigEndian: networkOrder.0), UInt16(bigEndian: networkOrder.1), UInt16(bigEndian: networkOrder.2),
+          UInt16(bigEndian: networkOrder.3), UInt16(bigEndian: networkOrder.4), UInt16(bigEndian: networkOrder.5),
+          UInt16(bigEndian: networkOrder.6), UInt16(bigEndian: networkOrder.7)
+        )
       }
     }
     set {
       switch octetArrangement {
       case .binary:
-        withUnsafeBytes(of: newValue) { src in withUnsafeMutableBytes(of: &octets) { dst in
-          dst.copyBytes(from: src)
-        } }
+        withUnsafeBytes(of: newValue) { src in
+          withUnsafeMutableBytes(of: &octets) { dst in
+            dst.copyBytes(from: src)
+          }
+        }
       case .numeric:
-        self[uint16Pieces: .binary] = (newValue.0.bigEndian, newValue.1.bigEndian, newValue.2.bigEndian,
-                                       newValue.3.bigEndian, newValue.4.bigEndian, newValue.5.bigEndian,
-                                       newValue.6.bigEndian, newValue.7.bigEndian)
+        self[uint16Pieces: .binary] = (
+          newValue.0.bigEndian, newValue.1.bigEndian, newValue.2.bigEndian,
+          newValue.3.bigEndian, newValue.4.bigEndian, newValue.5.bigEndian,
+          newValue.6.bigEndian, newValue.7.bigEndian
+        )
       }
     }
   }
@@ -178,7 +186,7 @@ public struct IPv6Address {
 // Standard protocols.
 
 extension IPv6Address: Equatable, Hashable, LosslessStringConvertible {
-  
+
   @inlinable
   public static func == (lhs: Self, rhs: Self) -> Bool {
     return withUnsafeBytes(of: lhs.octets) { lhsBytes in
@@ -239,7 +247,7 @@ extension IPv6Address {
     guard let parsed = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else { return nil }
     self = parsed
   }
-  
+
   /// Parses an IPv6 address from a String.
   ///
   /// Accepted formats are documented in [Section 2.2][rfc4291] ("Text Representation of Addresses") of
@@ -322,7 +330,7 @@ extension IPv6Address {
       }
     }
   }
-  
+
   // Note: This does not 'throw', as we want to specialize when the caller doesn't care about the error.
 
   /// Parses an IPv6 address from a buffer of UTF-8 code-units.
@@ -462,8 +470,9 @@ extension IPv6Address {
       }
 
       // Parsing successful.
-      return IPv6Address(octets: UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
-                          .load(fromByteOffset: 0, as: IPv6Address.Octets.self))
+      return IPv6Address(
+        octets: UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
+          .load(fromByteOffset: 0, as: IPv6Address.Octets.self))
     }
   }
 }
@@ -485,21 +494,21 @@ extension IPv6Address {
       return Int(direct.count)
     }
   }
-  
+
   var serializedDirect: (buffer: (UInt64, UInt64, UInt64, UInt64, UInt64), count: UInt8) {
-    
+
     // Maximum length of an IPv6 address = 39 bytes.
     // Note that this differs from libc's INET6_ADDRSTRLEN which is 46 because inet_ntop writes
     // embedded IPv4 addresses in dotted-decimal notation, but RFC 5952 doesn't require that:
     // https://tools.ietf.org/html/rfc5952#section-5
     var result: (UInt64, UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0, 0)
-    
+
     let count = withUnsafeMutableBytes(of: &result) { rawStringBuffer -> Int in
       let stringBuffer = rawStringBuffer.bindMemory(to: UInt8.self)
 
-      return withUnsafeBytes(of: self[uint16Pieces:.numeric]) { rawPiecesBuffer -> Int in
+      return withUnsafeBytes(of: self[uint16Pieces: .numeric]) { rawPiecesBuffer -> Int in
         let piecesBuffer = rawPiecesBuffer.bindMemory(to: UInt16.self)
-        
+
         // Look for ranges of consecutive zeroes.
         let compressedPieces: Range<Int>
         let compressedRangeResult = piecesBuffer.longestSubrange(equalTo: 0)
@@ -509,7 +518,8 @@ extension IPv6Address {
           compressedPieces = -1 ..< -1
         }
 
-        var stringIndex = 0, pieceIndex = 0
+        var stringIndex = 0
+        var pieceIndex = 0
         while pieceIndex < 8 {
           // Skip compressed pieces.
           if pieceIndex == compressedPieces.lowerBound {
@@ -547,16 +557,16 @@ extension IPv6Address {
 /// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.
 ///
 public struct IPv4Address {
-  
+
   public typealias Octets = (UInt8, UInt8, UInt8, UInt8)
-  
+
   public var octets: Octets
 
   /// Creates an address with the given octets.
   public init(octets: Octets = (0, 0, 0, 0)) {
     self.octets = octets
   }
-  
+
   /// Creates an address with the given 32-bit integer value.
   ///
   /// - seealso: `OctetArrangement`
@@ -571,7 +581,7 @@ public struct IPv4Address {
     self.init()
     self[value: octetArrangement] = value
   }
-  
+
   /// The address, expressed as 16-bit integer pieces.
   ///
   /// - seealso: `OctetArrangement`
@@ -594,9 +604,11 @@ public struct IPv4Address {
     set {
       switch octetArrangement {
       case .binary:
-        withUnsafeBytes(of: newValue) { src in withUnsafeMutableBytes(of: &octets) { dst in
-          dst.copyBytes(from: src)
-        } }
+        withUnsafeBytes(of: newValue) { src in
+          withUnsafeMutableBytes(of: &octets) { dst in
+            dst.copyBytes(from: src)
+          }
+        }
       case .numeric:
         self[value: .binary] = newValue.bigEndian
       }
@@ -607,7 +619,7 @@ public struct IPv4Address {
 // Standard protocols.
 
 extension IPv4Address: Equatable, Hashable, LosslessStringConvertible {
-  
+
   @inlinable
   public static func == (lhs: Self, rhs: Self) -> Bool {
     return withUnsafeBytes(of: lhs.octets) { lhsBytes in
@@ -832,7 +844,7 @@ extension IPv4Address {
     // This algorithm isn't from the WHATWG spec, but supports all the required shorthands.
     // Translated and adapted to Swift (with some modifications) from:
     // https://android.googlesource.com/platform/bionic/+/froyo/libc/inet/inet_aton.c
-    
+
     // TODO: Make sure we return the same non-fatal validation errors as the spec.
 
     var __pieces: (UInt32, UInt32, UInt32, UInt32) = (0, 0, 0, 0)
@@ -1042,12 +1054,12 @@ extension IPv4Address {
       return Int(direct.count)
     }
   }
-  
+
   var serializedDirect: (buffer: (UInt64, UInt64), count: UInt8) {
-    
+
     // The maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX") is 15 bytes.
     var result: (UInt64, UInt64) = (0, 0)
-    
+
     let count = withUnsafeMutableBytes(of: &result) { rawStringBuffer -> Int in
       let stringBuffer = rawStringBuffer.bindMemory(to: UInt8.self)
 
