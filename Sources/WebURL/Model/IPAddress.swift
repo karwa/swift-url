@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Algorithms  // for Collection.longestSubrange.
+import Algorithms
 
 // MARK: - Callbacks
 
 
 /// An object which is informed by the IPv4 parser if a validation error occurs.
 ///
-public protocol IPv4ParserCallback {
+public protocol IPv4AddressParserCallback {
   mutating func validationError(ipv4 error: IPv4Address.ValidationError)
 }
 
@@ -35,7 +35,7 @@ public protocol IPv6AddressParserCallback {
 /// This allows a single object to conform to both `IPv6AddressParserCallback` and `IPv4AddressParserCallback`, while giving IPv4 errors
 /// encountered via the v6 parser a distinct representation from those encountered via the v4 parser.
 ///
-fileprivate struct IPParserCallbackv4Tov6<Base>: IPv4ParserCallback where Base: IPv6AddressParserCallback {
+fileprivate struct IPParserCallbackv4Tov6<Base>: IPv4AddressParserCallback where Base: IPv6AddressParserCallback {
   var v6Handler: UnsafeMutablePointer<Base>
   func validationError(ipv4 error: IPv4Address.ValidationError) {
     v6Handler.pointee.validationError(ipv6: .invalidIPv4Address(error))
@@ -56,6 +56,51 @@ extension IPv6AddressParserCallback {
 }
 
 
+// MARK: - Byte Order
+
+
+/// The way in which octets are arranged to form a multi-byte integer.
+///
+/// Applications should prefer to work with individual octets wherever possible, as octets have a consistent numeric interpretation and binary representation
+/// across machines of different endianness.
+///
+/// When combining multiple octets in to larger (e.g. 16- or 32-bit) integers, we have to consider that each machine has a natural ordering which it
+/// uses to interpret those octets as a numeric value. For instance, the first piece of the IPv6 address `2608::3:5` consists of the octets `0x26 0x08` -
+/// when read left-to-right (big-endian), `0x26` is considered the most significant byte, resulting in the numeric value 9736 (0x2608);
+/// however, when read right-to-left (little-endian), `0x08` is considered the most significant byte, resulting in the numeric value 2086 (0x0826).
+///
+/// Hence there are 2 ways to combine octets in to larger integers:
+///
+///  1. As described above. We call this the `binary` interpretation, as it preserves the sequence of octets in their original order,
+///    even if different machines interpret the result as different numeric values (e.g. 9736 on BE, 2086 on LE).
+///
+///  2. By rearranging the octets of multi-byte integers which we read from- or write to the address. We call this the `numeric` interpretation,
+///    as it offers a consistent numeric value of each integer component rather than a consistent layout in memory. For instance, when reading the
+///    first 16-bit piece of the above address on a little-endian machine, the octets `0x26 0x08` will be reordered to `0x08 0x26`,
+///    so that the numeric value (9736) is the same as on a big-endian machine. Assigning a group of octets using the `numeric` integer 9736 will similarly
+///    result in the little-endian machine reordering the integer so that the octets are written in the order `0x26 0x08` (as they would be on a big-endian machine),
+///    rather than `0x08 0x26` (which is what the little-endian integer actually looks like in memory).
+///
+public enum OctetArrangement {
+
+  /// Offers consistent numeric values across machines of different endianness, by adjusting the binary representation when reading or writing multi-byte integers.
+  /// Also known as host byte order (i.e. the integers that you read and write are expected to be in host byte order).
+  ///
+  case numeric
+
+  /// Offers consistent binary representations across machines of different endianness, although each machine may interpret those bits as a different numeric value.
+  /// Also known as network byte order (i.e. the integers that you read and write are expected to be in network byte order).
+  ///
+  case binary
+
+  /// A synonym for `.numeric`.
+  @inlinable public static var hostOrder: Self { return .numeric }
+
+  /// A synonym for `.binary`.
+  @inlinable public static var networkOrder: Self { return .binary }
+}
+
+
 // MARK: - IPv6
 
 
@@ -63,69 +108,97 @@ extension IPv6AddressParserCallback {
 /// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
 ///
 public struct IPv6Address {
-  public typealias AddressType = (UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16)
 
-  // Host byte order.
+  public typealias Octets = (
+    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8
+  )
 
-  /// The raw address (i.e. in host byte order).
+  public var octets: Octets
+
+  /// Creates an address with the given octets.
+  @inlinable
+  public init(octets: Octets = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)) {
+    self.octets = octets
+  }
+
+  public typealias UInt16Pieces = (UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16)
+
+  /// Creates an address from the given 16-bit integer pieces.
   ///
-  public var rawAddress: AddressType
-
-  /// Creates a value with the given raw address.
-  ///
+  /// - seealso: `OctetArrangement`
   /// - parameters:
-  ///     - rawAddress:   The address value in host byte order.
+  ///     - uint16Pieces:      The integer pieces of the address.
+  ///     - octetArrangement:  How the octets in each integer of `uint16Pieces` are arranged:
+  ///                            - If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.
+  ///                            - If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
+  ///                              they are in.
   ///
   @inlinable
-  public init(rawAddress: AddressType = (0, 0, 0, 0, 0, 0, 0, 0)) {
-    self.rawAddress = rawAddress
+  public init(uint16Pieces: UInt16Pieces, _ octetArrangement: OctetArrangement) {
+    self.init()
+    self[uint16Pieces: octetArrangement] = uint16Pieces
   }
 
-  // Network byte order.
-
-  /// The network address (i.e. in network byte order).
+  /// The address, expressed as 16-bit integer pieces.
   ///
-  public var networkAddress: AddressType {
-    return (
-      rawAddress.0.bigEndian, rawAddress.1.bigEndian,
-      rawAddress.2.bigEndian, rawAddress.3.bigEndian,
-      rawAddress.4.bigEndian, rawAddress.5.bigEndian,
-      rawAddress.6.bigEndian, rawAddress.7.bigEndian
-    )
-  }
-
-  /// Creates a value with the given network address.
-  ///
+  /// - seealso: `OctetArrangement`
   /// - parameters:
-  ///     - networkAddress:   The address value in network byte order.
+  ///     - octetArrangement:  How the octets in each integer of `uint16Pieces` are arranged:
+  ///                            - If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.
+  ///                            - If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
+  ///                              they are in.
   ///
   @inlinable
-  public init(networkAddress: AddressType) {
-    self.init(
-      rawAddress: (
-        networkAddress.0.bigEndian, networkAddress.1.bigEndian,
-        networkAddress.2.bigEndian, networkAddress.3.bigEndian,
-        networkAddress.4.bigEndian, networkAddress.5.bigEndian,
-        networkAddress.6.bigEndian, networkAddress.7.bigEndian
-      ))
+  public subscript(uint16Pieces octetArrangement: OctetArrangement) -> UInt16Pieces {
+    get {
+      let networkOrder = withUnsafeBytes(of: octets) { $0.load(as: UInt16Pieces.self) }
+      switch octetArrangement {
+      case .binary:
+        return networkOrder
+      case .numeric:
+        return (
+          UInt16(bigEndian: networkOrder.0), UInt16(bigEndian: networkOrder.1), UInt16(bigEndian: networkOrder.2),
+          UInt16(bigEndian: networkOrder.3), UInt16(bigEndian: networkOrder.4), UInt16(bigEndian: networkOrder.5),
+          UInt16(bigEndian: networkOrder.6), UInt16(bigEndian: networkOrder.7)
+        )
+      }
+    }
+    set {
+      switch octetArrangement {
+      case .binary:
+        withUnsafeBytes(of: newValue) { src in
+          withUnsafeMutableBytes(of: &octets) { dst in
+            dst.copyBytes(from: src)
+          }
+        }
+      case .numeric:
+        self[uint16Pieces: .binary] = (
+          newValue.0.bigEndian, newValue.1.bigEndian, newValue.2.bigEndian,
+          newValue.3.bigEndian, newValue.4.bigEndian, newValue.5.bigEndian,
+          newValue.6.bigEndian, newValue.7.bigEndian
+        )
+      }
+    }
   }
-
 }
 
 // Standard protocols.
 
 extension IPv6Address: Equatable, Hashable, LosslessStringConvertible {
+
   @inlinable
   public static func == (lhs: Self, rhs: Self) -> Bool {
-    return lhs.rawAddress.0 == rhs.rawAddress.0 && lhs.rawAddress.1 == rhs.rawAddress.1
-      && lhs.rawAddress.2 == rhs.rawAddress.2 && lhs.rawAddress.3 == rhs.rawAddress.3
-      && lhs.rawAddress.4 == rhs.rawAddress.4 && lhs.rawAddress.5 == rhs.rawAddress.5
-      && lhs.rawAddress.6 == rhs.rawAddress.6 && lhs.rawAddress.7 == rhs.rawAddress.7
+    return withUnsafeBytes(of: lhs.octets) { lhsBytes in
+      return withUnsafeBytes(of: rhs.octets) { rhsBytes in
+        return lhsBytes.elementsEqual(rhsBytes)
+      }
+    }
   }
 
   @inlinable
   public func hash(into hasher: inout Hasher) {
-    withUnsafeBytes(of: rawAddress) { hasher.combine(bytes: $0) }
+    withUnsafeBytes(of: octets) { hasher.combine(bytes: $0) }
   }
 
   @inlinable
@@ -154,28 +227,53 @@ extension IPv6Address: Codable {
   }
 }
 
-// Parsing initializers.
+// Parsing.
 
 extension IPv6Address {
 
-  @inlinable public static func parse<Source, Callback>(
-    _ input: Source, callback: inout Callback
-  ) -> Self? where Source: StringProtocol, Callback: IPv6AddressParserCallback {
-    return input._withUTF8 { parse($0, callback: &callback) }
+  /// Parses an IPv6 address from a String.
+  ///
+  /// Accepted formats are documented in [Section 2.2][rfc4291] ("Text Representation of Addresses") of
+  /// IP Version 6 Addressing Architecture (RFC 4291).
+  ///
+  /// [rfc4291]: https://tools.ietf.org/html/rfc4291#section-2.2
+  ///
+  /// - parameters:
+  ///     - description: The string to parse.
+  ///
+  @inlinable
+  public init?<S>(_ description: S) where S: StringProtocol {
+    var callback = IgnoreValidationErrors()
+    guard let parsed = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else { return nil }
+    self = parsed
   }
 
-  @inlinable public init?<S>(_ input: S) where S: StringProtocol {
-    var callback = IgnoreValidationErrors()
-    guard let parsed = Self.parse(input, callback: &callback) else { return nil }
+  /// Parses an IPv6 address from a String.
+  ///
+  /// Accepted formats are documented in [Section 2.2][rfc4291] ("Text Representation of Addresses") of
+  /// IP Version 6 Addressing Architecture (RFC 4291).
+  ///
+  /// [rfc4291]: https://tools.ietf.org/html/rfc4291#section-2.2
+  ///
+  /// - parameters:
+  ///     - description: The string to parse.
+  ///
+  @inlinable
+  public init<S>(reportingErrors description: S) throws where S: StringProtocol {
+    var callback = LastValidationError()
+    guard let parsed = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else {
+      guard case .ipv6AddressError(let error) = callback.error?.hostParserError else {
+        preconditionFailure("IPv6 Parser returned a non-IPv6-parser error?!")
+      }
+      throw error
+    }
     self = parsed
   }
 }
 
-// Parsing and serialization impl.
-
 extension IPv6Address {
 
-  public struct ValidationError: Equatable, CustomStringConvertible {
+  public struct ValidationError: Swift.Error, Equatable, CustomStringConvertible {
     private let errorCode: UInt8
     private let context: Int
     private init(errorCode: UInt8, context: Int = -1) {
@@ -183,8 +281,8 @@ extension IPv6Address {
       self.context = context
     }
 
-    // Note: These are deliberately not public, because we don't want to make the set of possible errors API.
-    //       They are 'internal' for testing purposes only.
+    // These are deliberately not public, because we don't want to make the set of possible errors API.
+    // They are 'internal' for testing purposes only.
     internal static var emptyInput: Self { Self(errorCode: 1) }
     // -
     internal static var unexpectedLeadingColon: Self { Self(errorCode: 2) }
@@ -218,40 +316,44 @@ extension IPv6Address {
       case .tooManyPieces:
         return "Too many pieces in address"
       case .notEnoughPieces:
-        return "Not enough segments in address"
+        return "Not enough pieces in address"
       case .multipleCompressedPieces:
         return "Multiple compressed pieces in address"
       case .invalidPositionForIPv4Address:
-        return "Invalid position for IPv4 address segment"
+        return "Invalid position for embedded IPv4 address"
       case _ where self.errorCode == Self.invalidIPv4Address_errorCode:
         let wrappedError = IPv4Address.ValidationError(unpacking: context)
-        return "Invalid IPv4 address: \(wrappedError)"
+        return "Embedded IPv4 address is invalid: \(wrappedError)"
       default:
-        assert(false, "Unrecognised error code: \(errorCode). Context: \(context)")
-        return "Internal Error: Unrecognised error code"
+        assertionFailure("Unrecognised error code: \(errorCode). Context: \(context)")
+        return "Internal Error: Unrecognised error code \(errorCode)"
       }
     }
   }
 
-  /// Parses an IPv6 address from a UTF-8 string.
+  // Note: This does not 'throw', as we want to specialize when the caller doesn't care about the error.
+
+  /// Parses an IPv6 address from a buffer of UTF-8 code-units.
   ///
-  /// TODO: Add description of accepted formats.
+  /// Accepted formats are documented in [Section 2.2][rfc4291] ("Text Representation of Addresses") of
+  /// IP Version 6 Addressing Architecture (RFC 4291).
+  ///
+  /// [rfc4291]: https://tools.ietf.org/html/rfc4291#section-2.2
   ///
   /// - parameters:
-  ///     - input:      A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
-  ///     - callback:   A callback to be invoked if a validation error occurs. This callback is only invoked once,
-  ///                   and any validation error terminates parsing.
-  /// - returns:
-  ///     Either the successfully-parsed address, or `.none` if parsing fails.
+  ///     - input:     The string to parse, as a collection of UTF-8 code-units.
+  ///     - callback:  A callback to be invoked if a validation error occurs.
+  ///                  This callback is only invoked once, and any validation error terminates parsing.
+  /// - returns:  Either the successfully-parsed address, or `nil` if parsing fails.
   ///
-  public static func parse<Bytes, Callback>(_ input: Bytes, callback: inout Callback) -> Self?
+  public static func parse<Bytes, Callback>(utf8 input: Bytes, callback: inout Callback) -> Self?
   where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv6AddressParserCallback {
     guard input.isEmpty == false else {
       callback.validationError(ipv6: .emptyInput)
       return nil
     }
 
-    var result: IPv6Address.AddressType = (0, 0, 0, 0, 0, 0, 0, 0)
+    var result: IPv6Address.UInt16Pieces = (0, 0, 0, 0, 0, 0, 0, 0)
     return withUnsafeMutableBytes(of: &result) { tuplePointer -> Self? in
       let addressBuffer = tuplePointer.bindMemory(to: UInt16.self)
       var pieceIndex = 0
@@ -298,6 +400,8 @@ extension IPv6Address {
           length &+= 1
           idx = input.index(after: idx)
         }
+        // The bytes of 'value' are arranged in host order. Flip to network order if necessary.
+        value = value.bigEndian
         guard idx != input.endIndex else {
           addressBuffer[pieceIndex] = value
           pieceIndex &+= 1
@@ -327,13 +431,17 @@ extension IPv6Address {
           }
           guard
             let value = callback.wrappingIPv4Errors({ cb in
-              IPv4Address.parse_simple(input[pieceStartIndex...], callback: &cb)
+              IPv4Address.parse_simple(utf8: input[pieceStartIndex...], callback: &cb)
             })
           else {
+            // IPv4Address.parse_simple should have informed the callback of the error.
             return nil
           }
-          addressBuffer[pieceIndex] = UInt16(truncatingIfNeeded: value.rawAddress >> 16)
-          addressBuffer[pieceIndex &+ 1] = UInt16(truncatingIfNeeded: value.rawAddress)
+          withUnsafeBytes(of: value.octets) { octetBuffer in
+            let uint16s = octetBuffer.bindMemory(to: UInt16.self)
+            addressBuffer.baseAddress.unsafelyUnwrapped.advanced(by: pieceIndex)
+              .assign(from: uint16s.baseAddress.unsafelyUnwrapped, count: 2)
+          }
           pieceIndex &+= 2
 
           break parseloop
@@ -363,62 +471,84 @@ extension IPv6Address {
 
       // Parsing successful.
       return IPv6Address(
-        rawAddress:
-          UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
-          .load(fromByteOffset: 0, as: IPv6Address.AddressType.self)
-      )
+        octets: UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
+          .load(fromByteOffset: 0, as: IPv6Address.Octets.self))
     }
   }
 }
 
+// Serialization.
+
 extension IPv6Address {
 
+  /// The canonical textual representation of this address, as defined by [RFC 5952](https://tools.ietf.org/html/rfc5952).
+  ///
   public var serialized: String {
-    // Maximum normalised length of an IPv6 address = 39 bytes
-    // 32 (128 bits/4 bits per hex character) + 7 (separators)
-    return String(_unsafeUninitializedCapacity: 39) { stringBuffer in
-      return withUnsafeBytes(of: rawAddress) { __rawRawAddressBuffer in
-        let rawAddressBuffer = __rawRawAddressBuffer.bindMemory(to: UInt16.self)
+    var direct = serializedDirect
+    return String(_unsafeUninitializedCapacity: Int(direct.count)) { stringBuffer in
+      withUnsafeBytes(of: &direct.buffer) { codeunits in
+        UnsafeMutableRawBufferPointer(stringBuffer).copyMemory(
+          from: UnsafeRawBufferPointer(rebasing: codeunits.prefix(Int(direct.count)))
+        )
+      }
+      return Int(direct.count)
+    }
+  }
+
+  var serializedDirect: (buffer: (UInt64, UInt64, UInt64, UInt64, UInt64), count: UInt8) {
+
+    // Maximum length of an IPv6 address = 39 bytes.
+    // Note that this differs from libc's INET6_ADDRSTRLEN which is 46 because inet_ntop writes
+    // embedded IPv4 addresses in dotted-decimal notation, but RFC 5952 doesn't require that:
+    // https://tools.ietf.org/html/rfc5952#section-5
+    var result: (UInt64, UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0, 0)
+
+    let count = withUnsafeMutableBytes(of: &result) { rawStringBuffer -> Int in
+      let stringBuffer = rawStringBuffer.bindMemory(to: UInt8.self)
+
+      return withUnsafeBytes(of: self[uint16Pieces: .numeric]) { rawPiecesBuffer -> Int in
+        let piecesBuffer = rawPiecesBuffer.bindMemory(to: UInt16.self)
+
         // Look for ranges of consecutive zeroes.
         let compressedPieces: Range<Int>
-        let compressedRangeResult = rawAddressBuffer.longestSubrange(equalTo: 0)
+        let compressedRangeResult = piecesBuffer.longestSubrange(equalTo: 0)
         if compressedRangeResult.length > 1 {
           compressedPieces = compressedRangeResult.subrange
         } else {
           compressedPieces = -1 ..< -1
         }
 
-        var stringBufferIdx = stringBuffer.startIndex
+        var stringIndex = 0
         var pieceIndex = 0
         while pieceIndex < 8 {
           // Skip compressed pieces.
           if pieceIndex == compressedPieces.lowerBound {
-            stringBuffer[stringBufferIdx] = ASCII.colon.codePoint
-            stringBufferIdx &+= 1
+            stringBuffer[stringIndex] = ASCII.colon.codePoint
+            stringIndex &+= 1
             if pieceIndex == 0 {
-              stringBuffer[stringBufferIdx] = ASCII.colon.codePoint
-              stringBufferIdx &+= 1
+              stringBuffer[stringIndex] = ASCII.colon.codePoint
+              stringIndex &+= 1
             }
             pieceIndex = compressedPieces.upperBound
             continue
           }
           // Print the piece and, if not the last piece, the separator.
-          stringBufferIdx &+= ASCII.insertHexString(
-            for: rawAddressBuffer[pieceIndex],
-            into: UnsafeMutableBufferPointer(rebasing: stringBuffer[stringBufferIdx...])
+          stringIndex &+= ASCII.insertHexString(
+            for: piecesBuffer[pieceIndex],
+            into: UnsafeMutableBufferPointer(rebasing: stringBuffer[stringIndex...])
           )
           if pieceIndex != 7 {
-            stringBuffer[stringBufferIdx] = ASCII.colon.codePoint
-            stringBufferIdx &+= 1
+            stringBuffer[stringIndex] = ASCII.colon.codePoint
+            stringIndex &+= 1
           }
           pieceIndex &+= 1
         }
-        return stringBufferIdx
+        return stringIndex
       }
     }
+    return (result, UInt8(truncatingIfNeeded: count))
   }
 }
-
 
 // MARK: - IPv4
 
@@ -428,44 +558,81 @@ extension IPv6Address {
 ///
 public struct IPv4Address {
 
-  // Host byte order.
+  public typealias Octets = (UInt8, UInt8, UInt8, UInt8)
 
-  /// The raw address (i.e. in host byte order).
-  ///
-  public var rawAddress: UInt32
+  public var octets: Octets
 
-  /// Creates a value with the given raw address.
-  ///
-  /// - parameters:
-  ///     - rawAddress:   The address value in host byte order.
-  ///
-  @inlinable
-  public init(rawAddress: UInt32) {
-    self.rawAddress = rawAddress
+  /// Creates an address with the given octets.
+  public init(octets: Octets = (0, 0, 0, 0)) {
+    self.octets = octets
   }
 
-  // Network byte order.
-
-  /// The network address (i.e. in network byte order).
+  /// Creates an address with the given 32-bit integer value.
   ///
-  public var networkAddress: UInt32 {
-    return rawAddress.bigEndian
+  /// - seealso: `OctetArrangement`
+  /// - parameters:
+  ///     - value:             The integer value of the address.
+  ///     - octetArrangement:  How the octets of `value` are arranged:
+  ///                            - If `numeric`, the integer is assumed to be in "host byte order", and its octets will be rearranged if necessary.
+  ///                            - If `binary`, the integer is assumed to be in "network byte order", and its octets will be stored in the order
+  ///                              they are in.
+  ///
+  public init(value: UInt32, _ octetArrangement: OctetArrangement) {
+    self.init()
+    self[value: octetArrangement] = value
   }
 
-  /// Creates a value with the given network address.
+  /// The address, expressed as 16-bit integer pieces.
   ///
+  /// - seealso: `OctetArrangement`
   /// - parameters:
-  ///     - networkAddress:   The address value in network byte order.
+  ///     - octetArrangement:  How the octets of `value` are arranged:
+  ///                            - If `numeric`, the integer is assumed to be in "host byte order", and its octets will be rearranged if necessary.
+  ///                            - If `binary`, the integer is assumed to be in "network byte order", and its octets will be stored in the order
+  ///                              they are in.
   ///
-  @inlinable
-  public init(networkAddress: UInt32) {
-    self.init(rawAddress: networkAddress.bigEndian)
+  public subscript(value octetArrangement: OctetArrangement) -> UInt32 {
+    get {
+      let networkOrder = withUnsafeBytes(of: octets) { $0.load(as: UInt32.self) }
+      switch octetArrangement {
+      case .binary:
+        return networkOrder
+      case .numeric:
+        return UInt32(bigEndian: networkOrder)
+      }
+    }
+    set {
+      switch octetArrangement {
+      case .binary:
+        withUnsafeBytes(of: newValue) { src in
+          withUnsafeMutableBytes(of: &octets) { dst in
+            dst.copyBytes(from: src)
+          }
+        }
+      case .numeric:
+        self[value: .binary] = newValue.bigEndian
+      }
+    }
   }
 }
 
 // Standard protocols.
 
 extension IPv4Address: Equatable, Hashable, LosslessStringConvertible {
+
+  @inlinable
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    return withUnsafeBytes(of: lhs.octets) { lhsBytes in
+      return withUnsafeBytes(of: rhs.octets) { rhsBytes in
+        return lhsBytes.elementsEqual(rhsBytes)
+      }
+    }
+  }
+
+  @inlinable
+  public func hash(into hasher: inout Hasher) {
+    withUnsafeBytes(of: octets) { hasher.combine(bytes: $0) }
+  }
 
   public var description: String {
     return serialized
@@ -492,24 +659,81 @@ extension IPv4Address: Codable {
   }
 }
 
-// Parsing initializers.
+// Parsing.
 
 extension IPv4Address {
 
-  @inlinable public static func parse<Source, Callback>(
-    _ input: Source, callback: inout Callback
-  ) -> ParseResult where Source: StringProtocol, Callback: IPv4ParserCallback {
-    return input._withUTF8 { parse($0, callback: &callback) }
+  /// Parses an IPv4 address from a String.
+  ///
+  /// The following formats are recognized:
+  ///
+  ///  - _a.b.c.d_, where each numeric part defines the value of the address' octet at that position.
+  ///  - _a.b.c_, where _a_ and _b_ define the address' first 2 octets, and _c_ is interpreted as a 16-bit integer whose most and least significant bytes define
+  ///    the address' 3rd and 4th octets respectively.
+  ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
+  ///    significant.
+  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose octets define the octets of the address in order from most to least significant.
+  ///
+  /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
+  /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
+  ///
+  /// Examples:
+  /// ```
+  /// IPv4Address("0x7f.0.0.1")!.octets == (0x7f, 0x00, 0x00, 0x01) == "127.0.0.1"
+  /// IPv4Address("10.1.0x12.")!.octets == (0x0a, 0x01, 0x00, 0x12) == "10.1.0.18"
+  /// IPv4Address("0300.0xa80032")!.octets == (0xc0, 0xa8, 0x00, 0x32) == "192.168.0.50"
+  /// IPv4Address("0x8Badf00d")!.octets == (0x8b, 0xad, 0xf0, 0x0d) == "139.173.240.13"
+  /// ```
+  ///
+  /// - parameters:
+  ///     - description:  The string to parse.
+  ///
+  @inlinable
+  public init?<Source>(_ description: Source) where Source: StringProtocol {
+    var callback = IgnoreValidationErrors()
+    guard case .success(let parsed) = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else {
+      return nil
+    }
+    self = parsed
   }
 
-  @inlinable public init?<Source>(_ input: Source) where Source: StringProtocol {
-    var callback = IgnoreValidationErrors()
-    guard case .success(let parsedValue) = Self.parse(input, callback: &callback) else { return nil }
-    self = parsedValue
+  /// Parses an IPv4 address from a String.
+  ///
+  /// The following formats are recognized:
+  ///
+  ///  - _a.b.c.d_, where each numeric part defines the value of the address' octet at that position.
+  ///  - _a.b.c_, where _a_ and _b_ define the address' first 2 octets, and _c_ is interpreted as a 16-bit integer whose most and least significant bytes define
+  ///    the address' 3rd and 4th octets respectively.
+  ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
+  ///    significant.
+  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose octets define the octets of the address in order from most to least significant.
+  ///
+  /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
+  /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
+  ///
+  /// Examples:
+  /// ```
+  /// IPv4Address("0x7f.0.0.1")!.octets == (0x7f, 0x00, 0x00, 0x01) == "127.0.0.1"
+  /// IPv4Address("10.1.0x12.")!.octets == (0x0a, 0x01, 0x00, 0x12) == "10.1.0.18"
+  /// IPv4Address("0300.0xa80032")!.octets == (0xc0, 0xa8, 0x00, 0x32) == "192.168.0.50"
+  /// IPv4Address("0x8Badf00d")!.octets == (0x8b, 0xad, 0xf0, 0x0d) == "139.173.240.13"
+  /// ```
+  ///
+  /// - parameters:
+  ///     - description:  The string to parse.
+  ///
+  @inlinable
+  public init<S>(reportingErrors description: S) throws where S: StringProtocol {
+    var callback = LastValidationError()
+    guard case .success(let parsed) = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else {
+      guard case .ipv4AddressError(let error) = callback.error?.hostParserError else {
+        preconditionFailure("IPv4 Parser returned a non-IPv4-parser error?!")
+      }
+      throw error
+    }
+    self = parsed
   }
 }
-
-// Parsing and serialization impl.
 
 extension IPv4Address {
 
@@ -519,7 +743,7 @@ extension IPv4Address {
     case notAnIPAddress
   }
 
-  public struct ValidationError: Equatable, CustomStringConvertible {
+  public struct ValidationError: Swift.Error, Equatable, CustomStringConvertible {
     private let errorCode: UInt8
     private init(errorCode: UInt8) {
       self.errorCode = errorCode
@@ -532,8 +756,8 @@ extension IPv4Address {
       self = Self(errorCode: UInt8(packedValue))
     }
 
-    // Note: These are deliberately not public, because we don't want to make the set of possible errors API.
-    //       They are 'internal' for testing purposes only.
+    // These are deliberately not public, because we don't want to make the set of possible errors API.
+    // They are 'internal' for testing purposes only.
     internal static var emptyInput: Self { Self(errorCode: 1) }
     // -
     internal static var pieceBeginsWithInvalidCharacter: Self { Self(errorCode: 3) }  // full only.
@@ -577,22 +801,41 @@ extension IPv4Address {
     }
   }
 
-  /// Parses an IPv4 address from a UTF-8 string.
+  /// Parses an IPv4 address from a buffer of UTF-8 codeunits.
   ///
-  /// The given string may have 1, 2, 3 or 4 pieces, separated by a '.',
-  /// and each piece may be specified in octal, decimal, or hexadecimal notation.
-  /// A single trailing '.' is permitted.
+  /// The following formats are recognized:
+  ///
+  ///  - _a.b.c.d_, where each numeric part defines the value of the address' octet at that position.
+  ///  - _a.b.c_, where _a_ and _b_ define the address' first 2 octets, and _c_ is interpreted as a 16-bit integer whose most and least significant bytes define
+  ///    the address' 3rd and 4th octets respectively.
+  ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
+  ///    significant.
+  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose octets define the octets of the address in order from most to least significant.
+  ///
+  /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
+  /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
+  ///
+  /// Examples:
+  /// ```
+  /// IPv4Address("0x7f.0.0.1")!.octets == (0x7f, 0x00, 0x00, 0x01) == "127.0.0.1"
+  /// IPv4Address("10.1.0x12.")!.octets == (0x0a, 0x01, 0x00, 0x12) == "10.1.0.18"
+  /// IPv4Address("0300.0xa80032")!.octets == (0xc0, 0xa8, 0x00, 0x32) == "192.168.0.50"
+  /// IPv4Address("0x8Badf00d")!.octets == (0x8b, 0xad, 0xf0, 0x0d) == "139.173.240.13"
+  /// ```
   ///
   /// - parameters:
-  ///     - input:     A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
+  ///     - input:     The string to parse, as a collection of UTF-8 code-units.
   ///     - callback:  A callback to be invoked if a validation error occurs.
+  ///                  If parsing does not succeed, the callback will have been informed of the error. It may also be informed of other, non-fatal errors.
+  ///
   /// - returns:
   ///     A result object containing either the successfully-parsed address, or a failure flag communicating whether parsing
-  ///     failed because the string was not in the correct format.
+  ///     failed because the IP address was invalid (e.g. the value overflows) or whether it failed because the string isn't an IP address.
+  ///     For example, the string "9999999999.com" fails because it isn't an IP address, whereas "9999999999" fails due to overflow.
   ///
   public static func parse<Bytes, Callback>(
-    _ input: Bytes, callback: inout Callback
-  ) -> ParseResult where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4ParserCallback {
+    utf8 input: Bytes, callback: inout Callback
+  ) -> ParseResult where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4AddressParserCallback {
     guard input.isEmpty == false else {
       callback.validationError(ipv4: .emptyInput)
       return .failure
@@ -601,6 +844,8 @@ extension IPv4Address {
     // This algorithm isn't from the WHATWG spec, but supports all the required shorthands.
     // Translated and adapted to Swift (with some modifications) from:
     // https://android.googlesource.com/platform/bionic/+/froyo/libc/inet/inet_aton.c
+
+    // TODO: Make sure we return the same non-fatal validation errors as the spec.
 
     var __pieces: (UInt32, UInt32, UInt32, UInt32) = (0, 0, 0, 0)
     return withUnsafeMutableBytes(of: &__pieces) { rawPtr -> ParseResult in
@@ -682,62 +927,63 @@ extension IPv4Address {
         return .failure
       }
 
-      var rawAddress: UInt32 = 0
+      var numericAddress: UInt32 = 0
+      // swift-format-ignore
       switch pieceIndex {
       case 0:  // 'a'       - 32-bits.
-        rawAddress = pieces[0]
+        numericAddress = pieces[0]
       case 1:  // 'a.b'     - 8-bits/24-bits.
         var invalidBits = pieces[0] & ~0x0000_00FF
-        invalidBits |= pieces[1] & ~0x00FF_FFFF
+        invalidBits    |= pieces[1] & ~0x00FF_FFFF
         guard invalidBits == 0 else {
           callback.validationError(ipv4: .addressOverflows)
           return .failure
         }
-        rawAddress = (pieces[0] << 24) | pieces[1]
+        numericAddress = (pieces[0] << 24) | pieces[1]
       case 2:  // 'a.b.c'   - 8-bits/8-bits/16-bits.
         var invalidBits = pieces[0] & ~0x0000_00FF
-        invalidBits |= pieces[1] & ~0x0000_00FF
-        invalidBits |= pieces[2] & ~0x0000_FFFF
+        invalidBits    |= pieces[1] & ~0x0000_00FF
+        invalidBits    |= pieces[2] & ~0x0000_FFFF
         guard invalidBits == 0 else {
           callback.validationError(ipv4: .addressOverflows)
           return .failure
         }
-        rawAddress = (pieces[0] << 24) | (pieces[1] << 16) | pieces[2]
+        numericAddress = (pieces[0] << 24) | (pieces[1] << 16) | pieces[2]
       case 3:  // 'a.b.c.d' - 8-bits/8-bits/8-bits/8-bits.
         var invalidBits = pieces[0] & ~0x0000_00FF
-        invalidBits |= pieces[1] & ~0x0000_00FF
-        invalidBits |= pieces[2] & ~0x0000_00FF
-        invalidBits |= pieces[3] & ~0x0000_00FF
+        invalidBits    |= pieces[1] & ~0x0000_00FF
+        invalidBits    |= pieces[2] & ~0x0000_00FF
+        invalidBits    |= pieces[3] & ~0x0000_00FF
         guard invalidBits == 0 else {
           callback.validationError(ipv4: .addressOverflows)
           return .failure
         }
-        rawAddress = (pieces[0] << 24) | (pieces[1] << 16) | (pieces[2] << 8) | pieces[3]
+        numericAddress = (pieces[0] << 24) | (pieces[1] << 16) | (pieces[2] << 8) | pieces[3]
       default:
         fatalError("Internal error. pieceIndex has unexpected value.")
       }
       // Parsing successful.
-      return .success(IPv4Address(rawAddress: rawAddress))
+      return .success(IPv4Address(value: numericAddress, .numeric))
     }
   }
 
-  /// Parses an IPv4 address from a UTF-8 string.
+  /// Parses an IPv4 address from a buffer of UTF-8 codeunits.
   ///
-  /// This simplified parser accepts only the 4-piece decimal notation ("a.b.c.d").
+  /// This simplified parser only recognises the 4-piece decimal notation ("a.b.c.d"), also known as dotted decimal notation.
   /// Trailing '.'s are not permitted.
   ///
   /// - parameters:
-  ///     - input:     A buffer of ASCII/UTF-8 codepoints. The buffer does not have to be null-terminated.
-  ///     - callback:  A callback to be invoked if a validation error occurs. This callback is only invoked once,
-  ///                  and any validation error terminates parsing.
+  ///     - input:     The string to parse, as a collection of UTF-8 code-units.
+  ///     - callback:  A callback to be invoked if a validation error occurs.
+  ///                  This callback is only invoked once, and any validation error terminates parsing.
   /// - returns:
-  ///     Either the successfully-parsed address, or `.none` if parsing failed.
+  ///     Either the successfully-parsed address, or `nil` if parsing failed.
   ///
   public static func parse_simple<Bytes, Callback>(
-    _ input: Bytes, callback: inout Callback
-  ) -> Self? where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4ParserCallback {
+    utf8 input: Bytes, callback: inout Callback
+  ) -> Self? where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4AddressParserCallback {
 
-    var result = UInt32(0)
+    var numericAddress = UInt32(0)
     var idx = input.startIndex
     var numbersSeen = 0
     while idx != input.endIndex {
@@ -757,7 +1003,7 @@ extension IPv4Address {
       var ipv4Piece = -1  // We treat -1 as "null".
       while idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) {
         let digit = ASCII.parseDecimalDigit(ascii: asciiChar)
-        assert(digit != 99)  // We already checked it was a digit.
+        assert(digit != ASCII.parse_NotFound)  // We already checked it was a digit.
         switch ipv4Piece {
         case -1:
           ipv4Piece = Int(digit)
@@ -779,26 +1025,46 @@ extension IPv4Address {
         return nil
       }
       // Accumulate in to result.
-      result <<= 8
-      result &+= UInt32(ipv4Piece)
+      numericAddress <<= 8
+      numericAddress &+= UInt32(ipv4Piece)
       numbersSeen &+= 1
     }
     guard numbersSeen == 4 else {
       callback.validationError(ipv4: .notEnoughPieces)
       return nil
     }
-    return IPv4Address(rawAddress: result)
+    return IPv4Address(value: numericAddress, .numeric)
   }
 }
 
+// Serialization.
+
 extension IPv4Address {
 
+  /// The textual representation of this address, in dotted decimal notation, as defined by [RFC 4001](https://tools.ietf.org/html/rfc4001#page-7).
+  ///
   public var serialized: String {
-    // 15 bytes is the maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX"),
-    // but is also happily the small-string size on 64-bit platforms.
-    return String(_unsafeUninitializedCapacity: 15) { stringBuffer in
-      return withUnsafeBytes(of: rawAddress.byteSwapped) { __rawAddressBytes -> Int in
-        let addressBytes = __rawAddressBytes.bindMemory(to: UInt8.self)
+    var direct = serializedDirect
+    return String(_unsafeUninitializedCapacity: Int(direct.count)) { stringBuffer in
+      withUnsafeBytes(of: &direct.buffer) { codeunits in
+        UnsafeMutableRawBufferPointer(stringBuffer).copyMemory(
+          from: UnsafeRawBufferPointer(rebasing: codeunits.prefix(Int(direct.count)))
+        )
+      }
+      return Int(direct.count)
+    }
+  }
+
+  var serializedDirect: (buffer: (UInt64, UInt64), count: UInt8) {
+
+    // The maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX") is 15 bytes.
+    var result: (UInt64, UInt64) = (0, 0)
+
+    let count = withUnsafeMutableBytes(of: &result) { rawStringBuffer -> Int in
+      let stringBuffer = rawStringBuffer.bindMemory(to: UInt8.self)
+
+      return withUnsafeBytes(of: octets) { rawAddressBytes -> Int in
+        let addressBytes = rawAddressBytes.bindMemory(to: UInt8.self)
         var stringBufferIdx = stringBuffer.startIndex
         for i in 0..<4 {
           stringBufferIdx &+= ASCII.insertDecimalString(
@@ -815,5 +1081,6 @@ extension IPv4Address {
         return stringBufferIdx
       }
     }
+    return (result, UInt8(truncatingIfNeeded: count))
   }
 }
