@@ -475,48 +475,68 @@ extension IPv6Address {
   /// The canonical textual representation of this address, as defined by [RFC 5952](https://tools.ietf.org/html/rfc5952).
   ///
   public var serialized: String {
-    // Maximum normalised length of an IPv6 address = 39 bytes
-    // 32 (128 bits/4 bits per hex character) + 7 (separators)
-    return String(_unsafeUninitializedCapacity: 39) { stringBuffer in
-      return withUnsafeBytes(of: self[uint16Pieces:.numeric]) { __rawRawAddressBuffer in
-        let rawAddressBuffer = __rawRawAddressBuffer.bindMemory(to: UInt16.self)
+    var direct = serializedDirect
+    return String(_unsafeUninitializedCapacity: Int(direct.count)) { stringBuffer in
+      withUnsafeBytes(of: &direct.buffer) { codeunits in
+        UnsafeMutableRawBufferPointer(stringBuffer).copyMemory(
+          from: UnsafeRawBufferPointer(rebasing: codeunits.prefix(Int(direct.count)))
+        )
+      }
+      return Int(direct.count)
+    }
+  }
+  
+  var serializedDirect: (buffer: (UInt64, UInt64, UInt64, UInt64, UInt64), count: UInt8) {
+    
+    // Maximum length of an IPv6 address = 39 bytes.
+    // Note that this differs from libc's INET6_ADDRSTRLEN which is 46 because inet_ntop writes
+    // embedded IPv4 addresses in dotted-decimal notation, but RFC 5952 doesn't require that:
+    // https://tools.ietf.org/html/rfc5952#section-5
+    var result: (UInt64, UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0, 0)
+    
+    let count = withUnsafeMutableBytes(of: &result) { rawStringBuffer -> Int in
+      let stringBuffer = rawStringBuffer.bindMemory(to: UInt8.self)
+
+      return withUnsafeBytes(of: self[uint16Pieces:.numeric]) { rawPiecesBuffer -> Int in
+        let piecesBuffer = rawPiecesBuffer.bindMemory(to: UInt16.self)
+        
         // Look for ranges of consecutive zeroes.
         let compressedPieces: Range<Int>
-        let compressedRangeResult = rawAddressBuffer.longestSubrange(equalTo: 0)
+        let compressedRangeResult = piecesBuffer.longestSubrange(equalTo: 0)
         if compressedRangeResult.length > 1 {
           compressedPieces = compressedRangeResult.subrange
         } else {
           compressedPieces = -1 ..< -1
         }
 
-        var stringBufferIdx = stringBuffer.startIndex
-        var pieceIndex = 0
+        var stringIndex = 0, pieceIndex = 0
         while pieceIndex < 8 {
           // Skip compressed pieces.
           if pieceIndex == compressedPieces.lowerBound {
-            stringBuffer[stringBufferIdx] = ASCII.colon.codePoint
-            stringBufferIdx &+= 1
+            stringBuffer[stringIndex] = ASCII.colon.codePoint
+            stringIndex &+= 1
             if pieceIndex == 0 {
-              stringBuffer[stringBufferIdx] = ASCII.colon.codePoint
-              stringBufferIdx &+= 1
+              stringBuffer[stringIndex] = ASCII.colon.codePoint
+              stringIndex &+= 1
             }
             pieceIndex = compressedPieces.upperBound
             continue
           }
           // Print the piece and, if not the last piece, the separator.
-          stringBufferIdx &+= ASCII.insertHexString(
-            for: rawAddressBuffer[pieceIndex],
-            into: UnsafeMutableBufferPointer(rebasing: stringBuffer[stringBufferIdx...])
+          stringIndex &+= ASCII.insertHexString(
+            for: piecesBuffer[pieceIndex],
+            into: UnsafeMutableBufferPointer(rebasing: stringBuffer[stringIndex...])
           )
           if pieceIndex != 7 {
-            stringBuffer[stringBufferIdx] = ASCII.colon.codePoint
-            stringBufferIdx &+= 1
+            stringBuffer[stringIndex] = ASCII.colon.codePoint
+            stringIndex &+= 1
           }
           pieceIndex &+= 1
         }
-        return stringBufferIdx
+        return stringIndex
       }
     }
+    return (result, UInt8(truncatingIfNeeded: count))
   }
 }
 

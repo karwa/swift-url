@@ -148,7 +148,7 @@ extension ParsedHost {
           .writeBuffered { piece in writePiece(piece) }
       }
 
-    // TODO: [performance] - Write IPv4+v6 addresses directly, rather than going through String.
+    // TODO: [performance] - Write IPv4 addresses directly, rather than going through String.
     case .ipv4Address(let addr):
       writer.writeHostname { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
         var str = addr.serialized
@@ -156,16 +156,21 @@ extension ParsedHost {
       }
 
     case .ipv6Address(let addr):
-      var str = addr.serialized
       writer.writeHostname { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
+        var serialized = addr.serializedDirect
         var bracket = ASCII.leftSquareBracket.codePoint
         withUnsafeMutablePointer(to: &bracket) { bracketPtr in
           writePiece(UnsafeBufferPointer(start: bracketPtr, count: 1))
-          str.withUTF8 { writePiece($0) }
+          withUnsafeBytes(of: &serialized.buffer) { bufferBytes in
+            let codeunits = bufferBytes.bindMemory(to: UInt8.self).prefix(Int(serialized.count))
+            writePiece(UnsafeBufferPointer(rebasing: codeunits))
+          }
           bracketPtr.pointee = ASCII.rightSquareBracket.codePoint
           writePiece(UnsafeBufferPointer(start: bracketPtr, count: 1))
         }
       }
+      
+      
     }
   }
 }
