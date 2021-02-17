@@ -19,7 +19,7 @@ import Algorithms
 
 /// An object which is informed by the IPv4 parser if a validation error occurs.
 ///
-public protocol IPv4ParserCallback {
+public protocol IPv4AddressParserCallback {
   mutating func validationError(ipv4 error: IPv4Address.ValidationError)
 }
 
@@ -35,7 +35,7 @@ public protocol IPv6AddressParserCallback {
 /// This allows a single object to conform to both `IPv6AddressParserCallback` and `IPv4AddressParserCallback`, while giving IPv4 errors
 /// encountered via the v6 parser a distinct representation from those encountered via the v4 parser.
 ///
-fileprivate struct IPParserCallbackv4Tov6<Base>: IPv4ParserCallback where Base: IPv6AddressParserCallback {
+fileprivate struct IPParserCallbackv4Tov6<Base>: IPv4AddressParserCallback where Base: IPv6AddressParserCallback {
   var v6Handler: UnsafeMutablePointer<Base>
   func validationError(ipv4 error: IPv4Address.ValidationError) {
     v6Handler.pointee.validationError(ipv6: .invalidIPv4Address(error))
@@ -823,7 +823,7 @@ extension IPv4Address {
   ///
   public static func parse<Bytes, Callback>(
     utf8 input: Bytes, callback: inout Callback
-  ) -> ParseResult where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4ParserCallback {
+  ) -> ParseResult where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4AddressParserCallback {
     guard input.isEmpty == false else {
       callback.validationError(ipv4: .emptyInput)
       return .failure
@@ -969,7 +969,7 @@ extension IPv4Address {
   ///
   public static func parse_simple<Bytes, Callback>(
     utf8 input: Bytes, callback: inout Callback
-  ) -> Self? where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4ParserCallback {
+  ) -> Self? where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4AddressParserCallback {
 
     var numericAddress = UInt32(0)
     var idx = input.startIndex

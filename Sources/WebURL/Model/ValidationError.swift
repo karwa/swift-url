@@ -20,7 +20,7 @@
 /// Most validation errors are non-fatal and parsing can continue regardless. If parsing fails, the last
 /// validation error typically describes the issue which caused it to fail.
 ///
-public protocol URLParserCallback: IPv6AddressParserCallback, IPv4ParserCallback {
+public protocol URLParserCallback: IPv6AddressParserCallback, IPv4AddressParserCallback {
   mutating func validationError(_ error: ValidationError)
 }
 
