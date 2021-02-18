@@ -356,7 +356,7 @@ extension ASCII {
   ///
   /// - returns:  The index one-past-the-end of the resulting text.
   ///
-  static func insertDecimalString(for number: UInt8, into stringBuffer: UnsafeMutableBufferPointer<UInt8>) -> Int {
+  static func insertDecimalString(for number: UInt8, into stringBuffer: UnsafeMutableRawBufferPointer) -> Int {
     var idx = stringBuffer.startIndex
     guard _fastPath(stringBuffer.count >= 3) else { return idx }
 
@@ -382,7 +382,7 @@ extension ASCII {
   ///
   /// - returns:  The index one-past-the-end of the resulting text.
   ///
-  static func insertHexString<B>(for number: B, into stringBuffer: UnsafeMutableBufferPointer<UInt8>) -> Int
+  static func insertHexString<B>(for number: B, into stringBuffer: UnsafeMutableRawBufferPointer) -> Int
   where B: BinaryInteger {
     var idx = stringBuffer.startIndex
     assert(stringBuffer.count >= number.bitWidth / 4)

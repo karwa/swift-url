@@ -352,10 +352,8 @@ extension IPv6Address {
       callback.validationError(ipv6: .emptyInput)
       return nil
     }
-
-    var result: IPv6Address.UInt16Pieces = (0, 0, 0, 0, 0, 0, 0, 0)
-    return withUnsafeMutableBytes(of: &result) { tuplePointer -> Self? in
-      let addressBuffer = tuplePointer.bindMemory(to: UInt16.self)
+    var _parsedPieces: IPv6Address.UInt16Pieces = (0, 0, 0, 0, 0, 0, 0, 0)
+    return withUnsafeMutableBufferPointerToElements(tuple: &_parsedPieces) { parsedPieces -> Self? in
       var pieceIndex = 0
       var compress = -1  // We treat -1 as "null".
       var idx = input.startIndex
@@ -403,7 +401,7 @@ extension IPv6Address {
         // The bytes of 'value' are arranged in host order. Flip to network order if necessary.
         value = value.bigEndian
         guard idx != input.endIndex else {
-          addressBuffer[pieceIndex] = value
+          parsedPieces[pieceIndex] = value
           pieceIndex &+= 1
           break parseloop
         }
@@ -411,7 +409,7 @@ extension IPv6Address {
         // - ':' signifies the end of the piece.
         // - '.' signifies that we should re-parse the piece as an IPv4 address.
         guard _slowPath(input[idx] != ASCII.colon) else {
-          addressBuffer[pieceIndex] = value
+          parsedPieces[pieceIndex] = value
           pieceIndex &+= 1
           idx = input.index(after: idx)
           guard idx != input.endIndex else {
@@ -438,8 +436,10 @@ extension IPv6Address {
             return nil
           }
           withUnsafeBytes(of: value.octets) { octetBuffer in
+            // After binding memory, the local variable `value` is poisoned and must not be used again.
+            // It's fine to just copy its values through the pointer and abandon the local variable, though.
             let uint16s = octetBuffer.bindMemory(to: UInt16.self)
-            addressBuffer.baseAddress.unsafelyUnwrapped.advanced(by: pieceIndex)
+            parsedPieces.baseAddress.unsafelyUnwrapped.advanced(by: pieceIndex)
               .assign(from: uint16s.baseAddress.unsafelyUnwrapped, count: 2)
           }
           pieceIndex &+= 2
@@ -451,14 +451,11 @@ extension IPv6Address {
       }
 
       if compress != -1 {
-        var swaps = pieceIndex - compress
+        var swaps = pieceIndex &- compress
         pieceIndex = 7
         while pieceIndex != 0, swaps > 0 {
-          let destinationPiece = compress + swaps - 1
-          // Check that locations are not the same, otherwise we'll have an exclusivity violation.
-          if pieceIndex != destinationPiece {
-            swap(&addressBuffer[pieceIndex], &addressBuffer[destinationPiece])
-          }
+          let destinationPiece = compress &+ swaps &- 1
+          parsedPieces.swapAt(pieceIndex, destinationPiece)
           pieceIndex &-= 1
           swaps &-= 1
         }
@@ -470,9 +467,12 @@ extension IPv6Address {
       }
 
       // Parsing successful.
+      // Rather than returning a success/failure flag and creating an address from `resultTuple`, load a tuple
+      // via the pointer and return the constructed address. This prevents the withUnsafeMutableBytes closure
+      // from being outlined, resulting in significantly less byte-shuffling.
       return IPv6Address(
-        octets: UnsafeRawPointer(addressBuffer.baseAddress.unsafelyUnwrapped)
-          .load(fromByteOffset: 0, as: IPv6Address.Octets.self))
+        octets: UnsafeRawPointer(parsedPieces.baseAddress.unsafelyUnwrapped).load(as: IPv6Address.Octets.self)
+      )
     }
   }
 }
@@ -487,11 +487,8 @@ extension IPv6Address {
     var direct = serializedDirect
     return String(_unsafeUninitializedCapacity: Int(direct.count)) { stringBuffer in
       withUnsafeBytes(of: &direct.buffer) { codeunits in
-        UnsafeMutableRawBufferPointer(stringBuffer).copyMemory(
-          from: UnsafeRawBufferPointer(rebasing: codeunits.prefix(Int(direct.count)))
-        )
+        stringBuffer.initialize(from: codeunits.prefix(Int(direct.count))).1
       }
-      return Int(direct.count)
     }
   }
 
@@ -501,14 +498,9 @@ extension IPv6Address {
     // Note that this differs from libc's INET6_ADDRSTRLEN which is 46 because inet_ntop writes
     // embedded IPv4 addresses in dotted-decimal notation, but RFC 5952 doesn't require that:
     // https://tools.ietf.org/html/rfc5952#section-5
-    var result: (UInt64, UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0, 0)
-
-    let count = withUnsafeMutableBytes(of: &result) { rawStringBuffer -> Int in
-      let stringBuffer = rawStringBuffer.bindMemory(to: UInt8.self)
-
-      return withUnsafeBytes(of: self[uint16Pieces: .numeric]) { rawPiecesBuffer -> Int in
-        let piecesBuffer = rawPiecesBuffer.bindMemory(to: UInt16.self)
-
+    var _stringBuffer: (UInt64, UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0, 0)
+    let count = withUnsafeMutableBytes(of: &_stringBuffer) { stringBuffer -> Int in
+      withUnsafeBufferPointerToElements(tuple: self[uint16Pieces: .numeric]) { piecesBuffer -> Int in
         // Look for ranges of consecutive zeroes.
         let compressedPieces: Range<Int>
         let compressedRangeResult = piecesBuffer.longestSubrange(equalTo: 0)
@@ -535,7 +527,7 @@ extension IPv6Address {
           // Print the piece and, if not the last piece, the separator.
           stringIndex &+= ASCII.insertHexString(
             for: piecesBuffer[pieceIndex],
-            into: UnsafeMutableBufferPointer(rebasing: stringBuffer[stringIndex...])
+            into: UnsafeMutableRawBufferPointer(rebasing: stringBuffer[stringIndex...])
           )
           if pieceIndex != 7 {
             stringBuffer[stringIndex] = ASCII.colon.codePoint
@@ -546,9 +538,10 @@ extension IPv6Address {
         return stringIndex
       }
     }
-    return (result, UInt8(truncatingIfNeeded: count))
+    return (_stringBuffer, UInt8(truncatingIfNeeded: count))
   }
 }
+
 
 // MARK: - IPv4
 
@@ -847,9 +840,8 @@ extension IPv4Address {
 
     // TODO: Make sure we return the same non-fatal validation errors as the spec.
 
-    var __pieces: (UInt32, UInt32, UInt32, UInt32) = (0, 0, 0, 0)
-    return withUnsafeMutableBytes(of: &__pieces) { rawPtr -> ParseResult in
-      let pieces = rawPtr.bindMemory(to: UInt32.self)
+    var _parsedPieces: (UInt32, UInt32, UInt32, UInt32) = (0, 0, 0, 0)
+    return withUnsafeMutableBufferPointerToElements(tuple: &_parsedPieces) { parsedPieces -> ParseResult in
       var pieceIndex = -1
       var idx = input.startIndex
 
@@ -905,12 +897,13 @@ extension IPv4Address {
           idx = input.index(after: idx)
         }
         // Set value for piece.
+        // Note that we do not flip to network byte order as we still want to process these numerically.
         guard pieceIndex < 3 else {
           callback.validationError(ipv4: .tooManyPieces)
           return .notAnIPAddress
         }
         pieceIndex &+= 1
-        pieces[pieceIndex] = value
+        parsedPieces[pieceIndex] = value
         // Allow one trailing '.' after the piece, even if it's the last piece.
         guard idx != input.endIndex, input[idx] == ASCII.period else {
           break
@@ -931,34 +924,34 @@ extension IPv4Address {
       // swift-format-ignore
       switch pieceIndex {
       case 0:  // 'a'       - 32-bits.
-        numericAddress = pieces[0]
+        numericAddress = parsedPieces[0]
       case 1:  // 'a.b'     - 8-bits/24-bits.
-        var invalidBits = pieces[0] & ~0x0000_00FF
-        invalidBits    |= pieces[1] & ~0x00FF_FFFF
+        var invalidBits = parsedPieces[0] & ~0x0000_00FF
+        invalidBits    |= parsedPieces[1] & ~0x00FF_FFFF
         guard invalidBits == 0 else {
           callback.validationError(ipv4: .addressOverflows)
           return .failure
         }
-        numericAddress = (pieces[0] << 24) | pieces[1]
+        numericAddress = (parsedPieces[0] << 24) | parsedPieces[1]
       case 2:  // 'a.b.c'   - 8-bits/8-bits/16-bits.
-        var invalidBits = pieces[0] & ~0x0000_00FF
-        invalidBits    |= pieces[1] & ~0x0000_00FF
-        invalidBits    |= pieces[2] & ~0x0000_FFFF
+        var invalidBits = parsedPieces[0] & ~0x0000_00FF
+        invalidBits    |= parsedPieces[1] & ~0x0000_00FF
+        invalidBits    |= parsedPieces[2] & ~0x0000_FFFF
         guard invalidBits == 0 else {
           callback.validationError(ipv4: .addressOverflows)
           return .failure
         }
-        numericAddress = (pieces[0] << 24) | (pieces[1] << 16) | pieces[2]
+        numericAddress = (parsedPieces[0] << 24) | (parsedPieces[1] << 16) | parsedPieces[2]
       case 3:  // 'a.b.c.d' - 8-bits/8-bits/8-bits/8-bits.
-        var invalidBits = pieces[0] & ~0x0000_00FF
-        invalidBits    |= pieces[1] & ~0x0000_00FF
-        invalidBits    |= pieces[2] & ~0x0000_00FF
-        invalidBits    |= pieces[3] & ~0x0000_00FF
+        var invalidBits = parsedPieces[0] & ~0x0000_00FF
+        invalidBits    |= parsedPieces[1] & ~0x0000_00FF
+        invalidBits    |= parsedPieces[2] & ~0x0000_00FF
+        invalidBits    |= parsedPieces[3] & ~0x0000_00FF
         guard invalidBits == 0 else {
           callback.validationError(ipv4: .addressOverflows)
           return .failure
         }
-        numericAddress = (pieces[0] << 24) | (pieces[1] << 16) | (pieces[2] << 8) | pieces[3]
+        numericAddress = (parsedPieces[0] << 24) | (parsedPieces[1] << 16) | (parsedPieces[2] << 8) | parsedPieces[3]
       default:
         fatalError("Internal error. pieceIndex has unexpected value.")
       }
@@ -1047,29 +1040,22 @@ extension IPv4Address {
     var direct = serializedDirect
     return String(_unsafeUninitializedCapacity: Int(direct.count)) { stringBuffer in
       withUnsafeBytes(of: &direct.buffer) { codeunits in
-        UnsafeMutableRawBufferPointer(stringBuffer).copyMemory(
-          from: UnsafeRawBufferPointer(rebasing: codeunits.prefix(Int(direct.count)))
-        )
+        stringBuffer.initialize(from: codeunits.prefix(Int(direct.count))).1
       }
-      return Int(direct.count)
     }
   }
 
   var serializedDirect: (buffer: (UInt64, UInt64), count: UInt8) {
 
     // The maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX") is 15 bytes.
-    var result: (UInt64, UInt64) = (0, 0)
-
-    let count = withUnsafeMutableBytes(of: &result) { rawStringBuffer -> Int in
-      let stringBuffer = rawStringBuffer.bindMemory(to: UInt8.self)
-
-      return withUnsafeBytes(of: octets) { rawAddressBytes -> Int in
-        let addressBytes = rawAddressBytes.bindMemory(to: UInt8.self)
+    var _stringBuffer: (UInt64, UInt64) = (0, 0)
+    let count = withUnsafeMutableBytes(of: &_stringBuffer) { stringBuffer -> Int in
+      return withUnsafeBytes(of: octets) { octetBytes -> Int in
         var stringBufferIdx = stringBuffer.startIndex
         for i in 0..<4 {
           stringBufferIdx &+= ASCII.insertDecimalString(
-            for: addressBytes[i],
-            into: UnsafeMutableBufferPointer(
+            for: octetBytes[i],
+            into: UnsafeMutableRawBufferPointer(
               rebasing: stringBuffer[Range(uncheckedBounds: (stringBufferIdx, stringBuffer.endIndex))]
             )
           )
@@ -1081,6 +1067,6 @@ extension IPv4Address {
         return stringBufferIdx
       }
     }
-    return (result, UInt8(truncatingIfNeeded: count))
+    return (_stringBuffer, UInt8(truncatingIfNeeded: count))
   }
 }
