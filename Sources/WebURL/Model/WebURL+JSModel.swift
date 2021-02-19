@@ -96,15 +96,9 @@ extension WebURL.JSModel {
     }
   }
 
-  private func stringForComponent(_ component: WebURL.Component) -> String? {
-    return storage.withComponentBytes(component) { maybeBuffer in
-      return maybeBuffer.map { buffer in String(decoding: buffer, as: UTF8.self) }
-    }
-  }
-
   public var scheme: String {
     get {
-      return stringForComponent(.scheme)!
+      return storage.stringForComponent(.scheme)!
     }
     set {
       var stringToInsert = newValue
@@ -123,7 +117,7 @@ extension WebURL.JSModel {
 
   public var username: String {
     get {
-      return stringForComponent(.username) ?? ""
+      return storage.stringForComponent(.username) ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -138,7 +132,7 @@ extension WebURL.JSModel {
 
   public var password: String {
     get {
-      var string = stringForComponent(.password)
+      var string = storage.stringForComponent(.password)
       if !(string?.isEmpty ?? true) {
         let separator = string?.removeFirst()
         assert(separator == ":")
@@ -158,7 +152,7 @@ extension WebURL.JSModel {
 
   public var hostname: String {
     get {
-      return stringForComponent(.hostname) ?? ""
+      return storage.stringForComponent(.hostname) ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -178,7 +172,7 @@ extension WebURL.JSModel {
 
   public var port: String {
     get {
-      var string = stringForComponent(.port)
+      var string = storage.stringForComponent(.port)
       if !(string?.isEmpty ?? true) {
         let separator = string?.removeFirst()
         assert(separator == ":")
@@ -210,7 +204,7 @@ extension WebURL.JSModel {
 
   public var pathname: String {
     get {
-      return stringForComponent(.path) ?? ""
+      return storage.stringForComponent(.path) ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -229,7 +223,7 @@ extension WebURL.JSModel {
 
   public var search: String {
     get {
-      let string = stringForComponent(.query)
+      let string = storage.stringForComponent(.query)
       guard string != "?" else { return "" }
       return string ?? ""
     }
@@ -256,7 +250,7 @@ extension WebURL.JSModel {
 
   public var fragment: String {
     get {
-      let string = stringForComponent(.fragment)
+      let string = storage.stringForComponent(.fragment)
       guard string != "#" else { return "" }
       return string ?? ""
     }

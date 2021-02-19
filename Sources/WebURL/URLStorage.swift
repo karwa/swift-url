@@ -422,6 +422,12 @@ extension URLStorage {
     guard let range = header.structure.range(of: component) else { return block(nil) }
     return codeUnits.withElements(range: range, block)
   }
+  
+  func stringForComponent(_ component: WebURL.Component) -> String? {
+    return withComponentBytes(component) { maybeBuffer in
+      return maybeBuffer.map { buffer in String(decoding: buffer, as: UTF8.self) }
+    }
+  }
 
   func withAllAuthorityComponentBytes<T>(
     _ block: (
@@ -793,6 +799,13 @@ extension AnyURLStorage {
     switch self {
     case .small(let storage): return storage.withComponentBytes(component, block)
     case .generic(let storage): return storage.withComponentBytes(component, block)
+    }
+  }
+  
+  func stringForComponent(_ component: WebURL.Component) -> String? {
+    switch self {
+    case .small(let storage): return storage.stringForComponent(component)
+    case .generic(let storage): return storage.stringForComponent(component)
     }
   }
 
