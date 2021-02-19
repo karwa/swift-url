@@ -17,7 +17,6 @@ import XCTest
 
 @testable import WebURL
 
-
 // MARK: - Helpers.
 
 
@@ -29,20 +28,22 @@ import XCTest
   #error("Unknown libc variant")
 #endif
 
-fileprivate extension Array {
-  
-  init(fromIPv6Octets addr: IPv6Address.Octets) where Element == UInt8 {
-    self = [addr.0, addr.1, addr.2, addr.3, addr.4, addr.5, addr.6, addr.7,
-            addr.8, addr.9, addr.10, addr.11, addr.12, addr.13, addr.14, addr.15]
+extension Array {
+
+  fileprivate init(fromIPv6Octets addr: IPv6Address.Octets) where Element == UInt8 {
+    self = [
+      addr.0, addr.1, addr.2, addr.3, addr.4, addr.5, addr.6, addr.7,
+      addr.8, addr.9, addr.10, addr.11, addr.12, addr.13, addr.14, addr.15,
+    ]
   }
-  
-  init(fromIPv6Pieces addr: IPv6Address.UInt16Pieces) where Element == UInt16 {
+
+  fileprivate init(fromIPv6Pieces addr: IPv6Address.Pieces) where Element == UInt16 {
     self = [addr.0, addr.1, addr.2, addr.3, addr.4, addr.5, addr.6, addr.7]
   }
 }
 
-fileprivate extension ValidationError {
-  var ipv6Error: IPv6Address.ValidationError? {
+extension ValidationError {
+  fileprivate var ipv6Error: IPv6Address.ValidationError? {
     guard case .some(.ipv6AddressError(let error)) = self.hostParserError else { return nil }
     return error
   }
@@ -135,19 +136,22 @@ final class IPv6AddressTests: XCTestCase {
         [0x2001, 0x0000, 0xce49, 0x7601, 0xe866, 0xefff, 0x62c3, 0xfffe]
       ),
       // Compact
-      ("2608::3:5", "2608::3:5",
-       [0x26, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x05],
-       [0x2608, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0003, 0x0005]
+      (
+        "2608::3:5", "2608::3:5",
+        [0x26, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x05],
+        [0x2608, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0003, 0x0005]
       ),
       // Empty
-      ("::", "::",
-       [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-       [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000]
+      (
+        "::", "::",
+        [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+        [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000]
       ),
       // IPv4
-      ("::ffff:192.168.0.1", "::ffff:c0a8:1",
-       [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xc0, 0xa8, 0x00, 0x01],
-       [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xffff, 0xc0a8, 0x0001]
+      (
+        "::ffff:192.168.0.1", "::ffff:c0a8:1",
+        [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xc0, 0xa8, 0x00, 0x01],
+        [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xffff, 0xc0a8, 0x0001]
       ),
     ]
 
@@ -160,43 +164,47 @@ final class IPv6AddressTests: XCTestCase {
       XCTAssertEqual(Array(fromIPv6Octets: addr.octets), expectedOctets, "Octet mismatch: \(string)")
       XCTAssertEqual(Array(fromIPv6Octets: addr.octets), pton_octets(string), "Octet mismatch: \(string)")
       // Pieces.
-      XCTAssertEqual(Array(fromIPv6Pieces: addr[uint16Pieces: .numeric]), expectedNumericPieces,
-                     "Piece mismatch: \(string)")
-      XCTAssertEqual(Array(fromIPv6Pieces: addr[uint16Pieces: .binary]), pton_pieces(string),
-                     "Piece mismatch: \(string)")
+      XCTAssertEqual(Array(fromIPv6Pieces: addr[pieces: .numeric]), expectedNumericPieces, "Piece mismatch: \(string)")
+      XCTAssertEqual(Array(fromIPv6Pieces: addr[pieces: .binary]), pton_pieces(string), "Piece mismatch: \(string)")
       // Serialization.
       XCTAssertEqual(addr.serialized, expectedDescription)
       // Idempotence.
       if let reparsedAddr = IPv6Address(addr.serialized) {
-        XCTAssertEqual(Array(fromIPv6Octets: addr.octets), Array(fromIPv6Octets: reparsedAddr.octets),
-                       "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
+        XCTAssertEqual(
+          Array(fromIPv6Octets: addr.octets), Array(fromIPv6Octets: reparsedAddr.octets),
+          "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'"
+        )
       } else {
         XCTFail("Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
       }
     }
   }
-  
+
   func testCompression() {
 
     let testData: [(String, String, [UInt8], [UInt16])] = [
       // Leading
-      ("::1234:F088", "::1234:f088",
-       [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0xf0, 0x88],
-       [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x1234, 0xf088]
+      (
+        "::1234:F088", "::1234:f088",
+        [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0xf0, 0x88],
+        [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x1234, 0xf088]
       ),
-      ("0:0::0:192.168.0.2", "::c0a8:2",
-       [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0xa8, 0x00, 0x02],
-       [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xc0a8, 0x0002]
+      (
+        "0:0::0:192.168.0.2", "::c0a8:2",
+        [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0xa8, 0x00, 0x02],
+        [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xc0a8, 0x0002]
       ),
       // Middle
-      ("1212:F0F0::3434:D0D0", "1212:f0f0::3434:d0d0",
-       [0x12, 0x12, 0xf0, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0x34, 0xd0, 0xd0],
-       [0x1212, 0xf0f0, 0x0000, 0x0000, 0x0000, 0x0000, 0x3434, 0xd0d0]
+      (
+        "1212:F0F0::3434:D0D0", "1212:f0f0::3434:d0d0",
+        [0x12, 0x12, 0xf0, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0x34, 0xd0, 0xd0],
+        [0x1212, 0xf0f0, 0x0000, 0x0000, 0x0000, 0x0000, 0x3434, 0xd0d0]
       ),
       // Trailing
-      ("1234:F088::", "1234:f088::",
-       [0x12, 0x34, 0xf0, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-       [0x1234, 0xf088, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000]
+      (
+        "1234:F088::", "1234:f088::",
+        [0x12, 0x34, 0xf0, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+        [0x1234, 0xf088, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000]
       ),
     ]
 
@@ -209,16 +217,19 @@ final class IPv6AddressTests: XCTestCase {
       XCTAssertEqual(Array(fromIPv6Octets: addr.octets), expectedOctets, "Octet mismatch: \(string)")
       XCTAssertEqual(Array(fromIPv6Octets: addr.octets), pton_octets(string), "Octet mismatch: \(string)")
       // Pieces.
-      XCTAssertEqual(Array(fromIPv6Pieces: addr[uint16Pieces: .numeric]), expectedNumericPieces,
-                     "Piece mismatch: \(string)")
-      XCTAssertEqual(Array(fromIPv6Pieces: addr[uint16Pieces: .binary]), pton_pieces(string),
-                     "Piece mismatch: \(string)")
+      XCTAssertEqual(
+        Array(fromIPv6Pieces: addr[pieces: .numeric]), expectedNumericPieces,
+        "Piece mismatch: \(string)")
+      XCTAssertEqual(
+        Array(fromIPv6Pieces: addr[pieces: .binary]), pton_pieces(string),
+        "Piece mismatch: \(string)")
       // Serialization.
       XCTAssertEqual(addr.serialized, expectedDescription)
       // Idempotence.
       if let reparsedAddr = IPv6Address(addr.serialized) {
-        XCTAssertEqual(Array(fromIPv6Octets: addr.octets), Array(fromIPv6Octets: reparsedAddr.octets),
-                       "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
+        XCTAssertEqual(
+          Array(fromIPv6Octets: addr.octets), Array(fromIPv6Octets: reparsedAddr.octets),
+          "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
       } else {
         XCTFail("Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
       }
@@ -258,7 +269,7 @@ final class IPv6AddressTests: XCTestCase {
 
     for (string, expectedError) in invalidAddresses {
       do {
-      	let addr = try IPv6Address(reportingErrors: string)
+        let addr = try IPv6Address(reportingErrors: string)
         XCTFail("Invalid address '\(string)' was parsed as '\(addr)")
       } catch let error as IPv6Address.ValidationError {
         XCTAssertEqual(error, expectedError, "Unexpected error for invalid address '\(string)'")
@@ -278,11 +289,11 @@ extension IPv6AddressTests {
   func testRandom_Serialization() {
     for _ in 0..<1000 {
       let expected = IPv6Address.Utils.randomAddress()
-      let address = IPv6Address(uint16Pieces: expected, .binary)
+      let address = IPv6Address(pieces: expected, .binary)
       if address.serialized.contains("::") {
         XCTAssertTrue(Array(fromIPv6Pieces: expected).longestSubrange(equalTo: 0).length > 0)
       }
-      
+
       // Serialize with libc. It should return the same String.
       let libcStr = ntop_pieces(Array(fromIPv6Pieces: expected))
       if libcStr?.contains(".") == true {
@@ -295,7 +306,7 @@ extension IPv6AddressTests {
 
       // Parse our serialized output with libc. It should return the same address.
       XCTAssertEqual(pton_octets(address.serialized), Array(fromIPv6Octets: address.octets))
-      XCTAssertEqual(pton_pieces(address.serialized), Array(fromIPv6Pieces: address[uint16Pieces: .binary]))
+      XCTAssertEqual(pton_pieces(address.serialized), Array(fromIPv6Pieces: address[pieces: .binary]))
     }
   }
 
@@ -311,8 +322,8 @@ extension IPv6AddressTests {
         continue
       }
       XCTAssertEqual(Array(fromIPv6Octets: parsedAddress.octets), pton_octets(randomAddressString))
-      XCTAssertEqual(Array(fromIPv6Pieces: parsedAddress[uint16Pieces: .binary]), Array(fromIPv6Pieces: randomPieces))
-      XCTAssertEqual(Array(fromIPv6Pieces: parsedAddress[uint16Pieces: .binary]), pton_pieces(randomAddressString))
+      XCTAssertEqual(Array(fromIPv6Pieces: parsedAddress[pieces: .binary]), Array(fromIPv6Pieces: randomPieces))
+      XCTAssertEqual(Array(fromIPv6Pieces: parsedAddress[pieces: .binary]), pton_pieces(randomAddressString))
     }
   }
 }

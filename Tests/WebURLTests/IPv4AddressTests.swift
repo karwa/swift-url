@@ -17,7 +17,6 @@ import XCTest
 
 @testable import WebURL
 
-
 // MARK: - Helpers
 
 
@@ -84,8 +83,9 @@ final class IPv4AddressTests: XCTestCase {
       XCTAssertEqual(addr.serialized, "192.255.2.5")
       // Idempotence.
       if let reparsedAddr = IPv4Address(addr.serialized) {
-        XCTAssertEqual(Array(ipv4Octets: addr.octets), Array(ipv4Octets: reparsedAddr.octets),
-                       "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
+        XCTAssertEqual(
+          Array(ipv4Octets: addr.octets), Array(ipv4Octets: reparsedAddr.octets),
+          "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
       } else {
         XCTFail("Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
       }
@@ -123,7 +123,7 @@ final class IPv4AddressTests: XCTestCase {
     if let _ = IPv4Address("123.123.123.123.123.") { XCTFail("Expected fail") }
     if let _ = IPv4Address("123.123.123.123.123..") { XCTFail("Expected fail") }
   }
-  
+
   func testTrailingZeroes() {
     if let addr = IPv4Address("234") {
       XCTAssertEqual(Array(ipv4Octets: addr.octets), [0, 0, 0, 234])
@@ -151,14 +151,14 @@ final class IPv4AddressTests: XCTestCase {
     ]
     for string in noTrailingZeroes {
       let expectedNumericAddress: UInt32 = 3_925_868_553
-      
+
       guard let addr = IPv4Address(string) else {
         XCTFail("Failed to parse valid address")
         continue
       }
       // inet_aton doesn't accept trailing dots, but the WHATWG URL spec does.
       let libcString = string.hasSuffix(".") ? String(string.dropLast()) : string
-      
+
       XCTAssertEqual(Array(ipv4Octets: addr.octets), [234, 0, 0, 9])
       XCTAssertEqual(addr[value: .binary], libc_aton(libcString))
       XCTAssertEqual(addr[value: .numeric], expectedNumericAddress)
@@ -181,12 +181,12 @@ final class IPv4AddressTests: XCTestCase {
     ]
     for string in valid_trailingZeroes {
       let expectedNumericAddress: UInt32 = 3_926_458_368
-      
+
       guard let addr = IPv4Address(string) else {
         XCTFail("Failed to parse valid address")
         continue
       }
-      
+
       // inet_aton doesn't accept trailing dots, but the WHATWG URL spec does.
       let libcString = string.hasSuffix(".") ? String(string.dropLast()) : string
 
@@ -215,7 +215,7 @@ final class IPv4AddressTests: XCTestCase {
 
   func testInvalid() {
     // TODO: Check for specific validation errors.
-    
+
     if let _ = IPv4Address("0.0x300") {} else { XCTFail("Failed to parse valid address") }
     if let _ = IPv4Address("0..0x300") { XCTFail("Expected fail") }
 
@@ -260,7 +260,7 @@ extension IPv4AddressTests {
       let libcAddress = libc_aton(address.serialized)
       XCTAssertEqual(libcAddress?.octets, Array(ipv4Octets: address.octets), "Mismatch detected for address \(address)")
       XCTAssertEqual(libcAddress, address[value: .binary], "Mismatch detected for address \(address)")
-      
+
       // Re-parse our serialized output. It should return the same address.
       if let reparsed = IPv4Address(address.serialized) {
         XCTAssertEqual(Array(ipv4Octets: address.octets), Array(ipv4Octets: reparsed.octets))
