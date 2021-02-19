@@ -122,37 +122,37 @@ public struct IPv6Address {
     self.octets = octets
   }
 
-  public typealias UInt16Pieces = (UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16)
+  public typealias Pieces = (UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16)
 
   /// Creates an address from the given 16-bit integer pieces.
   ///
   /// - seealso: `OctetArrangement`
   /// - parameters:
-  ///     - uint16Pieces:      The integer pieces of the address.
-  ///     - octetArrangement:  How the octets in each integer of `uint16Pieces` are arranged:
+  ///     - pieces:            The integer pieces of the address.
+  ///     - octetArrangement:  How the octets in each integer of `pieces` are arranged:
   ///                            - If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.
   ///                            - If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
   ///                              they are in.
   ///
   @inlinable
-  public init(uint16Pieces: UInt16Pieces, _ octetArrangement: OctetArrangement) {
+  public init(pieces: Pieces, _ octetArrangement: OctetArrangement) {
     self.init()
-    self[uint16Pieces: octetArrangement] = uint16Pieces
+    self[pieces: octetArrangement] = pieces
   }
 
   /// The address, expressed as 16-bit integer pieces.
   ///
   /// - seealso: `OctetArrangement`
   /// - parameters:
-  ///     - octetArrangement:  How the octets in each integer of `uint16Pieces` are arranged:
+  ///     - octetArrangement:  How the octets in each integer of `pieces` are arranged:
   ///                            - If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.
   ///                            - If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
   ///                              they are in.
   ///
   @inlinable
-  public subscript(uint16Pieces octetArrangement: OctetArrangement) -> UInt16Pieces {
+  public subscript(pieces octetArrangement: OctetArrangement) -> Pieces {
     get {
-      let networkOrder = withUnsafeBytes(of: octets) { $0.load(as: UInt16Pieces.self) }
+      let networkOrder = withUnsafeBytes(of: octets) { $0.load(as: Pieces.self) }
       switch octetArrangement {
       case .binary:
         return networkOrder
@@ -173,7 +173,7 @@ public struct IPv6Address {
           }
         }
       case .numeric:
-        self[uint16Pieces: .binary] = (
+        self[pieces: .binary] = (
           newValue.0.bigEndian, newValue.1.bigEndian, newValue.2.bigEndian,
           newValue.3.bigEndian, newValue.4.bigEndian, newValue.5.bigEndian,
           newValue.6.bigEndian, newValue.7.bigEndian
@@ -352,7 +352,7 @@ extension IPv6Address {
       callback.validationError(ipv6: .emptyInput)
       return nil
     }
-    var _parsedPieces: IPv6Address.UInt16Pieces = (0, 0, 0, 0, 0, 0, 0, 0)
+    var _parsedPieces: IPv6Address.Pieces = (0, 0, 0, 0, 0, 0, 0, 0)
     return withUnsafeMutableBufferPointerToElements(tuple: &_parsedPieces) { parsedPieces -> Self? in
       var pieceIndex = 0
       var compress = -1  // We treat -1 as "null".
@@ -500,7 +500,7 @@ extension IPv6Address {
     // https://tools.ietf.org/html/rfc5952#section-5
     var _stringBuffer: (UInt64, UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0, 0)
     let count = withUnsafeMutableBytes(of: &_stringBuffer) { stringBuffer -> Int in
-      withUnsafeBufferPointerToElements(tuple: self[uint16Pieces: .numeric]) { piecesBuffer -> Int in
+      withUnsafeBufferPointerToElements(tuple: self[pieces: .numeric]) { piecesBuffer -> Int in
         // Look for ranges of consecutive zeroes.
         let compressedPieces: Range<Int>
         let compressedRangeResult = piecesBuffer.longestSubrange(equalTo: 0)

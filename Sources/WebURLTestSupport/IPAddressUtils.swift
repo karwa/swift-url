@@ -144,7 +144,7 @@ extension IPv6Address.Utils {
   /// At random, a series of 16-bit pieces are set to 0, in order to prompt a compressed serialization format.
   /// There is no bias to produce more addresses in the IPv4 range.
   ///
-  public static func randomAddress() -> IPv6Address.UInt16Pieces {
+  public static func randomAddress() -> IPv6Address.Pieces {
     var rng = SystemRandomNumberGenerator()
     let injectCompression = Bool.random(using: &rng)
     return randomAddress(limitedToIPv4: false, injectCompression: injectCompression, using: &rng)
@@ -161,12 +161,12 @@ extension IPv6Address.Utils {
     limitedToIPv4: Bool,
     injectCompression: Bool,
     using rng: inout RNG
-  ) -> IPv6Address.UInt16Pieces {
+  ) -> IPv6Address.Pieces {
 
     switch limitedToIPv4 {
     case true:
       var randomBytes = (UInt64(0), UInt64.random(in: 0...UInt64(UInt32.max), using: &rng).bigEndian)
-      return withUnsafeBytes(of: &randomBytes) { $0.load(as: IPv6Address.UInt16Pieces.self) }
+      return withUnsafeBytes(of: &randomBytes) { $0.load(as: IPv6Address.Pieces.self) }
 
     case false:
       var randomBytes = (UInt64.random(in: 0 ... .max, using: &rng), UInt64.random(in: 0 ... .max, using: &rng))
@@ -181,7 +181,7 @@ extension IPv6Address.Utils {
             rawPtr[x] = 0
           }
         }
-        return rawPtr.load(as: IPv6Address.UInt16Pieces.self)
+        return rawPtr.load(as: IPv6Address.Pieces.self)
       }
     }
   }
@@ -205,7 +205,7 @@ extension IPv6Address.Utils {
   /// This may be skewed a bit - some generated addresses will already be compressed, regardless of our
   /// randomised toggle to inject compressable pieces.
   ///
-  public static func randomString() -> (IPv6Address.UInt16Pieces, String) {
+  public static func randomString() -> (IPv6Address.Pieces, String) {
     var rng = SystemRandomNumberGenerator()
     let address = randomAddress(
       limitedToIPv4: Bool.random(using: &rng),
@@ -236,7 +236,7 @@ extension IPv6Address.Utils {
   ///
   ///
   public static func randomString<RNG: RandomNumberGenerator>(
-    address: IPv6Address.UInt16Pieces,
+    address: IPv6Address.Pieces,
     allowIPv4Addresses: Bool,
     mayCompress: Bool,
     using rng: inout RNG
