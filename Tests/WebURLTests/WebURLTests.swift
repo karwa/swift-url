@@ -55,7 +55,7 @@ extension WebURLTests {
     // TODO: These are by no means all paths that each setter can take.
     var url = WebURL("http://example.com/a/b?c=d&e=f#gh")!.jsModel
     let original = url
-    
+
     func checkOriginalHasNotChanged() {
       XCTAssertEqual(original.href, "http://example.com/a/b?c=d&e=f#gh")
       XCTAssertEqual(original.scheme, "http:")
@@ -112,38 +112,50 @@ extension WebURLTests {
 
   // Note: This is likely to be a bit fragile, since it relies on optimisations which might not happen at -Onone.
   //       For now, it works.
-  
+
   /// Tests that setters on a uniquely referenced URL are performed in-place.
   ///
   func testCopyOnWrite_unique() {
     var url = WebURL("wss://user:pass@example.com:90/a/b?c=d&e=f#gh")!
     XCTAssertEqual(url.serialized, "wss://user:pass@example.com:90/a/b?c=d&e=f#gh")
-    
+
     func checkDoesNotCopy(_ object: inout WebURL, _ perform: (inout WebURL) -> Void) {
       let addressBefore = object.storage.withEntireString { $0.baseAddress }
       perform(&object)
       let addressAfter = object.storage.withEntireString { $0.baseAddress }
       XCTAssertEqual(addressBefore, addressAfter)
     }
-    
-    // 'ftp' and 'wss' have the same length; should not reallocate due to capacity.
+
+    // All new values must be the same length, so we can be sure we have enough capacity.
+
+    // Scheme.
     checkDoesNotCopy(&url) {
       $0.scheme = "ftp"
     }
     XCTAssertEqual(url.serialized, "ftp://user:pass@example.com:90/a/b?c=d&e=f#gh")
-    
+    // Username.
+    checkDoesNotCopy(&url) {
+      $0.username = "resu"
+    }
+    XCTAssertEqual(url.serialized, "ftp://resu:pass@example.com:90/a/b?c=d&e=f#gh")
+    // Password.
+    checkDoesNotCopy(&url) {
+      $0.password = "ssap"
+    }
+    XCTAssertEqual(url.serialized, "ftp://resu:ssap@example.com:90/a/b?c=d&e=f#gh")
+
     // TODO: Add setters as they are implemented in the swift model.
-    
+
     checkDoesNotCopy(&url) {
       _ in
-//      $0.jsModel.hostname = "moc.elpmaxe"
+      //      $0.jsModel.hostname = "moc.elpmaxe"
     }
     // XCTAssertEqual(url.serialized, "ftp://moc.elpmaxe/a/b?c=d&e=f#gh")
   }
 }
 
 extension WebURLTests {
-  
+
   /// Tests the WebURL scheme setter.
   ///
   /// Broadly speaking, the setter's behaviour should be tested via the JS model according to the WPT test files.
@@ -179,7 +191,7 @@ extension WebURLTests {
       }
       XCTAssertNoThrow(try url.setScheme(to: "https"))
       XCTAssertEqual(url.serialized, "https://user:pass@somehost/")
-      
+
       url = WebURL("http://somehost:8080/")!
       XCTAssertThrowsSpecific(URLSetterError.error(.newSchemeCannotHaveCredentialsOrPort)) {
         try url.setScheme(to: "file")
@@ -187,7 +199,7 @@ extension WebURLTests {
       XCTAssertNoThrow(try url.setScheme(to: "https"))
       XCTAssertEqual(url.serialized, "https://somehost:8080/")
     }
-    
+
     do {
       // [Throw] URL with empty hostname changing to scheme which does not allow them.
       var url = WebURL("file:///")!
@@ -197,6 +209,66 @@ extension WebURLTests {
       XCTAssertNoThrow(try url.setScheme(to: "file"))
       XCTAssertEqual(url.serialized, "file:///")
     }
+  }
+
+  /// Tests the Swift model 'username' property.
+  ///
+  /// The Swift model deviates from the JS model in that it presents empty/not present usernames as 'nil'.
+  ///
+  func testUsername() {
+    // [Deviation] Empty usernames are entirely removed (including separator),
+    //             therefore the Swift model returns 'nil' to mean 'not present'.
+    var url = WebURL("http://example.com/")!
+    XCTAssertNil(url.username)
+    XCTAssertEqual(url.serialized, "http://example.com/")
+
+    url.username = "some username"
+    XCTAssertEqual(url.username, "some%20username")
+    XCTAssertEqual(url.serialized, "http://some%20username@example.com/")
+
+    // [Deviation] Setting the empty string is the same as setting 'nil'.
+    url.username = ""
+    XCTAssertNil(url.username)
+    XCTAssertEqual(url.serialized, "http://example.com/")
+
+    url.username = "some username"
+    XCTAssertEqual(url.username, "some%20username")
+    XCTAssertEqual(url.serialized, "http://some%20username@example.com/")
+
+    // [Deviation] Setting the 'nil' is the same as setting the empty string.
+    url.username = nil
+    XCTAssertNil(url.username)
+    XCTAssertEqual(url.serialized, "http://example.com/")
+  }
+
+  /// Tests the Swift model 'password' property.
+  ///
+  /// The Swift model deviates from the JS model in that it presents empty/not present passwords as 'nil'.
+  ///
+  func testPassword() {
+    // [Deviation] Empty passwords are entirely removed (including separator),
+    //             therefore the Swift model returns 'nil' to mean 'not present'.
+    var url = WebURL("http://example.com/")!
+    XCTAssertNil(url.password)
+    XCTAssertEqual(url.serialized, "http://example.com/")
+
+    url.password = "🤫"
+    XCTAssertEqual(url.password, "%F0%9F%A4%AB")
+    XCTAssertEqual(url.serialized, "http://:%F0%9F%A4%AB@example.com/")
+
+    // [Deviation] Setting the empty string is the same as setting 'nil'.
+    url.password = ""
+    XCTAssertNil(url.password)
+    XCTAssertEqual(url.serialized, "http://example.com/")
+
+    url.password = "🤫"
+    XCTAssertEqual(url.password, "%F0%9F%A4%AB")
+    XCTAssertEqual(url.serialized, "http://:%F0%9F%A4%AB@example.com/")
+
+    // [Deviation] Setting the 'nil' is the same as setting the empty string.
+    url.password = nil
+    XCTAssertNil(url.password)
+    XCTAssertEqual(url.serialized, "http://example.com/")
   }
 }
 

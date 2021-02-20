@@ -132,13 +132,9 @@ extension WebURL.JSModel {
       swiftModel.username ?? ""
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        withMutableStorage(
-          { small in small.setUsername(to: utf8).0 },
-          { generic in generic.setUsername(to: utf8).0 }
-        )
-      }
+      var swift = swiftModel
+      try? swift.setUsername(to: newValue)
+      self = swift.jsModel
     }
   }
 
@@ -147,13 +143,9 @@ extension WebURL.JSModel {
       swiftModel.password ?? ""
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        withMutableStorage(
-          { small in small.setPassword(to: utf8).0 },
-          { generic in generic.setPassword(to: utf8).0 }
-        )
-      }
+      var swift = swiftModel
+      try? swift.setPassword(to: newValue)
+      self = swift.jsModel
     }
   }
 

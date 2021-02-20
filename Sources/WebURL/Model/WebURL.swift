@@ -159,6 +159,8 @@ extension WebURL {
 
   /// The scheme of this URL, for example `https` or `file`.
   ///
+  /// All URLs have a scheme, and the scheme is never an empty string.
+  ///
   public var scheme: String {
     get {
       storage.withComponentBytes(.scheme) { maybeBytes in
@@ -173,16 +175,26 @@ extension WebURL {
 
   /// The username of this URL, if present, as a percent-encoded string.
   ///
+  /// If present, the username is never the empty sring.
+  ///
   public var username: String? {
-    storage.stringForComponent(.username)
+    get { storage.stringForComponent(.username) }
+    set { try? setUsername(to: newValue) }
   }
 
   /// The password of this URL, if present, as a percent-encoded string.
   ///
+  /// If present, the password is never the empty sring.
+  ///
   public var password: String? {
-    storage.withComponentBytes(.password) { maybeBytes in
-      guard let bytes = maybeBytes, bytes.count > 1 else { return nil }
-      return String(decoding: bytes.dropFirst(), as: UTF8.self)
+    get {
+      storage.withComponentBytes(.password) { maybeBytes in
+        guard let bytes = maybeBytes, bytes.count > 1 else { return nil }
+        return String(decoding: bytes.dropFirst(), as: UTF8.self)
+      }
+    }
+    set {
+      try? setPassword(to: newValue)
     }
   }
 
@@ -251,14 +263,14 @@ internal let _tempStorage = AnyURLStorage(
 )
 
 extension WebURL {
-  
+
   private mutating func withMutableStorage(
     _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
     _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> (AnyURLStorage, URLSetterError?)
   ) throws {
-    
+
     var error: URLSetterError?
-    
+
     // We need to go through a bit of a dance in order to get a unique reference to the storage.
     // It's like if you have something stuck to one hand and try to remove it with the other hand.
     //
@@ -287,7 +299,7 @@ extension WebURL {
 }
 
 extension WebURL {
-  
+
   public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
     try newScheme._withUTF8 { utf8 in
       try withMutableStorage(
@@ -296,5 +308,26 @@ extension WebURL {
       )
     }
   }
-}
 
+  public mutating func setUsername<S>(to newUsername: S?) throws where S: StringProtocol {
+    // Empty usernames are removed, so setting to 'nil' is the same as setting to an empty string.
+    let newUsername = newUsername ?? ""
+    try newUsername._withUTF8 { utf8 in
+      try withMutableStorage(
+        { small in small.setUsername(to: utf8) },
+        { generic in generic.setUsername(to: utf8) }
+      )
+    }
+  }
+
+  public mutating func setPassword<S>(to newPassword: S?) throws where S: StringProtocol {
+    // Empty passwords are removed, so setting to 'nil' is the same as setting to an empty string.
+    let newPassword = newPassword ?? ""
+    try newPassword._withUTF8 { utf8 in
+      try withMutableStorage(
+        { small in small.setPassword(to: utf8) },
+        { generic in generic.setPassword(to: utf8) }
+      )
+    }
+  }
+}
