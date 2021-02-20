@@ -30,6 +30,24 @@ extension WebURL {
     var swiftModel: WebURL {
       return WebURL(storage: self.storage)
     }
+
+    init(storage: AnyURLStorage) {
+      self.storage = storage
+    }
+
+    public init?(_ input: String, base: String?) {
+      if let baseStr = base {
+        let _url = WebURL(baseStr)?.join(input)
+        guard let url = _url else { return nil }
+        self.init(storage: url.storage)
+
+      } else if let url = WebURL(input) {
+        self.init(storage: url.storage)
+
+      } else {
+        return nil
+      }
+    }
   }
 }
 

@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// A Uniform Resource Locator (URL) is a value which identifies the location of a resource.
-///
-/// A URL is a `String` that can be deconstructed in to components which describe how to access the resource.
+/// A Uniform Resource Locator (URL) is a string which describes the location of a resource.
+/// The string may be deconstructed in to components which describe how to access the resource.
 ///
 /// - The `scheme` (or "protocol") describes how to communicate with the resource's location.
 ///   For example, a URL with an "http" scheme must be used with software that speaks the HTTP protocol.
@@ -42,8 +41,8 @@
 /// URLs are always ASCII Strings. Non-ASCII characters must be percent-encoded, except in domains, where they are encoded as ASCII by
 /// the [IDNA transformation][idna-spec] .
 ///
-/// Parsing of URL strings is compatible with the [WHATWG URL Specification][url-spec] as it was on 14.06.2020, although
-/// the object model is different. The Javascript model described in the specification is available via the `.jsModel` view.
+/// Parsing of URL strings is compatible with the [WHATWG URL Specification][url-spec], although the object model is different.
+/// The Javascript model described in the specification is available via the `.jsModel` view.
 ///
 /// [iana-schemes]: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
 /// [dns]: https://en.wikipedia.org/wiki/Domain_Name_System
@@ -57,25 +56,26 @@ public struct WebURL {
     self.storage = storage
   }
 
-  public init?(_ input: String) {
-    var input = input
-    guard let url = input.withUTF8({ urlFromBytes($0, baseURL: nil) }) else {
+  /// Attempts to create a URL by parsing the given absolute URL string.
+  ///
+  /// The created URL is normalized in a number of ways - for instance, whitespace characters may be stripped, other characters may be percent-encoded,
+  /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
+  /// serialized result may look different to the original contents. These transformations are defined in the URL specification.
+  ///
+  public init?<S>(_ string: S) where S: StringProtocol {
+    guard let url = string._withUTF8({ urlFromBytes($0, baseURL: nil) }) else {
       return nil
     }
     self = url
   }
 
-  public init?(_ input: String, base: String?) {
-    var baseURL: WebURL?
-    var input = input
-    if var baseString = base {
-      baseURL = baseString.withUTF8 { urlFromBytes($0, baseURL: nil) }
-      guard baseURL != nil else { return nil }
-    }
-    guard let url = input.withUTF8({ urlFromBytes($0, baseURL: baseURL) }) else {
+  /// Attempts to create a URL by parsing the given absolute or relative URL string with this URL as its base.
+  ///
+  public func join<S>(_ string: S) -> WebURL? where S: StringProtocol {
+    guard let url = string._withUTF8({ urlFromBytes($0, baseURL: self) }) else {
       return nil
     }
-    self = url
+    return url
   }
 }
 
@@ -83,34 +83,23 @@ extension WebURL {
 
   // Flags used by the parser.
 
-  var _schemeKind: WebURL.SchemeKind {
-    return storage.schemeKind
+  internal var _schemeKind: WebURL.SchemeKind {
+    storage.schemeKind
   }
 
-  var _cannotBeABaseURL: Bool {
-    return storage.cannotBeABaseURL
-  }
-}
-
-// Standard protocols.
-
-extension WebURL: CustomStringConvertible, LosslessStringConvertible, TextOutputStreamable {
-
-  public var description: String {
-    return storage.entireString
-  }
-
-  public func write<Target>(to target: inout Target) where Target: TextOutputStream {
-    target.write(description)
+  internal var _cannotBeABaseURL: Bool {
+    storage.cannotBeABaseURL
   }
 }
 
-extension WebURL: Equatable, Hashable {
+// MARK: - Standard protocols.
+
+extension WebURL: Equatable, Hashable, Comparable {
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.storage.withEntireString { lhsBuffer in
       rhs.storage.withEntireString { rhsBuffer in
-        return (lhsBuffer.baseAddress == rhsBuffer.baseAddress && lhsBuffer.count == rhsBuffer.count)
+        (lhsBuffer.baseAddress == rhsBuffer.baseAddress && lhsBuffer.count == rhsBuffer.count)
           || lhsBuffer.elementsEqual(rhsBuffer)
       }
     }
@@ -120,6 +109,21 @@ extension WebURL: Equatable, Hashable {
     storage.withEntireString { buffer in
       hasher.combine(bytes: UnsafeRawBufferPointer(buffer))
     }
+  }
+
+  public static func < (lhs: Self, rhs: Self) -> Bool {
+    lhs.storage.withEntireString { lhsBuffer in
+      rhs.storage.withEntireString { rhsBuffer in
+        return lhsBuffer.lexicographicallyPrecedes(rhsBuffer)
+      }
+    }
+  }
+}
+
+extension WebURL: CustomStringConvertible, LosslessStringConvertible {
+
+  public var description: String {
+    serialized
   }
 }
 
@@ -135,6 +139,94 @@ extension WebURL: Codable {
 
   public func encode(to encoder: Encoder) throws {
     var box = encoder.singleValueContainer()
-    try box.encode(self.description)
+    try box.encode(serialized)
+  }
+}
+
+// MARK: - Accessors.
+
+extension WebURL {
+
+  /// The string representation of this URL.
+  ///
+  public var serialized: String {
+    storage.entireString
+  }
+
+  /// The scheme of this URL, for example `https` or `file`.
+  ///
+  public var scheme: String {
+    storage.withComponentBytes(.scheme) { maybeBytes in
+      guard let bytes = maybeBytes, bytes.count > 1 else { preconditionFailure("Invalid scheme") }
+      return String(decoding: bytes.dropLast(), as: UTF8.self)
+    }
+  }
+
+  /// The username of this URL, if present, as a percent-encoded string.
+  ///
+  public var username: String? {
+    storage.stringForComponent(.username)
+  }
+
+  /// The password of this URL, if present, as a percent-encoded string.
+  ///
+  public var password: String? {
+    storage.withComponentBytes(.password) { maybeBytes in
+      guard let bytes = maybeBytes, bytes.count > 1 else { return nil }
+      return String(decoding: bytes.dropFirst(), as: UTF8.self)
+    }
+  }
+
+  /// The string representation of this URL's host, if present.
+  ///
+  /// The hostname may be a serialised IP address, a domain, or an opaque, percent-encoded identifier.
+  ///
+  public var hostname: String? {
+    storage.stringForComponent(.hostname)
+  }
+
+  /// The port of this URL, if present. Valid port numbers are in the range `0 ..< 65536`
+  ///
+  public var port: Int? {
+    storage.withComponentBytes(.port) { maybeBytes in
+      guard let bytes = maybeBytes, bytes.count > 1 else { return nil }
+      return Int(String(decoding: bytes.dropFirst(), as: UTF8.self), radix: 10)!
+    }
+  }
+
+  /// The path of this URL, if present, as a percent-encoded string.
+  ///
+  public var path: String? {
+    return storage.stringForComponent(.path)
+  }
+
+  /// The query of this URL, if present, as a percent-encoded string.
+  ///
+  /// This string does not include the leading `?`.
+  ///
+  public var query: String? {
+    storage.withComponentBytes(.query) { maybeBytes in
+      guard let bytes = maybeBytes else { return nil }
+      guard bytes.count != 1 else {
+        assert(bytes.first == ASCII.questionMark.codePoint)
+        return ""
+      }
+      return String(decoding: bytes.dropFirst(), as: UTF8.self)
+    }
+  }
+
+  /// The fragment of this URL, if present, as a percent-encoded string.
+  ///
+  /// This string does not include the leading `#`.
+  ///
+  public var fragment: String? {
+    storage.withComponentBytes(.fragment) { maybeBytes in
+      guard let bytes = maybeBytes else { return nil }
+      guard bytes.count != 1 else {
+        assert(bytes.first == ASCII.numberSign.codePoint)
+        return ""
+      }
+      return String(decoding: bytes.dropFirst(), as: UTF8.self)
+    }
   }
 }

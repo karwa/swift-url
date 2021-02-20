@@ -32,7 +32,7 @@ extension URLConstructorTest {
 extension URLConstructorTest.WebURLReportHarness: URLConstructorTest.Harness {
 
   public func parseURL(_ input: String, base: String?) -> URLValues? {
-    return WebURL(input, base: base)?.jsModel.urlValues
+    return WebURL.JSModel(input, base: base)?.urlValues
   }
 
   public mutating func reportNonTestEntry(_ entry: URLConstructorTest.FileEntry) {
