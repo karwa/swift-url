@@ -36,17 +36,71 @@
 ///
 struct URLStructure<SizeType: FixedWidthInteger> {
 
+  /// The length of the scheme, including trailing `:`. Must be greater than 1.
+  ///
   var schemeLength: SizeType
+
+  /// The length of the username component, not including any username-password or username-hostname separator which may be present.
+  /// If zero, no username is present. If the URL does not have an authority, this component cannot be present.
+  ///
+  /// If _either_ `usernameLength` or `passwordLength` are non-zero, there is a separator before the hostname.
+  /// Otherwise, there is no separator before the hostname.
+  ///
   var usernameLength: SizeType
+
+  /// The length of the password component, including leading `:`. Must be either 0 or greater than 1.
+  /// If zero, no password is present. A password may be present even if a username is not (e.g. `foo://:pass@host.com/`).
+  /// If the URL does not have an authority, this component cannot be present.
+  ///
+  /// If _either_ `usernameLength` or `passwordLength` are non-zero, there is a separator before the hostname.
+  /// Otherwise, there is no separator before the hostname.
+  ///
   var passwordLength: SizeType
+
+  /// The length of the hostname, not including any leading or trailing separators.
+  ///
+  /// The difference between an empty and not-present host is the presence of an authority (as denoted by the presence of an authority sigil).
+  /// If `sigil == .authority`, a length of zero indicates an empty hostname (e.g. `foo://?query`).
+  /// If the URL does not have an authority, this component cannot be present.
+  ///
   var hostnameLength: SizeType
+
+  /// The length of the port, including leading `:`. Must be either 0 or greater than 1.
+  /// If zero, no port is present. If the URL does not have an authority, this component cannot be present.
+  ///
   var portLength: SizeType
+
+  /// The length of the path. If zero, no path is present.
+  ///
   var pathLength: SizeType
+
+  /// The length of the query. If zero, no query is present.
+  ///
   var queryLength: SizeType
+
+  /// The length of the fragment. If zero, no query is present.
+  ///
   var fragmentLength: SizeType
 
+  /// The sigil, if present. The sigil comes immediately after the scheme and identifies the component following it.
+  ///
+  /// If `sigil == .authority`, the next component is an authority, consisting of username/password/hostname/port components.
+  /// If `sigil == .path` or `sigil == nil`, the next component is a path/query/fragment and no username/password/hostname/port is present.
+  ///
   var sigil: Sigil?
+
+  /// A summary of this URL's `scheme`.
+  ///
+  /// `SchemeKind` only contains information about which kind of special scheme this URL has. All non-special schemes are represented as the same,
+  /// so comparing the `schemeKind` doesn't necessarily mean that they have the same scheme.
+  ///
   var schemeKind: WebURL.SchemeKind
+
+  /// Whether this is a 'cannot-be-a-base' URL.
+  ///
+  /// Parsing a relative URL string against 'cannot-be-a-base' URLs will fail. This is the case for non-special URLs without an authority and whose path
+  /// does not begin with a `/` (e.g. `mailto:somebody@somehost.com` or `javascript:alert("hello")`.
+  ///
   var cannotBeABaseURL: Bool
 }
 
@@ -57,6 +111,8 @@ enum Sigil {
 
 extension URLStructure {
 
+  /// Creates an empty URL structure. Note that this structure does not represent a valid URL.
+  ///
   init() {
     self.schemeLength = 0
     self.usernameLength = 0
@@ -71,6 +127,9 @@ extension URLStructure {
     self.cannotBeABaseURL = false
   }
 
+  /// Creates a new URL structure with the same information as `otherStructure`, but whose values are stored using a different integer type.
+  /// This initializer will trigger a runtime error if the new size is not capable of exactly representing `otherStructure`'s values.
+  ///
   init<OtherSize: FixedWidthInteger>(copying otherStructure: URLStructure<OtherSize>) {
     if let sameTypeOtherStructure = otherStructure as? Self {
       self = sameTypeOtherStructure
@@ -89,6 +148,104 @@ extension URLStructure {
       schemeKind: otherStructure.schemeKind,
       cannotBeABaseURL: otherStructure.cannotBeABaseURL
     )
+    // Cannot check invariants here because of the 'tempStorage' hack we use to implement COW.
+    // checkInvariants()
+  }
+}
+
+extension URLStructure {
+
+  /// Performs debug-mode checks to ensure that this URL structure does not contain invalid combinations of values.
+  ///
+  /// This method does not check the _contents_ of the URL string (e.g. it does not check that `schemeKind` matches the code-units of the scheme, that the sigil
+  /// or any other expected separators are actually present, etc).
+  ///
+  func checkInvariants() {
+
+    // No values may be negative.
+    assert(schemeLength >= 0, "scheme has negative length")
+    assert(usernameLength >= 0, "username has negative length")
+    assert(passwordLength >= 0, "password has negative length")
+    assert(hostnameLength >= 0, "hostname has negative length")
+    assert(portLength >= 0, "port has negative length")
+    assert(pathLength >= 0, "path has negative length")
+    assert(queryLength >= 0, "query has negative length")
+    assert(fragmentLength >= 0, "fragment has negative length")
+
+    // Scheme must be present and not empty.
+    assert(schemeLength > 1, "Scheme not present or empty")
+
+    // Some components with separators included in their lengths cannot have a length of 1.
+    assert(passwordLength != 1, "Password is empty but leading separator is present")
+    assert(portLength != 1, "Port is empty but leading separator is present")
+
+    // If this URL cannot be a base URL, it can't have an authority.
+    if cannotBeABaseURL, case .authority = sigil {
+      assertionFailure("cannot-be-a-base URLs cannot have an authority")
+    }
+
+    // Special schemes must have an authority and non-empty path.
+    if schemeKind.isSpecial {
+      assert(sigil == .authority, "Special URL must have an authority")
+      assert(pathLength != 0, "Special URL must have a path")
+    }
+
+    // Certain URLs may not have credentials or a port.
+    if cannotHaveCredentialsOrPort {
+      assert(usernameLength == 0, "URL cannot have credentials or port, but has a username")
+      assert(passwordLength == 0, "URL cannot have credentials or port, but has a password")
+      assert(portLength == 0, "URL cannot have credentials or port, but has a port")
+    }
+
+    // If there is no authority, all authority components must be 0.
+    switch sigil {
+    case .authority:
+      break
+    case .path:
+      assert(pathLength >= 2, "Path sigil present, but path is too short to need one")
+      fallthrough
+    default:
+      assert(usernameLength == 0, "A URL without authority sigil cannot have a username")
+      assert(passwordLength == 0, "A URL without authority sigil cannot have a password")
+      assert(hostnameLength == 0, "A URL without authority sigil cannot have a hostname")
+      assert(portLength == 0, "A URL without authority sigil cannot have a port")
+    }
+  }
+}
+
+extension URLStructure {
+
+  /// Whether or not this URL has an authority, as denoted by the presence of an authority sigil.
+  ///
+  var hasAuthority: Bool {
+    if case .authority = sigil {
+      return true
+    } else {
+      return false
+    }
+  }
+
+  var hasPathSigil: Bool {
+    if case .path = sigil {
+      return true
+    } else {
+      return false
+    }
+  }
+
+  /// If the string has credentials, it must contain a '@' separating them from the hostname. If it doesn't, it mustn't.
+  ///
+  var hasCredentialSeparator: Bool {
+    return usernameLength != 0 || passwordLength != 0
+  }
+
+  /// > A URL cannot have a username/password/port if its host is null or the empty string,
+  /// > its cannot-be-a-base-URL is true, or its scheme is "file".
+  ///
+  /// https://url.spec.whatwg.org/#url-miscellaneous
+  ///
+  var cannotHaveCredentialsOrPort: Bool {
+    return schemeKind == .file || cannotBeABaseURL || hostnameLength == 0
   }
 }
 
@@ -104,7 +261,6 @@ extension URLStructure {
   /// For example, the string in `codeUnits[schemeStart..<schemeEnd]` may be `https:` or `myscheme:`.
   ///
   var schemeEnd: SizeType {
-    assert(schemeLength >= 1, "URLs must always have a scheme")
     return schemeStart &+ schemeLength
   }
 
@@ -159,38 +315,19 @@ extension URLStructure {
     return queryStart &+ queryLength
   }
 
-  var hasAuthority: Bool {
-    if case .authority = sigil {
-      return true
-    } else {
-      return false
-    }
-  }
-
-  var hasPathSigil: Bool {
-    if case .path = sigil {
-      return true
-    } else {
-      return false
-    }
-  }
-
-  // If the string has credentials, it must contain a '@' separating them from the hostname.
-  var hasCredentialSeparator: Bool {
-    return usernameLength != 0 || passwordLength != 0
-  }
-
   /// The range of code-units covering all authority components, if an authority is present.
   ///
   var rangeOfAuthorityString: Range<SizeType>? {
+    checkInvariants()
     guard hasAuthority else { return nil }
     return Range(uncheckedBounds: (authorityStart, pathStart))
   }
 
   /// The range of code-units which must be replaced in order to change the URL's sigil.
-  /// If the URL does not contain a sigil, this property returns an empty range starting at the place where the sigil is expected to be found.
+  /// If the URL does not contain a sigil, this property returns an empty range starting at the place where the sigil would go.
   ///
   var rangeForReplacingSigil: Range<SizeType> {
+    checkInvariants()
     let start = schemeEnd
     let length: SizeType
     switch sigil {
@@ -208,11 +345,11 @@ extension URLStructure {
   ///              between the credentials and the hostname, removing an authority may require the introduction of a path sigil, etc.
   ///
   func rangeForReplacingCodeUnits(of component: WebURL.Component) -> Range<SizeType> {
+    checkInvariants()
     let start: SizeType
     let length: SizeType
     switch component {
     case .scheme:
-      assert(schemeLength > 1)
       return Range(uncheckedBounds: (schemeStart, schemeEnd))
     case .hostname:
       start = hostnameStart
@@ -221,11 +358,9 @@ extension URLStructure {
       start = usernameStart
       length = usernameLength
     case .password:
-      assert(passwordLength != 1, "Lone ':' separator is not a valid password component")
       start = passwordStart
       length = passwordLength
     case .port:
-      assert(portLength != 1, "Lone ':' separator is not a valid port component")
       start = portStart
       length = portLength
     case .path:
@@ -247,6 +382,7 @@ extension URLStructure {
   /// If the component is not present, this method returns `nil`.
   ///
   func range(of component: WebURL.Component) -> Range<SizeType>? {
+    checkInvariants()
     let range = rangeForReplacingCodeUnits(of: component)
     switch component {
     case .scheme:
@@ -257,16 +393,12 @@ extension URLStructure {
     // Other components may not be empty. A length of 0 means "not present"/nil.
     case .username:
       guard usernameLength != 0 else { return nil }
-      assert(hasAuthority, "Cannot have a username without an authority")
     case .password:
       guard passwordLength != 0 else { return nil }
-      assert(hasAuthority, "Cannot have a password without an authority")
     case .port:
       guard portLength != 0 else { return nil }
-      assert(hasAuthority, "Cannot have a port without an authority")
     case .path:
       guard pathLength != 0 else { return nil }
-      assert(hasPathSigil ? pathLength >= 2 : true, "path sigil means the path must start with //")
     case .query:
       guard queryLength != 0 else { return nil }
     case .fragment:
@@ -275,13 +407,6 @@ extension URLStructure {
       preconditionFailure("Invalid component")
     }
     return range
-  }
-}
-
-extension URLStructure {
-
-  var cannotHaveCredentialsOrPort: Bool {
-    return schemeKind == .file || cannotBeABaseURL || hostnameLength == 0
   }
 }
 
@@ -422,7 +547,7 @@ extension URLStorage {
     guard let range = header.structure.range(of: component) else { return block(nil) }
     return codeUnits.withElements(range: range, block)
   }
-  
+
   func stringForComponent(_ component: WebURL.Component) -> String? {
     return withComponentBytes(component) { maybeBuffer in
       return maybeBuffer.map { buffer in String(decoding: buffer, as: UTF8.self) }
@@ -483,6 +608,7 @@ extension URLStorage {
     initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) -> AnyURLStorage {
 
+    newStructure.checkInvariants()
     let newCount = codeUnits.count - subrangeToReplace.count + insertCount
 
     if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
@@ -560,6 +686,7 @@ extension URLStorage {
     newStructure: URLStructure<Int>
   ) -> AnyURLStorage {
 
+    newStructure.checkInvariants()
     let newCount = commands.reduce(into: codeUnits.count) { c, op in
       c += (op.insertedCount - op.subrange.count)
     }
@@ -801,7 +928,7 @@ extension AnyURLStorage {
     case .generic(let storage): return storage.withComponentBytes(component, block)
     }
   }
-  
+
   func stringForComponent(_ component: WebURL.Component) -> String? {
     switch self {
     case .small(let storage): return storage.stringForComponent(component)
