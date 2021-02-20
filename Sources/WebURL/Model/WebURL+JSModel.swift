@@ -106,7 +106,7 @@ extension WebURL.JSModel {
 
   public var href: String {
     get {
-      return storage.entireString
+      swiftModel.serialized
     }
     set {
       guard let newURL = WebURL(newValue) else { return }
@@ -116,7 +116,7 @@ extension WebURL.JSModel {
 
   public var scheme: String {
     get {
-      return storage.stringForComponent(.scheme)!
+      swiftModel.scheme + ":"
     }
     set {
       var stringToInsert = newValue
@@ -135,7 +135,7 @@ extension WebURL.JSModel {
 
   public var username: String {
     get {
-      return storage.stringForComponent(.username) ?? ""
+      swiftModel.username ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -150,12 +150,7 @@ extension WebURL.JSModel {
 
   public var password: String {
     get {
-      var string = storage.stringForComponent(.password)
-      if !(string?.isEmpty ?? true) {
-        let separator = string?.removeFirst()
-        assert(separator == ":")
-      }
-      return string ?? ""
+      swiftModel.password ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -170,7 +165,7 @@ extension WebURL.JSModel {
 
   public var hostname: String {
     get {
-      return storage.stringForComponent(.hostname) ?? ""
+      swiftModel.hostname ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -190,12 +185,7 @@ extension WebURL.JSModel {
 
   public var port: String {
     get {
-      var string = storage.stringForComponent(.port)
-      if !(string?.isEmpty ?? true) {
-        let separator = string?.removeFirst()
-        assert(separator == ":")
-      }
-      return string ?? ""
+      swiftModel.port.map { String($0) } ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -222,7 +212,7 @@ extension WebURL.JSModel {
 
   public var pathname: String {
     get {
-      return storage.stringForComponent(.path) ?? ""
+      swiftModel.path ?? ""
     }
     set {
       var stringToInsert = newValue
@@ -241,9 +231,11 @@ extension WebURL.JSModel {
 
   public var search: String {
     get {
-      let string = storage.stringForComponent(.query)
-      guard string != "?" else { return "" }
-      return string ?? ""
+      let swiftValue = swiftModel.query ?? ""
+      if swiftValue.isEmpty {
+        return swiftValue
+      }
+      return "?" + swiftValue
     }
     set {
       var stringToInsert = newValue
@@ -268,9 +260,11 @@ extension WebURL.JSModel {
 
   public var fragment: String {
     get {
-      let string = storage.stringForComponent(.fragment)
-      guard string != "#" else { return "" }
-      return string ?? ""
+      let swiftValue = swiftModel.fragment ?? ""
+      if swiftValue.isEmpty {
+        return swiftValue
+      }
+      return "#" + swiftValue
     }
     set {
       var stringToInsert = newValue
