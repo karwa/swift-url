@@ -455,9 +455,9 @@ extension URLStorage {
 
 /// An error which may be returned when a `URLStorage` setter operation fails.
 ///
-struct URLSetterError: Error {
+struct URLSetterError: Error, Equatable {
 
-  enum Value {
+  enum Value: Equatable {
     // scheme.
     case invalidScheme
     case changeOfSchemeSpecialness

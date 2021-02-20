@@ -46,6 +46,162 @@ extension WebURLTests {
 
 extension WebURLTests {
 
+  /// Tests that setters copy to new storage when the mutated URL is not a unique reference.
+  ///
+  func testCopyOnWrite_nonUnique() {
+    // TODO: Move to swift model once it has setters for all components.
+    // TODO: Can we rule out copying due to needing more capacity or changing header type?
+    //       - Maybe add an internal 'reserveCapacity' function?
+    // TODO: These are by no means all paths that each setter can take.
+    var url = WebURL("http://example.com/a/b?c=d&e=f#gh")!.jsModel
+    let original = url
+    
+    func checkOriginalHasNotChanged() {
+      XCTAssertEqual(original.href, "http://example.com/a/b?c=d&e=f#gh")
+      XCTAssertEqual(original.scheme, "http:")
+    }
+    // Scheme.
+    url.scheme = "https"
+    XCTAssertEqual(url.href, "https://example.com/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.scheme, "https:")
+    checkOriginalHasNotChanged()
+    url = original
+    // Username.
+    url.username = "user"
+    XCTAssertEqual(url.href, "http://user@example.com/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.username, "user")
+    checkOriginalHasNotChanged()
+    url = original
+    // Password.
+    url.password = "pass"
+    XCTAssertEqual(url.href, "http://:pass@example.com/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.password, "pass")
+    checkOriginalHasNotChanged()
+    url = original
+    // Hostname.
+    url.hostname = "test.test"
+    XCTAssertEqual(url.href, "http://test.test/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.hostname, "test.test")
+    checkOriginalHasNotChanged()
+    url = original
+    // Port.
+    url.port = "8080"
+    XCTAssertEqual(url.href, "http://example.com:8080/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.port, "8080")
+    checkOriginalHasNotChanged()
+    url = original
+    // Path.
+    url.pathname = "/foo/bar/baz"
+    XCTAssertEqual(url.href, "http://example.com/foo/bar/baz?c=d&e=f#gh")
+    XCTAssertEqual(url.pathname, "/foo/bar/baz")
+    checkOriginalHasNotChanged()
+    url = original
+    // Query
+    url.search = "?foo=bar&baz=qux"
+    XCTAssertEqual(url.href, "http://example.com/a/b?foo=bar&baz=qux#gh")
+    XCTAssertEqual(url.search, "?foo=bar&baz=qux")
+    checkOriginalHasNotChanged()
+    url = original
+    // Fragment
+    url.fragment = "#foo"
+    XCTAssertEqual(url.href, "http://example.com/a/b?c=d&e=f#foo")
+    XCTAssertEqual(url.fragment, "#foo")
+    checkOriginalHasNotChanged()
+    url = original
+  }
+
+  // Note: This is likely to be a bit fragile, since it relies on optimisations which might not happen at -Onone.
+  //       For now, it works.
+  
+  /// Tests that setters on a uniquely referenced URL are performed in-place.
+  ///
+  func testCopyOnWrite_unique() {
+    var url = WebURL("wss://user:pass@example.com:90/a/b?c=d&e=f#gh")!
+    XCTAssertEqual(url.serialized, "wss://user:pass@example.com:90/a/b?c=d&e=f#gh")
+    
+    func checkDoesNotCopy(_ object: inout WebURL, _ perform: (inout WebURL) -> Void) {
+      let addressBefore = object.storage.withEntireString { $0.baseAddress }
+      perform(&object)
+      let addressAfter = object.storage.withEntireString { $0.baseAddress }
+      XCTAssertEqual(addressBefore, addressAfter)
+    }
+    
+    // 'ftp' and 'wss' have the same length; should not reallocate due to capacity.
+    checkDoesNotCopy(&url) {
+      $0.scheme = "ftp"
+    }
+    XCTAssertEqual(url.serialized, "ftp://user:pass@example.com:90/a/b?c=d&e=f#gh")
+    
+    // TODO: Add setters as they are implemented in the swift model.
+    
+    checkDoesNotCopy(&url) {
+      _ in
+//      $0.jsModel.hostname = "moc.elpmaxe"
+    }
+    // XCTAssertEqual(url.serialized, "ftp://moc.elpmaxe/a/b?c=d&e=f#gh")
+  }
+}
+
+extension WebURLTests {
+  
+  /// Tests the WebURL scheme setter.
+  ///
+  /// Broadly speaking, the setter's behaviour should be tested via the JS model according to the WPT test files.
+  /// However, the JS model is in many ways not ideal for use in Swift, so deviations and extra information (e.g. errors) should be tested here.
+  ///
+  func testSchemeSetter() {
+    do {
+      // [Throw] Invalid scheme.
+      var url = WebURL("http://example.com/a/b?c=d&e=f#gh")!
+      XCTAssertThrowsSpecific(URLSetterError.error(.invalidScheme)) {
+        try url.setScheme(to: "🤯")
+      }
+      // [Throw] Change of special-ness.
+      XCTAssertThrowsSpecific(URLSetterError.error(.changeOfSchemeSpecialness)) {
+        try url.setScheme(to: "foo")
+      }
+      // [Deviation] If there is content after the ":", the operation fails. The JS model silently discards it.
+      XCTAssertThrowsSpecific(URLSetterError.error(.invalidScheme)) {
+        try url.setScheme(to: "http://foo/")
+      }
+      // ":" is allowed as the final character, but not required.
+      XCTAssertNoThrow(try url.setScheme(to: "ws"))
+      XCTAssertEqual(url.serialized, "ws://example.com/a/b?c=d&e=f#gh")
+      XCTAssertNoThrow(try url.setScheme(to: "https:"))
+      XCTAssertEqual(url.serialized, "https://example.com/a/b?c=d&e=f#gh")
+    }
+
+    do {
+      // [Throw] URL with credentials or port changing to scheme which does not allow them.
+      var url = WebURL("http://user:pass@somehost/")!
+      XCTAssertThrowsSpecific(URLSetterError.error(.newSchemeCannotHaveCredentialsOrPort)) {
+        try url.setScheme(to: "file")
+      }
+      XCTAssertNoThrow(try url.setScheme(to: "https"))
+      XCTAssertEqual(url.serialized, "https://user:pass@somehost/")
+      
+      url = WebURL("http://somehost:8080/")!
+      XCTAssertThrowsSpecific(URLSetterError.error(.newSchemeCannotHaveCredentialsOrPort)) {
+        try url.setScheme(to: "file")
+      }
+      XCTAssertNoThrow(try url.setScheme(to: "https"))
+      XCTAssertEqual(url.serialized, "https://somehost:8080/")
+    }
+    
+    do {
+      // [Throw] URL with empty hostname changing to scheme which does not allow them.
+      var url = WebURL("file:///")!
+      XCTAssertThrowsSpecific(URLSetterError.error(.newSchemeCannotHaveEmptyHostname)) {
+        try url.setScheme(to: "http")
+      }
+      XCTAssertNoThrow(try url.setScheme(to: "file"))
+      XCTAssertEqual(url.serialized, "file:///")
+    }
+  }
+}
+
+extension WebURLTests {
+
   func testJSModelSetters() {
     // Check that 'pathname' setter does not remove leading slashes.
     do {

@@ -92,7 +92,9 @@ extension WebURL {
   }
 }
 
+
 // MARK: - Standard protocols.
+
 
 extension WebURL: Equatable, Hashable, Comparable {
 
@@ -143,7 +145,9 @@ extension WebURL: Codable {
   }
 }
 
-// MARK: - Accessors.
+
+// MARK: - Properties.
+
 
 extension WebURL {
 
@@ -156,9 +160,14 @@ extension WebURL {
   /// The scheme of this URL, for example `https` or `file`.
   ///
   public var scheme: String {
-    storage.withComponentBytes(.scheme) { maybeBytes in
-      guard let bytes = maybeBytes, bytes.count > 1 else { preconditionFailure("Invalid scheme") }
-      return String(decoding: bytes.dropLast(), as: UTF8.self)
+    get {
+      storage.withComponentBytes(.scheme) { maybeBytes in
+        guard let bytes = maybeBytes, bytes.count > 1 else { preconditionFailure("Invalid scheme") }
+        return String(decoding: bytes.dropLast(), as: UTF8.self)
+      }
+    }
+    set {
+      try? setScheme(to: newValue)
     }
   }
 
@@ -230,3 +239,62 @@ extension WebURL {
     }
   }
 }
+
+
+// MARK: - Setters
+
+
+internal let _tempStorage = AnyURLStorage(
+  URLStorage<GenericURLHeader<UInt8>>(
+    count: 0, structure: .init(), initializingCodeUnitsWith: { _ in return 0 }
+  )!
+)
+
+extension WebURL {
+  
+  private mutating func withMutableStorage(
+    _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
+    _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> (AnyURLStorage, URLSetterError?)
+  ) throws {
+    
+    var error: URLSetterError?
+    
+    // We need to go through a bit of a dance in order to get a unique reference to the storage.
+    // It's like if you have something stuck to one hand and try to remove it with the other hand.
+    //
+    // Basically:
+    // 1. Swap our storage to temporarily point to some read-only global, so our only storage reference is
+    //    via a local variable.
+    // 2. Extract the URLStorage (which is a COW value type) from local variable's enum payload, and set
+    //    the local to also point that read-only global.
+    // 3. Hand that extracted storage off to closure (`inout`, but `__consuming` might also work),
+    //    which returns a storage object back (possibly the same storage object).
+    // 4. We round it all off by assigning that value as our new storage. Phew.
+    var localRef = self.storage
+    self.storage = _tempStorage
+    switch localRef {
+    case .generic(var extracted_storage):
+      localRef = _tempStorage
+      (self.storage, error) = generic(&extracted_storage)
+    case .small(var extracted_storage):
+      localRef = _tempStorage
+      (self.storage, error) = small(&extracted_storage)
+    }
+    if let error = error {
+      throw error
+    }
+  }
+}
+
+extension WebURL {
+  
+  public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
+    try newScheme._withUTF8 { utf8 in
+      try withMutableStorage(
+        { small in small.setScheme(to: utf8) },
+        { generic in generic.setScheme(to: utf8) }
+      )
+    }
+  }
+}
+

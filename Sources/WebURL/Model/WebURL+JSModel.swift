@@ -53,12 +53,6 @@ extension WebURL {
 
 // In-place mutation hack.
 
-private let _tempStorage = AnyURLStorage(
-  URLStorage<GenericURLHeader<UInt8>>(
-    count: 0, structure: .init(), initializingCodeUnitsWith: { _ in return 0 }
-  )!
-)
-
 extension WebURL.JSModel {
 
   private mutating func withMutableStorage(
@@ -119,17 +113,17 @@ extension WebURL.JSModel {
       swiftModel.scheme + ":"
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        // URLStorage's setter requires that the ":", if present, be the last character.
-        // The JS model's setter succeeds even if the ":" is not the last character,
-        // but everything after the ":" gets silently dropped.
-        let newSchemeBytes = UnsafeBufferPointer(rebasing: utf8.prefix(while: { $0 != ASCII.colon.codePoint }))
-        withMutableStorage(
-          { small in small.setScheme(to: newSchemeBytes).0 },
-          { generic in generic.setScheme(to: newSchemeBytes).0 }
-        )
+      // The JS model's setter succeeds even if there is junk after the ":", but silently drops that junk.
+      // The Swift model allows a trailing ":", but it must be the last character.
+      let withoutJunk: Substring
+      if let terminatorIdx = newValue.firstIndex(of: ":") {
+        withoutJunk = newValue[..<newValue.index(after: terminatorIdx)]
+      } else {
+        withoutJunk = newValue[...]
       }
+      var swift = swiftModel
+      try? swift.setScheme(to: withoutJunk)
+      self = swift.jsModel
     }
   }
 
