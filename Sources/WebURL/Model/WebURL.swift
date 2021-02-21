@@ -203,7 +203,8 @@ extension WebURL {
   /// The hostname may be a serialised IP address, a domain, or an opaque, percent-encoded identifier.
   ///
   public var hostname: String? {
-    storage.stringForComponent(.hostname)
+    get { storage.stringForComponent(.hostname) }
+    set { try? setHostname(to: newValue) }
   }
 
   /// The port of this URL, if present. Valid port numbers are in the range `0 ..< 65536`
@@ -300,34 +301,49 @@ extension WebURL {
 
 extension WebURL {
 
+  mutating func setScheme<C>(utf8 newScheme: C) throws where C: Collection, C.Element == UInt8 {
+    try withMutableStorage(
+      { small in small.setScheme(to: newScheme) },
+      { generic in generic.setScheme(to: newScheme) }
+    )
+  }
+
+  mutating func setUsername<C>(utf8 newUsername: C?) throws where C: Collection, C.Element == UInt8 {
+    try withMutableStorage(
+      { small in small.setUsername(to: newUsername) },
+      { generic in generic.setUsername(to: newUsername) }
+    )
+  }
+
+  mutating func setPassword<C>(utf8 newPassword: C?) throws where C: Collection, C.Element == UInt8 {
+    try withMutableStorage(
+      { small in small.setPassword(to: newPassword) },
+      { generic in generic.setPassword(to: newPassword) }
+    )
+  }
+
+  public mutating func setHostname<C>(utf8 newHostname: C?) throws
+  where C: BidirectionalCollection, C.Element == UInt8 {
+    try withMutableStorage(
+      { small in small.setHostname(to: newHostname) },
+      { generic in generic.setHostname(to: newHostname) }
+    )
+  }
+
   public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
-    try newScheme._withUTF8 { utf8 in
-      try withMutableStorage(
-        { small in small.setScheme(to: utf8) },
-        { generic in generic.setScheme(to: utf8) }
-      )
-    }
+    try setScheme(utf8: newScheme.utf8)
   }
 
   public mutating func setUsername<S>(to newUsername: S?) throws where S: StringProtocol {
-    // Empty usernames are removed, so setting to 'nil' is the same as setting to an empty string.
-    let newUsername = newUsername ?? ""
-    try newUsername._withUTF8 { utf8 in
-      try withMutableStorage(
-        { small in small.setUsername(to: utf8) },
-        { generic in generic.setUsername(to: utf8) }
-      )
-    }
+    try setUsername(utf8: newUsername?.utf8)
   }
 
   public mutating func setPassword<S>(to newPassword: S?) throws where S: StringProtocol {
-    // Empty passwords are removed, so setting to 'nil' is the same as setting to an empty string.
-    let newPassword = newPassword ?? ""
-    try newPassword._withUTF8 { utf8 in
-      try withMutableStorage(
-        { small in small.setPassword(to: utf8) },
-        { generic in generic.setPassword(to: utf8) }
-      )
-    }
+    try setPassword(utf8: newPassword?.utf8)
+  }
+
+  public mutating func setHostname<S>(to newHostname: S?) throws
+  where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+    try setHostname(utf8: newHostname?.utf8)
   }
 }

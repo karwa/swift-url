@@ -17,9 +17,6 @@ extension URLStorage {
   /// Attempts to set the scheme component to the given UTF8-encoded string.
   /// The new value may contain a trailing colon (e.g. `http`, `http:`). Colons are only allowed as the last character of the string.
   ///
-  /// - Note: Filtering ASCII tab and newline characters is not needed as those characters cannot be included in a scheme, and schemes cannot
-  ///         contain percent encoding.
-  ///
   mutating func setScheme<Input>(
     to newValue: Input
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
@@ -74,7 +71,7 @@ extension URLStorage {
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
   ///
   mutating func setUsername<Input>(
-    to newValue: Input
+    to newValue: Input?
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
@@ -83,7 +80,7 @@ extension URLStorage {
     }
     // The operation is semantically valid.
 
-    guard newValue.isEmpty == false else {
+    guard let newValue = newValue, newValue.isEmpty == false else {
       guard let oldUsername = oldStructure.range(of: .username) else {
         return (AnyURLStorage(self), nil)
       }
@@ -126,7 +123,7 @@ extension URLStorage {
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
   ///
   mutating func setPassword<Input>(
-    to newValue: Input
+    to newValue: Input?
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
@@ -135,7 +132,7 @@ extension URLStorage {
     }
     // The operation is semantically valid.
 
-    guard newValue.isEmpty == false else {
+    guard let newValue = newValue, newValue.isEmpty == false else {
       guard let oldPassword = oldStructure.range(of: .password) else {
         return (AnyURLStorage(self), nil)
       }
@@ -182,13 +179,8 @@ extension URLStorage {
   /// A `nil` hostname removes the `//` separator after the scheme, resulting in a so-called "path-only" URL (e.g. `unix://oldhost/some/path` -> `unix:/some/path`).
   ///
   mutating func setHostname<Input>(
-    to newValue: Input?,
-    filter: Bool = false
+    to newValue: Input?
   ) -> (AnyURLStorage, URLSetterError?) where Input: BidirectionalCollection, Input.Element == UInt8 {
-
-    guard filter == false || newValue == nil else {
-      return setHostname(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
-    }
 
     let oldStructure = header.structure
     guard oldStructure.cannotBeABaseURL == false else {

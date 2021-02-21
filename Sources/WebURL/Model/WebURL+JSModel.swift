@@ -108,25 +108,6 @@ extension WebURL.JSModel {
     }
   }
 
-  public var scheme: String {
-    get {
-      swiftModel.scheme + ":"
-    }
-    set {
-      // The JS model's setter succeeds even if there is junk after the ":", but silently drops that junk.
-      // The Swift model allows a trailing ":", but it must be the last character.
-      let withoutJunk: Substring
-      if let terminatorIdx = newValue.firstIndex(of: ":") {
-        withoutJunk = newValue[..<newValue.index(after: terminatorIdx)]
-      } else {
-        withoutJunk = newValue[...]
-      }
-      var swift = swiftModel
-      try? swift.setScheme(to: withoutJunk)
-      self = swift.jsModel
-    }
-  }
-
   public var username: String {
     get {
       swiftModel.username ?? ""
@@ -149,23 +130,44 @@ extension WebURL.JSModel {
     }
   }
 
+  // Setters for the following components tend to be more complex. They tend to go through the URL parser,
+  // which filters tabs and newlines (but won't trim ASCII C0 or spaces),
+  // and allows trailing data that just gets silently ignored.
+  //
+  // The Swift model setters do not filter tabs or newlines, nor do they silently drop any part of the given value,
+  // and they may choose to represent non-present values as 'nil' rather than empty strings,
+  // but in all other respects they should behave the same.
+
+  public var scheme: String {
+    get {
+      swiftModel.scheme + ":"
+    }
+    set {
+      let trimmedAndFiltered: ASCII.NewlineAndTabFiltered<Substring.UTF8View>
+      if let terminatorIdx = newValue.firstIndex(of: ":") {
+        trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[..<newValue.index(after: terminatorIdx)].utf8)
+      } else {
+        trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[...].utf8)
+      }
+      var swift = swiftModel
+      try? swift.setScheme(utf8: trimmedAndFiltered)
+      self = swift.jsModel
+    }
+  }
+
   public var hostname: String {
     get {
       swiftModel.hostname ?? ""
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        var callback = IgnoreValidationErrors()
-        guard let hostnameEnd = findEndOfHostnamePrefix(utf8, scheme: schemeKind, callback: &callback) else {
-          return
-        }
-        let newHostname = utf8[..<hostnameEnd]
-        withMutableStorage(
-          { small in small.setHostname(to: newHostname, filter: true).0 },
-          { generic in generic.setHostname(to: newHostname, filter: true).0 }
-        )
+      let filtered = ASCII.NewlineAndTabFiltered(newValue.utf8)
+      var callback = IgnoreValidationErrors()
+      guard let hostnameEnd = findEndOfHostnamePrefix(filtered, scheme: schemeKind, callback: &callback) else {
+        return
       }
+      var swift = swiftModel
+      try? swift.setHostname(utf8: filtered[..<hostnameEnd])
+      self = swift.jsModel
     }
   }
 
@@ -174,25 +176,24 @@ extension WebURL.JSModel {
       swiftModel.port.map { String($0) } ?? ""
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        // The JS model allows non-numeric junk to be attached to the end of the string,
-        // (e.g. "8080stuff" sets port to 8080).
-        let portString = utf8.prefix(while: { ASCII($0)?.isA(\.digits) ?? false })
-        // - No number => not an error => remove existing port.
-        // - Invalid number (e.g. overflow) => error => keep existing port.
-        var newPort: UInt16? = nil
-        if portString.isEmpty == false {
-          guard let parsedPort = UInt16(String(decoding: portString, as: UTF8.self)) else {
-            return
-          }
-          newPort = parsedPort
+      let filtered = ASCII.NewlineAndTabFiltered(newValue.utf8)
+      let portString = filtered.prefix(while: { ASCII($0)?.isA(\.digits) ?? false })
+
+      var newPort: UInt16? = nil
+      if portString.isEmpty {
+        // No number => not an error => remove existing port (newPort == nil).
+      } else {
+        guard let parsedPort = UInt16(String(decoding: portString, as: UTF8.self)) else {
+          // Invalid number (e.g. overflow) => error => keep existing port (abort setter).
+          return
         }
-        withMutableStorage(
-          { small in small.setPort(to: newPort).0 },
-          { generic in generic.setPort(to: newPort).0 }
-        )
+        newPort = parsedPort
       }
+
+      withMutableStorage(
+        { small in small.setPort(to: newPort).0 },
+        { generic in generic.setPort(to: newPort).0 }
+      )
     }
   }
 

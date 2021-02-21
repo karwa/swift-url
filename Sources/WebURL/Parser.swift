@@ -1499,6 +1499,8 @@ func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Collection, 
 /// This is used by the Javascript model's URL setter, which accepts a rather wide variety of inputs.
 ///
 /// This is a "scan-level" operation: the discovered hostname may need additional processing before being written to a URL string.
+/// The only situation in which this function returns `nil` is if the scheme is not `file`, and the given string starts with a `:`
+/// (i.e. contains a port but no hostname).
 ///
 func findEndOfHostnamePrefix<Input, Callback>(
   _ input: Input, scheme: WebURL.SchemeKind, callback cb: inout Callback
@@ -1519,10 +1521,16 @@ func findEndOfHostnamePrefix<Input, Callback>(
   }
   if scheme == .file {
     guard case .success(_) = URLScanner.scanFileHost(hostname, &mapping, callback: &cb) else {
+      // Never fails - even if there is a port and the hostname is empty.
+      // In that case, the hostname will contain the port and ultimately get rejected for containing forbidden
+      // code-points. File URLs are forbidden from containing ports.
+      assertionFailure("Unexpected failure to scan file host")
       return nil
     }
   } else {
     guard case .success(_) = URLScanner.scanHostname(hostname, scheme: scheme, &mapping, callback: &cb) else {
+      // Only fails if there is a port and the hostname is empty.
+      assert(hostname.first == ASCII.colon.codePoint)
       return nil
     }
   }

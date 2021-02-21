@@ -143,14 +143,13 @@ extension WebURLTests {
       $0.password = "ssap"
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@example.com:90/a/b?c=d&e=f#gh")
+    // Hostname.
+    checkDoesNotCopy(&url) {
+      $0.hostname = "moc.elpmaxe"
+    }
+    XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:90/a/b?c=d&e=f#gh")
 
     // TODO: Add setters as they are implemented in the swift model.
-
-    checkDoesNotCopy(&url) {
-      _ in
-      //      $0.jsModel.hostname = "moc.elpmaxe"
-    }
-    // XCTAssertEqual(url.serialized, "ftp://moc.elpmaxe/a/b?c=d&e=f#gh")
   }
 }
 
@@ -181,6 +180,11 @@ extension WebURLTests {
       XCTAssertEqual(url.serialized, "ws://example.com/a/b?c=d&e=f#gh")
       XCTAssertNoThrow(try url.setScheme(to: "https:"))
       XCTAssertEqual(url.serialized, "https://example.com/a/b?c=d&e=f#gh")
+
+      // [Deviation] Tabs and newlines are not ignored, cause setter to fail. The JS model ignores them.
+      XCTAssertThrowsSpecific(URLSetterError.error(.invalidScheme)) {
+        try url.setScheme(to: "\th\nttp:")
+      }
     }
 
     do {
@@ -270,6 +274,83 @@ extension WebURLTests {
     XCTAssertNil(url.password)
     XCTAssertEqual(url.serialized, "http://example.com/")
   }
+
+  /// Tests the Swift model 'hostname' property.
+  ///
+  /// The Swift model deviates from the JS model in that it does not trim or filter the new value when setting, can represent not-present hosts as 'nil', and supports
+  /// setting hosts to 'nil'.
+  ///
+  func testHostname() {
+    // [Deviation] Hostname is not trimmed; invalid host code points such as "?", "#", or ":" cause the setter to fail.
+    var url = WebURL("http://example.com/")!
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
+      try url.setHostname(to: "hello?")
+    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
+      try url.setHostname(to: "hello#")
+    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
+      try url.setHostname(to: "hel:lo")
+    }
+    // [Deviation] Hostname is not filtered. Tabs and newlines are invalid host code points, cause setter to fail.
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
+      try url.setHostname(to: "\thel\nlo")
+    }
+
+    // [Deviation] Swift model can distinguish between empty and not-present hostnames.
+    XCTAssertNil(WebURL("unix:/some/path")!.hostname)
+    XCTAssertEqual(WebURL("unix:///some/path")!.hostname, "")
+
+    // [Deviation] Swift model allows setting hostname to nil (removing it, not just making it empty).
+    //             But only if the scheme allows it, of course.
+    XCTAssertThrowsSpecific(URLSetterError.error(.schemeDoesNotSupportNilOrEmptyHostnames)) {
+      try url.setHostname(to: String?.none)
+    }
+    // Non-special schemes allow 'nil' hostnames.
+    url = WebURL("unix:///some/path")!
+    XCTAssertNoThrow(try url.setHostname(to: String?.none))
+    XCTAssertEqual(url.serialized, "unix:/some/path")
+    // But not if they already have credentials or ports.
+    url = WebURL("unix://user:pass@example/some/path")!
+    XCTAssertEqual(url.hostname, "example")
+    XCTAssertEqual(url.username, "user")
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetHostnameWithCredentialsOrPort)) {
+      try url.setHostname(to: String?.none)
+    }
+    url = WebURL("unix://example:99/some/path")!
+    XCTAssertEqual(url.hostname, "example")
+    XCTAssertEqual(url.port, 99)
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetHostnameWithCredentialsOrPort)) {
+      try url.setHostname(to: String?.none)
+    }
+    // When setting a hostname to/from 'nil', we may need to add/remove a path sigil.
+    do {
+      func check_has_path_sigil(url: WebURL) {
+        XCTAssertEqual(url.serialized, "web+demo:/.//not-a-host/test")
+        XCTAssertEqual(url.storage.structure.sigil, .path)
+        XCTAssertEqual(url.hostname, nil)
+        XCTAssertEqual(url.path, "//not-a-host/test")
+      }
+      func check_has_auth_sigil(url: WebURL, hostname: String) {
+        XCTAssertEqual(url.serialized, "web+demo://\(hostname)//not-a-host/test")
+        XCTAssertEqual(url.storage.structure.sigil, .authority)
+        XCTAssertEqual(url.hostname, hostname)
+        XCTAssertEqual(url.path, "//not-a-host/test")
+      }
+      // Start with a 'nil' host, path sigil.
+      var test_url = WebURL("web+demo:/.//not-a-host/test")!
+      check_has_path_sigil(url: test_url)
+      // Switch to a non-empty host. We should gain an authority sigil.
+      test_url.hostname = "host"
+      check_has_auth_sigil(url: test_url, hostname: "host")
+      // Switch to an empty host. We should still have an authority sigil.
+      test_url.hostname = ""
+      check_has_auth_sigil(url: test_url, hostname: "")
+      // Switch to a 'nil' host. We should change the authority sigil to a path sigil.
+      test_url.hostname = nil
+      check_has_path_sigil(url: test_url)
+    }
+  }
 }
 
 extension WebURLTests {
@@ -290,34 +371,7 @@ extension WebURLTests {
       XCTAssertEqual(x.href, "sc://x?hello")
       XCTAssertEqual(x.pathname, "")
     }
-    // Check that 'hostname' setter removes path sigil.
-    do {
-      func check_has_path_sigil(url: WebURL.JSModel) {
-        XCTAssertEqual(url.description, "web+demo:/.//not-a-host/test")
-        XCTAssertEqual(url.storage.structure.sigil, .path)
-        XCTAssertEqual(url.hostname, "")
-        XCTAssertEqual(url.pathname, "//not-a-host/test")
-      }
-      func check_has_auth_sigil(url: WebURL.JSModel, hostname: String) {
-        XCTAssertEqual(url.description, "web+demo://\(hostname)//not-a-host/test")
-        XCTAssertEqual(url.storage.structure.sigil, .authority)
-        XCTAssertEqual(url.hostname, hostname)
-        XCTAssertEqual(url.pathname, "//not-a-host/test")
-      }
 
-      var test_url = WebURL("web+demo:/.//not-a-host/test")!.jsModel
-      check_has_path_sigil(url: test_url)
-      test_url.hostname = "host"
-      check_has_auth_sigil(url: test_url, hostname: "host")
-      test_url.hostname = ""
-      check_has_auth_sigil(url: test_url, hostname: "")
-      // We don't yet expose any way to remove an authority, so go down to URLStorage.
-      switch test_url.storage {
-      case .generic(var storage): test_url.storage = storage.setHostname(to: UnsafeBufferPointer?.none).0
-      case .small(var storage): test_url.storage = storage.setHostname(to: UnsafeBufferPointer?.none).0
-      }
-      check_has_path_sigil(url: test_url)
-    }
 
     // TODO [testing]: This test needs to be more comprehensive, and we need tests like this exercising all major
     // paths in all setters.
