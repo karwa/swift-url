@@ -148,7 +148,11 @@ extension WebURLTests {
       $0.hostname = "moc.elpmaxe"
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:90/a/b?c=d&e=f#gh")
-
+    // Port.
+    checkDoesNotCopy(&url) {
+      $0.port = 42
+    }
+    XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/a/b?c=d&e=f#gh")
     // TODO: Add setters as they are implemented in the swift model.
   }
 }
@@ -350,6 +354,36 @@ extension WebURLTests {
       test_url.hostname = nil
       check_has_path_sigil(url: test_url)
     }
+  }
+
+  /// Tests the Swift model 'port' property.
+  ///
+  /// The Swift model deviates from the JS model in that it takes an `Int?` rather than a string.
+  ///
+  func testPort() {
+    // [Throw] Adding a port to a URL which does not allow them.
+    var url = WebURL("file://somehost/p1/p2")!
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) {
+      try url.setPort(to: 99)
+    }
+    // [Throw] Setting a port to a non-valid UInt16 value.
+    url = WebURL("http://example.com/p1/p2")!
+    XCTAssertThrowsSpecific(URLSetterError.error(.portValueOutOfBounds)) {
+      try url.setPort(to: -99)
+    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.portValueOutOfBounds)) {
+      try url.setPort(to: Int(UInt32.max))
+    }
+    // [Deviation] Non-present port is represented as 'nil', rather than empty string.
+    XCTAssertNil(url.port)
+    // Set the port to a non-nil value.
+    XCTAssertNoThrow(try url.setPort(to: 42))
+    XCTAssertEqual(url.port, 42)
+    XCTAssertEqual(url.serialized, "http://example.com:42/p1/p2")
+    // And back to nil.
+    XCTAssertNoThrow(try url.setPort(to: nil))
+    XCTAssertNil(url.port)
+    XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
   }
 }
 

@@ -189,11 +189,9 @@ extension WebURL.JSModel {
         }
         newPort = parsedPort
       }
-
-      withMutableStorage(
-        { small in small.setPort(to: newPort).0 },
-        { generic in generic.setPort(to: newPort).0 }
-      )
+      var swift = swiftModel
+      swift.port = newPort.map { Int($0) }
+      self = swift.jsModel
     }
   }
 

@@ -210,9 +210,14 @@ extension WebURL {
   /// The port of this URL, if present. Valid port numbers are in the range `0 ..< 65536`
   ///
   public var port: Int? {
-    storage.withComponentBytes(.port) { maybeBytes in
-      guard let bytes = maybeBytes, bytes.count > 1 else { return nil }
-      return Int(String(decoding: bytes.dropFirst(), as: UTF8.self), radix: 10)!
+    get {
+      storage.withComponentBytes(.port) { maybeBytes in
+        guard let bytes = maybeBytes, bytes.count > 1 else { return nil }
+        return Int(String(decoding: bytes.dropFirst(), as: UTF8.self), radix: 10)!
+      }
+    }
+    set {
+      try? setPort(to: newValue)
     }
   }
 
@@ -322,8 +327,7 @@ extension WebURL {
     )
   }
 
-  public mutating func setHostname<C>(utf8 newHostname: C?) throws
-  where C: BidirectionalCollection, C.Element == UInt8 {
+  mutating func setHostname<C>(utf8 newHostname: C?) throws where C: BidirectionalCollection, C.Element == UInt8 {
     try withMutableStorage(
       { small in small.setHostname(to: newHostname) },
       { generic in generic.setHostname(to: newHostname) }
@@ -345,5 +349,22 @@ extension WebURL {
   public mutating func setHostname<S>(to newHostname: S?) throws
   where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     try setHostname(utf8: newHostname?.utf8)
+  }
+
+  public mutating func setPort(to newPort: Int?) throws {
+    guard let newPort = newPort else {
+      try withMutableStorage(
+        { small in small.setPort(to: nil) },
+        { generic in generic.setPort(to: nil) }
+      )
+      return
+    }
+    guard let uint16Port = UInt16(exactly: newPort) else {
+      throw URLSetterError.error(.portValueOutOfBounds)
+    }
+    try withMutableStorage(
+      { small in small.setPort(to: uint16Port) },
+      { generic in generic.setPort(to: uint16Port) }
+    )
   }
 }

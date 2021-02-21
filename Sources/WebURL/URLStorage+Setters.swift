@@ -457,6 +457,7 @@ struct URLSetterError: Error, Equatable {
     case newSchemeCannotHaveEmptyHostname
     // credentials and port.
     case cannotHaveCredentialsOrPort
+    case portValueOutOfBounds
     // hostname.
     case cannotSetHostOnCannotBeABaseURL
     case schemeDoesNotSupportNilOrEmptyHostnames
