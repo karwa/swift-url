@@ -385,6 +385,47 @@ extension WebURLTests {
     XCTAssertNil(url.port)
     XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
   }
+
+  /// Tests the Swift model 'path' property.
+  ///
+  /// The Swift model deviates from the JS model in that it does not filter the new value when setting.
+  ///
+  func testPath() {
+
+    // [Throw] Cannot set path on cannot-be-a-base URLs.
+    var url = WebURL("mailto:bob")!
+    XCTAssertEqual(url.path, "bob")
+    XCTAssertTrue(url._cannotBeABaseURL)
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetPathOnCannotBeABaseURL)) {
+      try url.setPath(to: "frank")
+    }
+
+    // [Deviation] Tabs and newlines are not trimmed.
+    url = WebURL("file:///hello/world?someQuery")!
+    XCTAssertNoThrow(try url.setPath(to: "\t\n\t"))
+    XCTAssertEqual(url.path, "/%09%0A%09")
+    XCTAssertEqual(url.serialized, "file:///%09%0A%09?someQuery")
+
+    // [Bug] This seems to be a bug in the standard, which our implementation also exhibits (yay for accuracy?).
+    //       The path of non-special URLs can be set to the empty string, which makes them cannot-be-a-base URLs,
+    //       but without the flag. Re-parsing the serialized URL sets the flag, so the two behave differently.
+    // See: https://github.com/whatwg/url/issues/581
+    url = WebURL("foo:/hello/world?someQuery")!
+    XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
+    XCTAssertEqual(url.path, "/hello/world")
+    XCTAssertFalse(url._cannotBeABaseURL)
+
+    url.path = ""
+    XCTAssertEqual(url.serialized, "foo:?someQuery")
+    XCTAssertEqual(url.path, "")
+    XCTAssertFalse(url._cannotBeABaseURL)
+    XCTAssertTrue(WebURL(url.serialized)!._cannotBeABaseURL)
+
+    url.path = "test"
+    XCTAssertEqual(url.serialized, "foo:/test?someQuery")
+    XCTAssertEqual(url.path, "/test")
+    XCTAssertFalse(url._cannotBeABaseURL)
+  }
 }
 
 extension WebURLTests {

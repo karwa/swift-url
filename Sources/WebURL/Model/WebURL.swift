@@ -28,10 +28,14 @@
 ///
 /// - Additionally, the hostname may be augmented by a `username`, `password` or `port`. Collectively, these are known as the URL's "authority".
 ///
-/// - The `path` is an optional component which describes the location of the resource on the host.
-///   It models descending a tree of 'components', each of which is separated by a "/" character, with "." referring to the current node and ".." referring to the parent.
-///   It is important to note that the way these model paths are mapped to actual resources is a host- or scheme-specific detail
-///   (for example, if the host uses a case-insensitive filesystem, two "file" URLs with different model paths may map to the same filesystem path).
+/// - The `path` describes the location of the resource on the host. There are 2 kinds of paths - those which start with a "/", and those that don't.
+///   - Those which _do_ model descending a tree of 'components', each of which is separated by a "/" character, with "." referring to the current node
+///     and ".." referring to the parent. It is important to note that the way these model paths are mapped to actual resources is a host- or scheme-specific detail
+///     (for example, if the host uses a case-insensitive filesystem, two "file" URLs with different model paths may map to the same filesystem path). These paths
+///     are lexically simplified when parsed or set.
+///   - Those which _do not_ are just arbitary strings (e.g. `mailto:somebody@example.com`, or `javascript:alert("hello")`). These
+///     URLS are known as "cannot be a base URL"s, and parsing any relative URL string against them will fail. Their paths are never lexically simplified,
+///     and indeed cannot be modified after parsing.
 ///
 /// - The `query` is an optional, ordered sequence of key-value pairs which the host may use when processing a request.
 ///
@@ -221,10 +225,14 @@ extension WebURL {
     }
   }
 
-  /// The path of this URL, if present, as a percent-encoded string.
+  /// The path of this URL, as a percent-encoded string.
   ///
-  public var path: String? {
-    return storage.stringForComponent(.path)
+  /// URLs with special schemes have an implicit path "/", which cannot be removed. URLs with other schemes may have an empty path.
+  /// This string includes the leading path separator, if it is present.
+  ///
+  public var path: String {
+    get { return storage.stringForComponent(.path) ?? "" }
+    set { try? setPath(to: newValue) }
   }
 
   /// The query of this URL, if present, as a percent-encoded string.
@@ -334,6 +342,13 @@ extension WebURL {
     )
   }
 
+  mutating func setPath<C>(utf8 newPath: C) throws where C: BidirectionalCollection, C.Element == UInt8 {
+    try withMutableStorage(
+      { small in small.setPath(to: newPath) },
+      { generic in generic.setPath(to: newPath) }
+    )
+  }
+
   public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
     try setScheme(utf8: newScheme.utf8)
   }
@@ -366,5 +381,9 @@ extension WebURL {
       { small in small.setPort(to: uint16Port) },
       { generic in generic.setPort(to: uint16Port) }
     )
+  }
+
+  public mutating func setPath<S>(to newPath: S) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+    try setPath(utf8: newPath.utf8)
   }
 }

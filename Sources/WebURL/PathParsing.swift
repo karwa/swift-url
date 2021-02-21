@@ -272,7 +272,7 @@ extension PathParser {
     var input = input[...]
 
     guard input.isEmpty == false else {
-      // Empty string. Special URLs have an implicit path, non-special URLs may have a nil path.
+      // Empty string. Special URLs have an implicit path, non-special URLs may have an empty path.
       if schemeKind.isSpecial {
         visitEmptyPathComponent()
       }

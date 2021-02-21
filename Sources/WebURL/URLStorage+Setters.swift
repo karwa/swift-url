@@ -326,41 +326,13 @@ extension URLStorage {
 
   /// Attempts to set the path component to the given UTF8-encoded string.
   ///
-  /// A value of `nil` removes the path.
-  /// If `filter` is `true`, ASCII tab and newline characters in the given value will be ignored.
-  ///
   mutating func setPath<Input>(
-    to newValue: Input?,
-    filter: Bool = false
-  ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
-
-    guard filter == false || newValue == nil else {
-      return setPath(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
-    }
+    to newPath: Input
+  ) -> (AnyURLStorage, URLSetterError?) where Input: BidirectionalCollection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
     guard oldStructure.cannotBeABaseURL == false else {
-      return (false, AnyURLStorage(self))
-    }
-
-    guard let newPath = newValue else {
-      // URLs with special schemes must always have a path. Possibly replace this with an empty path?
-      guard oldStructure.schemeKind.isSpecial == false else {
-        return (false, AnyURLStorage(self))
-      }
-      guard let existingPath = oldStructure.range(of: .path) else {
-        precondition(oldStructure.hasPathSigil == false, "Cannot have a path sigil without a path")
-        return (true, AnyURLStorage(self))
-      }
-      var commands: [ReplaceSubrangeOperation] = []
-      var newStructure = oldStructure
-      if oldStructure.hasPathSigil {
-        commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
-        newStructure.sigil = .none
-      }
-      commands.append(.remove(subrange: existingPath))
-      newStructure.pathLength = 0
-      return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
+      return (AnyURLStorage(self), .error(.cannotSetPathOnCannotBeABaseURL))
     }
 
     let pathInfo = PathMetrics(
@@ -395,7 +367,7 @@ extension URLStorage {
             needsEscaping: pathInfo.needsEscaping
           )
         }))
-    return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
+    return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
   }
 
   /// Attempts to set the query component to the given UTF8-encoded string.
@@ -463,6 +435,8 @@ struct URLSetterError: Error, Equatable {
     case schemeDoesNotSupportNilOrEmptyHostnames
     case cannotSetHostnameWithCredentialsOrPort
     case invalidHostname
+    // path.
+    case cannotSetPathOnCannotBeABaseURL
   }
   private var _value: Value
 

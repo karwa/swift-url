@@ -197,20 +197,12 @@ extension WebURL.JSModel {
 
   public var pathname: String {
     get {
-      swiftModel.path ?? ""
+      swiftModel.path
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        var newQuery = Optional(utf8)
-        if utf8.isEmpty {
-          newQuery = nil
-        }
-        withMutableStorage(
-          { small in small.setPath(to: newQuery, filter: true).1 },
-          { generic in generic.setPath(to: newQuery, filter: true).1 }
-        )
-      }
+      var swift = swiftModel
+      try? swift.setPath(utf8: ASCII.NewlineAndTabFiltered(newValue.utf8))
+      self = swift.jsModel
     }
   }
 
