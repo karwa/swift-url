@@ -243,23 +243,22 @@ extension WebURL.JSModel {
       return "#" + swiftValue
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        // It is important that these steps happen in this order.
-        // - If the new value is empty, the fragment is removed (set to nil)
-        // - If the new value starts with a "#", it is dropped.
-        // - The remainder gets filtered of particular ASCII whitespace characters.
-        var newFragment = Optional(utf8)
-        if utf8.isEmpty {
-          newFragment = nil
-        } else if utf8.first == ASCII.numberSign.codePoint {
-          newFragment = UnsafeBufferPointer(rebasing: utf8.dropFirst())
-        }
-        withMutableStorage(
-          { small in small.setFragment(to: newFragment, filter: true) },
-          { generic in generic.setFragment(to: newFragment, filter: true) }
-        )
+      // - If the new value is empty, the fragment is removed (set to nil).
+      guard newValue.isEmpty == false else {
+        var swift = swiftModel
+        swift.fragment = nil
+        self = swift.jsModel
+        return
       }
+      var newFragment = newValue[...]
+      // - If the new value starts with a "?", it is dropped.
+      if newValue.first?.asciiValue == ASCII.numberSign.codePoint {
+        newFragment = newValue.dropFirst()
+      }
+      // - The remainder gets filtered of particular ASCII whitespace characters.
+      var swift = swiftModel
+      swift.setFragment(utf8: ASCII.NewlineAndTabFiltered(newFragment.utf8))
+      self = swift.jsModel
     }
   }
 }

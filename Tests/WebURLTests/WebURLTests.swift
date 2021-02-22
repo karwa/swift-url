@@ -427,7 +427,7 @@ extension WebURLTests {
     XCTAssertFalse(url._cannotBeABaseURL)
   }
 
-  /// Tests the Swift model 'path' property.
+  /// Tests the Swift model 'query' property.
   ///
   /// The Swift model deviates from the JS model in that it does not trim the leading "?" or filter the new value when setting. It is also able to distinguish between
   /// not-present and empty query strings using 'nil'.
@@ -459,6 +459,40 @@ extension WebURLTests {
     url.query = "\tso\nmething"
     XCTAssertEqual(url.serialized, "http://example.com/hello?%09so%0Amething")
     XCTAssertEqual(url.query, "%09so%0Amething")
+  }
+
+  /// Tests the Swift model 'fragment' property.
+  ///
+  /// The Swift model deviates from the JS model in that it does not trim the leading "#" or filter the new value when setting. It is also able to distinguish between
+  /// not-present and empty fragment strings using 'nil'.
+  ///
+  func testFragment() {
+    // [Deviation]: The Swift model does not include the leading "#" in the getter, uses 'nil' to mean 'not present'.
+    var url = WebURL("http://example.com/hello")!
+    XCTAssertEqual(url.serialized, "http://example.com/hello")
+    XCTAssertNil(url.fragment)
+
+    url.fragment = ""
+    XCTAssertEqual(url.serialized, "http://example.com/hello#")
+    XCTAssertEqual(url.fragment, "")
+
+    url.fragment = "test"
+    XCTAssertEqual(url.serialized, "http://example.com/hello#test")
+    XCTAssertEqual(url.fragment, "test")
+
+    url.fragment = nil
+    XCTAssertEqual(url.serialized, "http://example.com/hello")
+    XCTAssertNil(url.fragment)
+
+    // [Deviation]: The Swift model does not trim the leading "#" from the new value when setting.
+    url.fragment = "#test"
+    XCTAssertEqual(url.serialized, "http://example.com/hello##test")
+    XCTAssertEqual(url.fragment, "#test")
+
+    // [Deviation]: Newlines and tabs are not filtered.
+    url.fragment = "\tso\nmething"
+    XCTAssertEqual(url.serialized, "http://example.com/hello#%09so%0Amething")
+    XCTAssertEqual(url.fragment, "%09so%0Amething")
   }
 }
 

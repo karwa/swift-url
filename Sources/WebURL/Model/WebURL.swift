@@ -260,13 +260,18 @@ extension WebURL {
   /// This string does not include the leading `#`.
   ///
   public var fragment: String? {
-    storage.withComponentBytes(.fragment) { maybeBytes in
-      guard let bytes = maybeBytes else { return nil }
-      guard bytes.count != 1 else {
-        assert(bytes.first == ASCII.numberSign.codePoint)
-        return ""
+    get {
+      storage.withComponentBytes(.fragment) { maybeBytes in
+        guard let bytes = maybeBytes else { return nil }
+        guard bytes.count != 1 else {
+          assert(bytes.first == ASCII.numberSign.codePoint)
+          return ""
+        }
+        return String(decoding: bytes.dropFirst(), as: UTF8.self)
       }
-      return String(decoding: bytes.dropFirst(), as: UTF8.self)
+    }
+    set {
+      setFragment(to: newValue)
     }
   }
 }
@@ -368,6 +373,13 @@ extension WebURL {
     )
   }
 
+  mutating func setFragment<C>(utf8 newFragment: C?) where C: Collection, C.Element == UInt8 {
+    withMutableStorage(
+      { small in small.setFragment(to: newFragment) },
+      { generic in generic.setFragment(to: newFragment) }
+    )
+  }
+
   public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
     try setScheme(utf8: newScheme.utf8)
   }
@@ -408,5 +420,9 @@ extension WebURL {
 
   public mutating func setQuery<S>(to newQuery: S?) where S: StringProtocol {
     setQuery(utf8: newQuery?.utf8)
+  }
+
+  public mutating func setFragment<S>(to newFragment: S?) where S: StringProtocol {
+    setFragment(utf8: newFragment?.utf8)
   }
 }
