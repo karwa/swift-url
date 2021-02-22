@@ -323,7 +323,8 @@ extension WebURLTests {
     XCTAssertEqual(WebURL("unix:///some/path")!.hostname, "")
 
     // [Deviation] Swift model allows setting hostname to nil (removing it, not just making it empty).
-    //             But only if the scheme allows it, of course.
+    // Special schemes do not allow 'nil' hostnames.
+    XCTAssertEqual(url.scheme, "http")
     XCTAssertThrowsSpecific(URLSetterError.error(.schemeDoesNotSupportNilOrEmptyHostnames)) {
       try url.setHostname(to: String?.none)
     }
@@ -422,26 +423,6 @@ extension WebURLTests {
     XCTAssertNoThrow(try url.setPath(to: "\t\n\t"))
     XCTAssertEqual(url.path, "/%09%0A%09")
     XCTAssertEqual(url.serialized, "file:///%09%0A%09?someQuery")
-
-    // [Bug] This seems to be a bug in the standard, which our implementation also exhibits (yay for accuracy?).
-    //       The path of non-special URLs can be set to the empty string, which makes them cannot-be-a-base URLs,
-    //       but without the flag. Re-parsing the serialized URL sets the flag, so the two behave differently.
-    // See: https://github.com/whatwg/url/issues/581
-    url = WebURL("foo:/hello/world?someQuery")!
-    XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
-    XCTAssertEqual(url.path, "/hello/world")
-    XCTAssertFalse(url._cannotBeABaseURL)
-
-    url.path = ""
-    XCTAssertEqual(url.serialized, "foo:?someQuery")
-    XCTAssertEqual(url.path, "")
-    XCTAssertFalse(url._cannotBeABaseURL)
-    XCTAssertTrue(WebURL(url.serialized)!._cannotBeABaseURL)
-
-    url.path = "test"
-    XCTAssertEqual(url.serialized, "foo:/test?someQuery")
-    XCTAssertEqual(url.path, "/test")
-    XCTAssertFalse(url._cannotBeABaseURL)
   }
 
   /// Tests the Swift model 'query' property.
@@ -514,6 +495,52 @@ extension WebURLTests {
 }
 
 extension WebURLTests {
+
+  /// Tests that URL setters do not inadvertently create strings that would be re-parsed as 'cannot-be-a-base' URLs.
+  ///
+  /// There are 2 situations where this could happen:
+  ///
+  /// 1. Setting a `nil` host when there is no path
+  /// 2. Setting an empty path when there is no host
+  ///
+  func testDoesNotCreateCannotBeABaseURLs() {
+
+    // Check that we require a path in order to remove a host.
+    var url = WebURL("foo://somehost")!
+    XCTAssertEqual(url.serialized, "foo://somehost")
+    XCTAssertEqual(url.path, "")
+    XCTAssertNotNil(url.hostname)
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotRemoveHostnameWithoutPath)) {
+      try url.setHostname(to: String?.none)
+    }
+
+    // Check that we require a host in order to remove a path.
+
+    // [Bug] This seems to be a bug in the standard, which our implementation also exhibits (yay for accuracy?).
+    //       The path of non-special URLs can be set to empty, even if they don't have a host (path-only URLs).
+    //       This makes them 'cannot-be-a-base' URLs, but without the flag. Re-parsing the URL sets the flag,
+    //       but it means the set of operations which are allowed depends on how you got the URL (not idempotent).
+    //       See: https://github.com/whatwg/url/issues/581
+
+    url = WebURL("foo:/hello/world?someQuery")!
+    XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
+    XCTAssertEqual(url.path, "/hello/world")
+    XCTAssertNil(url.hostname)
+    XCTAssertFalse(url._cannotBeABaseURL)
+
+    url.path = ""
+    XCTAssertEqual(url.serialized, "foo:?someQuery")
+    XCTAssertEqual(url.path, "")
+    XCTAssertNil(url.hostname)
+    XCTAssertFalse(url._cannotBeABaseURL)
+    XCTAssertTrue(WebURL(url.serialized)!._cannotBeABaseURL)
+
+    url.path = "test"
+    XCTAssertEqual(url.serialized, "foo:/test?someQuery")
+    XCTAssertEqual(url.path, "/test")
+    XCTAssertNil(url.hostname)
+    XCTAssertFalse(url._cannotBeABaseURL)
+  }
 
   func testJSModelSetters() {
     // Check that 'pathname' setter does not remove leading slashes.

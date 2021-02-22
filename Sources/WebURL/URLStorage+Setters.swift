@@ -198,6 +198,9 @@ extension URLStorage {
       guard hasCredentialsOrPort == false else {
         return (AnyURLStorage(self), .error(.cannotSetHostnameWithCredentialsOrPort))
       }
+      guard !(oldStructure.pathLength == 0 && newValue == nil) else {
+        return (AnyURLStorage(self), .error(.cannotRemoveHostnameWithoutPath))
+      }
       switch oldStructure.range(of: .hostname) {
       case .none:
         // 'nil' -> 'nil'.
@@ -435,6 +438,7 @@ struct URLSetterError: Error, Equatable {
     case schemeDoesNotSupportNilOrEmptyHostnames
     case cannotSetHostnameWithCredentialsOrPort
     case invalidHostname
+    case cannotRemoveHostnameWithoutPath
     // path.
     case cannotSetPathOnCannotBeABaseURL
   }
