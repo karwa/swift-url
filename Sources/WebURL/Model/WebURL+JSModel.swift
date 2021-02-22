@@ -215,23 +215,22 @@ extension WebURL.JSModel {
       return "?" + swiftValue
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        // It is important that these steps happen in this order.
-        // - If the new value is empty, the fragment is removed (set to nil)
-        // - If the new value starts with a "?", it is dropped.
-        // - The remainder gets filtered of particular ASCII whitespace characters.
-        var newQuery = Optional(utf8)
-        if utf8.isEmpty {
-          newQuery = nil
-        } else if utf8.first == ASCII.questionMark.codePoint {
-          newQuery = UnsafeBufferPointer(rebasing: utf8.dropFirst())
-        }
-        withMutableStorage(
-          { small in small.setQuery(to: newQuery, filter: true) },
-          { generic in generic.setQuery(to: newQuery, filter: true) }
-        )
+      // - If the new value is empty, the query is removed (set to nil).
+      guard newValue.isEmpty == false else {
+        var swift = swiftModel
+        swift.query = nil
+        self = swift.jsModel
+        return
       }
+      var newQuery = newValue[...]
+      // - If the new value starts with a "?", it is dropped.
+      if newValue.first?.asciiValue == ASCII.questionMark.codePoint {
+        newQuery = newValue.dropFirst()
+      }
+      // - The remainder gets filtered of particular ASCII whitespace characters.
+      var swift = swiftModel
+      swift.setQuery(utf8: ASCII.NewlineAndTabFiltered(newQuery.utf8))
+      self = swift.jsModel
     }
   }
 

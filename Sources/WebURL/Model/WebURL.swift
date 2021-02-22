@@ -240,13 +240,18 @@ extension WebURL {
   /// This string does not include the leading `?`.
   ///
   public var query: String? {
-    storage.withComponentBytes(.query) { maybeBytes in
-      guard let bytes = maybeBytes else { return nil }
-      guard bytes.count != 1 else {
-        assert(bytes.first == ASCII.questionMark.codePoint)
-        return ""
+    get {
+      storage.withComponentBytes(.query) { maybeBytes in
+        guard let bytes = maybeBytes else { return nil }
+        guard bytes.count != 1 else {
+          assert(bytes.first == ASCII.questionMark.codePoint)
+          return ""
+        }
+        return String(decoding: bytes.dropFirst(), as: UTF8.self)
       }
-      return String(decoding: bytes.dropFirst(), as: UTF8.self)
+    }
+    set {
+      setQuery(to: newValue)
     }
   }
 
@@ -277,6 +282,13 @@ internal let _tempStorage = AnyURLStorage(
 )
 
 extension WebURL {
+
+  private mutating func withMutableStorage(
+    _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> (AnyURLStorage),
+    _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> (AnyURLStorage)
+  ) {
+    try! withMutableStorage({ (small(&$0), nil) }, { (generic(&$0), nil) })
+  }
 
   private mutating func withMutableStorage(
     _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
@@ -349,6 +361,13 @@ extension WebURL {
     )
   }
 
+  mutating func setQuery<C>(utf8 newQuery: C?) where C: Collection, C.Element == UInt8 {
+    withMutableStorage(
+      { small in small.setQuery(to: newQuery) },
+      { generic in generic.setQuery(to: newQuery) }
+    )
+  }
+
   public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
     try setScheme(utf8: newScheme.utf8)
   }
@@ -385,5 +404,9 @@ extension WebURL {
 
   public mutating func setPath<S>(to newPath: S) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     try setPath(utf8: newPath.utf8)
+  }
+
+  public mutating func setQuery<S>(to newQuery: S?) where S: StringProtocol {
+    setQuery(utf8: newQuery?.utf8)
   }
 }

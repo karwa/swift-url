@@ -426,6 +426,40 @@ extension WebURLTests {
     XCTAssertEqual(url.path, "/test")
     XCTAssertFalse(url._cannotBeABaseURL)
   }
+
+  /// Tests the Swift model 'path' property.
+  ///
+  /// The Swift model deviates from the JS model in that it does not trim the leading "?" or filter the new value when setting. It is also able to distinguish between
+  /// not-present and empty query strings using 'nil'.
+  ///
+  func testQuery() {
+    // [Deviation]: The Swift model does not include the leading "?" in the getter, uses 'nil' to mean 'not present'.
+    var url = WebURL("http://example.com/hello")!
+    XCTAssertEqual(url.serialized, "http://example.com/hello")
+    XCTAssertNil(url.query)
+
+    url.query = ""
+    XCTAssertEqual(url.serialized, "http://example.com/hello?")
+    XCTAssertEqual(url.query, "")
+
+    url.query = "a=b&c=d"
+    XCTAssertEqual(url.serialized, "http://example.com/hello?a=b&c=d")
+    XCTAssertEqual(url.query, "a=b&c=d")
+
+    url.query = nil
+    XCTAssertEqual(url.serialized, "http://example.com/hello")
+    XCTAssertNil(url.query)
+
+    // [Deviation]: The Swift model does not trim the leading "?" from the new value when setting.
+    url.query = "?e=f&g=h"
+    XCTAssertEqual(url.serialized, "http://example.com/hello??e=f&g=h")
+    XCTAssertEqual(url.query, "?e=f&g=h")
+
+    // [Deviation]: Newlines and tabs are not filtered.
+    url.query = "\tso\nmething"
+    XCTAssertEqual(url.serialized, "http://example.com/hello?%09so%0Amething")
+    XCTAssertEqual(url.query, "%09so%0Amething")
+  }
 }
 
 extension WebURLTests {
