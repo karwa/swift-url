@@ -25,6 +25,7 @@ extension WebURLTests {
   /// can be upstreamed.
   ///
   func testURLConstructor() throws {
+
     let url = URL(fileURLWithPath: #file).deletingLastPathComponent()
       .appendingPathComponent("additional_constructor_tests.json")
     let fileContents = try JSONDecoder().decode([URLConstructorTest.FileEntry].self, from: try Data(contentsOf: url))
@@ -49,6 +50,7 @@ extension WebURLTests {
   /// Tests that setters copy to new storage when the mutated URL is not a unique reference.
   ///
   func testCopyOnWrite_nonUnique() {
+
     // TODO: Can we rule out copying due to needing more capacity or changing header type?
     //       - Maybe add an internal 'reserveCapacity' function?
     // TODO: These are by no means all paths that each setter can take.
@@ -114,6 +116,7 @@ extension WebURLTests {
   /// Tests that setters on a uniquely referenced URL are performed in-place.
   ///
   func testCopyOnWrite_unique() {
+
     var url = WebURL("wss://user:pass@example.com:90/a/b?c=d&e=f#gh")!
     XCTAssertEqual(url.serialized, "wss://user:pass@example.com:90/a/b?c=d&e=f#gh")
 
@@ -182,6 +185,7 @@ extension WebURLTests {
   /// The Swift model deviates from the JS model in that it does not trim or filter the new value when setting.
   ///
   func testSchemeSetter() {
+
     do {
       // [Throw] Invalid scheme.
       var url = WebURL("http://example.com/a/b?c=d&e=f#gh")!
@@ -241,6 +245,7 @@ extension WebURLTests {
   /// The Swift model deviates from the JS model in that it presents empty/not present usernames as 'nil'.
   ///
   func testUsername() {
+
     // [Deviation] Empty usernames are entirely removed (including separator),
     //             therefore the Swift model returns 'nil' to mean 'not present'.
     var url = WebURL("http://example.com/")!
@@ -260,10 +265,18 @@ extension WebURLTests {
     XCTAssertEqual(url.username, "some%20username")
     XCTAssertEqual(url.serialized, "http://some%20username@example.com/")
 
-    // [Deviation] Setting the 'nil' is the same as setting the empty string.
+    // [Deviation] Setting 'nil' is the same as setting the empty string.
     url.username = nil
     XCTAssertNil(url.username)
     XCTAssertEqual(url.serialized, "http://example.com/")
+
+    // [Throw]: Setting credentials when the scheme does not allow them.
+    url = WebURL("file://somehost/p1/p2")!
+    XCTAssertNil(url.username)
+    XCTAssertEqual(url.serialized, "file://somehost/p1/p2")
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) {
+      try url.setUsername(to: "user")
+    }
   }
 
   /// Tests the Swift model 'password' property.
@@ -294,6 +307,14 @@ extension WebURLTests {
     url.password = nil
     XCTAssertNil(url.password)
     XCTAssertEqual(url.serialized, "http://example.com/")
+
+    // [Throw]: Setting credentials when the scheme does not allow them.
+    url = WebURL("file://somehost/p1/p2")!
+    XCTAssertNil(url.password)
+    XCTAssertEqual(url.serialized, "file://somehost/p1/p2")
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) {
+      try url.setPassword(to: "pass")
+    }
   }
 
   /// Tests the Swift model 'hostname' property.
@@ -302,6 +323,7 @@ extension WebURLTests {
   /// setting hosts to 'nil'.
   ///
   func testHostname() {
+
     // [Deviation] Hostname is not trimmed; invalid host code points such as "?", "#", or ":" cause the setter to fail.
     var url = WebURL("http://example.com/")!
     XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
@@ -336,13 +358,13 @@ extension WebURLTests {
     url = WebURL("unix://user:pass@example/some/path")!
     XCTAssertEqual(url.hostname, "example")
     XCTAssertEqual(url.username, "user")
-    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetHostnameWithCredentialsOrPort)) {
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetEmptyHostnameWithCredentialsOrPort)) {
       try url.setHostname(to: String?.none)
     }
     url = WebURL("unix://example:99/some/path")!
     XCTAssertEqual(url.hostname, "example")
     XCTAssertEqual(url.port, 99)
-    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetHostnameWithCredentialsOrPort)) {
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetEmptyHostnameWithCredentialsOrPort)) {
       try url.setHostname(to: String?.none)
     }
     // When setting a hostname to/from 'nil', we may need to add/remove a path sigil.
@@ -372,6 +394,57 @@ extension WebURLTests {
       test_url.hostname = nil
       check_has_path_sigil(url: test_url)
     }
+
+    // [Throw]: Cannot set hostname on cannot-be-a-base URLs.
+    url = WebURL("mailto:bob")!
+    XCTAssertNil(url.hostname)
+    XCTAssertTrue(url._cannotBeABaseURL)
+    XCTAssertEqual(url.serialized, "mailto:bob")
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetHostOnCannotBeABaseURL)) {
+      try url.setHostname(to: "somehost")
+    }
+    XCTAssertEqual(url.serialized, "mailto:bob")
+
+    // [Throw]: Cannot set empty hostname on special schemes.
+    url = WebURL("http://example.com/p1/p2")!
+    XCTAssertEqual(url.hostname, "example.com")
+    XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
+    XCTAssertThrowsSpecific(URLSetterError.error(.schemeDoesNotSupportNilOrEmptyHostnames)) {
+      try url.setHostname(to: "")
+    }
+    XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
+
+    // [Throw]: Cannot set empty hostname if the URL contains credentials or port.
+    url = WebURL("foo://user@example.com/p1/p2")!
+    XCTAssertEqual(url.username, "user")
+    XCTAssertEqual(url.hostname, "example.com")
+    XCTAssertEqual(url.serialized, "foo://user@example.com/p1/p2")
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetEmptyHostnameWithCredentialsOrPort)) {
+      try url.setHostname(to: "")
+    }
+    XCTAssertEqual(url.serialized, "foo://user@example.com/p1/p2")
+
+    url = WebURL("foo://example.com:8080/p1/p2")!
+    XCTAssertEqual(url.port, 8080)
+    XCTAssertEqual(url.hostname, "example.com")
+    XCTAssertEqual(url.serialized, "foo://example.com:8080/p1/p2")
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetEmptyHostnameWithCredentialsOrPort)) {
+      try url.setHostname(to: "")
+    }
+    XCTAssertEqual(url.serialized, "foo://example.com:8080/p1/p2")
+
+    // [Throw]: Invalid hostnames.
+    url = WebURL("foo://example.com/")!
+    XCTAssertEqual(url.hostname, "example.com")
+    XCTAssertEqual(url.serialized, "foo://example.com/")
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
+      try url.setHostname(to: "@")
+    }
+    XCTAssertEqual(url.serialized, "foo://example.com/")
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
+      try url.setHostname(to: "/a/b/c")
+    }
+    XCTAssertEqual(url.serialized, "foo://example.com/")
   }
 
   /// Tests the Swift model 'port' property.
@@ -379,6 +452,7 @@ extension WebURLTests {
   /// The Swift model deviates from the JS model in that it takes an `Int?` rather than a string.
   ///
   func testPort() {
+
     // [Throw] Adding a port to a URL which does not allow them.
     var url = WebURL("file://somehost/p1/p2")!
     XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) {
@@ -431,6 +505,7 @@ extension WebURLTests {
   /// not-present and empty query strings using 'nil'.
   ///
   func testQuery() {
+
     // [Deviation]: The Swift model does not include the leading "?" in the getter, uses 'nil' to mean 'not present'.
     var url = WebURL("http://example.com/hello")!
     XCTAssertEqual(url.serialized, "http://example.com/hello")
@@ -465,6 +540,7 @@ extension WebURLTests {
   /// not-present and empty fragment strings using 'nil'.
   ///
   func testFragment() {
+
     // [Deviation]: The Swift model does not include the leading "#" in the getter, uses 'nil' to mean 'not present'.
     var url = WebURL("http://example.com/hello")!
     XCTAssertEqual(url.serialized, "http://example.com/hello")
