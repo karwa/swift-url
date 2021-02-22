@@ -17,9 +17,6 @@ extension URLStorage {
   /// Attempts to set the scheme component to the given UTF8-encoded string.
   /// The new value may contain a trailing colon (e.g. `http`, `http:`). Colons are only allowed as the last character of the string.
   ///
-  /// - Note: Filtering ASCII tab and newline characters is not needed as those characters cannot be included in a scheme, and schemes cannot
-  ///         contain percent encoding.
-  ///
   mutating func setScheme<Input>(
     to newValue: Input
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
@@ -74,7 +71,7 @@ extension URLStorage {
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
   ///
   mutating func setUsername<Input>(
-    to newValue: Input
+    to newValue: Input?
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
@@ -83,7 +80,7 @@ extension URLStorage {
     }
     // The operation is semantically valid.
 
-    guard newValue.isEmpty == false else {
+    guard let newValue = newValue, newValue.isEmpty == false else {
       guard let oldUsername = oldStructure.range(of: .username) else {
         return (AnyURLStorage(self), nil)
       }
@@ -126,7 +123,7 @@ extension URLStorage {
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
   ///
   mutating func setPassword<Input>(
-    to newValue: Input
+    to newValue: Input?
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
@@ -135,7 +132,7 @@ extension URLStorage {
     }
     // The operation is semantically valid.
 
-    guard newValue.isEmpty == false else {
+    guard let newValue = newValue, newValue.isEmpty == false else {
       guard let oldPassword = oldStructure.range(of: .password) else {
         return (AnyURLStorage(self), nil)
       }
@@ -182,13 +179,8 @@ extension URLStorage {
   /// A `nil` hostname removes the `//` separator after the scheme, resulting in a so-called "path-only" URL (e.g. `unix://oldhost/some/path` -> `unix:/some/path`).
   ///
   mutating func setHostname<Input>(
-    to newValue: Input?,
-    filter: Bool = false
+    to newValue: Input?
   ) -> (AnyURLStorage, URLSetterError?) where Input: BidirectionalCollection, Input.Element == UInt8 {
-
-    guard filter == false || newValue == nil else {
-      return setHostname(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
-    }
 
     let oldStructure = header.structure
     guard oldStructure.cannotBeABaseURL == false else {
@@ -204,7 +196,10 @@ extension URLStorage {
         return (AnyURLStorage(self), .error(.schemeDoesNotSupportNilOrEmptyHostnames))
       }
       guard hasCredentialsOrPort == false else {
-        return (AnyURLStorage(self), .error(.cannotSetHostnameWithCredentialsOrPort))
+        return (AnyURLStorage(self), .error(.cannotSetEmptyHostnameWithCredentialsOrPort))
+      }
+      guard !(oldStructure.pathLength == 0 && newValue == nil) else {
+        return (AnyURLStorage(self), .error(.cannotRemoveHostnameWithoutPath))
       }
       switch oldStructure.range(of: .hostname) {
       case .none:
@@ -334,41 +329,13 @@ extension URLStorage {
 
   /// Attempts to set the path component to the given UTF8-encoded string.
   ///
-  /// A value of `nil` removes the path.
-  /// If `filter` is `true`, ASCII tab and newline characters in the given value will be ignored.
-  ///
   mutating func setPath<Input>(
-    to newValue: Input?,
-    filter: Bool = false
-  ) -> (Bool, AnyURLStorage) where Input: BidirectionalCollection, Input.Element == UInt8 {
-
-    guard filter == false || newValue == nil else {
-      return setPath(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
-    }
+    to newPath: Input
+  ) -> (AnyURLStorage, URLSetterError?) where Input: BidirectionalCollection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
     guard oldStructure.cannotBeABaseURL == false else {
-      return (false, AnyURLStorage(self))
-    }
-
-    guard let newPath = newValue else {
-      // URLs with special schemes must always have a path. Possibly replace this with an empty path?
-      guard oldStructure.schemeKind.isSpecial == false else {
-        return (false, AnyURLStorage(self))
-      }
-      guard let existingPath = oldStructure.range(of: .path) else {
-        precondition(oldStructure.hasPathSigil == false, "Cannot have a path sigil without a path")
-        return (true, AnyURLStorage(self))
-      }
-      var commands: [ReplaceSubrangeOperation] = []
-      var newStructure = oldStructure
-      if oldStructure.hasPathSigil {
-        commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
-        newStructure.sigil = .none
-      }
-      commands.append(.remove(subrange: existingPath))
-      newStructure.pathLength = 0
-      return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
+      return (AnyURLStorage(self), .error(.cannotSetPathOnCannotBeABaseURL))
     }
 
     let pathInfo = PathMetrics(
@@ -403,21 +370,17 @@ extension URLStorage {
             needsEscaping: pathInfo.needsEscaping
           )
         }))
-    return (true, multiReplaceSubrange(commands: commands, newStructure: newStructure))
+    return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
   }
 
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
-  /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
+  /// A value of `nil` removes the query.
   ///
   mutating func setQuery<Input>(
-    to newValue: Input?,
-    filter: Bool = false
+    to newValue: Input?
   ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
 
-    guard filter == false || newValue == nil else {
-      return setQuery(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
-    }
     return setSimpleComponent(
       .query,
       to: newValue,
@@ -429,16 +392,12 @@ extension URLStorage {
 
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
-  /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
+  /// A value of `nil` removes the query.
   ///
   mutating func setFragment<Input>(
-    to newValue: Input?,
-    filter: Bool = false
+    to newValue: Input?
   ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
 
-    guard filter == false || newValue == nil else {
-      return setFragment(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
-    }
     return setSimpleComponent(
       .fragment,
       to: newValue,
@@ -455,9 +414,9 @@ extension URLStorage {
 
 /// An error which may be returned when a `URLStorage` setter operation fails.
 ///
-struct URLSetterError: Error {
+struct URLSetterError: Error, Equatable {
 
-  enum Value {
+  enum Value: Equatable {
     // scheme.
     case invalidScheme
     case changeOfSchemeSpecialness
@@ -465,15 +424,107 @@ struct URLSetterError: Error {
     case newSchemeCannotHaveEmptyHostname
     // credentials and port.
     case cannotHaveCredentialsOrPort
+    case portValueOutOfBounds
     // hostname.
     case cannotSetHostOnCannotBeABaseURL
     case schemeDoesNotSupportNilOrEmptyHostnames
-    case cannotSetHostnameWithCredentialsOrPort
+    case cannotSetEmptyHostnameWithCredentialsOrPort
     case invalidHostname
+    case cannotRemoveHostnameWithoutPath
+    // path.
+    case cannotSetPathOnCannotBeABaseURL
   }
   private var _value: Value
 
   static func error(_ v: Value) -> Self {
     return .init(_value: v)
+  }
+}
+
+extension URLSetterError: CustomStringConvertible {
+
+  public var description: String {
+    switch _value {
+    case .invalidScheme:
+      return #"""
+        The new scheme is not valid. Valid schemes consist of ASCII alphanumerics, '+', '-' and '.', and the
+        first character must be an ASCII alpha. If setting a scheme, you may include its trailing ':' separator.
+
+        Valid schemes: 'http', 'file', 'ftp:', 'http+unix:'
+        Invalid schemes: '  http', 'http$', '👹', 'ftp://example.com'
+        """#
+    case .changeOfSchemeSpecialness:
+      return #"""
+        The new scheme is special/not-special, but the URL's existing scheme is not-special/special.
+        URLs with special schemes are encoded in a significantly different way from those with non-special schemes,
+        and switching from one style to the other via the 'scheme' property is not supported.
+
+        The special schemes are: 'http', 'https', 'file', 'ftp', 'ws', 'wss'.
+        Gopher was considered a special scheme by previous standards, but no longer is.
+        """#
+    case .newSchemeCannotHaveCredentialsOrPort:
+      return #"""
+        The URL contains credentials or a port number, which is unsupported by the new scheme.
+        The only scheme which does not support credentials or a port number is 'file'.
+        """#
+    case .newSchemeCannotHaveEmptyHostname:
+      return #"""
+        The URL has an empty hostname, which is unsupported by the new scheme.
+        The schemes which do not support empty hostnames are 'http', 'https', 'ftp', 'ws', and 'wss'.
+        """#
+    case .cannotHaveCredentialsOrPort:
+      return #"""
+        Attempt to set credentials or a port number, but the URL's scheme does not support them.
+        The only scheme which does not support credentials or a port number is 'file'.
+        """#
+    case .portValueOutOfBounds:
+      return #"""
+        Attempt to set the port number to an invalid value. Valid port numbers are in the range 0 ..< 65536.
+        """#
+    case .cannotSetHostOnCannotBeABaseURL:
+      return #"""
+        Attempt to set the hostname on a 'cannot be a base' URL.
+        URLs without hostnames, and whose path does not begin with '/', are considered invalid base URLs and
+        cannot be made valid by adding a hostname or changing their path.
+
+        Examples include: 'mailto:somebody@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
+        """#
+    case .schemeDoesNotSupportNilOrEmptyHostnames:
+      return #"""
+        Attempt to set the hostname to 'nil' or the empty string, but the URL's scheme requires a non-empty hostname.
+        The schemes which do not support empty hostnames are 'http', 'https', 'ftp', 'ws', and 'wss'.
+        The schemes which do not support 'nil' hostnames are as above, plus 'file'.
+        """#
+    case .cannotSetEmptyHostnameWithCredentialsOrPort:
+      return #"""
+        Attempt to set the hostname to 'nil' or the empty string, but the URL contains credentials or a port number.
+        Credentials and port numbers require a non-empty hostname to be present.
+        """#
+    case .invalidHostname:
+      return #"""
+        Attempt to set the hostname to an invalid value. Invalid values include invalid IPv4/v6 addresses
+        (e.g. "10.0.0.999" or "[:::]"), as well as strings containing forbidden host code points.
+
+        A forbidden host code point is U+0000 NULL, U+0009 TAB, U+000A LF, U+000D CR,
+        U+0020 SPACE, U+0023 (#), U+0025 (%), U+002F (/), U+003A (:), U+003C (<), U+003E (>),
+        U+003F (?), U+0040 (@), U+005B ([), U+005C (\), U+005D (]), or U+005E (^).
+
+        These code points are forbidden (even if percent-encoded) in 'http', 'https', 'file', 'ftp', 'ws', and 'wss' URLs.
+        They may only be present in hostnames of other schemes if they are percent-encoded.
+        """#
+    case .cannotRemoveHostnameWithoutPath:
+      return #"""
+        Attempt to set the hostname to 'nil' on a URL which also does not have a path.
+        This is not allowed, as the result would be an invalid base URL (for example, "foo://examplehost?aQuery" would become "foo:?aQuery").
+        """#
+    case .cannotSetPathOnCannotBeABaseURL:
+      return #"""
+        Attempt to set the path on a 'cannot be a base' URL.
+        URLs without hostnames, and whose path does not begin with '/', are considered invalid base URLs and
+        cannot be made valid by adding a hostname or changing their path.
+
+        Examples include: 'mailto:somebody@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
+        """#
+    }
   }
 }

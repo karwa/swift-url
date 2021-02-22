@@ -1,0 +1,83 @@
+{
+    "comment": [
+        "## Tests for setters of https://url.spec.whatwg.org/#urlutils-members",
+        "",
+        "This file contains a JSON object.",
+        "Other than 'comment', each key is an attribute of the `URL` interface",
+        "defined in WHATWG’s URL Standard.",
+        "The values are arrays of test case objects for that attribute.",
+        "",
+        "To run a test case for the attribute `attr`:",
+        "",
+        "* Create a new `URL` object with the value for the 'href' key",
+        "  the constructor single parameter. (Without a base URL.)",
+        "  This must not throw.",
+        "* Set the attribute `attr` to (invoke its setter with)",
+        "  with the value of for 'new_value' key.",
+        "* The value for the 'expected' key is another object.",
+        "  For each `key` / `value` pair of that object,",
+        "  get the attribute `key` (invoke its getter).",
+        "  The returned string must be equal to `value`.",
+        "",
+        "Note: the 'href' setter is already covered by urltestdata.json."
+    ],
+    "protocol": [
+        {
+            "comment": "Tabs and newlines are ignored",
+            "href": "a://example.net",
+            "new_value": "\u0009\u0009fo\u000Ao",
+            "expected": {
+                "href": "foo://example.net",
+                "protocol": "foo:"
+            }
+        }
+    ],
+    "username": [
+        {
+            "comment": "Tabs and newlines are not ignored",
+            "href": "http://example.com/",
+            "new_value": "\u0009us\u000Aer",
+            "expected": {
+                "href": "http://%09us%0Aer@example.com/",
+                "username": "%09us%0Aer"
+            }
+        }
+    ],
+    "password": [
+        {
+            "comment": "Tabs and newlines are not ignored",
+            "href": "http://example.com/",
+            "new_value": "pa\u0009\u000Ass\u0009",
+            "expected": {
+                "href": "http://:pa%09%0Ass%09@example.com/",
+                "password": "pa%09%0Ass%09"
+            }
+        }
+    ],
+    "port": [
+        {
+            "comment": "Tabs and newlines are ignored",
+            "href": "http://example.com/",
+            "new_value": "\u00099\u000A\u00090",
+            "expected": {
+                "href": "http://example.com:90/",
+                "port": "90"
+            }
+        }
+    ],
+    "pathname": [
+        {
+            "comment": "Tabs and newlines are ignored",
+            "href": "http://example.com/",
+            "new_value": "\u0009/\u000Ahel\u0009lo\u0009/\u0009\u0009world/\u0009.\u0009.",
+            "expected": {
+                "href": "http://example.com/hello/",
+                "pathname": "/hello/"
+            }
+        }
+    ],
+    "host": [],
+    "hostname": [],
+    "search": [],
+    "hash": []
+}

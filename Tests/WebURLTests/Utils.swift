@@ -22,6 +22,21 @@ func XCTAssertEqualElements<Left: Sequence, Right: Sequence>(
   XCTAssertTrue(left.elementsEqual(right), file: file, line: line)
 }
 
+/// Aseerts that a closure throws a particular error.
+///
+func XCTAssertThrowsSpecific<E>(
+  _ expectedError: E, file: StaticString = #file, line: UInt = #line, _ body: () throws -> Void
+) where E: Error, E: Equatable {
+  do {
+    try body()
+    XCTFail("Expected an error to be thrown")
+  } catch let error as E {
+    XCTAssertEqual(error, expectedError)
+  } catch {
+    XCTFail("Unexpected error")
+  }
+}
+
 /// A String containing all 128 ASCII characters (`0..<128`), in order.
 ///
 let stringWithEveryASCIICharacter: String = {

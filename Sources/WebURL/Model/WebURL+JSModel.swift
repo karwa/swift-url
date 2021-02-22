@@ -30,16 +30,28 @@ extension WebURL {
     var swiftModel: WebURL {
       return WebURL(storage: self.storage)
     }
+
+    init(storage: AnyURLStorage) {
+      self.storage = storage
+    }
+
+    public init?(_ input: String, base: String?) {
+      if let baseStr = base {
+        let _url = WebURL(baseStr)?.join(input)
+        guard let url = _url else { return nil }
+        self.init(storage: url.storage)
+
+      } else if let url = WebURL(input) {
+        self.init(storage: url.storage)
+
+      } else {
+        return nil
+      }
+    }
   }
 }
 
 // In-place mutation hack.
-
-private let _tempStorage = AnyURLStorage(
-  URLStorage<GenericURLHeader<UInt8>>(
-    count: 0, structure: .init(), initializingCodeUnitsWith: { _ in return 0 }
-  )!
-)
 
 extension WebURL.JSModel {
 
@@ -88,7 +100,7 @@ extension WebURL.JSModel {
 
   public var href: String {
     get {
-      return storage.entireString
+      swiftModel.serialized
     }
     set {
       guard let newURL = WebURL(newValue) else { return }
@@ -96,182 +108,157 @@ extension WebURL.JSModel {
     }
   }
 
-  public var scheme: String {
-    get {
-      return storage.stringForComponent(.scheme)!
-    }
-    set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        // URLStorage's setter requires that the ":", if present, be the last character.
-        // The JS model's setter succeeds even if the ":" is not the last character,
-        // but everything after the ":" gets silently dropped.
-        let newSchemeBytes = UnsafeBufferPointer(rebasing: utf8.prefix(while: { $0 != ASCII.colon.codePoint }))
-        withMutableStorage(
-          { small in small.setScheme(to: newSchemeBytes).0 },
-          { generic in generic.setScheme(to: newSchemeBytes).0 }
-        )
-      }
-    }
-  }
-
   public var username: String {
     get {
-      return storage.stringForComponent(.username) ?? ""
+      swiftModel.username ?? ""
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        withMutableStorage(
-          { small in small.setUsername(to: utf8).0 },
-          { generic in generic.setUsername(to: utf8).0 }
-        )
-      }
+      var swift = swiftModel
+      try? swift.setUsername(to: newValue)
+      self = swift.jsModel
     }
   }
 
   public var password: String {
     get {
-      var string = storage.stringForComponent(.password)
-      if !(string?.isEmpty ?? true) {
-        let separator = string?.removeFirst()
-        assert(separator == ":")
-      }
-      return string ?? ""
+      swiftModel.password ?? ""
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        withMutableStorage(
-          { small in small.setPassword(to: utf8).0 },
-          { generic in generic.setPassword(to: utf8).0 }
-        )
+      var swift = swiftModel
+      try? swift.setPassword(to: newValue)
+      self = swift.jsModel
+    }
+  }
+
+  // Setters for the following components tend to be more complex. They tend to go through the URL parser,
+  // which filters tabs and newlines (but won't trim ASCII C0 or spaces),
+  // and allows trailing data that just gets silently ignored.
+  //
+  // The Swift model setters do not filter tabs or newlines, nor do they silently drop any part of the given value,
+  // and they may choose to represent non-present values as 'nil' rather than empty strings,
+  // but in all other respects they should behave the same.
+
+  public var scheme: String {
+    get {
+      swiftModel.scheme + ":"
+    }
+    set {
+      let trimmedAndFiltered: ASCII.NewlineAndTabFiltered<Substring.UTF8View>
+      if let terminatorIdx = newValue.firstIndex(of: ":") {
+        trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[..<newValue.index(after: terminatorIdx)].utf8)
+      } else {
+        trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[...].utf8)
       }
+      var swift = swiftModel
+      try? swift.setScheme(utf8: trimmedAndFiltered)
+      self = swift.jsModel
     }
   }
 
   public var hostname: String {
     get {
-      return storage.stringForComponent(.hostname) ?? ""
+      swiftModel.hostname ?? ""
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        var callback = IgnoreValidationErrors()
-        guard let hostnameEnd = findEndOfHostnamePrefix(utf8, scheme: schemeKind, callback: &callback) else {
-          return
-        }
-        let newHostname = utf8[..<hostnameEnd]
-        withMutableStorage(
-          { small in small.setHostname(to: newHostname, filter: true).0 },
-          { generic in generic.setHostname(to: newHostname, filter: true).0 }
-        )
+      let filtered = ASCII.NewlineAndTabFiltered(newValue.utf8)
+      var callback = IgnoreValidationErrors()
+      guard let hostnameEnd = findEndOfHostnamePrefix(filtered, scheme: schemeKind, callback: &callback) else {
+        return
       }
+      var swift = swiftModel
+      try? swift.setHostname(utf8: filtered[..<hostnameEnd])
+      self = swift.jsModel
     }
   }
 
   public var port: String {
     get {
-      var string = storage.stringForComponent(.port)
-      if !(string?.isEmpty ?? true) {
-        let separator = string?.removeFirst()
-        assert(separator == ":")
-      }
-      return string ?? ""
+      swiftModel.port.map { String($0) } ?? ""
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        // The JS model allows non-numeric junk to be attached to the end of the string,
-        // (e.g. "8080stuff" sets port to 8080).
-        let portString = utf8.prefix(while: { ASCII($0)?.isA(\.digits) ?? false })
-        // - No number => not an error => remove existing port.
-        // - Invalid number (e.g. overflow) => error => keep existing port.
-        var newPort: UInt16? = nil
-        if portString.isEmpty == false {
-          guard let parsedPort = UInt16(String(decoding: portString, as: UTF8.self)) else {
-            return
-          }
-          newPort = parsedPort
+      let filtered = ASCII.NewlineAndTabFiltered(newValue.utf8)
+      let portString = filtered.prefix(while: { ASCII($0)?.isA(\.digits) ?? false })
+
+      var newPort: UInt16? = nil
+      if portString.isEmpty {
+        // No number => not an error => remove existing port (newPort == nil).
+      } else {
+        guard let parsedPort = UInt16(String(decoding: portString, as: UTF8.self)) else {
+          // Invalid number (e.g. overflow) => error => keep existing port (abort setter).
+          return
         }
-        withMutableStorage(
-          { small in small.setPort(to: newPort).0 },
-          { generic in generic.setPort(to: newPort).0 }
-        )
+        newPort = parsedPort
       }
+      var swift = swiftModel
+      swift.port = newPort.map { Int($0) }
+      self = swift.jsModel
     }
   }
 
   public var pathname: String {
     get {
-      return storage.stringForComponent(.path) ?? ""
+      swiftModel.path
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        var newQuery = Optional(utf8)
-        if utf8.isEmpty {
-          newQuery = nil
-        }
-        withMutableStorage(
-          { small in small.setPath(to: newQuery, filter: true).1 },
-          { generic in generic.setPath(to: newQuery, filter: true).1 }
-        )
-      }
+      var swift = swiftModel
+      try? swift.setPath(utf8: ASCII.NewlineAndTabFiltered(newValue.utf8))
+      self = swift.jsModel
     }
   }
 
   public var search: String {
     get {
-      let string = storage.stringForComponent(.query)
-      guard string != "?" else { return "" }
-      return string ?? ""
+      let swiftValue = swiftModel.query ?? ""
+      if swiftValue.isEmpty {
+        return swiftValue
+      }
+      return "?" + swiftValue
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        // It is important that these steps happen in this order.
-        // - If the new value is empty, the fragment is removed (set to nil)
-        // - If the new value starts with a "?", it is dropped.
-        // - The remainder gets filtered of particular ASCII whitespace characters.
-        var newQuery = Optional(utf8)
-        if utf8.isEmpty {
-          newQuery = nil
-        } else if utf8.first == ASCII.questionMark.codePoint {
-          newQuery = UnsafeBufferPointer(rebasing: utf8.dropFirst())
-        }
-        withMutableStorage(
-          { small in small.setQuery(to: newQuery, filter: true) },
-          { generic in generic.setQuery(to: newQuery, filter: true) }
-        )
+      // - If the new value is empty, the query is removed (set to nil).
+      guard newValue.isEmpty == false else {
+        var swift = swiftModel
+        swift.query = nil
+        self = swift.jsModel
+        return
       }
+      var newQuery = newValue[...]
+      // - If the new value starts with a "?", it is dropped.
+      if newValue.first?.asciiValue == ASCII.questionMark.codePoint {
+        newQuery = newValue.dropFirst()
+      }
+      // - The remainder gets filtered of particular ASCII whitespace characters.
+      var swift = swiftModel
+      swift.setQuery(utf8: ASCII.NewlineAndTabFiltered(newQuery.utf8))
+      self = swift.jsModel
     }
   }
 
   public var fragment: String {
     get {
-      let string = storage.stringForComponent(.fragment)
-      guard string != "#" else { return "" }
-      return string ?? ""
+      let swiftValue = swiftModel.fragment ?? ""
+      if swiftValue.isEmpty {
+        return swiftValue
+      }
+      return "#" + swiftValue
     }
     set {
-      var stringToInsert = newValue
-      stringToInsert.withUTF8 { utf8 in
-        // It is important that these steps happen in this order.
-        // - If the new value is empty, the fragment is removed (set to nil)
-        // - If the new value starts with a "#", it is dropped.
-        // - The remainder gets filtered of particular ASCII whitespace characters.
-        var newFragment = Optional(utf8)
-        if utf8.isEmpty {
-          newFragment = nil
-        } else if utf8.first == ASCII.numberSign.codePoint {
-          newFragment = UnsafeBufferPointer(rebasing: utf8.dropFirst())
-        }
-        withMutableStorage(
-          { small in small.setFragment(to: newFragment, filter: true) },
-          { generic in generic.setFragment(to: newFragment, filter: true) }
-        )
+      // - If the new value is empty, the fragment is removed (set to nil).
+      guard newValue.isEmpty == false else {
+        var swift = swiftModel
+        swift.fragment = nil
+        self = swift.jsModel
+        return
       }
+      var newFragment = newValue[...]
+      // - If the new value starts with a "?", it is dropped.
+      if newValue.first?.asciiValue == ASCII.numberSign.codePoint {
+        newFragment = newValue.dropFirst()
+      }
+      // - The remainder gets filtered of particular ASCII whitespace characters.
+      var swift = swiftModel
+      swift.setFragment(utf8: ASCII.NewlineAndTabFiltered(newFragment.utf8))
+      self = swift.jsModel
     }
   }
 }

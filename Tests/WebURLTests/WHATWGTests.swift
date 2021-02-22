@@ -146,15 +146,24 @@ extension WHATWGTests {
   }
 
   func testURLSetters() throws {
-
     let url = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("setters_tests.json")
+    try runURLSetterTest(inputFile: url, reportName: "weburl_setters_wpt.txt")
+  }
+
+  func testURLSetters_additional() throws {
+    let url = URL(fileURLWithPath: #file).deletingLastPathComponent()
+      .appendingPathComponent("additional_setters_tests.json")
+    try runURLSetterTest(inputFile: url, reportName: "weburl_setters_more.txt")
+  }
+
+  func runURLSetterTest(inputFile url: URL, reportName: String) throws {
     let data = try Data(contentsOf: url)
     var dict = try JSONSerialization.jsonObject(with: data, options: []) as! [String: Any]
     dict["comment"] = nil  // Don't need the file-level comment.
-    assert(
-      dict.count == 9,
-      "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
-    )
+    //    assert(
+    //      dict.count == 9,
+    //      "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
+    //    )
 
     // The JSON data is in the format:
     // {
@@ -205,7 +214,7 @@ extension WHATWGTests {
     }
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
 
-    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_setters_wpt.txt")
+    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(reportName)
     try report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
   }
