@@ -12,41 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// A Uniform Resource Locator (URL) is a string which describes the location of a resource.
-/// The string may be deconstructed in to components which describe how to access the resource.
+/// A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.
 ///
-/// - The `scheme` (or "protocol") describes how to communicate with the resource's location.
-///   For example, a URL with an "http" scheme must be used with software that speaks the HTTP protocol.
-///   A scheme is always required, and the way in which other components are encoded depends on the scheme.
-///   Some schemes ("http", "https", "ws", "wss", "ftp", and "file") are referred to as being "special".
+/// - A URL’s `scheme` is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing.
+///   For example, software that speaks the HTTP protocol will know how to process requests involving URLs with the "http" scheme.
+///   A scheme is always required, and determines the way in which other components are encoded in the URL.
+///   Some schemes ("http", "https", "ws", "wss", "ftp", and "file") are referred to as being "special"; their components may be encoded differently,
+///   or gain additional semantic meaning.
 ///   Scheme usage is coordinated by the [Internet Assigned Numbers Authority][iana-schemes].
 ///
-/// - The `hostname` is an optional component which describes which computer has the resource information.
-///   For URLs with special schemes, the hostname may be an IP address, a _domain_, or empty.
-///   For URLs with non-special schemes, the hostname is an opaque identifier.
+/// - The `hostname` is an optional component which can be a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+///   Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
 ///   Domains may be resolved to IP addresses using the [Domain Name System (DNS)][dns] .
 ///
 /// - Additionally, the hostname may be augmented by a `username`, `password` or `port`. Collectively, these are known as the URL's "authority".
 ///
-/// - The `path` describes the location of the resource on the host. There are 2 kinds of paths - those which start with a "/", and those that don't.
-///   - Those which _do_ model descending a tree of 'components', each of which is separated by a "/" character, with "." referring to the current node
-///     and ".." referring to the parent. It is important to note that the way these model paths are mapped to actual resources is a host- or scheme-specific detail
-///     (for example, if the host uses a case-insensitive filesystem, two "file" URLs with different model paths may map to the same filesystem path). These paths
-///     are lexically simplified when parsed or set.
-///   - Those which _do not_ are just arbitary strings (e.g. `mailto:somebody@example.com`, or `javascript:alert("hello")`). These
-///     URLS are known as "cannot be a base URL"s, and parsing any relative URL string against them will fail. Their paths are never lexically simplified,
-///     and indeed cannot be modified after parsing.
+/// - The `path` is a list of zero or more ASCII strings, usually identifying a location in hierarchical form.
+///   Hierarchical paths will be lexically simplified according to the `scheme`.
 ///
-/// - The `query` is an optional, ordered sequence of key-value pairs which the host may use when processing a request.
+/// - The `query` is an optional, ordered sequence of key-value pairs.
 ///
 /// - The `fragment` is an optional string which may be used for further processing on the resource identified by the other components.
 ///   It is typically used for client-side information and not sent to the host, although this is a scheme- and implementation-specific detail.
 ///
+/// Additionally, URLs without a host and with a non-hierarchical path are said to be "cannot be a base" URLs.
+/// (e.g. `mailto:somebody@example.com`, or `javascript:alert("hello")`). Joining a relative URL string to such a URL will always fail,
+/// unless that string consists only of a fragment (e.g. "#my-fragment").
+///
 /// URLs are always ASCII Strings. Non-ASCII characters must be percent-encoded, except in domains, where they are encoded as ASCII by
 /// the [IDNA transformation][idna-spec] .
 ///
-/// Parsing of URL strings is compatible with the [WHATWG URL Specification][url-spec], although the object model is different.
-/// The Javascript model described in the specification is available via the `.jsModel` view.
+/// Parsing of URL strings is compatible with the [WHATWG URL Specification][url-spec].
+/// The model exposed here differs slightly from the Javascript model described in the standard, which is available via the `.jsModel` view.
 ///
 /// [iana-schemes]: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
 /// [dns]: https://en.wikipedia.org/wiki/Domain_Name_System
@@ -54,9 +51,9 @@
 /// [url-spec]: https://url.spec.whatwg.org/
 ///
 public struct WebURL {
-  var storage: AnyURLStorage
+  internal var storage: AnyURLStorage
 
-  init(storage: AnyURLStorage) {
+  internal init(storage: AnyURLStorage) {
     self.storage = storage
   }
 
@@ -74,6 +71,10 @@ public struct WebURL {
   }
 
   /// Attempts to create a URL by parsing the given absolute or relative URL string with this URL as its base.
+  ///
+  /// The created URL is normalized in a number of ways - for instance, whitespace characters may be stripped, other characters may be percent-encoded,
+  /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
+  /// serialized result may look different to the original contents. These transformations are defined in the URL specification.
   ///
   public func join<S>(_ string: S) -> WebURL? where S: StringProtocol {
     guard let url = string._withUTF8({ urlFromBytes($0, baseURL: self) }) else {
@@ -163,7 +164,9 @@ extension WebURL {
 
   /// The scheme of this URL, for example `https` or `file`.
   ///
-  /// All URLs have a scheme, and the scheme is never an empty string.
+  /// A URL’s `scheme` is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing.
+  /// All URLs have a scheme, which is never the empty string.
+  /// Setting this property may fail if the URL does not support the new value.
   ///
   public var scheme: String {
     get {
@@ -180,6 +183,8 @@ extension WebURL {
   /// The username of this URL, if present, as a percent-encoded string.
   ///
   /// If present, the username is never the empty sring.
+  /// When setting this property, disallowed characters will be percent-encoded.
+  /// However, the operation may still fail if the URL does not support the new value for other reasons.
   ///
   public var username: String? {
     get { storage.stringForComponent(.username) }
@@ -189,6 +194,8 @@ extension WebURL {
   /// The password of this URL, if present, as a percent-encoded string.
   ///
   /// If present, the password is never the empty sring.
+  /// When setting this property, disallowed characters will be percent-encoded.
+  /// However, the operation may still fail if the URL does not support the new value for other reasons.
   ///
   public var password: String? {
     get {
@@ -204,14 +211,18 @@ extension WebURL {
 
   /// The string representation of this URL's host, if present.
   ///
-  /// The hostname may be a serialised IP address, a domain, or an opaque, percent-encoded identifier.
+  /// A URL's host may be a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+  /// Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
+  /// When setting this property, disallowed characters will **not** be percent-encoded, and will cause the operation to fail.
   ///
   public var hostname: String? {
     get { storage.stringForComponent(.hostname) }
     set { try? setHostname(to: newValue) }
   }
 
-  /// The port of this URL, if present. Valid port numbers are in the range `0 ..< 65536`
+  /// The port of this URL, if present. Valid port numbers are in the range `0 ..< 65536`.
+  ///
+  /// Setting this property may fail if the URL does not support the new value.
   ///
   public var port: Int? {
     get {
@@ -225,19 +236,22 @@ extension WebURL {
     }
   }
 
-  /// The path of this URL, as a percent-encoded string.
+  /// The string representation of this URL's path.
   ///
+  /// A URL's path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form.
   /// URLs with special schemes have an implicit path "/", which cannot be removed. URLs with other schemes may have an empty path.
-  /// This string includes the leading path separator, if it is present.
+  /// When setting this property, disallowed characters will be percent-encoded.
+  /// However, the operation may still fail if the URL does not support the new value for other reasons.
   ///
   public var path: String {
     get { return storage.stringForComponent(.path) ?? "" }
     set { try? setPath(to: newValue) }
   }
 
-  /// The query of this URL, if present, as a percent-encoded string.
+  /// The string representation of this URL's query, if present.
   ///
-  /// This string does not include the leading `?`.
+  /// A URL's `query` is an optional, ordered sequence of key-value pairs. This string representation does not include the leading `?`.
+  /// When setting this property, disallowed characters will be percent-encoded.
   ///
   public var query: String? {
     get {
@@ -257,7 +271,9 @@ extension WebURL {
 
   /// The fragment of this URL, if present, as a percent-encoded string.
   ///
-  /// This string does not include the leading `#`.
+  /// A URL's `fragment` is an optional string which may be used for further processing on the resource identified by the other components.
+  /// This string representation does not include the leading `#`.
+  /// When setting this property, disallowed characters will be percent-encoded.
   ///
   public var fragment: String? {
     get {
@@ -331,6 +347,8 @@ extension WebURL {
 
 extension WebURL {
 
+  // UTF-8 setters.
+
   mutating func setScheme<C>(utf8 newScheme: C) throws where C: Collection, C.Element == UInt8 {
     try withMutableStorage(
       { small in small.setScheme(to: newScheme) },
@@ -380,23 +398,45 @@ extension WebURL {
     )
   }
 
+  // StringProtocol/Int setters.
+
+  /// Sets this URL's `scheme`, throwing an error if the operation fails.
+  ///
+  /// - seealso: `scheme`
+  ///
   public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
     try setScheme(utf8: newScheme.utf8)
   }
 
+  /// Sets this URL's `username`, throwing an error if the operation fails.
+  ///
+  /// - seealso: `username`
+  ///
   public mutating func setUsername<S>(to newUsername: S?) throws where S: StringProtocol {
     try setUsername(utf8: newUsername?.utf8)
   }
 
+  /// Sets this URL's `password`, throwing an error if the operation fails.
+  ///
+  /// - seealso: `password`
+  ///
   public mutating func setPassword<S>(to newPassword: S?) throws where S: StringProtocol {
     try setPassword(utf8: newPassword?.utf8)
   }
 
+  /// Sets this URL's `hostname`, throwing an error if the operation fails.
+  ///
+  /// - seealso: `hostname`
+  ///
   public mutating func setHostname<S>(to newHostname: S?) throws
   where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     try setHostname(utf8: newHostname?.utf8)
   }
 
+  /// Sets this URL's `port`, throwing an error if the operation fails.
+  ///
+  /// - seealso: `port`
+  ///
   public mutating func setPort(to newPort: Int?) throws {
     guard let newPort = newPort else {
       try withMutableStorage(
@@ -414,14 +454,26 @@ extension WebURL {
     )
   }
 
+  /// Sets this URL's `path`, throwing an error if the operation fails.
+  ///
+  /// - seealso: `path`
+  ///
   public mutating func setPath<S>(to newPath: S) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     try setPath(utf8: newPath.utf8)
   }
 
+  /// Sets this URL's `query`.
+  ///
+  /// - seealso: `query`
+  ///
   public mutating func setQuery<S>(to newQuery: S?) where S: StringProtocol {
     setQuery(utf8: newQuery?.utf8)
   }
 
+  /// Sets this URL's `fragment`.
+  ///
+  /// - seealso: `fragment`
+  ///
   public mutating func setFragment<S>(to newFragment: S?) where S: StringProtocol {
     setFragment(utf8: newFragment?.utf8)
   }
