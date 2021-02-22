@@ -440,3 +440,91 @@ struct URLSetterError: Error, Equatable {
     return .init(_value: v)
   }
 }
+
+extension URLSetterError: CustomStringConvertible {
+
+  public var description: String {
+    switch _value {
+    case .invalidScheme:
+      return #"""
+        The new scheme is not valid. Valid schemes consist of ASCII alphanumerics, '+', '-' and '.', and the
+        first character must be an ASCII alpha. If setting a scheme, you may include its trailing ':' separator.
+
+        Valid schemes: 'http', 'file', 'ftp:', 'http+unix:'
+        Invalid schemes: '  http', 'http$', '👹', 'ftp://example.com'
+        """#
+    case .changeOfSchemeSpecialness:
+      return #"""
+        The new scheme is special/not-special, but the URL's existing scheme is not-special/special.
+        URLs with special schemes are encoded in a significantly different way from those with non-special schemes,
+        and switching from one style to the other via the 'scheme' property is not supported.
+
+        The special schemes are: 'http', 'https', 'file', 'ftp', 'ws', 'wss'.
+        Gopher was considered a special scheme by previous standards, but no longer is.
+        """#
+    case .newSchemeCannotHaveCredentialsOrPort:
+      return #"""
+        The URL contains credentials or a port number, which is unsupported by the new scheme.
+        The only scheme which does not support credentials or a port number is 'file'.
+        """#
+    case .newSchemeCannotHaveEmptyHostname:
+      return #"""
+        The URL has an empty hostname, which is unsupported by the new scheme.
+        The schemes which do not support empty hostnames are 'http', 'https', 'ftp', 'ws', and 'wss'.
+        """#
+    case .cannotHaveCredentialsOrPort:
+      return #"""
+        Attempt to set credentials or a port number, but the URL's scheme does not support them.
+        The only scheme which does not support credentials or a port number is 'file'.
+        """#
+    case .portValueOutOfBounds:
+      return #"""
+        Attempt to set the port number to an invalid value. Valid port numbers are in the range 0 ..< 65536.
+        """#
+    case .cannotSetHostOnCannotBeABaseURL:
+      return #"""
+        Attempt to set the hostname on a 'cannot be a base' URL.
+        URLs without hostnames, and whose path does not begin with '/', are considered invalid base URLs and
+        cannot be made valid by adding a hostname or changing their path.
+
+        Examples include: 'mailto:somebody@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
+        """#
+    case .schemeDoesNotSupportNilOrEmptyHostnames:
+      return #"""
+        Attempt to set the hostname to 'nil' or the empty string, but the URL's scheme requires a non-empty hostname.
+        The schemes which do not support empty hostnames are 'http', 'https', 'ftp', 'ws', and 'wss'.
+        The schemes which do not support 'nil' hostnames are as above, plus 'file'.
+        """#
+    case .cannotSetEmptyHostnameWithCredentialsOrPort:
+      return #"""
+        Attempt to set the hostname to 'nil' or the empty string, but the URL contains credentials or a port number.
+        Credentials and port numbers require a non-empty hostname to be present.
+        """#
+    case .invalidHostname:
+      return #"""
+        Attempt to set the hostname to an invalid value. Invalid values include invalid IPv4/v6 addresses
+        (e.g. "10.0.0.999" or "[:::]"), as well as strings containing forbidden host code points.
+
+        A forbidden host code point is U+0000 NULL, U+0009 TAB, U+000A LF, U+000D CR,
+        U+0020 SPACE, U+0023 (#), U+0025 (%), U+002F (/), U+003A (:), U+003C (<), U+003E (>),
+        U+003F (?), U+0040 (@), U+005B ([), U+005C (\), U+005D (]), or U+005E (^).
+
+        These code points are forbidden (even if percent-encoded) in 'http', 'https', 'file', 'ftp', 'ws', and 'wss' URLs.
+        They may only be present in hostnames of other schemes if they are percent-encoded.
+        """#
+    case .cannotRemoveHostnameWithoutPath:
+      return #"""
+        Attempt to set the hostname to 'nil' on a URL which also does not have a path.
+        This is not allowed, as the result would be an invalid base URL (for example, "foo://examplehost?aQuery" would become "foo:?aQuery").
+        """#
+    case .cannotSetPathOnCannotBeABaseURL:
+      return #"""
+        Attempt to set the path on a 'cannot be a base' URL.
+        URLs without hostnames, and whose path does not begin with '/', are considered invalid base URLs and
+        cannot be made valid by adding a hostname or changing their path.
+
+        Examples include: 'mailto:somebody@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
+        """#
+    }
+  }
+}

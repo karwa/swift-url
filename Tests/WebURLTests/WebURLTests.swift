@@ -284,6 +284,7 @@ extension WebURLTests {
   /// The Swift model deviates from the JS model in that it presents empty/not present passwords as 'nil'.
   ///
   func testPassword() {
+
     // [Deviation] Empty passwords are entirely removed (including separator),
     //             therefore the Swift model returns 'nil' to mean 'not present'.
     var url = WebURL("http://example.com/")!
@@ -347,6 +348,14 @@ extension WebURLTests {
     // [Deviation] Swift model allows setting hostname to nil (removing it, not just making it empty).
     // Special schemes do not allow 'nil' hostnames.
     XCTAssertEqual(url.scheme, "http")
+    XCTAssertThrowsSpecific(URLSetterError.error(.schemeDoesNotSupportNilOrEmptyHostnames)) {
+      try url.setHostname(to: String?.none)
+    }
+    // 'file' allows empty hostnames, but not 'nil' hostnames.
+    url = WebURL("file:///some/path")!
+    XCTAssertEqual(url.hostname, "")
+    XCTAssertEqual(url.scheme, "file")
+    XCTAssertEqual(url.serialized, "file:///some/path")
     XCTAssertThrowsSpecific(URLSetterError.error(.schemeDoesNotSupportNilOrEmptyHostnames)) {
       try url.setHostname(to: String?.none)
     }
@@ -443,6 +452,10 @@ extension WebURLTests {
     XCTAssertEqual(url.serialized, "foo://example.com/")
     XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
       try url.setHostname(to: "/a/b/c")
+    }
+    XCTAssertEqual(url.serialized, "foo://example.com/")
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
+      try url.setHostname(to: "[:::]")
     }
     XCTAssertEqual(url.serialized, "foo://example.com/")
   }
