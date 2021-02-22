@@ -49,65 +49,63 @@ extension WebURLTests {
   /// Tests that setters copy to new storage when the mutated URL is not a unique reference.
   ///
   func testCopyOnWrite_nonUnique() {
-    // TODO: Move to swift model once it has setters for all components.
     // TODO: Can we rule out copying due to needing more capacity or changing header type?
     //       - Maybe add an internal 'reserveCapacity' function?
     // TODO: These are by no means all paths that each setter can take.
-    var url = WebURL("http://example.com/a/b?c=d&e=f#gh")!.jsModel
+    var url = WebURL("http://example.com/a/b?c=d&e=f#gh")!
     let original = url
 
     func checkOriginalHasNotChanged() {
-      XCTAssertEqual(original.href, "http://example.com/a/b?c=d&e=f#gh")
-      XCTAssertEqual(original.scheme, "http:")
+      XCTAssertEqual(original.serialized, "http://example.com/a/b?c=d&e=f#gh")
+      XCTAssertEqual(original.scheme, "http")
     }
     // Scheme.
     url.scheme = "https"
-    XCTAssertEqual(url.href, "https://example.com/a/b?c=d&e=f#gh")
-    XCTAssertEqual(url.scheme, "https:")
+    XCTAssertEqual(url.serialized, "https://example.com/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.scheme, "https")
     checkOriginalHasNotChanged()
     url = original
     // Username.
     url.username = "user"
-    XCTAssertEqual(url.href, "http://user@example.com/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.serialized, "http://user@example.com/a/b?c=d&e=f#gh")
     XCTAssertEqual(url.username, "user")
     checkOriginalHasNotChanged()
     url = original
     // Password.
     url.password = "pass"
-    XCTAssertEqual(url.href, "http://:pass@example.com/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.serialized, "http://:pass@example.com/a/b?c=d&e=f#gh")
     XCTAssertEqual(url.password, "pass")
     checkOriginalHasNotChanged()
     url = original
     // Hostname.
     url.hostname = "test.test"
-    XCTAssertEqual(url.href, "http://test.test/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.serialized, "http://test.test/a/b?c=d&e=f#gh")
     XCTAssertEqual(url.hostname, "test.test")
     checkOriginalHasNotChanged()
     url = original
     // Port.
-    url.port = "8080"
-    XCTAssertEqual(url.href, "http://example.com:8080/a/b?c=d&e=f#gh")
-    XCTAssertEqual(url.port, "8080")
+    url.port = 8080
+    XCTAssertEqual(url.serialized, "http://example.com:8080/a/b?c=d&e=f#gh")
+    XCTAssertEqual(url.port, 8080)
     checkOriginalHasNotChanged()
     url = original
     // Path.
-    url.pathname = "/foo/bar/baz"
-    XCTAssertEqual(url.href, "http://example.com/foo/bar/baz?c=d&e=f#gh")
-    XCTAssertEqual(url.pathname, "/foo/bar/baz")
+    url.path = "/foo/bar/baz"
+    XCTAssertEqual(url.serialized, "http://example.com/foo/bar/baz?c=d&e=f#gh")
+    XCTAssertEqual(url.path, "/foo/bar/baz")
     checkOriginalHasNotChanged()
     url = original
     // Query
-    url.search = "?foo=bar&baz=qux"
-    XCTAssertEqual(url.href, "http://example.com/a/b?foo=bar&baz=qux#gh")
-    XCTAssertEqual(url.search, "?foo=bar&baz=qux")
+    url.query = "foo=bar&baz=qux"
+    XCTAssertEqual(url.serialized, "http://example.com/a/b?foo=bar&baz=qux#gh")
+    XCTAssertEqual(url.query, "foo=bar&baz=qux")
     checkOriginalHasNotChanged()
     url = original
     // Fragment
-    url.fragment = "#foo"
-    XCTAssertEqual(url.href, "http://example.com/a/b?c=d&e=f#foo")
-    XCTAssertEqual(url.fragment, "#foo")
+    url.fragment = "foo"
+    XCTAssertEqual(url.serialized, "http://example.com/a/b?c=d&e=f#foo")
+    XCTAssertEqual(url.fragment, "foo")
     checkOriginalHasNotChanged()
-    url = original
   }
 
   // Note: This is likely to be a bit fragile, since it relies on optimisations which might not happen at -Onone.
@@ -153,16 +151,35 @@ extension WebURLTests {
       $0.port = 42
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/a/b?c=d&e=f#gh")
-    // TODO: Add setters as they are implemented in the swift model.
+    // Path
+    checkDoesNotCopy(&url) {
+      $0.path = "/j/k"
+    }
+    XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/j/k?c=d&e=f#gh")
+    // Query
+    checkDoesNotCopy(&url) {
+      $0.query = "m=n&o=p"
+    }
+    XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/j/k?m=n&o=p#gh")
+    // Fragment
+    checkDoesNotCopy(&url) {
+      $0.fragment = "zz"
+    }
+    XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/j/k?m=n&o=p#zz")
   }
 }
+
+// WebURL component tests.
+//
+// The behaviour of getters and setters are tested via the JS model according to the WPT test files.
+// However, the JS model is in many ways not ideal for use in Swift, so these tests only cover deviations from that
+// model, including errors that can be thrown by the setters.
 
 extension WebURLTests {
 
   /// Tests the WebURL scheme setter.
   ///
-  /// Broadly speaking, the setter's behaviour should be tested via the JS model according to the WPT test files.
-  /// However, the JS model is in many ways not ideal for use in Swift, so deviations and extra information (e.g. errors) should be tested here.
+  /// The Swift model deviates from the JS model in that it does not trim or filter the new value when setting.
   ///
   func testSchemeSetter() {
     do {
