@@ -375,16 +375,12 @@ extension URLStorage {
 
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
-  /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
+  /// A value of `nil` removes the query.
   ///
   mutating func setQuery<Input>(
-    to newValue: Input?,
-    filter: Bool = false
+    to newValue: Input?
   ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
 
-    guard filter == false || newValue == nil else {
-      return setQuery(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
-    }
     return setSimpleComponent(
       .query,
       to: newValue,
@@ -396,16 +392,12 @@ extension URLStorage {
 
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
-  /// A value of `nil` removes the query. If `filter` is `true`, ASCII tab and newline characters will be removed from the given string.
+  /// A value of `nil` removes the query.
   ///
   mutating func setFragment<Input>(
-    to newValue: Input?,
-    filter: Bool = false
+    to newValue: Input?
   ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
 
-    guard filter == false || newValue == nil else {
-      return setFragment(to: newValue.map { ASCII.NewlineAndTabFiltered($0) }, filter: false)
-    }
     return setSimpleComponent(
       .fragment,
       to: newValue,
