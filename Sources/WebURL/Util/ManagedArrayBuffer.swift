@@ -12,85 +12,74 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file contains utility types built atop `ManagedBuffer`, including an alternate
-// interface which makes `ManagedBuffer` easier to work with (`AltManagedBufferReference`), and
-// `ManagedArrayBuffer`, which is something like an Array with a user-specified header and tail-allocated contents.
+
+// MARK: - AltManagedBufferReference
+
 
 /// A header for a managed buffer which includes `count` and `capacity` information.
-/// These values are modified by the `ManagedBufferArray` and should never be set outside of that.
+/// These values are set by `ManagedArrayBuffer` and should never be modified outside of that.
 ///
 protocol ManagedBufferHeader {
 
   /// The number of initialized elements that are stored in the allocation attached to this header.
   ///
-  /// It is imperative that this value be kept up-to-date at all times. It is particularly important to consider that when `AltManagedBuffer` is deinitialized,
-  /// elements in the range `0..<count` will automatically be deinitialized as well.
+  /// It is imperative that this value be kept up-to-date at all times.
+  /// When `AltManagedBuffer` is deinitialized, elements in the range `0..<count` will automatically be deinitialized as well.
   ///
   var count: Int { get set }
 
   /// The total number of elements which may be stored in the allocation attached to this header.
   ///
-  /// `AltManagedBuffer` automatically manages this value and no other code should modify it.
-  /// This value is set by using the `withCapacity` function to obtain a copy of an existing header with a new capacity value.
+  /// This value should never be mutated. Headers with the appropriate capacity values for their attached allocations are obtained by
+  /// using the `withCapacity` function to copy an existing header with for use with a different allocation.
   ///
   var capacity: Int { get }
 
   /// Returns a copy of this header, for attaching to a buffer with a different capacity.
   ///
   /// The returned header's `capacity` must be at least as large as `minimumCapacity`, and not greater than `maximumCapacity`.
-  /// If the header is unable to store values as large as `minimumCapacity`, this method returns `nil`.
+  /// If the header is unable to store values as large as `minimumCapacity`, this method must return `nil`.
   ///
   /// - Note: `maximumCapacity` is a value provided by the operating system. Even if you have taken care to ensure this
-  ///         type of header is only constructed in limited situations (for example, when the required capacity fits inside a `UInt8`/is less than 256),
-  ///         the operating system is not aware of those conditions, and may very well provide 259 or even 300+ bytes of space.
-  ///         Again, the header need only be large enough to store a value of `minimumCapacity`.
+  ///         type of header is only constructed for a particular `minimumCapacity`, the `maximumCapacity` may still be larger.
+  ///         The header need only be large enough to store a value of `minimumCapacity`.
   ///
   func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self?
 }
 
 /// An alternative `ManagedBuffer` interface, with the following differences:
 ///
-/// - Rather than allowing/requiring subclassing, the buffer object is encapsulated in a `struct`.
-/// - The initial header must be given as a value at initialisation time.
-/// - The buffer's capacity must be stored in the header. A protocol enforces this, and ensures that the headers of newly-allocated buffers
-///   are automatically set to to the correct value.
-/// - The same header protocol exposes the buffer's initialized count, allowing us to safely deinitialize those objects and implement common utility functions
-///   such as for copying and moving buffers.
-///
-/// Essentially all uses of `ManagedBuffer` do this already. There are times when some of this information is a constant and doesn't need to be
-/// stored; that can be achieved in the header's conformance to `ManagedBufferHeader`.
-///
-/// - important: Note that even though it is a struct, instances of this type have reference semantics.
+/// - It is a `struct` with reference semantics, rather than a `class`.
+/// - The initial `header` must be given as a value at initialisation time.
+/// - The `header` must store the buffer's `count`and `capacity`:
+///   - The `capacity` is automatically set to the correct value when attaching the header to storage.
+///   - Elements in the range `0..<count` are automatically deinitialized when the buffer is destroyed.
 ///
 struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
 
+  /// The private `ManagedBuffer` subclass used by all `AltManagedBufferReference`s.
   private final class _Storage: ManagedBuffer<Header, Element> {
 
-    /// Creates a new buffer with the given capacity and initial header.
-    ///
-    /// The header's `count` is automatically set to 0 (as the uninitialized buffer does not contain anything).
-    /// The addressable capacity may depend on the OS and header type, but must be at least as large as `minimumCapacity`.
-    ///
     static func newBuffer(minimumCapacity: Int, initialHeader: Header) -> Self {
       let buffer = Self.create(minimumCapacity: minimumCapacity) { unsafeBuffer in
-        guard
-          var newHeader = initialHeader.withCapacity(
-            minimumCapacity: minimumCapacity, maximumCapacity: unsafeBuffer.capacity
-          )
+        let actualCapacity = unsafeBuffer.capacity
+        // Create a copy of the header for the new allocation.
+        guard var newHdr = initialHeader.withCapacity(minimumCapacity: minimumCapacity, maximumCapacity: actualCapacity)
         else {
-          preconditionFailure("Failed to create header with desireed capacity")
+          preconditionFailure("Failed to create header with required capacity")
         }
-        precondition(newHeader.capacity >= minimumCapacity)
-        newHeader.count = 0
-        return newHeader
+        precondition((minimumCapacity...actualCapacity).contains(newHdr.capacity), "Header stored incorrect capacity")
+        // The header's `count` must be set to 0 (as the uninitialized buffer does not contain anything).
+        newHdr.count = 0
+        return newHdr
       }
       return unsafeDowncast(buffer, to: Self.self)
     }
 
     deinit {
       // Swift does not specialize generic classes (often? maybe? not sure, but it's flaky).
-      // That means this deinit will never be eliminated, and even querying `.count`
-      // can be very expensive.
+      // That means this deinit will never be eliminated, and everything we do here will be
+      // unspecialized generic code (which is **extremely** expensive).
       // https://bugs.swift.org/browse/SR-13221
       if Swift._isPOD(Element.self) == false {
         _ = withUnsafeMutablePointers { headerPtr, elemsPtr in
@@ -126,31 +115,28 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
     return header.capacity
   }
 
-  /// Call `body` with an `UnsafeMutablePointer` to the stored
-  /// `Header`.
+  /// Call `body` with an `UnsafeMutablePointer` to the stored `Header`.
   ///
-  /// - Note: This pointer is valid only for the duration of the
-  ///   call to `body`.
+  /// - Note: This pointer is valid only for the duration of the call to `body`.
+  ///
   @inlinable
   func withUnsafeMutablePointerToHeader<R>(_ body: (UnsafeMutablePointer<Header>) throws -> R) rethrows -> R {
     return try wrapped.withUnsafeMutablePointerToHeader(body)
   }
 
-  /// Call `body` with an `UnsafeMutablePointer` to the `Element`
-  /// storage.
+  /// Call `body` with an `UnsafeMutablePointer` to the `Element` storage.
   ///
-  /// - Note: This pointer is valid only for the duration of the
-  ///   call to `body`.
+  /// - Note: This pointer is valid only for the duration of the call to `body`.
+  ///
   @inlinable
   func withUnsafeMutablePointerToElements<R>(_ body: (UnsafeMutablePointer<Element>) throws -> R) rethrows -> R {
     return try wrapped.withUnsafeMutablePointerToElements(body)
   }
 
-  /// Call `body` with `UnsafeMutablePointer`s to the stored `Header`
-  /// and raw `Element` storage.
+  /// Call `body` with `UnsafeMutablePointer`s to the stored `Header` and raw `Element` storage.
   ///
-  /// - Note: These pointers are valid only for the duration of the
-  ///   call to `body`.
+  /// - Note: These pointers are valid only for the duration of the call to `body`.
+  ///
   @inlinable
   func withUnsafeMutablePointers<R>(
     _ body: (UnsafeMutablePointer<Header>, UnsafeMutablePointer<Element>) throws -> R
@@ -164,8 +150,9 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
     return isKnownUniquelyReferenced(&wrapped)
   }
 
-  /// Moves the contents of this buffer to a new buffer with the given capacity. The header is copied, although its `capacity` will be adjusted to reflect the new
-  /// buffer's capacity. Afterwards, this buffer's `count` will be 0.
+  /// Moves the contents of this buffer to a new buffer with the given capacity.
+  ///
+  /// The header is copied, although its `capacity` will be adjusted to reflect the new buffer's capacity. Afterwards, this buffer's `count` will be 0.
   ///
   /// - precondition: The given capacity must be sufficient to store all of this buffer's contents.
   ///
@@ -173,6 +160,7 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
     let numElements = count
     precondition(minimumCapacity >= numElements)
     let newBuffer = Self.init(minimumCapacity: minimumCapacity, initialHeader: header)
+    assert(newBuffer.count == 0)
     newBuffer.withUnsafeMutablePointers { destHeader, destElems in
       self.withUnsafeMutablePointers { srcHeader, srcElems in
         destElems.moveInitialize(from: srcElems, count: numElements)
@@ -185,8 +173,9 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
     return newBuffer
   }
 
-  /// Copies the contents of this buffer to a new buffer with the given capacity. The header is copied, although its `capacity` will be adjusted to reflect the new
-  /// buffer's capacity. This buffer remains unchanged.
+  /// Copies the contents of this buffer to a new buffer with the given capacity.
+  ///
+  /// The header is copied, although its `capacity` will be adjusted to reflect the new buffer's capacity. This buffer remains unchanged.
   ///
   /// - precondition: The given capacity must be sufficient to store all of this buffer's contents.
   ///
@@ -194,6 +183,7 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
     let numElements = count
     precondition(minimumCapacity >= numElements)
     let newBuffer = Self.init(minimumCapacity: minimumCapacity, initialHeader: header)
+    assert(newBuffer.count == 0)
     newBuffer.withUnsafeMutablePointers { destHeader, destElemens in
       self.withUnsafeMutablePointerToElements { srcElems in
         destElemens.initialize(from: srcElems, count: numElements)
@@ -206,24 +196,31 @@ struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> {
   }
 }
 
+
 // MARK: - ManagedArrayBuffer
 
-/// A wrapper for an `AltManagedBufferReference` which provides similar convenience methods and semantics to `Array`.
+
+/// A wrapper for an `AltManagedBufferReference` which aims to provide similar convenience methods and semantics to `Array`.
 ///
-/// For example, `ManagedArrayBuffer` provides `RandomAccessCollection` conformance using the buffer's `count`, and
-/// value semantics using copy-on-write. Unfortunately, while `RangeReplaceableCollection` conformance is not possible for arbitrary `Header` types,
-/// `ManagedArrayBuffer` provides an alternative which supports many of the same operations, such as inserting and removing elements in arbitrary subranges
-/// and efficiently growing the storage on-demand.
+/// In particular:
+/// - This is a Copy-on-Write value type.
+/// - The buffer's header is exposed as a property, mutations to which will trigger the buffer to copy to new storage if not a unique reference.
+/// - The buffer's elements are exposed as a `RandomAccessCollection` for reading and a `MutableCollection` for writing. Again, mutations
+///   will trigger a copy if not a unique reference.
+/// - Indicies are bounds-checked.
 ///
-/// `ManagedArrayBuffer` only grows its capacity to exactly fit the number of elements being inserted; it does not employ any sort
-/// of predictive growth strategy (although capacity may allocated in advance using `reserveCapacity`). It also does not shrink its storage,
-/// although a fresh allocation produced by copy-on-write during a no-op operation such as `reserveCapacity(0)` will occupy the smallest possible space.
+/// Some features of `Array` are not supported:
+/// - No `RangeReplaceableCollection` conformance. However, this type does provide the `replaceSubrange` and `append` methods.
+/// - No predictive growth strategy (although capacity may allocated in advance using `reserveCapacity`).
+/// - No shrinking of storage, although a fresh allocation produced by copy-on-write during a no-op operation such as `reserveCapacity(0)`
+///   will occupy the smallest possible space.
 ///
 struct ManagedArrayBuffer<Header: ManagedBufferHeader, Element> {
-  var storage: AltManagedBufferReference<Header, Element>
+  private var storage: AltManagedBufferReference<Header, Element>
 
   /// Creates a new `ManagedArrayBuffer` with the given minimum capacity and header.
-  /// The new header's `count` is automatically set to `0`, and its `capacity` is set according to the behaviour described by `ManagedBufferHeader`.
+  ///
+  /// The new header's `count` is automatically set to `0`, and its `capacity` is set appropriately for the allocated storage.
   ///
   init(minimumCapacity: Int, initialHeader: Header) {
     self.storage = .init(minimumCapacity: minimumCapacity, initialHeader: initialHeader)
@@ -257,44 +254,111 @@ struct ManagedArrayBuffer<Header: ManagedBufferHeader, Element> {
   }
 }
 
-// Array APIs.
-
 extension ManagedArrayBuffer {
 
-  func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<Element>) throws -> R) rethrows -> R {
-    return try storage.withUnsafeMutablePointerToElements {
-      return try body(UnsafeBufferPointer(start: $0, count: count))
+  /// Ensures that this buffer's has sufficient capacity to store at least the specified number of elements.
+  ///
+  /// If the buffer already has sufficient capacity, calling this function will also ensure that it has a unique reference to its storage.
+  ///
+  mutating func reserveCapacity(_ minimumCapacity: Int) {
+    let isUnique = storage.isKnownUniqueReference()
+    if _slowPath(!isUnique || storage.capacity < minimumCapacity) {
+      let newCapacity = Swift.max(minimumCapacity, storage.count)
+      if isUnique {
+        storage = storage.moveToNewBuffer(minimumCapacity: newCapacity)
+      } else {
+        storage = storage.copyToNewBuffer(minimumCapacity: newCapacity)
+      }
+    }
+    precondition(storage.capacity >= minimumCapacity)
+    precondition(storage.isKnownUniqueReference())
+  }
+
+  /// Appends space for the given number of objects, but leaves the initialization of that space to the given closure.
+  ///
+  /// - important: The closure must initialize **exactly** `uninitializedCapacity` elements, else a runtime error will be triggered.
+  /// - returns:   The collection's new `endIndex`.
+  ///
+  @discardableResult
+  mutating func unsafeAppend(
+    uninitializedCapacity: Int, initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int
+  ) -> Index {
+
+    let oldCount = self.count
+    let newCount = oldCount + uninitializedCapacity
+    reserveCapacity(newCount)
+    assert(storage.isKnownUniqueReference(), "reserveCapacity should have made this unique")
+
+    storage.withUnsafeMutablePointerToElements { elements in
+      var uninitializedBuffer = UnsafeMutableBufferPointer(start: elements + oldCount, count: uninitializedCapacity)
+      let n = initializer(&uninitializedBuffer)
+      precondition(n == uninitializedCapacity)
+    }
+    storage.header.count = newCount
+    return newCount
+  }
+
+  private struct StorageHolder: BufferContainer {
+    var bufferRef: AltManagedBufferReference<Header, Element>
+    func withUnsafeMutablePointerToElements<R>(_ body: (UnsafeMutablePointer<Element>) throws -> R) rethrows -> R {
+      return try bufferRef.withUnsafeMutablePointerToElements(body)
     }
   }
 
-  mutating func withUnsafeMutableBufferPointer<R>(
-    _ body: (inout UnsafeMutableBufferPointer<Element>) throws -> R
-  ) rethrows -> R {
-    ensureUnique()
-    return try storage.withUnsafeMutablePointerToElements {
-      var ptr = UnsafeMutableBufferPointer(start: $0, count: count)
-      return try body(&ptr)
+  /// Replaces the given subrange with uninitialized space for a given number of objects, but leaves the initialization of that space to the given closure.
+  ///
+  /// - important: The closure must initialize **exactly** `uninitializedCapacity` elements, else a runtime error will be triggered.
+  /// - returns:   The indices of the initialized elements.
+  ///
+  @discardableResult
+  mutating func unsafeReplaceSubrange(
+    _ subrange: Range<Index>,
+    withUninitializedCapacity newSubrangeCount: Int,
+    initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int
+  ) -> Range<Index> {
+
+    let isUnique = storage.isKnownUniqueReference()
+    let result = storage.withUnsafeMutablePointerToElements { elems in
+      return replaceElements(
+        in: UnsafeMutableBufferPointer(start: elems, count: storage.capacity),
+        initializedCount: storage.count,
+        isUnique: isUnique,
+        subrange: subrange,
+        withElements: newSubrangeCount,
+        initializedWith: initializer,
+        storageConstructor: { StorageHolder(bufferRef: .init(minimumCapacity: $0, initialHeader: storage.header)) }
+      )
     }
+    // Update the count of our existing storage. Its contents may have been moved out.
+    self.storage.header.count = result.bufferCount
+    // Adopt any new storage that was allocated.
+    if var newStorage = result.newStorage?.bufferRef {
+      newStorage.header.count = result.newStorageCount
+      self.storage = newStorage
+    }
+    return subrange.lowerBound..<(subrange.lowerBound + result.insertedCount)
   }
 }
+
+// Collection protocols.
 
 extension ManagedArrayBuffer: RandomAccessCollection {
   typealias Index = Int
 
-  var startIndex: Int {
+  var startIndex: Index {
     return 0
   }
-  var endIndex: Int {
+  var endIndex: Index {
     return storage.count
   }
-  var count: Int {
+  var count: Index {
     return storage.count
   }
-  func index(after i: Int) -> Int {
+  func index(after i: Index) -> Index {
     precondition(i < endIndex, "Cannot increment endIndex")
     return i &+ 1
   }
-  func index(before i: Int) -> Int {
+  func index(before i: Index) -> Index {
     precondition(i > startIndex, "Cannot decrement startIndex")
     return i &- 1
   }
@@ -310,7 +374,7 @@ extension ManagedArrayBuffer: RandomAccessCollection {
 
 extension ManagedArrayBuffer: MutableCollection {
 
-  subscript(position: Int) -> Element {
+  subscript(position: Index) -> Element {
     get {
       precondition(position >= startIndex && position < endIndex, "Index out of bounds")
       return storage.withUnsafeMutablePointerToElements { $0.advanced(by: position).pointee }
@@ -319,44 +383,18 @@ extension ManagedArrayBuffer: MutableCollection {
       precondition(position >= startIndex && position < endIndex, "Index out of bounds")
       ensureUnique()
       return storage.withUnsafeMutablePointerToElements {
-        $0.advanced(by: position).assign(repeating: newValue, count: 1)
+        $0.advanced(by: position).pointee = newValue
       }
-    }
-    _modify {
-      precondition(position >= startIndex && position < endIndex, "Index out of bounds")
-      ensureUnique()
-      let ptr = storage.withUnsafeMutablePointerToElements { $0.advanced(by: position) }
-      yield &ptr.pointee
-      withExtendedLifetime(storage) {}
     }
   }
 }
 
-extension ManagedArrayBuffer: AltRangeReplaceableCollection {
+// RRC-lite.
 
-  mutating func reserveCapacity(_ minimumCapacity: Int) {
-    let isUnique = storage.isKnownUniqueReference()
-    if _slowPath(!isUnique || storage.capacity < minimumCapacity) {
-      let newCapacity = Swift.max(minimumCapacity, storage.count)
-      if isUnique {
-        storage = storage.moveToNewBuffer(minimumCapacity: newCapacity)
-      } else {
-        storage = storage.copyToNewBuffer(minimumCapacity: newCapacity)
-      }
-    }
-    precondition(storage.capacity >= minimumCapacity)
-    precondition(storage.isKnownUniqueReference())
-  }
-
-  private struct StorageHolder: BufferContainer {
-    var bufferReference: AltManagedBufferReference<Header, Element>
-    func withUnsafeMutablePointerToElements<R>(_ body: (UnsafeMutablePointer<Element>) throws -> R) rethrows -> R {
-      return try bufferReference.withUnsafeMutablePointerToElements(body)
-    }
-  }
+extension ManagedArrayBuffer {
 
   @discardableResult
-  mutating func replaceSubrange<C>(_ subrange: Range<Int>, with newElements: C) -> Range<Int>
+  mutating func replaceSubrange<C>(_ subrange: Range<Index>, with newElements: C) -> Range<Index>
   where C: Collection, Self.Element == C.Element {
     return unsafeReplaceSubrange(subrange, withUninitializedCapacity: newElements.count) { buffer in
       return buffer.initialize(from: newElements).1
@@ -364,7 +402,7 @@ extension ManagedArrayBuffer: AltRangeReplaceableCollection {
   }
 
   @discardableResult
-  mutating func append<S>(contentsOf newElements: S) -> Range<Self.Index> where S: Sequence, Self.Element == S.Element {
+  mutating func append<S>(contentsOf newElements: S) -> Range<Index> where S: Sequence, Self.Element == S.Element {
     let preAppendEnd = endIndex
 
     var result: (S.Iterator, Int)?
@@ -377,66 +415,37 @@ extension ManagedArrayBuffer: AltRangeReplaceableCollection {
     }
     return Range(uncheckedBounds: (preAppendEnd, endIndex))
   }
+
+  @discardableResult
+  mutating func append(_ element: Element) -> Index {
+    append(contentsOf: CollectionOfOne(element)).upperBound
+  }
 }
 
 // Extensions.
 
 extension ManagedArrayBuffer {
 
-  /// Appends space for the given number of objects, but leaves the initialization of that space to the given closure.
-  ///
-  /// - important: The closure must initialize **exactly** `uninitializedCapacity` elements.
-  ///
-  mutating func unsafeAppend(
-    uninitializedCapacity: Int, initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int
-  ) {
-    let oldCount = self.count
-    let newCount = oldCount + uninitializedCapacity
-    reserveCapacity(newCount)
-    assert(storage.isKnownUniqueReference(), "reserveCapacity should have made this unique")
-
-    storage.withUnsafeMutablePointerToElements { elements in
-      var uninitializedBuffer = UnsafeMutableBufferPointer(start: elements + oldCount, count: uninitializedCapacity)
-      let n = initializer(&uninitializedBuffer)
-      precondition(n == uninitializedCapacity)
+  func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<Element>) throws -> R) rethrows -> R {
+    try storage.withUnsafeMutablePointerToElements {
+      try body(UnsafeBufferPointer(start: $0, count: count))
     }
-    storage.header.count = newCount
   }
 
-  @discardableResult
-  mutating func unsafeReplaceSubrange(
-    _ subrange: Range<Int>,
-    withUninitializedCapacity newSubrangeCount: Int,
-    initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int
-  ) -> Range<Int> {
-
-    let isUnique = storage.isKnownUniqueReference()
-    let result = storage.withUnsafeMutablePointerToElements { elems in
-      return replaceElements(
-        in: UnsafeMutableBufferPointer(start: elems, count: storage.capacity),
-        initializedCount: storage.count,
-        isUnique: isUnique,
-        subrange: subrange,
-        withElements: newSubrangeCount,
-        initializedWith: initializer,
-        storageConstructor: {
-          StorageHolder(bufferReference: .init(minimumCapacity: $0, initialHeader: storage.header))
-        }
-      )
+  mutating func withUnsafeMutableBufferPointer<R>(
+    _ body: (inout UnsafeMutableBufferPointer<Element>) throws -> R
+  ) rethrows -> R {
+    ensureUnique()
+    return try storage.withUnsafeMutablePointerToElements {
+      var ptr = UnsafeMutableBufferPointer(start: $0, count: count)
+      return try body(&ptr)
     }
-    // Update the count of our existing storage. Its contents may have been moved out.
-    self.storage.header.count = result.bufferCount
-    // Adopt any new storage that was allocated.
-    if var newStorage = result.newStorage?.bufferReference {
-      newStorage.header.count = result.newStorageCount
-      self.storage = newStorage
-    }
-    return subrange.lowerBound..<(subrange.lowerBound + result.insertedCount)
   }
 
-  func withElements<T>(range: Range<Index>, _ block: (UnsafeBufferPointer<Element>) throws -> T) rethrows -> T {
-    precondition(range.startIndex >= startIndex, "Invalid startIndex")
-    precondition(range.endIndex <= endIndex, "Invalid endIndex")
+  func withUnsafeBufferPointer<R>(
+    range: Range<Index>, _ block: (UnsafeBufferPointer<Element>) throws -> R
+  ) rethrows -> R {
+    precondition(range.startIndex >= startIndex && range.endIndex <= endIndex, "Range is out of bounds")
     return try storage.withUnsafeMutablePointerToElements { elements in
       let slice = UnsafeBufferPointer(start: elements + range.startIndex, count: range.count)
       return try block(slice)

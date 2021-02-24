@@ -545,7 +545,7 @@ extension URLStorage {
 
   func withComponentBytes<T>(_ component: WebURL.Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
     guard let range = header.structure.range(of: component) else { return block(nil) }
-    return codeUnits.withElements(range: range, block)
+    return codeUnits.withUnsafeBufferPointer(range: range, block)
   }
 
   func stringForComponent(_ component: WebURL.Component) -> String? {
@@ -565,7 +565,7 @@ extension URLStorage {
   ) -> T {
     let urlStructure = header.structure
     guard let range = urlStructure.rangeOfAuthorityString else { return block(nil, 0, 0, 0, 0) }
-    return codeUnits.withElements(range: Range(uncheckedBounds: (range.lowerBound, range.upperBound))) {
+    return codeUnits.withUnsafeBufferPointer(range: Range(uncheckedBounds: (range.lowerBound, range.upperBound))) {
       buffer in
       block(
         buffer,
