@@ -311,7 +311,7 @@ extension LazilyPercentEncoded where Source: BidirectionalCollection {
 
 extension LazyCollectionProtocol where Element == UInt8 {
 
-  typealias LazilyPercentDecodedWithoutSubstitutions = LazilyPercentDecoded<Self, PassthroughEncodeSet>
+  typealias LazilyPercentDecodedWithoutSubstitutions = LazilyPercentDecoded<Elements, PassthroughEncodeSet>
 
   /// Returns a view of this collection with percent-encoded byte sequences ("%ZZ") replaced by the byte 0xZZ.
   ///
@@ -321,7 +321,7 @@ extension LazyCollectionProtocol where Element == UInt8 {
   /// - seealso: `LazilyPercentDecoded`
   ///
   var percentDecoded: LazilyPercentDecodedWithoutSubstitutions {
-    return LazilyPercentDecoded(source: self)
+    return LazilyPercentDecoded(source: elements)
   }
 
   /// Returns a view of this collection with percent-encoded byte sequences ("%ZZ") replaced by the byte 0xZZ.
@@ -330,8 +330,8 @@ extension LazyCollectionProtocol where Element == UInt8 {
   ///
   /// - seealso: `LazilyPercentDecoded`
   ///
-  func percentDecoded<EncodeSet>(using encodeSet: EncodeSet.Type) -> LazilyPercentDecoded<Self, EncodeSet> {
-    return LazilyPercentDecoded(source: self)
+  func percentDecoded<EncodeSet>(using encodeSet: EncodeSet.Type) -> LazilyPercentDecoded<Elements, EncodeSet> {
+    return LazilyPercentDecoded(source: elements)
   }
 }
 
