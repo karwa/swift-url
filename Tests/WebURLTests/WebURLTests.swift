@@ -17,7 +17,7 @@ import XCTest
 
 @testable import WebURL
 
-class WebURLTests: XCTestCase {}
+class WebURLTests: ReportGeneratingTestCase {}
 
 extension WebURLTests {
 
@@ -39,7 +39,7 @@ extension WebURLTests {
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     // Generate a report file because the XCTest ones really aren't that helpful.
-    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_constructor_more.txt")
+    let reportURL = fileURLForReport(named: "weburl_constructor_more.txt")
     try harness.report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
   }
