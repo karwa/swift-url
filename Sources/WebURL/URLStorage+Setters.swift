@@ -192,12 +192,19 @@ extension URLStorage {
       oldStructure.usernameLength != 0 || oldStructure.passwordLength != 0 || oldStructure.portLength != 0
 
     guard let newHostnameBytes = newValue, newHostnameBytes.isEmpty == false else {
+      // Special schemes (except file) do not support nil/empty hostnames.
       if oldStructure.schemeKind.isSpecial, oldStructure.schemeKind != .file {
         return (AnyURLStorage(self), .error(.schemeDoesNotSupportNilOrEmptyHostnames))
       }
+      // File does not support nil hostnames, only empty.
+      if oldStructure.schemeKind == .file, newValue == nil {
+        return (AnyURLStorage(self), .error(.schemeDoesNotSupportNilOrEmptyHostnames))
+      }
+      // Cannot set empty/nil hostname if there are credentials or a port number.
       guard hasCredentialsOrPort == false else {
         return (AnyURLStorage(self), .error(.cannotSetEmptyHostnameWithCredentialsOrPort))
       }
+      // Can only set a nil hostname if there is a path.
       guard !(oldStructure.pathLength == 0 && newValue == nil) else {
         return (AnyURLStorage(self), .error(.cannotRemoveHostnameWithoutPath))
       }
