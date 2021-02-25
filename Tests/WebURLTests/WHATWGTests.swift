@@ -28,7 +28,7 @@ import XCTest
 // https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json
 // at version 050308a616a8388f1ad5d6e87eac0270fd35023f (unaltered).
 
-final class WHATWGTests: XCTestCase {}
+final class WHATWGTests: ReportGeneratingTestCase {}
 
 // WHATWG URL Constructor Tests.
 // Creates a URL object from a (input: String, base: String) pair, and checks that it has the expected
@@ -68,7 +68,8 @@ extension WHATWGTests {
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     // Generate a report file because the XCTest ones really aren't that helpful.
-    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("weburl_constructor_wpt.txt")
+
+    let reportURL = fileURLForReport(named: "weburl_constructor_wpt.txt")
     try harness.report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
   }
@@ -214,7 +215,7 @@ extension WHATWGTests {
     }
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
 
-    let reportURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(reportName)
+    let reportURL = fileURLForReport(named: reportName)
     try report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
   }
