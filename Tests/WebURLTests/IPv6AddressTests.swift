@@ -49,10 +49,16 @@ extension ValidationError {
   }
 }
 
+#if canImport(Darwin)
+  let in6_union_property = \in6_addr.__u6_addr
+#else
+  let in6_union_property = \in6_addr.__in6_u
+#endif
+
 fileprivate func pton_octets(_ input: String) -> [UInt8]? {
   var result = in6_addr()
   guard inet_pton(AF_INET6, input, &result) != 0 else { return nil }
-  return withUnsafeBytes(of: &result.__u6_addr.__u6_addr8) { ptr in
+  return withUnsafeBytes(of: &result[keyPath: in6_union_property].__u6_addr8) { ptr in
     let u16 = ptr.bindMemory(to: UInt8.self)
     return Array(u16)
   }
@@ -61,7 +67,7 @@ fileprivate func pton_octets(_ input: String) -> [UInt8]? {
 fileprivate func pton_pieces(_ input: String) -> [UInt16]? {
   var result = in6_addr()
   guard inet_pton(AF_INET6, input, &result) != 0 else { return nil }
-  return withUnsafeBytes(of: &result.__u6_addr.__u6_addr16) { ptr in
+  return withUnsafeBytes(of: &result[keyPath: in6_union_property].__u6_addr16) { ptr in
     let u16 = ptr.bindMemory(to: UInt16.self)
     return Array(u16)
   }
@@ -69,22 +75,22 @@ fileprivate func pton_pieces(_ input: String) -> [UInt16]? {
 
 fileprivate func ntop_octets(_ input: [UInt8]) -> String? {
   var src = in6_addr()
-  src.__u6_addr.__u6_addr8.0 = input[0]
-  src.__u6_addr.__u6_addr8.1 = input[1]
-  src.__u6_addr.__u6_addr8.2 = input[2]
-  src.__u6_addr.__u6_addr8.3 = input[3]
-  src.__u6_addr.__u6_addr8.4 = input[4]
-  src.__u6_addr.__u6_addr8.5 = input[5]
-  src.__u6_addr.__u6_addr8.6 = input[6]
-  src.__u6_addr.__u6_addr8.7 = input[7]
-  src.__u6_addr.__u6_addr8.8 = input[8]
-  src.__u6_addr.__u6_addr8.9 = input[9]
-  src.__u6_addr.__u6_addr8.10 = input[10]
-  src.__u6_addr.__u6_addr8.11 = input[11]
-  src.__u6_addr.__u6_addr8.12 = input[12]
-  src.__u6_addr.__u6_addr8.13 = input[13]
-  src.__u6_addr.__u6_addr8.14 = input[14]
-  src.__u6_addr.__u6_addr8.15 = input[15]
+  src[keyPath: in6_union_property].__u6_addr8.0 = input[0]
+  src[keyPath: in6_union_property].__u6_addr8.1 = input[1]
+  src[keyPath: in6_union_property].__u6_addr8.2 = input[2]
+  src[keyPath: in6_union_property].__u6_addr8.3 = input[3]
+  src[keyPath: in6_union_property].__u6_addr8.4 = input[4]
+  src[keyPath: in6_union_property].__u6_addr8.5 = input[5]
+  src[keyPath: in6_union_property].__u6_addr8.6 = input[6]
+  src[keyPath: in6_union_property].__u6_addr8.7 = input[7]
+  src[keyPath: in6_union_property].__u6_addr8.8 = input[8]
+  src[keyPath: in6_union_property].__u6_addr8.9 = input[9]
+  src[keyPath: in6_union_property].__u6_addr8.10 = input[10]
+  src[keyPath: in6_union_property].__u6_addr8.11 = input[11]
+  src[keyPath: in6_union_property].__u6_addr8.12 = input[12]
+  src[keyPath: in6_union_property].__u6_addr8.13 = input[13]
+  src[keyPath: in6_union_property].__u6_addr8.14 = input[14]
+  src[keyPath: in6_union_property].__u6_addr8.15 = input[15]
   let str = String(_unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) {
     return $0.withMemoryRebound(to: CChar.self) {
       let p = inet_ntop(AF_INET6, &src, $0.baseAddress, socklen_t($0.count))
@@ -97,14 +103,14 @@ fileprivate func ntop_octets(_ input: [UInt8]) -> String? {
 
 fileprivate func ntop_pieces(_ input: [UInt16]) -> String? {
   var src = in6_addr()
-  src.__u6_addr.__u6_addr16.0 = input[0]
-  src.__u6_addr.__u6_addr16.1 = input[1]
-  src.__u6_addr.__u6_addr16.2 = input[2]
-  src.__u6_addr.__u6_addr16.3 = input[3]
-  src.__u6_addr.__u6_addr16.4 = input[4]
-  src.__u6_addr.__u6_addr16.5 = input[5]
-  src.__u6_addr.__u6_addr16.6 = input[6]
-  src.__u6_addr.__u6_addr16.7 = input[7]
+  src[keyPath: in6_union_property].__u6_addr16.0 = input[0]
+  src[keyPath: in6_union_property].__u6_addr16.1 = input[1]
+  src[keyPath: in6_union_property].__u6_addr16.2 = input[2]
+  src[keyPath: in6_union_property].__u6_addr16.3 = input[3]
+  src[keyPath: in6_union_property].__u6_addr16.4 = input[4]
+  src[keyPath: in6_union_property].__u6_addr16.5 = input[5]
+  src[keyPath: in6_union_property].__u6_addr16.6 = input[6]
+  src[keyPath: in6_union_property].__u6_addr16.7 = input[7]
   let str = String(_unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) {
     return $0.withMemoryRebound(to: CChar.self) {
       let p = inet_ntop(AF_INET6, &src, $0.baseAddress, socklen_t($0.count))

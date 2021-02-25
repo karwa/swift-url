@@ -17,7 +17,7 @@ import XCTest
 
 class ReportGeneratingTestCase: XCTestCase {
 
-  private static let reportDir = ProcessInfo().environment["SWIFT_URL_REPORT_PATH"] ?? NSTemporaryDirectory()
+  private static let reportDir = ProcessInfo.processInfo.environment["SWIFT_URL_REPORT_PATH"] ?? NSTemporaryDirectory()
 
   override class func setUp() {
     try? FileManager.default.createDirectory(atPath: reportDir, withIntermediateDirectories: true, attributes: nil)
