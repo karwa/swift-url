@@ -675,3 +675,53 @@ extension WebURLTests {
     }
   }
 }
+
+
+// MARK: - Host
+
+
+extension WebURLTests {
+
+  func testHost() {
+
+    // Non-IP hostnames in special URLs are always domains.
+    let url1 = WebURL("http://example.com/aPath?aQuery#andFragment, too")!
+    if case .domain("example.com") = url1.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url1.host))")
+    }
+
+    // Non-IP hostnames in non-special URLs are always opaque hostnames.
+    let url2 = WebURL("foo://example.com/aPath?aQuery#andFragment, too")!
+    if case .opaque("example.com") = url2.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url2.host))")
+    }
+
+    // Special URLs detect IPv4 addresses.
+    let url3 = WebURL("http://0xbadf00d/aPath?aQuery#andFragment, too")!
+    if case .ipv4Address(.init(octets: (11, 173, 240, 13))) = url3.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url3.host))")
+    }
+    // Non-special URLs do not.
+    let url4 = WebURL("foo://11.173.240.13/aPath?aQuery#andFragment, too")!
+    if case .opaque("11.173.240.13") = url4.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url4.host))")
+    }
+
+    // Both special and non-special URLs detect IPv6 addresses.
+    let url5 = WebURL("http://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
+    if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url5.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url5.host))")
+    }
+
+    let url6 = WebURL("foo://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
+    if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url6.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url6.host))")
+    }
+  }
+}
