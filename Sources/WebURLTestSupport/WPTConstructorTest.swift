@@ -142,6 +142,9 @@ extension URLConstructorTest.Testcase: Equatable, Hashable, Codable {
     try container.encode(base, forKey: .base)
     if let expectedValues = expectedValues {
       try container.encode(expectedValues.href, forKey: .href)
+      if let origin = expectedValues.origin {
+        try container.encode(origin, forKey: .origin)
+      }
       try container.encode(expectedValues.protocol, forKey: .protocol)
       try container.encode(expectedValues.username, forKey: .username)
       try container.encode(expectedValues.password, forKey: .password)
@@ -175,12 +178,12 @@ extension URLConstructorTest.Testcase: CustomStringConvertible {
         .base:     \(base)
 
         .href:     \(expectedValues.href)
+        .origin:   \(expectedValues.origin ?? "<not present>")
         .protocol: \(expectedValues.`protocol`)
         .username: \(expectedValues.username)
         .password: \(expectedValues.password)
         .host:     \(expectedValues.host)
         .hostname: \(expectedValues.hostname)
-        .origin:   \(expectedValues.origin ?? "<not present>")
         .port:     \(expectedValues.port)
         .pathname: \(expectedValues.pathname)
         .search:   \(expectedValues.search)
@@ -325,7 +328,7 @@ extension URLConstructorTest.Harness {
       }
 
       if let expectedValues = testcase.expectedValues {
-        if !parsedVals.unequalURLProperties(comparedWith: expectedValues).isEmpty {
+        if !parsedVals.allMismatchingURLProperties(comparedWith: expectedValues).isEmpty {
           failures.insert(.propertyMismatch)
         }
       } else {
@@ -339,7 +342,7 @@ extension URLConstructorTest.Harness {
         failures.insert(.notIdempotent)
         continue
       }
-      if !parsedVals.unequalURLProperties(comparedWith: reparsed).isEmpty {
+      if !parsedVals.allMismatchingURLProperties(comparedWith: reparsed).isEmpty {
         failures.insert(.notIdempotent)
       }
     }

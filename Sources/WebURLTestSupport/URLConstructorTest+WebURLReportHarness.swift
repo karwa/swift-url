@@ -68,7 +68,7 @@ extension URLConstructorTest.WebURLReportHarness: URLConstructorTest.Harness {
         }
         if let _ = remainingFailures.remove(.propertyMismatch) {
           let diff = URLValues.diff(result.testcase.expectedValues, result.propertyValues)
-          let namedDiff = URLValues.allTestableURLProperties.filter { diff.contains($0.keyPath) }
+          let namedDiff = URLValues.allProperties.filter { diff.contains($0.keyPath) }
           assert(!diff.isEmpty && !namedDiff.isEmpty, "Test failed due to mismatching properties, but diff was empty")
           for (mismatchingPropertyName, _) in namedDiff {
             reporter.fail(mismatchingPropertyName)
