@@ -675,3 +675,130 @@ extension WebURLTests {
     }
   }
 }
+
+
+// MARK: - Host and Origin
+
+
+extension WebURLTests {
+
+  func testHost() {
+
+    // Non-IP hostnames in special URLs are always domains.
+    let url1 = WebURL("http://example.com/aPath?aQuery#andFragment, too")!
+    if case .domain("example.com") = url1.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url1.host))")
+    }
+
+    // Non-IP hostnames in non-special URLs are always opaque hostnames.
+    let url2 = WebURL("foo://example.com/aPath?aQuery#andFragment, too")!
+    if case .opaque("example.com") = url2.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url2.host))")
+    }
+
+    // Special URLs detect IPv4 addresses.
+    let url3 = WebURL("http://0xbadf00d/aPath?aQuery#andFragment, too")!
+    if case .ipv4Address(.init(octets: (11, 173, 240, 13))) = url3.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url3.host))")
+    }
+    // Non-special URLs do not.
+    let url4 = WebURL("foo://11.173.240.13/aPath?aQuery#andFragment, too")!
+    if case .opaque("11.173.240.13") = url4.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url4.host))")
+    }
+
+    // Both special and non-special URLs detect IPv6 addresses.
+    let url5 = WebURL("http://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
+    if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url5.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url5.host))")
+    }
+
+    let url6 = WebURL("foo://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
+    if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url6.host {
+    } else {
+      XCTFail("Unexpected host: \(String(describing: url6.host))")
+    }
+  }
+
+  func testOrigin() {
+
+    // Special URLs return non-opaque origins.
+    // Are same-origin WRT other paths, queries, fragments at... err... the same origin.
+    if let origin = WebURL("https://example.com/index.html")?.origin {
+      XCTAssertEqual(origin.serialized, "https://example.com")
+      XCTAssertFalse(origin.isOpaque)
+      XCTAssertEqual(origin, WebURL("https://example.com:443/some_resource.png?the_answer=42#test")?.origin)
+      XCTAssertNotEqual(origin, WebURL("https://test.com/")?.origin)
+    } else {
+      XCTFail("Failed to parse valid URL")
+    }
+
+    // Port number included if not the default. Different port numbers are not same-origin.
+    if let origin = WebURL("http://localhost:8080/index.html")?.origin {
+      XCTAssertEqual(origin.serialized, "http://localhost:8080")
+      XCTAssertFalse(origin.isOpaque)
+      XCTAssertEqual(origin, WebURL("http://localhost:8080/some_resource.png?query=true#frag-it")?.origin)
+      XCTAssertNotEqual(origin, WebURL("http://localhost:80/")?.origin)
+    } else {
+      XCTFail("Failed to parse valid URL")
+    }
+
+    // Cannot-be-a-base 'blob:' URLs have the same origin as the URL parsed from their path.
+    if let origin = WebURL("blob:https://example.com:443/index.html")?.origin {
+      XCTAssertEqual(origin.serialized, "https://example.com")
+      XCTAssertFalse(origin.isOpaque)
+      XCTAssertEqual(origin, WebURL("https://example.com/some_resource.txt?q=🐟#🦆=👹")?.origin)
+    } else {
+      XCTFail("Failed to parse valid URL")
+    }
+
+    // Non-cannot-be-a-base 'blob:' URLs are always opaque.
+    if let origin = WebURL("blob:///https://example.com:443/index.html")?.origin {
+      XCTAssertEqual(origin.serialized, "null")
+      XCTAssertTrue(origin.isOpaque)
+      XCTAssertNotEqual(origin, origin)
+      XCTAssertNotEqual(origin, WebURL("blob:https://example.com")?.origin)
+    } else {
+      XCTFail("Failed to parse valid URL")
+    }
+
+    // Cannot-be-a-base 'blob:' URLs have opaque origins if their path is not a valid URL string.
+    if let origin = WebURL("blob:this is not a URL")?.origin {
+      XCTAssertEqual(origin.serialized, "null")
+      XCTAssertTrue(origin.isOpaque)
+      XCTAssertNotEqual(origin, origin)
+      XCTAssertNotEqual(origin, WebURL("blob:also not a URL")?.origin)
+    } else {
+      XCTFail("Failed to parse valid URL")
+    }
+
+    // 'file' URLs have opaque origins.
+    if let origin = WebURL("file:///usr/bin/swift")?.origin {
+      XCTAssertEqual(origin.serialized, "null")
+      XCTAssertTrue(origin.isOpaque)
+      XCTAssertNotEqual(origin, origin)
+      XCTAssertNotEqual(origin, WebURL("file:///var/tmp/somefile")?.origin)
+    } else {
+      XCTFail("Failed to parse valid URL")
+    }
+
+    // Opaque hosts are not equal to each other.
+    do {
+      let myURL = WebURL("foo://exampleHost:4567/")!
+      XCTAssertTrue(myURL.origin.isOpaque)
+      XCTAssertFalse(myURL.origin == myURL.origin)
+
+      var seenOrigins: Set = [myURL.origin]
+      XCTAssertFalse(seenOrigins.contains(myURL.origin))
+      XCTAssertTrue(seenOrigins.insert(myURL.origin).inserted)
+      XCTAssertTrue(seenOrigins.insert(myURL.origin).inserted)
+      XCTAssertTrue(seenOrigins.insert(myURL.origin).inserted)
+      XCTAssertFalse(seenOrigins.contains(myURL.origin))
+    }
+  }
+}

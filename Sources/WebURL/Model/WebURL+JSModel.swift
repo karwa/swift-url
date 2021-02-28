@@ -108,6 +108,10 @@ extension WebURL.JSModel {
     }
   }
 
+  public var origin: String {
+    swiftModel.origin.serialized
+  }
+
   public var username: String {
     get {
       swiftModel.username ?? ""
@@ -280,6 +284,7 @@ extension WebURL.JSModel: CustomStringConvertible, TextOutputStreamable {
     return """
       {
         .href:     \(href)
+        .origin:   \(origin)
         .protocol: \(scheme) (\(schemeKind))
         .username: \(username)
         .password: \(password)
