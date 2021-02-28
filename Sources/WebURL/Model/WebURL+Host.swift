@@ -33,11 +33,6 @@ extension WebURL {
     case opaque(String)
     case empty
   }
-}
-
-extension WebURL.Host: Equatable, Hashable {}
-
-extension WebURL {
 
   /// The host of this URL, if present.
   ///
@@ -61,6 +56,36 @@ extension WebURL {
       return .domain(hostname)
     case .opaque:
       return .opaque(hostname)
+    }
+  }
+}
+
+// Standard protocols.
+
+extension WebURL.Host: Equatable, Hashable {}
+
+extension WebURL.Host: CustomStringConvertible {
+
+  public var description: String {
+    serialized
+  }
+}
+
+// Serialization.
+
+extension WebURL.Host {
+
+  /// The string representation of this host.
+  ///
+  /// The serialization format is defined by the [URL Standard](https://url.spec.whatwg.org/#host-serializing).
+  /// This is the same as the URL's `hostname` property.
+  ///
+  public var serialized: String {
+    switch self {
+    case .ipv4Address(let address): return address.serialized
+    case .ipv6Address(let address): return "[\(address.serialized)]"
+    case .domain(let name), .opaque(let name): return name
+    case .empty: return ""
     }
   }
 }
