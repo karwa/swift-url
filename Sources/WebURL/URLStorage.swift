@@ -582,6 +582,26 @@ extension URLStorage {
 // MARK: - Setter Utilities.
 
 
+/// A command object which represents a replacement operation on some URL code-units.
+///
+struct ReplaceSubrangeOperation {
+  var subrange: Range<Int>
+  var insertedCount: Int
+  var writer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+
+  /// - seealso: `URLStorage.replaceSubrange`
+  static func replace(
+    subrange: Range<Int>, withCount: Int, writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+  ) -> Self {
+    return .init(subrange: subrange, insertedCount: withCount, writer: writer)
+  }
+
+  /// - seealso: `URLStorage.removeSubrange`
+  static func remove(subrange: Range<Int>) -> Self {
+    return .replace(subrange: subrange, withCount: 0, writer: { _ in return 0 })
+  }
+}
+
 extension URLStorage {
 
   /// Replaces the given range of code-units with an uninitialized space, which is then initialized by the given closure.
@@ -647,26 +667,6 @@ extension URLStorage {
     _ subrangeToRemove: Range<Int>, newStructure: URLStructure<Int>
   ) -> AnyURLStorage {
     return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
-  }
-
-  /// A command object which represents a replacement operation on some URL code-units.
-  ///
-  struct ReplaceSubrangeOperation {
-    var subrange: Range<Int>
-    var insertedCount: Int
-    var writer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
-
-    /// - seealso: `URLStorage.replaceSubrange`
-    static func replace(
-      subrange: Range<Int>, withCount: Int, writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
-    ) -> Self {
-      return .init(subrange: subrange, insertedCount: withCount, writer: writer)
-    }
-
-    /// - seealso: `URLStorage.removeSubrange`
-    static func remove(subrange: Range<Int>) -> Self {
-      return .replace(subrange: subrange, withCount: 0, writer: { _ in return 0 })
-    }
   }
 
   /// Performs the given list of code-unit replacement operations while updating the URL's header to reflect the given structure.

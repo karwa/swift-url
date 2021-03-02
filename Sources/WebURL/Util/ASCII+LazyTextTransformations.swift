@@ -43,7 +43,7 @@ extension ASCII {
       self.base = base
     }
 
-    private static func isAllowedByte(_ byte: UInt8) -> Bool {
+    internal static func isAllowedByte(_ byte: UInt8) -> Bool {
       return byte != ASCII.horizontalTab.codePoint && byte != ASCII.carriageReturn.codePoint
         && byte != ASCII.lineFeed.codePoint
     }

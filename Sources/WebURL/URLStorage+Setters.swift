@@ -345,6 +345,9 @@ extension URLStorage {
       return (AnyURLStorage(self), .error(.cannotSetPathOnCannotBeABaseURL))
     }
 
+    // Note: absolutePathsCopyWindowsDriveFromBase models a quirk from the URL Standard's "file slash" state,
+    //       and the setter goes through the "path start" state, which never reaches "file slash",
+    //       so the setter doesn't expose the quirk and APCWDFB should be 'false'.
     let pathInfo = PathMetrics(
       parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil,
       absolutePathsCopyWindowsDriveFromBase: false)

@@ -63,8 +63,12 @@ public struct WebURL {
   /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
   /// serialized result may look different to the original contents. These transformations are defined in the URL specification.
   ///
-  public init?<S>(_ string: S) where S: StringProtocol {
-    guard let url = string._withUTF8({ urlFromBytes($0, baseURL: nil) }) else {
+  public init?<S>(_ string: S) where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+    self.init(utf8: string.utf8)
+  }
+
+  init?<C>(utf8 bytes: C) where C: BidirectionalCollection, C.Element == UInt8 {
+    guard let url = urlFromBytes(bytes, baseURL: nil) else {
       return nil
     }
     self = url
@@ -76,8 +80,12 @@ public struct WebURL {
   /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
   /// serialized result may look different to the original contents. These transformations are defined in the URL specification.
   ///
-  public func join<S>(_ string: S) -> WebURL? where S: StringProtocol {
-    guard let url = string._withUTF8({ urlFromBytes($0, baseURL: self) }) else {
+  public func join<S>(_ string: S) -> WebURL? where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+    return join(utf8: string.utf8)
+  }
+
+  func join<C>(utf8 bytes: C) -> WebURL? where C: BidirectionalCollection, C.Element == UInt8 {
+    guard let url = urlFromBytes(bytes, baseURL: self) else {
       return nil
     }
     return url
