@@ -413,3 +413,152 @@ extension WebURL {
     utf8.setFragment(newFragment?.utf8)
   }
 }
+
+extension WebURL {
+
+  /// Creates a URL by resolving the given string with this URL as its base.
+  ///
+  /// This function behaves like `resolve(_:)`, except that it escapes strings which would otherwise modify the URL's `scheme` or authority components
+  /// (`username`, `password`, `hostname` and `port`). 2 kinds of inputs accepted by the `join(_:)` function might do this:
+  ///
+  /// - Absolute URLs.
+  ///
+  ///     The regular `resolve` function can entirely replace the URL. This can be an unexpected result
+  ///     when resolving a relative path whose initial component contains a ":", such as a Windows drive letter:
+  ///     ```swift
+  ///     let base = WebURL("file:///C:/Windows/")!
+  ///     base.resolve("D:/Media") // { "d:/Media", scheme = "D", path = "/Media" }
+  ///     base.resolve(hostRelative: "D:/Media") // { "file:///D:/Media", scheme = "file", path = "D:/Media" }
+  ///     ```
+  ///
+  ///     It may also occur if the joined string begins with unsanitized input:
+  ///     ```swift
+  ///     let endpoint = WebURL("https://api.example.com/")!
+  ///     // Using 'resolve':
+  ///     func getImportantDataURL(user: String) -> WebURL {
+  ///       endpoint.resolve("\(user)/files/importantData")!
+  ///     }
+  ///     getImportantDataURL(user: "frank") // "https://api.example.com/frank/files/importantData"
+  ///     getImportantDataURL(user: "http://fake.com")  // "http://fake.com/files/importantData"
+  ///
+  ///     // Using 'resolve(hostRelative:)':
+  ///     func getImportantDataURL(user: String) -> WebURL {
+  ///       endpoint.resolve(hostRelative: "\(user)/files/importantData")!
+  ///     }
+  ///     getImportantDataURL(user: "frank") // "https://api.example.com/frank/files/importantData"
+  ///     getImportantDataURL(user: "http://fake.com")  // "https://api.example.com/http://fake.com/files/importantData"
+  ///     ```
+  ///
+  /// - Protocol-relative URLs.
+  ///
+  ///     Strings with a leading "//" are known as protocol-relative URLs. They were useful for web pages that needed
+  ///     to support both HTTP and HTTPS, but tend to be discouraged these days. Nonetheless, support for these URLs
+  ///     means that certain code which attempts to make a path absolute by prepending a "/" can inadvertently change
+  ///     the host:
+  ///
+  ///     ```swift
+  ///     let container = WebURL("foo://somehost/")!
+  ///     // Using 'resolve':
+  ///     func getURLForPath(path: String) -> WebURL {
+  ///       // Did the caller add a leading '/'? Probably not - let's add one!
+  ///       container.resolve("/\(path)")!
+  ///     }
+  ///     // Will the function add a leading '/'? Probably not - let's add one!
+  ///     getURLForPath(path: "/users/john/profile") // foo://users/john/profile
+  ///
+  ///     // Using 'resolve(hostRelative:)':
+  ///     func getURLForPath(path: String) -> WebURL {
+  ///       // Did the caller add a leading '/'? Probably not - let's add one!
+  ///       container.resolve(hostRelative: "/\(path)")!
+  ///     }
+  ///     // Will the function add a leading '/'? Probably not - let's add one!
+  ///     getURLForPath(path: "/users/john/profile") // foo://somehost//users/john/profile
+  ///     ```
+  ///
+  public func resolve<S>(hostRelative input: S) -> WebURL? where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+    utf8.resolve(hostRelative: input.utf8)
+  }
+}
+
+extension WebURL.UTF8View {
+
+  public func resolve<C>(hostRelative input: C) -> WebURL? where C: BidirectionalCollection, C.Element == UInt8 {
+
+    // How to escape:
+    //
+    // - Absolute URLs ("scheme:...")
+    //
+    //   As described in RFC3986 (https://tools.ietf.org/html/rfc3986#section-4.2), we can prepend "./" to escape the
+    //   possible scheme while keeping the path relative: "http://example/" -> "./http://example/".
+    //
+    // - Protocol-relative URLs ("//newhost/...")
+    //
+    //   For the latter, we can escape the path while maintaining its absolute-ness by prepending a "/.",
+    //   in a similar fashion to the path sigil: "//notahost" -> "/.//notahost".
+    //
+    // Q: How will the parser interpret this?
+    // A: The presence of the "./" or "/." prefixes will ensure the input always reaches the path/file path states.
+    //
+    // Q: Does this change the meaning of the operation?
+    // A: If the input starts with a "?" or "#" (so it doesn't touch the path), it wouldn't have gone down the path/file path
+    //    states, so we shouldn't touch it.
+    //
+    //    Additionally, we need to make sure that we maintain whether the path part of the input is absolute or relative
+    //    (whether it starts with a "/" or not).
+    //
+    //    The "." components we add to the path are entirely skipped by the path parser; they do not even affect ".." popcounts.
+    //    However, their presence means that a previously-empty string would no longer be empty (which can be significant),
+    //    and it hinders the quirk that relative paths whose first component is a Windows drive are treated as absolute.
+    //    Therefore, we have to detect empty inputs (which we can send through unescaped), and relative paths
+    //    which start with Windows drive letters (which have to be escaped as "file:C:..." so the drive letter is still at
+    //    the start of the path) as special cases.
+
+    let isDetectedAsAuthoritySlash: (UInt8) -> Bool
+    if storage.schemeKind.isSpecial {
+      isDetectedAsAuthoritySlash = { $0 == ASCII.forwardSlash.codePoint || $0 == ASCII.backslash.codePoint }
+    } else {
+      isDetectedAsAuthoritySlash = { $0 == ASCII.forwardSlash.codePoint }
+    }
+
+    // Trim leading/trailing C0 control characters and spaces.
+    // Also trim newlines and tabs that the parser will filter anyway, so we can reliably prepend things.
+    let trimmedInput = input.trim {
+      switch ASCII($0) {
+      case ASCII.ranges.c0Control?, .space?: return true
+      default: return ASCII.isNewlineOrTab($0)
+      }
+    }
+
+    if trimmedInput.isEmpty {
+      // "" - parse unchanged.
+      return resolve(trimmedInput)
+    }
+
+    var remainingInput = trimmedInput[...]
+    guard remainingInput.popFirst().map(isDetectedAsAuthoritySlash) ?? false else {
+      // 0 slashes.
+      if storage.schemeKind == .file, PathComponentParser.hasWindowsDriveLetterPrefix(trimmedInput) {
+        // "C:..." - Parse as "file:C:".
+        return resolve([Array("file:".utf8), Array(trimmedInput)].joined())
+      }
+      switch trimmedInput.first {
+      // "?..." or "#..." - No path included, parse unchanged.
+      case ASCII.questionMark.codePoint, ASCII.numberSign.codePoint:
+        return resolve(trimmedInput)
+      // "..." - Escape possible scheme by prepending "./"
+      default:
+        // TODO: Use swift-algorithms lazy concatenation type.
+        return resolve([[ASCII.period.codePoint, ASCII.forwardSlash.codePoint], Array(trimmedInput)].joined())
+      }
+    }
+
+    guard remainingInput.popFirst().map(isDetectedAsAuthoritySlash) ?? false else {
+      // 1 slash. We don't need to adjust anything here.
+      return resolve(trimmedInput)
+    }
+
+    // 2+ slashes. Escape protocol-relative URL by prepending "/.".
+    // TODO: Use swift-algorithms lazy concatenation type.
+    return resolve([[ASCII.forwardSlash.codePoint, ASCII.period.codePoint], Array(trimmedInput)].joined())
+  }
+}

@@ -1014,3 +1014,142 @@ extension WebURLTests {
     }
   }
 }
+
+extension WebURLTests {
+
+  func testResolveHostRelative() {
+
+    // Relative paths are relative, do not modify scheme or authority, remove query and fragment.
+    do {
+      let url = WebURL("http://example.com/p1/p2/p3?query=good#fragggggment")!
+      let url_r = url.resolve(hostRelative: "../lib/swift")
+      XCTAssertEqual(url_r?.serialized, "http://example.com/p1/lib/swift")
+      XCTAssertEqual(url_r?.path, "/p1/lib/swift")
+      XCTAssertEqual(url_r, url.resolve("../lib/swift"))
+    }
+    // Absolute paths are absolute, do not modify scheme or authority, remove query and fragment.
+    do {
+      let url = WebURL("http://example.com/p1/p2/p3?query=good#fragggggment")!
+      let url_r = url.resolve(hostRelative: "/usr/lib/swift")
+      XCTAssertEqual(url_r?.serialized, "http://example.com/usr/lib/swift")
+      XCTAssertEqual(url_r?.hostname, "example.com")
+      XCTAssertEqual(url_r?.path, "/usr/lib/swift")
+      XCTAssertEqual(url_r, url.resolve("/usr/lib/swift"))
+    }
+    do {
+      let url = WebURL("http://example.com/p1/p2/p3?query=good#fragggggment")!
+      let url_r = url.resolve(hostRelative: "//notahost/test")
+      XCTAssertEqual(url_r?.serialized, "http://example.com//notahost/test")
+      XCTAssertEqual(url_r?.path, "//notahost/test")
+      XCTAssertEqual(url_r, url.resolve("/.//notahost/test"))
+    }
+
+    // Empty strings are a no-op.
+    do {
+      let url = WebURL("foo://somehost/path?query=good#fragggggment")!
+      XCTAssertFalse(url.cannotBeABase)
+      let url_r = url.resolve(hostRelative: "")
+      XCTAssertEqual(url_r?.serialized, "foo://somehost/path?query=good")
+      XCTAssertEqual(url_r?.path, "/path")
+      XCTAssertEqual(url_r, url.resolve(""))
+    }
+
+    // Windows drive letters.
+    do {
+      let url = WebURL("file:///C:/Windows/")!
+      let url_r = url.resolve(hostRelative: "../../../../../Users/")
+      XCTAssertEqual(url_r?.serialized, "file:///C:/Users/")
+      XCTAssertEqual(url_r?.path, "/C:/Users/")
+
+      XCTAssertEqual(url_r, url.resolve("/C:/Users/"))
+    }
+    // Absolute paths copy Windows drive from base.
+    do {
+      let url = WebURL("file:///C:/Windows/")!
+      let url_r = url.resolve(hostRelative: "/hello")
+      XCTAssertEqual(url_r?.serialized, "file:///C:/hello")
+      XCTAssertEqual(url_r?.path, "/C:/hello")
+
+      XCTAssertEqual(url_r, url.resolve("/C:/hello"))
+    }
+    do {
+      let url = WebURL("file:///C:/Windows/")!
+      let url_r = url.resolve(hostRelative: "/D:/hello")
+      XCTAssertEqual(url_r?.serialized, "file:///D:/hello")
+      XCTAssertEqual(url_r?.path, "/D:/hello")
+
+      XCTAssertEqual(url_r, url.resolve("/D:/hello"))
+    }
+    do {
+      let url = WebURL("file:///C:/Windows/")!
+      let url_r = url.resolve(hostRelative: "D:/hello/")
+      XCTAssertEqual(url_r?.serialized, "file:///D:/hello/")
+      XCTAssertEqual(url_r?.path, "/D:/hello/")
+
+      XCTAssertEqual(url_r, url.resolve("file:D:/hello/"))
+    }
+
+    // Spaces are trimmed and newlines ignored.
+    do {
+      let url = WebURL("file:///C:/Windows/")!
+      let url_r = url.resolve(hostRelative: "  \n\tD:/hello/ ")
+      XCTAssertEqual(url_r?.serialized, "file:///D:/hello/")
+      XCTAssertEqual(url_r?.path, "/D:/hello/")
+
+      XCTAssertEqual(url_r, url.resolve("file:D:/hello/"))
+    }
+
+		// Documentation examples:
+
+    // - Absolute URLs
+    do {
+      let base = WebURL("file:///C:/Windows/")!
+      XCTAssertEqual(base.resolve("D:/Media")?.serialized, "d:/Media")
+      XCTAssertEqual(base.resolve(hostRelative: "D:/Media")?.serialized, "file:///D:/Media")
+    }
+    do {
+      let endpoint = WebURL("https://api.example.com/")!
+      // Using 'resolve':
+      func getImportantDataURL(user: String) -> WebURL {
+        endpoint.resolve("\(user)/files/importantData")!
+      }
+      XCTAssertEqual(getImportantDataURL(user: "frank").serialized, "https://api.example.com/frank/files/importantData")
+      XCTAssertEqual(getImportantDataURL(user: "http://fake.com").serialized, "http://fake.com/files/importantData")
+    }
+    do {
+      let endpoint = WebURL("https://api.example.com/")!
+      // Using 'resolve(hostRelative:)':
+      func getImportantDataURL(user: String) -> WebURL {
+        endpoint.resolve(hostRelative: "\(user)/files/importantData")!
+      }
+      XCTAssertEqual(getImportantDataURL(user: "frank").serialized, "https://api.example.com/frank/files/importantData")
+      XCTAssertEqual(
+        getImportantDataURL(user: "http://fake.com").serialized,
+        "https://api.example.com/http://fake.com/files/importantData"
+      )
+    }
+
+    // - Protocol-relative URLs
+    do {
+      let container = WebURL("foo://somehost/")!
+      // Using 'resolve':
+      func getURLForPath(path: String) -> WebURL {
+        // Did the caller add a leading '/'? Probably not - let's add one!
+        container.resolve("/\(path)")!
+      }
+      // Will the function add a leading '/'? Probably not - let's add one!
+      XCTAssertEqual(getURLForPath(path: "/users/john/profile").serialized, "foo://users/john/profile")
+    }
+    do {
+      let container = WebURL("foo://somehost/")!
+      // Using 'resolve(hostRelative:)':
+      func getURLForPath(path: String) -> WebURL {
+        // Did the caller add a leading '/'? Probably not - let's add one!
+        container.resolve(hostRelative: "/\(path)")!
+      }
+      // Will the function add a leading '/'? Probably not - let's add one!
+      XCTAssertEqual(getURLForPath(path: "/users/john/profile").serialized, "foo://somehost//users/john/profile")
+    }
+
+  }
+}
