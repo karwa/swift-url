@@ -367,7 +367,9 @@ extension ParsedURLString {
   }
 }
 
+
 // MARK: - URL Scanner.
+
 
 /// A set of components to be copied from a URL.
 ///
@@ -419,45 +421,6 @@ extension URLScanner {
   /// This is the only case when a component is marked as present from both data sources.
   ///
   struct UnprocessedMapping {
-
-    // - Indexes.
-
-    var schemeTerminatorIndex: InputString.Index? {
-      schemeRange?.upperBound
-    }
-
-    var authorityStartIndex: InputString.Index? {
-      authorityRange?.lowerBound
-    }
-
-    var usernameEndIndex: InputString.Index? {
-      usernameRange?.upperBound
-    }
-
-    var passwordEndIndex: InputString.Index? {
-      passwordRange?.upperBound
-    }
-
-    var hostnameEndIndex: InputString.Index? {
-      hostnameRange?.upperBound
-    }
-
-    var portEndIndex: InputString.Index? {
-      portRange?.upperBound
-    }
-
-    var pathEndIndex: InputString.Index? {
-      pathRange?.upperBound
-    }
-
-    var queryEndIndex: InputString.Index? {
-      queryRange?.upperBound
-    }
-
-    var fragmentEndIndex: InputString.Index? {
-      fragmentRange?.upperBound
-    }
-
 
     // This is the index of the scheme terminator (":"), if one exists.
     var schemeRange: Range<InputString.Index>?
@@ -697,13 +660,13 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.usernameEndIndex == nil)
-    assert(mapping.passwordEndIndex == nil)
-    assert(mapping.hostnameEndIndex == nil)
-    assert(mapping.portEndIndex == nil)
-    assert(mapping.pathEndIndex == nil)
-    assert(mapping.queryEndIndex == nil)
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.usernameRange == nil)
+    assert(mapping.passwordRange == nil)
+    assert(mapping.hostnameRange == nil)
+    assert(mapping.portRange == nil)
+    assert(mapping.pathRange == nil)
+    assert(mapping.queryRange == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the authority (i.e. the terminator between host and path/query/fragment).
     let authority = input.prefix {
@@ -766,11 +729,11 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.hostnameEndIndex == nil)
-    assert(mapping.portEndIndex == nil)
-    assert(mapping.pathEndIndex == nil)
-    assert(mapping.queryEndIndex == nil)
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.hostnameRange == nil)
+    assert(mapping.portRange == nil)
+    assert(mapping.pathRange == nil)
+    assert(mapping.queryRange == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the hostname.
     var hostnameEndIndex: InputSlice.Index?
@@ -816,10 +779,10 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.portEndIndex == nil)
-    assert(mapping.pathEndIndex == nil)
-    assert(mapping.queryEndIndex == nil)
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.portRange == nil)
+    assert(mapping.pathRange == nil)
+    assert(mapping.queryRange == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the port string.
     let portString = input.prefix { ASCII($0).map { ASCII.ranges.digits.contains($0) } ?? false }
@@ -851,9 +814,9 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.pathEndIndex == nil)
-    assert(mapping.queryEndIndex == nil)
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.pathRange == nil)
+    assert(mapping.queryRange == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Return the component to parse based on input.
     guard input.isEmpty == false else {
@@ -881,9 +844,9 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.pathEndIndex == nil)
-    assert(mapping.queryEndIndex == nil)
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.pathRange == nil)
+    assert(mapping.queryRange == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the path.
     let nextComponentStartIndex = input.firstIndex { ASCII($0) == .questionMark || ASCII($0) == .numberSign }
@@ -916,8 +879,8 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.queryEndIndex == nil)
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.queryRange == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the query
     let queryEndIndex = input.firstIndex { ASCII($0) == .numberSign }
@@ -944,7 +907,7 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Validate the fragment string.
     validateURLCodePointsAndPercentEncoding(input, callback: &callback)
@@ -1080,12 +1043,12 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.authorityStartIndex == nil)
-    assert(mapping.hostnameEndIndex == nil)
-    assert(mapping.portEndIndex == nil)
-    assert(mapping.pathEndIndex == nil)
-    assert(mapping.queryEndIndex == nil)
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.authorityRange == nil)
+    assert(mapping.hostnameRange == nil)
+    assert(mapping.portRange == nil)
+    assert(mapping.pathRange == nil)
+    assert(mapping.queryRange == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the hostname.
     let hostnameEndIndex =
@@ -1172,12 +1135,12 @@ extension URLScanner {
   ) -> ComponentParseResult {
 
     // 1. Validate the mapping.
-    assert(mapping.authorityStartIndex == nil)
-    assert(mapping.hostnameEndIndex == nil)
-    assert(mapping.portEndIndex == nil)
-    assert(mapping.pathEndIndex == nil)
-    assert(mapping.queryEndIndex == nil)
-    assert(mapping.fragmentEndIndex == nil)
+    assert(mapping.authorityRange == nil)
+    assert(mapping.hostnameRange == nil)
+    assert(mapping.portRange == nil)
+    assert(mapping.pathRange == nil)
+    assert(mapping.queryRange == nil)
+    assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the path.
     let pathEndIndex = input.firstIndex { byte in
@@ -1426,31 +1389,31 @@ extension URLScanner.UnprocessedMapping {
   func checkStructuralInvariants() -> Bool {
 
     // We must have a scheme from somewhere.
-    if schemeTerminatorIndex == nil {
+    if schemeRange == nil {
       guard componentsToCopyFromBase.contains(.scheme) else { return false }
     }
     // Authority components imply the presence of an authorityStartIndex and hostname.
-    if usernameEndIndex != nil || passwordEndIndex != nil || hostnameEndIndex != nil || portEndIndex != nil {
-      guard hostnameEndIndex != nil else { return false }
-      guard authorityStartIndex != nil else { return false }
+    if usernameRange != nil || passwordRange != nil || hostnameRange != nil || portRange != nil {
+      guard hostnameRange != nil else { return false }
+      guard authorityRange != nil else { return false }
     }
     // A password implies the presence of a username.
-    if passwordEndIndex != nil {
-      guard usernameEndIndex != nil else { return false }
+    if passwordRange != nil {
+      guard usernameRange != nil else { return false }
     }
 
     // Ensure components from input string do not overlap with 'componentsToCopyFromBase' (except path).
-    if schemeTerminatorIndex != nil {
+    if schemeRange != nil {
       // FIXME: Scheme can overlap in relative URLs, but we already test the string and base schemes for equality.
       // guard componentsToCopyFromBase.contains(.scheme) == false else { return false }
     }
-    if authorityStartIndex != nil {
+    if authorityRange != nil {
       guard componentsToCopyFromBase.contains(.authority) == false else { return false }
     }
-    if queryEndIndex != nil {
+    if queryRange != nil {
       guard componentsToCopyFromBase.contains(.query) == false else { return false }
     }
-    if fragmentEndIndex != nil {
+    if fragmentRange != nil {
       guard componentsToCopyFromBase.contains(.fragment) == false else { return false }
     }
     return true
@@ -1525,7 +1488,7 @@ func findEndOfHostnamePrefix<Input, Callback>(
       return nil
     }
   }
-  return mapping.hostnameEndIndex ?? hostname.endIndex
+  return mapping.hostnameRange?.upperBound ?? hostname.endIndex
 }
 
 /// Checks if `input`, which is a collection of UTF8-encoded bytes, contains any non-URL code-points or invalid percent encoding (e.g. "%XY").
