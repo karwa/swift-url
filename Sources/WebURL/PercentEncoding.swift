@@ -481,81 +481,42 @@ enum URLEncodeSet {
   struct C0: PercentEncodeSet {
     @inline(__always)
     static func shouldEscape(character: ASCII) -> Bool {
-      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
-      let lo: UInt64 = 0b00000000_00000000_00000000_00000000_11111111_11111111_11111111_11111111
-      let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
-      } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
-      }
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.c0)
     }
   }
 
   struct Fragment: PercentEncodeSet {
     @inline(__always)
     static func shouldEscape(character: ASCII) -> Bool {
-      if C0.shouldEscape(character: character) { return true }
-      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
-      let lo: UInt64 = 0b01010000_00000000_00000000_00000101_00000000_00000000_00000000_00000000
-      let hi: UInt64 = 0b00000000_00000000_00000000_00000001_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
-      } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
-      }
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.fragment)
     }
   }
 
   struct Query_NotSpecial: PercentEncodeSet {
     @inline(__always)
     static func shouldEscape(character: ASCII) -> Bool {
-      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
-      let lo: UInt64 = 0b01010000_00000000_00000000_00001101_11111111_11111111_11111111_11111111
-      let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
-      } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
-      }
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.query)
     }
   }
 
   struct Query_Special: PercentEncodeSet {
     @inline(__always)
     static func shouldEscape(character: ASCII) -> Bool {
-      if Query_NotSpecial.shouldEscape(character: character) { return true }
-      return character == .apostrophe
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.specialQuery)
     }
   }
 
   struct Path: PercentEncodeSet {
     @inline(__always)
     static func shouldEscape(character: ASCII) -> Bool {
-      if Fragment.shouldEscape(character: character) { return true }
-      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
-      let lo: UInt64 = 0b10000000_00000000_00000000_00001000_00000000_00000000_00000000_00000000
-      let hi: UInt64 = 0b00101000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
-      } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
-      }
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.path)
     }
   }
 
   struct UserInfo: PercentEncodeSet {
     @inline(__always)
     static func shouldEscape(character: ASCII) -> Bool {
-      if Path.shouldEscape(character: character) { return true }
-      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
-      let lo: UInt64 = 0b00101100_00000000_10000000_00000000_00000000_00000000_00000000_00000000
-      let hi: UInt64 = 0b00010000_00000000_00000000_00000000_01111000_00000000_00000000_00000001
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
-      } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
-      }
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.userInfo)
     }
   }
 
@@ -565,27 +526,13 @@ enum URLEncodeSet {
   struct Component: PercentEncodeSet {
     @inline(__always)
     static func shouldEscape(character: ASCII) -> Bool {
-      if UserInfo.shouldEscape(character: character) { return true }
-      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
-      let lo: UInt64 = 0b00000000_00000000_00011000_01110000_00000000_00000000_00000000_00000000
-      let hi: UInt64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
-      } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
-      }
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.component)
     }
   }
 
   struct FormEncoded: PercentEncodeSet {
     static func shouldEscape(character: ASCII) -> Bool {
-      // Do not percent-escape spaces because we 'plus-escape' them instead.
-      if character == .space { return false }
-      switch character {
-      case _ where character.isAlphaNumeric: return false
-      case .asterisk, .minus, .period, .underscore: return false
-      default: return true
-      }
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.form)
     }
     static func substitute(for character: ASCII) -> ASCII? {
       return character == .space ? .plus : nil
@@ -595,3 +542,163 @@ enum URLEncodeSet {
     }
   }
 }
+
+//swift-format-ignore
+/// A set of `URLEncodeSet`s.
+struct URLEncodeSetSet: OptionSet {
+  var rawValue: UInt8
+  init(rawValue: UInt8) {
+    self.rawValue = rawValue
+  }
+
+  static var none: Self         { Self(rawValue: 0) }
+  static var c0: Self           { Self(rawValue: 1 << 0) }
+  static var fragment: Self     { Self(rawValue: 1 << 1) }
+  static var query: Self        { Self(rawValue: 1 << 2) }
+  static var specialQuery: Self { Self(rawValue: 1 << 3) }
+  static var path: Self         { Self(rawValue: 1 << 4) }
+  static var userInfo: Self     { Self(rawValue: 1 << 5) }
+  static var form: Self         { Self(rawValue: 1 << 6) }
+  static var component: Self    { Self(rawValue: 1 << 7) }
+}
+
+// swift-format-ignore
+let percent_encoding_table: [URLEncodeSetSet] = [
+  // Control Characters                ---------------------------------------------------------------------
+  /*  0x00 null */                     [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x01 startOfHeading */           [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x02 startOfText */              [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x03 endOfText */                [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x04 endOfTransmission */        [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x05 enquiry */                  [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x06 acknowledge */              [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x07 bell */                     [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x08 backspace */                [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x09 horizontalTab */            [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x0A lineFeed */                 [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x0B verticalTab */              [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x0C formFeed */                 [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x0D carriageReturn */           [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x0E shiftOut */                 [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x0F shiftIn */                  [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x10 dataLinkEscape */           [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x11 deviceControl1 */           [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x12 deviceControl2 */           [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x13 deviceControl3 */           [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x14 deviceControl4 */           [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x15 negativeAcknowledge */      [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x16 synchronousIdle */          [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x17 endOfTransmissionBlock */   [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x18 cancel */                   [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x19 endOfMedium */              [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x1A substitute */               [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x1B escape */                   [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x1C fileSeparator */            [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x1D groupSeparator */           [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x1E recordSeparator */          [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x1F unitSeparator */            [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  // Special Characters                ---------------------------------------------------------------------
+  /* 0x20 space */                     [.fragment, .query, .specialQuery, .path, .userInfo, .component], // form substitutes instead.
+  /* 0x21 exclamationMark */           .form,
+  /* 0x22 doubleQuotationMark */       [.fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /* 0x23 numberSign */                [.query, .specialQuery, .path, .userInfo, .form, .component],
+  /* 0x24 dollarSign */                [.form, .component],
+  /* 0x25 percentSign */               [.form, .component],
+  /* 0x26 ampersand */                 [.form, .component],
+  /* 0x27 apostrophe */                [.specialQuery, .form],
+  /* 0x28 leftParenthesis */           .form,
+  /* 0x29 rightParenthesis */          .form,
+  /* 0x2A asterisk */                  .none,
+  /* 0x2B plus */                      .none,
+  /* 0x2C comma */                     [.form, .component],
+  /* 0x2D minus */                     .none,
+  /* 0x2E period */                    .form,
+  /* 0x2F forwardSlash */              [.userInfo, .form, .component],
+  // Numbers                           ----------------------------------------------------------------------
+  /*  0x30 digit 0 */                  .none,
+  /*  0x31 digit 1 */                  .none,
+  /*  0x32 digit 2 */                  .none,
+  /*  0x33 digit 3 */                  .none,
+  /*  0x34 digit 4 */                  .none,
+  /*  0x35 digit 5 */                  .none,
+  /*  0x36 digit 6 */                  .none,
+  /*  0x37 digit 7 */                  .none,
+  /*  0x38 digit 8 */                  .none,
+  /*  0x39 digit 9 */                  .none,
+  // Punctuation                       ----------------------------------------------------------------------
+  /*  0x3A colon */                    [.userInfo, .form, .component],
+  /*  0x3B semicolon */                [.userInfo, .form, .component],
+  /*  0x3C lessThanSign */             [.fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x3D equalSign */                [.userInfo, .form, .component],
+  /*  0x3E greaterThanSign */          [.fragment, .query, .specialQuery, .path, .userInfo, .form, .component],
+  /*  0x3F questionMark */             [.path, .userInfo, .form, .component],
+  /*  0x40 commercialAt */             [.userInfo, .form, .component],
+  // Uppercase letters                 ----------------------------------------------------------------------
+  /*  0x41 A */                        .none,
+  /*  0x42 B */                        .none,
+  /*  0x43 C */                        .none,
+  /*  0x44 D */                        .none,
+  /*  0x45 E */                        .none,
+  /*  0x46 F */                        .none,
+  /*  0x47 G */                        .none,
+  /*  0x48 H */                        .none,
+  /*  0x49 I */                        .none,
+  /*  0x4A J */                        .none,
+  /*  0x4B K */                        .none,
+  /*  0x4C L */                        .none,
+  /*  0x4D M */                        .none,
+  /*  0x4E N */                        .none,
+  /*  0x4F O */                        .none,
+  /*  0x50 P */                        .none,
+  /*  0x51 Q */                        .none,
+  /*  0x52 R */                        .none,
+  /*  0x53 S */                        .none,
+  /*  0x54 T */                        .none,
+  /*  0x55 U */                        .none,
+  /*  0x56 V */                        .none,
+  /*  0x57 W */                        .none,
+  /*  0x58 X */                        .none,
+  /*  0x59 Y */                        .none,
+  /*  0x5A Z */                        .none,
+  // More special characters           ---------------------------------------------------------------------
+  /*  0x5B leftSquareBracket */        [.userInfo, .form, .component],
+  /*  0x5C backslash */                [.userInfo, .form, .component],
+  /*  0x5D rightSquareBracket */       [.userInfo, .form, .component],
+  /*  0x5E circumflexAccent */         [.userInfo, .form, .component],
+  /*  0x5F underscore */               .none,
+  /*  0x60 backtick */                 [.fragment, .path, .userInfo, .form, .component],
+  // Lowercase letters                 ---------------------------------------------------------------------
+  /*  0x61 a */                        .none,
+  /*  0x62 b */                        .none,
+  /*  0x63 c */                        .none,
+  /*  0x64 d */                        .none,
+  /*  0x65 e */                        .none,
+  /*  0x66 f */                        .none,
+  /*  0x67 g */                        .none,
+  /*  0x68 h */                        .none,
+  /*  0x69 i */                        .none,
+  /*  0x6A j */                        .none,
+  /*  0x6B k */                        .none,
+  /*  0x6C l */                        .none,
+  /*  0x6D m */                        .none,
+  /*  0x6E n */                        .none,
+  /*  0x6F o */                        .none,
+  /*  0x70 p */                        .none,
+  /*  0x71 q */                        .none,
+  /*  0x72 r */                        .none,
+  /*  0x73 s */                        .none,
+  /*  0x74 t */                        .none,
+  /*  0x75 u */                        .none,
+  /*  0x76 v */                        .none,
+  /*  0x77 w */                        .none,
+  /*  0x78 x */                        .none,
+  /*  0x79 y */                        .none,
+  /*  0x7A z */                        .none,
+  // More special characters           ---------------------------------------------------------------------
+  /*  0x7B leftCurlyBracket */         [.path, .userInfo, .form, .component],
+  /*  0x7C verticalBar */              [.userInfo, .form, .component],
+  /*  0x7D rightCurlyBracket */        [.path, .userInfo, .form, .component],
+  /*  0x7E tilde */                    .form,
+  /*  0x7F delete */                   [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component]
+  // The End.                          ---------------------------------------------------------------------
+]

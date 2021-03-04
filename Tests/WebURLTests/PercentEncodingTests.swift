@@ -66,6 +66,10 @@ extension PercentEncodingTests {
       $0.utf8.lazy.percentEncoded(using: URLEncodeSet.Component.self).joined()
     })
   }
+
+  func testTable() {
+    XCTAssert(percent_encoding_table.count == 128)
+  }
 }
 
 extension PercentEncodingTests {
