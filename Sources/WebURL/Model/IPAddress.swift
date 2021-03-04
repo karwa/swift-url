@@ -241,10 +241,10 @@ extension IPv6Address {
   /// - parameters:
   ///     - description: The string to parse.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public init?<S>(_ description: S) where S: StringProtocol {
     var callback = IgnoreValidationErrors()
-    guard let parsed = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else { return nil }
+    guard let parsed = IPv6Address.parse(utf8: description.utf8, callback: &callback) else { return nil }
     self = parsed
   }
 
@@ -258,10 +258,10 @@ extension IPv6Address {
   /// - parameters:
   ///     - description: The string to parse.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public init<S>(reportingErrors description: S) throws where S: StringProtocol {
     var callback = LastValidationError()
-    guard let parsed = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else {
+    guard let parsed = IPv6Address.parse(utf8: description.utf8, callback: &callback) else {
       guard case .ipv6AddressError(let error) = callback.error?.hostParserError else {
         preconditionFailure("IPv6 Parser returned a non-IPv6-parser error?!")
       }
@@ -346,8 +346,19 @@ extension IPv6Address {
   ///                  This callback is only invoked once, and any validation error terminates parsing.
   /// - returns:  Either the successfully-parsed address, or `nil` if parsing fails.
   ///
+  @inlinable
   public static func parse<Bytes, Callback>(utf8 input: Bytes, callback: inout Callback) -> Self?
   where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv6AddressParserCallback {
+    return input.withContiguousStorageIfAvailable {
+      parse_impl(utf8: $0, callback: &callback)
+    } ?? parse_impl(utf8: input, callback: &callback)
+  }
+
+  @usableFromInline
+  @_specialize(kind:partial,where Callback == IgnoreValidationErrors)
+  static func parse_impl<Bytes, Callback>(utf8 input: Bytes, callback: inout Callback) -> Self?
+  where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv6AddressParserCallback {
+
     guard input.isEmpty == false else {
       callback.validationError(ipv6: .emptyInput)
       return nil
@@ -681,10 +692,10 @@ extension IPv4Address {
   /// - parameters:
   ///     - description:  The string to parse.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public init?<Source>(_ description: Source) where Source: StringProtocol {
     var callback = IgnoreValidationErrors()
-    guard case .success(let parsed) = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else {
+    guard case .success(let parsed) = IPv4Address.parse(utf8: description.utf8, callback: &callback) else {
       return nil
     }
     self = parsed
@@ -715,10 +726,10 @@ extension IPv4Address {
   /// - parameters:
   ///     - description:  The string to parse.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public init<S>(reportingErrors description: S) throws where S: StringProtocol {
     var callback = LastValidationError()
-    guard case .success(let parsed) = description._withUTF8({ Self.parse(utf8: $0, callback: &callback) }) else {
+    guard case .success(let parsed) = IPv4Address.parse(utf8: description.utf8, callback: &callback) else {
       guard case .ipv4AddressError(let error) = callback.error?.hostParserError else {
         preconditionFailure("IPv4 Parser returned a non-IPv4-parser error?!")
       }
@@ -826,9 +837,21 @@ extension IPv4Address {
   ///     failed because the IP address was invalid (e.g. the value overflows) or whether it failed because the string isn't an IP address.
   ///     For example, the string "9999999999.com" fails because it isn't an IP address, whereas "9999999999" fails due to overflow.
   ///
+  @inlinable
   public static func parse<Bytes, Callback>(
     utf8 input: Bytes, callback: inout Callback
   ) -> ParseResult where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4AddressParserCallback {
+    return input.withContiguousStorageIfAvailable {
+      parse_impl(utf8: $0, callback: &callback)
+    } ?? parse_impl(utf8: input, callback: &callback)
+  }
+
+  @usableFromInline
+  @_specialize(kind:partial,where Callback == IgnoreValidationErrors)
+  static func parse_impl<Bytes, Callback>(
+    utf8 input: Bytes, callback: inout Callback
+  ) -> ParseResult where Bytes: Collection, Bytes.Element == UInt8, Callback: IPv4AddressParserCallback {
+
     guard input.isEmpty == false else {
       callback.validationError(ipv4: .emptyInput)
       return .failure
