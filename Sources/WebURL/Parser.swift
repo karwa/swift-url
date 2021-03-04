@@ -422,45 +422,82 @@ extension URLScanner {
 
     // - Indexes.
 
+    var schemeTerminatorIndex: InputString.Index? {
+      schemeRange?.upperBound
+    }
+
+    var authorityStartIndex: InputString.Index? {
+      authorityRange?.lowerBound
+    }
+
+    var usernameEndIndex: InputString.Index? {
+      usernameRange?.upperBound
+    }
+
+    var passwordEndIndex: InputString.Index? {
+      passwordRange?.upperBound
+    }
+
+    var hostnameEndIndex: InputString.Index? {
+      hostnameRange?.upperBound
+    }
+
+    var portEndIndex: InputString.Index? {
+      portRange?.upperBound
+    }
+
+    var pathEndIndex: InputString.Index? {
+      pathRange?.upperBound
+    }
+
+    var queryEndIndex: InputString.Index? {
+      queryRange?.upperBound
+    }
+
+    var fragmentEndIndex: InputString.Index? {
+      fragmentRange?.upperBound
+    }
+
+
     // This is the index of the scheme terminator (":"), if one exists.
-    var schemeTerminatorIndex = InputString.Index?.none
+    var schemeRange: Range<InputString.Index>?
 
     // This is the index of the first character of the authority segment, if one exists.
     // The scheme and authority may be separated by an arbitrary amount of trivia.
     // The authority ends at the "*EndIndex" of the last of its components.
-    var authorityStartIndex = InputString.Index?.none
+    var authorityRange: Range<InputString.Index>?
 
     // This is the endIndex of the authority's username component, if one exists.
     // The username starts at the authorityStartIndex.
-    var usernameEndIndex = InputString.Index?.none
+    var usernameRange: Range<InputString.Index>?
 
     // This is the endIndex of the password, if one exists.
     // If a password exists, a username must also exist, and usernameEndIndex must be the ":" character.
     // The password starts at the index after usernameEndIndex.
-    var passwordEndIndex = InputString.Index?.none
+    var passwordRange: Range<InputString.Index>?
 
     // This is the endIndex of the hostname, if one exists.
     // The hostname starts at (username/password)EndIndex, or from authorityStartIndex if there are no credentials.
     // If a hostname exists, authorityStartIndex must be set.
-    var hostnameEndIndex = InputString.Index?.none
+    var hostnameRange: Range<InputString.Index>?
 
     // This is the endIndex of the port-string, if one exists. If a port exists, a hostname must also exist.
     // If it exists, the port-string starts at hostnameEndIndex and includes a leading ':' character.
-    var portEndIndex = InputString.Index?.none
+    var portRange: Range<InputString.Index>?
 
     // This is the endIndex of the path, if one exists.
     // If an authority segment exists, the path starts at the end of the authority and includes a leading slash.
     // Otherwise, it starts at the index after 'schemeTerminatorIndex' (if it exists) and may/may not include leading slashes.
     // If there is also no scheme, the path starts at the start of the string and may/may not include leading slashes.
-    var pathEndIndex = InputString.Index?.none
+    var pathRange: Range<InputString.Index>?
 
     // This is the endIndex of the query-string, if one exists.
     // If it exists, the query starts at the end of the last component and includes a leading '?' character.
-    var queryEndIndex = InputString.Index?.none
+    var queryRange: Range<InputString.Index>?
 
     // This is the endIndex of the fragment-string, if one exists.
     // If it exists, the fragment starts at the end of the last component and includes a leading '#' character.
-    var fragmentEndIndex = InputString.Index?.none
+    var fragmentRange: Range<InputString.Index>?
 
     // - Flags and data.
 
@@ -519,7 +556,7 @@ extension URLScanner {
       let schemeName = input.prefix(upTo: schemeEndIndex)
       let schemeKind = WebURL.SchemeKind(parsing: schemeName)
       scanResults.schemeKind = schemeKind
-      scanResults.schemeTerminatorIndex = schemeName.endIndex
+      scanResults.schemeRange = Range(uncheckedBounds: (input.startIndex, schemeName.endIndex))
 
       let tail = input.suffix(from: input.index(after: schemeEndIndex))
       return scanURLWithScheme(
@@ -679,7 +716,7 @@ extension URLScanner {
         return true
       }
     }
-    mapping.authorityStartIndex = authority.startIndex
+    mapping.authorityRange = Range(uncheckedBounds: (authority.startIndex, authority.endIndex))
 
     var hostStartIndex = authority.startIndex
 
@@ -694,9 +731,11 @@ extension URLScanner {
 
       let credentials = authority[..<credentialsEndIndex]
       let username = credentials.prefix { ASCII($0) != .colon }
-      mapping.usernameEndIndex = username.endIndex
+      mapping.usernameRange = Range(uncheckedBounds: (username.startIndex, username.endIndex))
       if username.endIndex != credentials.endIndex {
-        mapping.passwordEndIndex = credentials.endIndex
+        mapping.passwordRange = Range(
+          uncheckedBounds: (credentials.index(after: username.endIndex), credentials.endIndex)
+        )
       }
     }
 
@@ -707,7 +746,7 @@ extension URLScanner {
         callback.validationError(.emptyHostSpecialScheme)
         return .failed
       }
-      mapping.hostnameEndIndex = hostStartIndex
+      mapping.hostnameRange = Range(uncheckedBounds: (hostStartIndex, hostStartIndex))
       return .success(continueFrom: (.pathStart, hostStartIndex))
     }
 
@@ -763,7 +802,7 @@ extension URLScanner {
     }
 
     // 4. Return the next component.
-    mapping.hostnameEndIndex = hostname.endIndex
+    mapping.hostnameRange = Range(uncheckedBounds: (hostname.startIndex, hostname.endIndex))
     if let hostnameEnd = hostnameEndIndex {
       return .success(continueFrom: (.port, input.index(after: hostnameEnd)))
     } else {
@@ -800,7 +839,7 @@ extension URLScanner {
     }
 
     // 4. Return the next component.
-    mapping.portEndIndex = portString.endIndex
+    mapping.portRange = Range(uncheckedBounds: (portString.startIndex, portString.endIndex))
     return .success(continueFrom: (.pathStart, portString.endIndex))
   }
 
@@ -855,9 +894,9 @@ extension URLScanner {
 
     // 4. Return the next component.
     if path.isEmpty && scheme.isSpecial == false {
-      mapping.pathEndIndex = nil
+      mapping.pathRange = nil
     } else {
-      mapping.pathEndIndex = path.endIndex
+      mapping.pathRange = Range(uncheckedBounds: (path.startIndex, path.endIndex))
     }
     if let pathEnd = nextComponentStartIndex {
       return .success(
@@ -887,7 +926,7 @@ extension URLScanner {
     validateURLCodePointsAndPercentEncoding(input.prefix(upTo: queryEndIndex ?? input.endIndex), callback: &callback)
 
     // 3. Return the next component.
-    mapping.queryEndIndex = queryEndIndex ?? input.endIndex
+    mapping.queryRange = Range(uncheckedBounds: (input.startIndex, queryEndIndex ?? input.endIndex))
     if let queryEnd = queryEndIndex {
       return .success(
         continueFrom: ASCII(input[queryEnd]) == .numberSign ? (.fragment, input.index(after: queryEnd)) : nil
@@ -910,7 +949,7 @@ extension URLScanner {
     // 2. Validate the fragment string.
     validateURLCodePointsAndPercentEncoding(input, callback: &callback)
 
-    mapping.fragmentEndIndex = input.endIndex
+    mapping.fragmentRange = Range(uncheckedBounds: (input.startIndex, input.endIndex))
     return .success(continueFrom: nil)
   }
 }
@@ -1013,7 +1052,7 @@ extension URLScanner {
     guard cursor != input.endIndex, let c1 = ASCII(input[cursor]), c1 == .forwardSlash || c1 == .backslash else {
       // 1 slash. e.g. "file:/usr/lib/Swift". Absolute path.
       guard baseScheme == .file else {
-        return .success(continueFrom: (.path, cursor))
+        return .success(continueFrom: (.path, input.startIndex))
       }
       mapping.componentsToCopyFromBase.formUnion([.authority])
 
@@ -1022,7 +1061,7 @@ extension URLScanner {
       mapping.absolutePathsCopyWindowsDriveFromBase = true
       mapping.componentsToCopyFromBase.formUnion([.path])
 
-      return .success(continueFrom: (.path, cursor))
+      return .success(continueFrom: (.path, input.startIndex))
     }
 
     cursor = input.index(after: cursor)
@@ -1069,8 +1108,8 @@ extension URLScanner {
     }
 
     // 4. Return the next component.
-    mapping.authorityStartIndex = input.startIndex
-    mapping.hostnameEndIndex = hostnameEndIndex
+    mapping.authorityRange = Range(uncheckedBounds: (input.startIndex, hostnameEndIndex))
+    mapping.hostnameRange = Range(uncheckedBounds: (input.startIndex, hostnameEndIndex))
     return .success(continueFrom: (.pathStart, hostnameEndIndex))
   }
 }
@@ -1154,13 +1193,13 @@ extension URLScanner {
 
     // 4. Return the next component.
     if let pathEnd = pathEndIndex {
-      mapping.pathEndIndex = pathEnd
+      mapping.pathRange = Range(uncheckedBounds: (path.startIndex, pathEnd))
       return .success(
         continueFrom: (
           ASCII(input[pathEnd]) == .questionMark ? .query : .fragment, input.index(after: pathEnd)
         ))
     } else {
-      mapping.pathEndIndex = path.isEmpty ? nil : input.endIndex
+      mapping.pathRange = path.isEmpty ? nil : Range(uncheckedBounds: (input.startIndex, input.endIndex))
       return .success(continueFrom: nil)
     }
   }
@@ -1305,73 +1344,25 @@ extension URLScanner.UnprocessedMapping {
       preconditionFailure("We must have a scheme")
     }
 
-    // The mapping does not contain full ranges. They must be inferred using our knowledge of URL structure.
-    // Some components require additional validation (e.g. the port), and others require adjustments based on
-    // full knowledge of the URL string (e.g. if a file URL whose path starts with a Windows drive, clear the host).
-
-    let schemeRange = u_mapping.schemeTerminatorIndex.map { inputString.startIndex..<$0 }
-    var usernameRange: Range<InputString.Index>?
-    var passwordRange: Range<InputString.Index>?
-    var hostnameRange: Range<InputString.Index>?
-    var portRange: Range<InputString.Index>?
-    var pathRange: Range<InputString.Index>?
-    let queryRange: Range<InputString.Index>?
-    let fragmentRange: Range<InputString.Index>?
-
     // Step 1: Extract full ranges.
 
-    var cursor: InputString.Index
-
-    if let authorityStart = u_mapping.authorityStartIndex {
-      cursor = authorityStart
-      if let usernameEnd = u_mapping.usernameEndIndex {
-        usernameRange = cursor..<usernameEnd
-        cursor = usernameEnd
-        if let passwordEnd = u_mapping.passwordEndIndex {
-          assert(inputString[cursor] == ASCII.colon.codePoint)
-          cursor = inputString.index(after: cursor)
-          passwordRange = cursor..<passwordEnd
-          cursor = passwordEnd
+    if u_mapping.authorityRange != nil {
+      if let username = u_mapping.usernameRange {
+        if let password = u_mapping.passwordRange {
+          assert(inputString[inputString.index(before: password.lowerBound)] == ASCII.colon.codePoint)
         }
-        assert(inputString[cursor] == ASCII.commercialAt.codePoint)
-        cursor = inputString.index(after: cursor)
+        assert(inputString[u_mapping.passwordRange?.upperBound ?? username.upperBound] == ASCII.commercialAt.codePoint)
       }
-      if let hostnameEnd = u_mapping.hostnameEndIndex {
-        hostnameRange = cursor..<hostnameEnd
-        cursor = hostnameEnd
+      assert(u_mapping.hostnameRange != nil)
+      if let port = u_mapping.portRange {
+        assert(inputString[inputString.index(before: port.lowerBound)] == ASCII.colon.codePoint)
       }
-      if let portEndIndex = u_mapping.portEndIndex {
-        assert(inputString[cursor] == ASCII.colon.codePoint)
-        cursor = inputString.index(after: cursor)
-        portRange = cursor..<portEndIndex
-        cursor = portEndIndex
-      }
-    } else if let schemeRange = schemeRange {
-      cursor = inputString.index(after: schemeRange.upperBound)  // ":" scheme separator.
-    } else {
-      cursor = inputString.startIndex
     }
-    if let pathEnd = u_mapping.pathEndIndex {
-      pathRange = cursor..<pathEnd
-      cursor = pathEnd
-    } else {
-      pathRange = nil
+    if let query = u_mapping.queryRange {
+      assert(inputString[inputString.index(before: query.lowerBound)] == ASCII.questionMark.codePoint)
     }
-    if let queryEnd = u_mapping.queryEndIndex {
-      assert(inputString[cursor] == ASCII.questionMark.codePoint)
-      cursor = inputString.index(after: cursor)  // "?" query separator not included in range.
-      queryRange = cursor..<queryEnd
-      cursor = queryEnd
-    } else {
-      queryRange = nil
-    }
-    if let fragmentEnd = u_mapping.fragmentEndIndex {
-      assert(inputString[cursor] == ASCII.numberSign.codePoint)
-      cursor = inputString.index(after: cursor)  // "#" fragment separator not included in range.
-      fragmentRange = cursor..<fragmentEnd
-      cursor = fragmentEnd
-    } else {
-      fragmentRange = nil
+    if let fragment = u_mapping.fragmentRange {
+      assert(inputString[inputString.index(before: fragment.lowerBound)] == ASCII.numberSign.codePoint)
     }
 
     // Step 2: Process the input string, now that we have full knowledge of its contents.
@@ -1395,11 +1386,11 @@ extension URLScanner.UnprocessedMapping {
     }
 
     // FIXME: This is too fragile.
-
+    var adjustedPathRange = u_mapping.pathRange
     if schemeKind == .file {
       // We may have a Windows drive letter in the authority position ("file://C:/foo").
       // If so, drop the leading slash so it is treated as an absolute path with Windows drive.
-      if var pathContents = pathRange.map({ inputString[$0] }), hostnameRange == nil {
+      if var pathContents = adjustedPathRange.map({ inputString[$0] }), hostnameRange == nil {
         let isPathSeparator: (UInt8?) -> Bool = {
           $0 == ASCII.forwardSlash.codePoint || $0 == ASCII.backslash.codePoint
         }
@@ -1407,20 +1398,20 @@ extension URLScanner.UnprocessedMapping {
           isPathSeparator(pathContents.first),
           URLStringUtils.hasWindowsDriveLetterPrefix(pathContents.dropFirst())
         {
-          pathRange = pathContents.startIndex..<pathContents.endIndex
+          adjustedPathRange = pathContents.startIndex..<pathContents.endIndex
         }
       }
     }
 
     // Step 3: Construct a `ProcessedMapping` from that information.
     return ParsedURLString<InputString>.ProcessedMapping(
-      schemeRange: schemeRange,
-      usernameRange: usernameRange,
-      passwordRange: passwordRange,
-      hostnameRange: hostnameRange,
-      pathRange: pathRange,
-      queryRange: queryRange,
-      fragmentRange: fragmentRange,
+      schemeRange: u_mapping.schemeRange,
+      usernameRange: u_mapping.usernameRange,
+      passwordRange: u_mapping.passwordRange,
+      hostnameRange: u_mapping.hostnameRange,
+      pathRange: adjustedPathRange,
+      queryRange: u_mapping.queryRange,
+      fragmentRange: u_mapping.fragmentRange,
       hostKind: hostKind,
       port: port,
       cannotBeABaseURL: u_mapping.cannotBeABaseURL,
