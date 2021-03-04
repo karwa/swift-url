@@ -143,53 +143,49 @@ extension ParsedURLString {
 ///
 struct ScannedRangesAndFlags<InputString> where InputString: Collection {
 
-  // This is the index of the scheme terminator (":"), if one exists.
+  /// The position of the scheme's content, if present, without trailing separators.
   var schemeRange: Range<InputString.Index>?
 
-  // This is the index of the first character of the authority segment, if one exists.
-  // The scheme and authority may be separated by an arbitrary amount of trivia.
-  // The authority ends at the "*EndIndex" of the last of its components.
+  /// The position of the authority section, if present, without leading or trailing separators.
   var authorityRange: Range<InputString.Index>?
 
-  // This is the endIndex of the authority's username component, if one exists.
-  // The username starts at the authorityStartIndex.
+  /// The position of the username content, if present, without leading or trailing separators.
   var usernameRange: Range<InputString.Index>?
 
-  // This is the endIndex of the password, if one exists.
-  // If a password exists, a username must also exist, and usernameEndIndex must be the ":" character.
-  // The password starts at the index after usernameEndIndex.
+  /// The position of the password content, if present, without leading or trailing separators.
   var passwordRange: Range<InputString.Index>?
 
-  // This is the endIndex of the hostname, if one exists.
-  // The hostname starts at (username/password)EndIndex, or from authorityStartIndex if there are no credentials.
-  // If a hostname exists, authorityStartIndex must be set.
+  /// The position of the hostname content, if present, without leading or trailing separators.
   var hostnameRange: Range<InputString.Index>?
 
-  // This is the endIndex of the port-string, if one exists. If a port exists, a hostname must also exist.
-  // If it exists, the port-string starts at hostnameEndIndex and includes a leading ':' character.
+  /// The position of the port content, if present, without leading or trailing separators.
   var portRange: Range<InputString.Index>?
 
-  // This is the endIndex of the path, if one exists.
-  // If an authority segment exists, the path starts at the end of the authority and includes a leading slash.
-  // Otherwise, it starts at the index after 'schemeTerminatorIndex' (if it exists) and may/may not include leading slashes.
-  // If there is also no scheme, the path starts at the start of the string and may/may not include leading slashes.
+  /// The position of the path content, if present, without leading or trailing separators.
+  /// Note that the path's initial "/", if present, is not considered a separator.
   var pathRange: Range<InputString.Index>?
 
-  // This is the endIndex of the query-string, if one exists.
-  // If it exists, the query starts at the end of the last component and includes a leading '?' character.
+  /// The position of the query content, if present, without leading or trailing separators.
   var queryRange: Range<InputString.Index>?
 
-  // This is the endIndex of the fragment-string, if one exists.
-  // If it exists, the fragment starts at the end of the last component and includes a leading '#' character.
+  /// The position of the fragment content, if present, without leading or trailing separators.
   var fragmentRange: Range<InputString.Index>?
 
-  // - Flags and data.
+  // Flags.
 
-  var cannotBeABaseURL = false
-  fileprivate var componentsToCopyFromBase: ComponentsToCopy = []
+  /// The kind of scheme contained in `schemeRange`, if it is not `nil`.
   var schemeKind: WebURL.SchemeKind? = nil
 
+  /// Whether this URL 'cannot be a base'.
+  var cannotBeABaseURL = false
+
+  /// A flag for a quirk in the standard, which means that absolute paths in particular URL strings should copy the Windows drive from their base URL.
   var absolutePathsCopyWindowsDriveFromBase = false
+
+  /// The components to copy from the base URL. If non-empty, there must be a base URL.
+  /// Only the scheme and path may overlap with components detected in the input string - for the former, it is a meaningless quirk of the control flow,
+  /// and the two schemes must be equal; for the latter, it means the two paths should be merged (i.e. that the input string's path is relative to the base URL's path).
+  fileprivate var componentsToCopyFromBase: ComponentsToCopy = []
 }
 
 extension ParsedURLString.ProcessedMapping {
