@@ -277,57 +277,6 @@ extension LazilyPercentEncoded {
 
 }
 
-extension LazilyPercentEncoded where Source: BidirectionalCollection {
-
-  /// Calls the given closure with a temporary buffer containing part of the flattened percent-encoded string. The closure is called repeatedly until
-  /// the entire string has been written.
-  ///
-  /// - important: This function is similar to `writeBuffered`, except that the string is written in parts from the end to the start.
-  ///              Each buffer's contents are in the correct order, but the buffers themselves represent a sliding window which begins at the
-  ///              chunk containing the source collection's end and ends at the chunk containing the source collection's start.
-  ///              The contents of each buffer may be _prepended_ to the contents of all previous buffers to yield the final encoded string.
-  ///
-  /// The provided buffer must not escape the closure.
-  ///
-  /// - returns: A boolean indicating whether or not the final result differs from the source contents.
-  ///            If this function returns `true`, some of the source collection's content was either percent-encoded or substituted.
-  ///            If it returns `false`, the source collection is already percent-encoded.
-  ///
-  @discardableResult
-  func writeBufferedFromBack(_ writer: (UnsafeBufferPointer<UInt8>) -> Void) -> Bool {
-
-    return withSmallStringSizedStackBuffer { buffer -> Bool in
-      let bufferSize = buffer.count
-      precondition(buffer.baseAddress != nil)
-      var bufferIdx = buffer.endIndex
-      var hasEncodedBytes = false
-
-      for byteGroup in self.reversed() {
-        if bufferIdx < 3 {
-          writer(
-            UnsafeBufferPointer(
-              start: buffer.baseAddress.unsafelyUnwrapped + bufferIdx,
-              count: bufferSize &- bufferIdx))
-          bufferIdx = buffer.endIndex
-        }
-        for byte in byteGroup.reversed() {
-          bufferIdx &-= 1
-          buffer.baseAddress.unsafelyUnwrapped.advanced(by: bufferIdx).initialize(to: byte)
-        }
-        guard case .sourceByte = byteGroup else {
-          hasEncodedBytes = true
-          continue
-        }
-      }
-      writer(
-        UnsafeBufferPointer(
-          start: buffer.baseAddress.unsafelyUnwrapped + bufferIdx,
-          count: bufferSize &- bufferIdx))
-      return hasEncodedBytes
-    }
-  }
-}
-
 
 // MARK: - Decoding.
 
