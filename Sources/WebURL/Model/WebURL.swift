@@ -63,10 +63,12 @@ public struct WebURL {
   /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
   /// serialized result may look different to the original contents. These transformations are defined in the URL specification.
   ///
+  @inlinable @inline(__always)
   public init?<S>(_ string: S) where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     self.init(utf8: string.utf8)
   }
 
+  @inlinable @inline(__always)
   init?<C>(utf8 bytes: C) where C: BidirectionalCollection, C.Element == UInt8 {
     guard let url = urlFromBytes(bytes, baseURL: nil) else {
       return nil
@@ -80,10 +82,12 @@ public struct WebURL {
   /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
   /// serialized result may look different to the original contents. These transformations are defined in the URL specification.
   ///
+  @inlinable @inline(__always)
   public func join<S>(_ string: S) -> WebURL? where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     return join(utf8: string.utf8)
   }
 
+  @inlinable @inline(__always)
   func join<C>(utf8 bytes: C) -> WebURL? where C: BidirectionalCollection, C.Element == UInt8 {
     guard let url = urlFromBytes(bytes, baseURL: self) else {
       return nil
@@ -412,6 +416,8 @@ extension WebURL {
   ///
   /// - seealso: `scheme`
   ///
+  @_specialize(where S == String)
+  @_specialize(where S == Substring)
   public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
     try setScheme(utf8: newScheme.utf8)
   }
@@ -420,6 +426,8 @@ extension WebURL {
   ///
   /// - seealso: `username`
   ///
+  @_specialize(where S == String)
+  @_specialize(where S == Substring)
   public mutating func setUsername<S>(to newUsername: S?) throws where S: StringProtocol {
     try setUsername(utf8: newUsername?.utf8)
   }
@@ -428,6 +436,8 @@ extension WebURL {
   ///
   /// - seealso: `password`
   ///
+  @_specialize(where S == String)
+  @_specialize(where S == Substring)
   public mutating func setPassword<S>(to newPassword: S?) throws where S: StringProtocol {
     try setPassword(utf8: newPassword?.utf8)
   }
@@ -436,6 +446,8 @@ extension WebURL {
   ///
   /// - seealso: `hostname`
   ///
+  @_specialize(where S == String)
+  @_specialize(where S == Substring)
   public mutating func setHostname<S>(to newHostname: S?) throws
   where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     try setHostname(utf8: newHostname?.utf8)
@@ -466,6 +478,8 @@ extension WebURL {
   ///
   /// - seealso: `path`
   ///
+  @_specialize(where S == String)
+  @_specialize(where S == Substring)
   public mutating func setPath<S>(to newPath: S) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     try setPath(utf8: newPath.utf8)
   }
@@ -474,6 +488,8 @@ extension WebURL {
   ///
   /// - seealso: `query`
   ///
+  @_specialize(where S == String)
+  @_specialize(where S == Substring)
   public mutating func setQuery<S>(to newQuery: S?) where S: StringProtocol {
     setQuery(utf8: newQuery?.utf8)
   }
@@ -482,6 +498,8 @@ extension WebURL {
   ///
   /// - seealso: `fragment`
   ///
+  @_specialize(where S == String)
+  @_specialize(where S == Substring)
   public mutating func setFragment<S>(to newFragment: S?) where S: StringProtocol {
     setFragment(utf8: newFragment?.utf8)
   }
