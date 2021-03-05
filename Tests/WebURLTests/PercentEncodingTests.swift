@@ -70,6 +70,26 @@ extension PercentEncodingTests {
   func testTable() {
     XCTAssert(percent_encoding_table.count == 128)
   }
+
+  func testDualImplementationEquivalence() {
+    func testEncodeSet<EncodeSet: DualImplementedPercentEncodeSet>(_: EncodeSet.Type) {
+      for char in ASCII.allCharacters {
+        XCTAssertEqual(
+          EncodeSet.shouldEscape_binary(character: char),
+          EncodeSet.shouldEscape_table(character: char),
+          "Mismatch for character \"\(char)\" (#\(char.codePoint)) in encode set #\(EncodeSet.self)"
+        )
+      }
+    }
+    testEncodeSet(URLEncodeSet.C0.self)
+    testEncodeSet(URLEncodeSet.Fragment.self)
+    testEncodeSet(URLEncodeSet.Query_NotSpecial.self)
+    testEncodeSet(URLEncodeSet.Query_Special.self)
+    testEncodeSet(URLEncodeSet.Path.self)
+    testEncodeSet(URLEncodeSet.UserInfo.self)
+    testEncodeSet(URLEncodeSet.Component.self)
+    testEncodeSet(URLEncodeSet.FormEncoded.self)
+  }
 }
 
 extension PercentEncodingTests {

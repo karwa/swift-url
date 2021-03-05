@@ -449,46 +449,128 @@ struct PassthroughEncodeSet: PercentEncodeSet {
   }
 }
 
+// ARM and x86 seem to have wildly different performance characteristics.
+// The lookup table seems to be about 8-12% better than bitshifting on x86, but can be 90% slower on ARM.
+
+protocol DualImplementedPercentEncodeSet: PercentEncodeSet {
+  static func shouldEscape_binary(character: ASCII) -> Bool
+  static func shouldEscape_table(character: ASCII) -> Bool
+}
+
+extension DualImplementedPercentEncodeSet {
+  @inline(__always)
+  static func shouldEscape(character: ASCII) -> Bool {
+    #if arch(x86_64)
+      return shouldEscape_table(character: character)
+    #else
+      return shouldEscape_binary(character: character)
+    #endif
+  }
+}
+
 enum URLEncodeSet {
 
-  struct C0: PercentEncodeSet {
+  struct C0: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape(character: ASCII) -> Bool {
+    static func shouldEscape_binary(character: ASCII) -> Bool {
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b00000000_00000000_00000000_00000000_11111111_11111111_11111111_11111111
+      let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+    @inline(__always)
+    static func shouldEscape_table(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.c0)
     }
   }
 
-  struct Fragment: PercentEncodeSet {
+  struct Fragment: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape(character: ASCII) -> Bool {
+    static func shouldEscape_binary(character: ASCII) -> Bool {
+      if C0.shouldEscape_binary(character: character) { return true }
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b01010000_00000000_00000000_00000101_00000000_00000000_00000000_00000000
+      let hi: UInt64 = 0b00000000_00000000_00000000_00000001_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+    @inline(__always)
+    static func shouldEscape_table(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.fragment)
     }
   }
 
-  struct Query_NotSpecial: PercentEncodeSet {
+  struct Query_NotSpecial: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape(character: ASCII) -> Bool {
+    static func shouldEscape_binary(character: ASCII) -> Bool {
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b01010000_00000000_00000000_00001101_11111111_11111111_11111111_11111111
+      let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+    @inline(__always)
+    static func shouldEscape_table(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.query)
     }
   }
 
-  struct Query_Special: PercentEncodeSet {
+  struct Query_Special: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape(character: ASCII) -> Bool {
+    static func shouldEscape_binary(character: ASCII) -> Bool {
+      if Query_NotSpecial.shouldEscape_binary(character: character) { return true }
+      return character == .apostrophe
+    }
+    @inline(__always)
+    static func shouldEscape_table(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.specialQuery)
     }
   }
 
-  struct Path: PercentEncodeSet {
+  struct Path: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape(character: ASCII) -> Bool {
+    static func shouldEscape_binary(character: ASCII) -> Bool {
+      if Fragment.shouldEscape_binary(character: character) { return true }
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b10000000_00000000_00000000_00001000_00000000_00000000_00000000_00000000
+      let hi: UInt64 = 0b00101000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+    @inline(__always)
+    static func shouldEscape_table(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.path)
     }
   }
 
-  struct UserInfo: PercentEncodeSet {
+  struct UserInfo: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape(character: ASCII) -> Bool {
+    static func shouldEscape_binary(character: ASCII) -> Bool {
+      if Path.shouldEscape_binary(character: character) { return true }
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b00101100_00000000_10000000_00000000_00000000_00000000_00000000_00000000
+      let hi: UInt64 = 0b00010000_00000000_00000000_00000000_01111000_00000000_00000000_00000001
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+    @inline(__always)
+    static func shouldEscape_table(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.userInfo)
     }
   }
@@ -496,16 +578,38 @@ enum URLEncodeSet {
   /// This encode-set is not used for any particular component, but can be used to encode data which is compatible with the escaping for
   /// the path, query, and fragment. It should give the same results as Javascript's `.encodeURIComponent()` method.
   ///
-  struct Component: PercentEncodeSet {
+  struct Component: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape(character: ASCII) -> Bool {
+    static func shouldEscape_binary(character: ASCII) -> Bool {
+      if UserInfo.shouldEscape_binary(character: character) { return true }
+      //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+      let lo: UInt64 = 0b00000000_00000000_00011000_01110000_00000000_00000000_00000000_00000000
+      let hi: UInt64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
+      if character.codePoint < 64 {
+        return lo & (1 &<< character.codePoint) != 0
+      } else {
+        return hi & (1 &<< (character.codePoint &- 64)) != 0
+      }
+    }
+    @inline(__always)
+    static func shouldEscape_table(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.component)
     }
   }
 
-  struct FormEncoded: PercentEncodeSet {
+  struct FormEncoded: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape(character: ASCII) -> Bool {
+    static func shouldEscape_binary(character: ASCII) -> Bool {
+      // Do not percent-escape spaces because we 'plus-escape' them instead.
+      if character == .space { return false }
+      switch character {
+      case _ where character.isAlphaNumeric: return false
+      case .asterisk, .minus, .period, .underscore: return false
+      default: return true
+      }
+    }
+    @inline(__always)
+    static func shouldEscape_table(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.form)
     }
     @inline(__always)
@@ -585,10 +689,10 @@ let percent_encoding_table: [URLEncodeSetSet] = [
   /* 0x28 leftParenthesis */           .form,
   /* 0x29 rightParenthesis */          .form,
   /* 0x2A asterisk */                  .none,
-  /* 0x2B plus */                      .none,
+  /* 0x2B plus */                      [.form, .component],
   /* 0x2C comma */                     [.form, .component],
   /* 0x2D minus */                     .none,
-  /* 0x2E period */                    .form,
+  /* 0x2E period */                    .none,
   /* 0x2F forwardSlash */              [.userInfo, .form, .component],
   // Numbers                           ----------------------------------------------------------------------
   /*  0x30 digit 0 */                  .none,
