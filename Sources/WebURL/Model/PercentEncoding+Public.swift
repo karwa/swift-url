@@ -17,6 +17,27 @@
 
 
 // We only offer eager-encoding APIs, as lazy collections of encoded characters probably aren't that useful?
+
+extension Collection where Element == UInt8 {
+
+  fileprivate func urlEncodedString<EncodeSet: PercentEncodeSet>(_: EncodeSet.Type) -> String {
+    var result = ""
+    result.reserveCapacity(underestimatedCount)
+    self.lazy.percentEncoded(using: EncodeSet.self).writeBuffered { buffer in
+      result.append(contentsOf: String(decoding: buffer, as: UTF8.self))
+    }
+    return result
+  }
+
+  /// Interpets this collection's elements as a UTF-8 string, and returns its `urlEncoded` representation.
+  ///
+  public var urlEncodedString: String {
+    withContiguousStorageIfAvailable {
+      $0.urlEncodedString(URLEncodeSet.Component.self)
+    } ?? urlEncodedString(URLEncodeSet.Component.self)
+  }
+}
+
 extension StringProtocol {
 
   /// Returns a copy of this string that can be embedded in a URL's `path`, `query`, or `fragment`, and is also a valid opaque host.
@@ -32,12 +53,7 @@ extension StringProtocol {
     @_specialize(where Self == String)
     @_specialize(where Self == Substring)
     get {
-      var result = ""
-      result.reserveCapacity(utf8.underestimatedCount)
-      self.utf8.lazy.percentEncoded(using: URLEncodeSet.Component.self).writeBuffered { buffer in
-        result.append(contentsOf: String(decoding: buffer, as: UTF8.self))
-      }
-      return result
+      utf8.urlEncodedString
     }
   }
 
@@ -57,12 +73,9 @@ extension StringProtocol {
     @_specialize(where Self == String)
     @_specialize(where Self == Substring)
     get {
-      var result = ""
-      result.reserveCapacity(utf8.underestimatedCount)
-      self.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered { buffer in
-        result.append(contentsOf: String(decoding: buffer, as: UTF8.self))
-      }
-      return result
+      utf8.withContiguousStorageIfAvailable {
+        $0.urlEncodedString(URLEncodeSet.FormEncoded.self)
+      } ?? utf8.urlEncodedString(URLEncodeSet.FormEncoded.self)
     }
   }
 }
@@ -70,6 +83,17 @@ extension StringProtocol {
 
 // MARK: - Percent Decoding
 
+
+extension Collection where Element == UInt8 {
+
+  /// Interpets this collection's elements as a UTF-8 string, and returns its `urlDecoded` representation.
+  ///
+  public var urlDecodedString: String {
+    withContiguousStorageIfAvailable {
+      String(decoding: $0.lazy.percentDecoded, as: UTF8.self)
+    } ?? String(decoding: self.lazy.percentDecoded, as: UTF8.self)
+  }
+}
 
 extension StringProtocol {
 
@@ -81,11 +105,12 @@ extension StringProtocol {
   /// "%2Fusr%2Fbin%2Fswift".urlDecoded // /usr/bin/swift
   /// "%F0%9F%98%8E".urlDecoded // 😎
   /// ```
+  ///
   public var urlDecoded: String {
     @_specialize(where Self == String)
     @_specialize(where Self == Substring)
     get {
-      String(decoding: self.utf8.lazy.percentDecoded, as: UTF8.self)
+      utf8.urlDecodedString
     }
   }
 
@@ -104,7 +129,9 @@ extension StringProtocol {
     @_specialize(where Self == String)
     @_specialize(where Self == Substring)
     get {
-      String(decoding: self.utf8.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
+      utf8.withContiguousStorageIfAvailable {
+        String(decoding: $0.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
+      } ?? String(decoding: utf8.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
     }
   }
 }
