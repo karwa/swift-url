@@ -29,12 +29,16 @@ extension StringProtocol {
   /// ```
   ///
   public var urlEncoded: String {
-    var result = ""
-    result.reserveCapacity(utf8.underestimatedCount)
-    self.utf8.lazy.percentEncoded(using: URLEncodeSet.Component.self).writeBuffered { buffer in
-      result.append(contentsOf: String(decoding: buffer, as: UTF8.self))
+    @_specialize(where Self == String)
+    @_specialize(where Self == Substring)
+    get {
+      var result = ""
+      result.reserveCapacity(utf8.underestimatedCount)
+      self.utf8.lazy.percentEncoded(using: URLEncodeSet.Component.self).writeBuffered { buffer in
+        result.append(contentsOf: String(decoding: buffer, as: UTF8.self))
+      }
+      return result
     }
-    return result
   }
 
   /// Returns a copy of this string that can be used as a component in a `application/x-www-form-urlencoded` string.
@@ -50,12 +54,16 @@ extension StringProtocol {
   /// ```
   ///
   public var urlFormEncoded: String {
-    var result = ""
-    result.reserveCapacity(utf8.underestimatedCount)
-    self.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered { buffer in
-      result.append(contentsOf: String(decoding: buffer, as: UTF8.self))
+    @_specialize(where Self == String)
+    @_specialize(where Self == Substring)
+    get {
+      var result = ""
+      result.reserveCapacity(utf8.underestimatedCount)
+      self.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered { buffer in
+        result.append(contentsOf: String(decoding: buffer, as: UTF8.self))
+      }
+      return result
     }
-    return result
   }
 }
 
@@ -74,7 +82,11 @@ extension StringProtocol {
   /// "%F0%9F%98%8E".urlDecoded // 😎
   /// ```
   public var urlDecoded: String {
-    String(decoding: self.utf8.lazy.percentDecoded, as: UTF8.self)
+    @_specialize(where Self == String)
+    @_specialize(where Self == Substring)
+    get {
+      String(decoding: self.utf8.lazy.percentDecoded, as: UTF8.self)
+    }
   }
 
   /// Returns a copy of this string that has been decoded from `application/x-www-form-urlencoded` format.
@@ -89,9 +101,15 @@ extension StringProtocol {
   /// ```
   ///
   public var urlFormDecoded: String {
-    String(decoding: self.utf8.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
+    @_specialize(where Self == String)
+    @_specialize(where Self == Substring)
+    get {
+      String(decoding: self.utf8.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
+    }
   }
 }
+
+// Note: This is sloooooow, because it doesn't get specialized.
 
 extension LazyCollectionProtocol where Elements: StringProtocol {
 
