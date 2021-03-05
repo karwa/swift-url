@@ -46,9 +46,12 @@ protocol PercentEncodeSet {
 
 extension PercentEncodeSet {
 
+  @inline(__always)
   static func substitute(for character: ASCII) -> ASCII? {
     return nil
   }
+
+  @inline(__always)
   static func unsubstitute(character: ASCII) -> ASCII? {
     return nil
   }
@@ -130,8 +133,20 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
     return source.formIndex(after: &i)
   }
 
+  func index(_ i: Index, offsetBy distance: Int) -> Index {
+    return source.index(i, offsetBy: distance)
+  }
+
+  func formIndex(_ i: inout Index, offsetBy distance: Int) {
+    return source.formIndex(&i, offsetBy: distance)
+  }
+
   func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
     return source.index(i, offsetBy: distance, limitedBy: limit)
+  }
+
+  func formIndex(_ i: inout Index, offsetBy distance: Int, limitedBy limit: Index) -> Bool {
+    return source.formIndex(&i, offsetBy: distance, limitedBy: limit)
   }
 
   func distance(from start: Index, to end: Index) -> Int {
@@ -162,6 +177,14 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
       case .percentEncodedByte:
         return 3
       }
+    }
+
+    var isEmpty: Bool {
+      return false
+    }
+
+    var underestimatedCount: Int {
+      return endIndex
     }
 
     var count: Int {
@@ -471,6 +494,7 @@ func writeBufferedPercentEncodedQuery<Source>(
 /// the `PercentEncodeSet` used to encode the string is not known.
 ///
 struct PassthroughEncodeSet: PercentEncodeSet {
+  @inline(__always)
   static func shouldEscape(character: ASCII) -> Bool {
     return false
   }
@@ -531,12 +555,15 @@ enum URLEncodeSet {
   }
 
   struct FormEncoded: PercentEncodeSet {
+    @inline(__always)
     static func shouldEscape(character: ASCII) -> Bool {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.form)
     }
+    @inline(__always)
     static func substitute(for character: ASCII) -> ASCII? {
       return character == .space ? .plus : nil
     }
+    @inline(__always)
     static func unsubstitute(character: ASCII) -> ASCII? {
       return character == .plus ? .space : nil
     }
