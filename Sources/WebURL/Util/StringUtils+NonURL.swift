@@ -78,16 +78,3 @@ private func with32ByteStackBuffer<T>(_ perform: (UnsafeMutableBufferPointer<UIn
     }
   }
 }
-
-extension StringProtocol {
-
-  @inlinable @inline(__always)
-  func _withUTF8<T>(_ body: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
-    if var string = self as? String {
-      return try string.withUTF8(body)
-    } else {
-      var substring = self as! Substring
-      return try substring.withUTF8(body)
-    }
-  }
-}

@@ -38,6 +38,7 @@
 //    the content to freshly-allocated storage. The actual construction process involves performing a dry-run
 //    to calculate the optimal result type and produce an allocation which is correctly sized to hold the result.
 
+@inlinable
 func urlFromBytes<Bytes>(_ inputString: Bytes, baseURL: WebURL?) -> WebURL?
 where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
@@ -47,7 +48,9 @@ where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
   } ?? _urlFromBytes_impl(inputString, baseURL: baseURL, callback: &callback)
 }
 
-private func _urlFromBytes_impl<Bytes, Callback>(
+@usableFromInline
+@_specialize(kind:partial,where Callback == IgnoreValidationErrors)
+func _urlFromBytes_impl<Bytes, Callback>(
   _ inputString: Bytes, baseURL: WebURL?, callback: inout Callback
 ) -> WebURL? where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Callback: URLParserCallback {
 
