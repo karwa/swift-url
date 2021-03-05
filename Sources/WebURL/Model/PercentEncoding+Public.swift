@@ -21,12 +21,7 @@
 extension Collection where Element == UInt8 {
 
   fileprivate func urlEncodedString<EncodeSet: PercentEncodeSet>(_: EncodeSet.Type) -> String {
-    var result = ""
-    result.reserveCapacity(underestimatedCount)
-    self.lazy.percentEncoded(using: EncodeSet.self).writeBuffered { buffer in
-      result.append(contentsOf: String(decoding: buffer, as: UTF8.self))
-    }
-    return result
+    String(decoding: self.lazy.percentEncoded(using: EncodeSet.self).joined(), as: UTF8.self)
   }
 
   /// Interpets this collection's elements as a UTF-8 string, and returns its `urlEncoded` representation.
