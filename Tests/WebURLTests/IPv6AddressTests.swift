@@ -91,14 +91,11 @@ fileprivate func ntop_octets(_ input: [UInt8]) -> String? {
   src[keyPath: in6_union_property].__u6_addr8.13 = input[13]
   src[keyPath: in6_union_property].__u6_addr8.14 = input[14]
   src[keyPath: in6_union_property].__u6_addr8.15 = input[15]
-  let str = String(_unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) {
-    return $0.withMemoryRebound(to: CChar.self) {
-      let p = inet_ntop(AF_INET6, &src, $0.baseAddress, socklen_t($0.count))
-      guard p != nil else { return 0 }
-      return strlen($0.baseAddress!)
-    }
+  let bytes = [CChar](unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) { buffer, count in
+    let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
+    count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
   }
-  return str.isEmpty ? nil : str
+  return bytes.isEmpty ? nil : String(cString: bytes)
 }
 
 fileprivate func ntop_pieces(_ input: [UInt16]) -> String? {
@@ -111,14 +108,11 @@ fileprivate func ntop_pieces(_ input: [UInt16]) -> String? {
   src[keyPath: in6_union_property].__u6_addr16.5 = input[5]
   src[keyPath: in6_union_property].__u6_addr16.6 = input[6]
   src[keyPath: in6_union_property].__u6_addr16.7 = input[7]
-  let str = String(_unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) {
-    return $0.withMemoryRebound(to: CChar.self) {
-      let p = inet_ntop(AF_INET6, &src, $0.baseAddress, socklen_t($0.count))
-      guard p != nil else { return 0 }
-      return strlen($0.baseAddress!)
-    }
+  let bytes = [CChar](unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) { buffer, count in
+    let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
+    count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
   }
-  return str.isEmpty ? nil : str
+  return bytes.isEmpty ? nil : String(cString: bytes)
 }
 
 
