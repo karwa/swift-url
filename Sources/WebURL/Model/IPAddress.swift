@@ -496,10 +496,8 @@ extension IPv6Address {
   ///
   public var serialized: String {
     var direct = serializedDirect
-    return String(_unsafeUninitializedCapacity: Int(direct.count)) { stringBuffer in
-      withUnsafeBytes(of: &direct.buffer) { codeunits in
-        stringBuffer.initialize(from: codeunits.prefix(Int(direct.count))).1
-      }
+    return withUnsafeBytes(of: &direct.buffer) {
+      String(decoding: $0.prefix(Int(direct.count)), as: UTF8.self)
     }
   }
 
@@ -1061,10 +1059,8 @@ extension IPv4Address {
   ///
   public var serialized: String {
     var direct = serializedDirect
-    return String(_unsafeUninitializedCapacity: Int(direct.count)) { stringBuffer in
-      withUnsafeBytes(of: &direct.buffer) { codeunits in
-        stringBuffer.initialize(from: codeunits.prefix(Int(direct.count))).1
-      }
+    return withUnsafeBytes(of: &direct.buffer) {
+      String(decoding: $0.prefix(Int(direct.count)), as: UTF8.self)
     }
   }
 
