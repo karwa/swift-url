@@ -141,11 +141,9 @@ extension ParsedHost {
 
     case .opaque:
       assert(bytes.isEmpty == false)
-      writer.writeHostname { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
+      writer.writeHostname { writePiece in
         // TODO: [performance] - store whether %-encoding was required in URLMetrics.
-        _ = bytes
-          .lazy.percentEncoded(using: URLEncodeSet.C0.self)
-          .writeBuffered { piece in writePiece(piece) }
+        _ = bytes.lazy.percentEncoded(using: URLEncodeSet.C0.self).write(to: writePiece)
       }
 
     case .ipv4Address(let addr):

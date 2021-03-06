@@ -153,59 +153,59 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
     return source.distance(from: start, to: end)
   }
 
-  subscript(position: Index) -> Element {
+  subscript(position: Index) -> PercentEncodedByte {
     let sourceByte = source[position]
     if let asciiChar = ASCII(sourceByte), EncodeSet.shouldEscape(character: asciiChar) == false {
       return EncodeSet.substitute(for: asciiChar).map { .substitutedByte($0.codePoint) } ?? .sourceByte(sourceByte)
     }
     return .percentEncodedByte(sourceByte)
   }
+}
 
-  enum Element: RandomAccessCollection {
-    case sourceByte(UInt8)
-    case substitutedByte(UInt8)
-    case percentEncodedByte(UInt8)
+enum PercentEncodedByte: RandomAccessCollection {
+  case sourceByte(UInt8)
+  case substitutedByte(UInt8)
+  case percentEncodedByte(UInt8)
 
-    var startIndex: Int {
-      return 0
+  var startIndex: Int {
+    return 0
+  }
+
+  var endIndex: Int {
+    switch self {
+    case .sourceByte, .substitutedByte:
+      return 1
+    case .percentEncodedByte:
+      return 3
     }
+  }
 
-    var endIndex: Int {
-      switch self {
-      case .sourceByte, .substitutedByte:
-        return 1
-      case .percentEncodedByte:
-        return 3
-      }
-    }
+  var isEmpty: Bool {
+    return false
+  }
 
-    var isEmpty: Bool {
-      return false
-    }
+  var underestimatedCount: Int {
+    return endIndex
+  }
 
-    var underestimatedCount: Int {
-      return endIndex
-    }
+  var count: Int {
+    return endIndex
+  }
 
-    var count: Int {
-      return endIndex
-    }
-
-    subscript(position: Int) -> UInt8 {
-      switch self {
-      case .sourceByte(let byte):
-        assert(position == 0, "Invalid index")
-        return byte
-      case .substitutedByte(let byte):
-        assert(position == 0, "Invalid index")
-        return byte
-      case .percentEncodedByte(let byte):
-        switch position {
-        case 0: return ASCII.percentSign.codePoint
-        case 1: return ASCII.getHexDigit_upper(byte &>> 4).codePoint
-        case 2: return ASCII.getHexDigit_upper(byte).codePoint
-        default: fatalError("Invalid index")
-        }
+  subscript(position: Int) -> UInt8 {
+    switch self {
+    case .sourceByte(let byte):
+      assert(position == 0, "Invalid index")
+      return byte
+    case .substitutedByte(let byte):
+      assert(position == 0, "Invalid index")
+      return byte
+    case .percentEncodedByte(let byte):
+      switch position {
+      case 0: return ASCII.percentSign.codePoint
+      case 1: return ASCII.getHexDigit_upper(byte &>> 4).codePoint
+      case 2: return ASCII.getHexDigit_upper(byte).codePoint
+      default: fatalError("Invalid index")
       }
     }
   }
@@ -226,55 +226,18 @@ extension LazilyPercentEncoded: RandomAccessCollection where Source: RandomAcces
 
 extension LazilyPercentEncoded {
 
-  /// Calls the given closure with a temporary buffer containing part of the flattened percent-encoded string. The closure is called repeatedly until
-  /// the entire string has been written.
-  ///
-  /// The string is written from start to end, so that appending the contents of each buffer to the contents of the previous buffers yields the final encoded string.
-  /// The provided buffer must not escape the closure.
-  ///
-  /// - returns: A boolean indicating whether or not the final result differs from the source contents.
-  ///            If this function returns `true`, some of the source collection's content was either percent-encoded or substituted.
-  ///            If it returns `false`, the source collection is already percent-encoded.
-  ///
-  @discardableResult
-  func writeBuffered(_ writer: (UnsafeBufferPointer<UInt8>) -> Void) -> Bool {
-
-    return withSmallStringSizedStackBuffer { buffer -> Bool in
-      let bufferSize = buffer.count
-      // TODO: This is carefully written to appease the optimizer.
-      // - precondition shouldn't be necessary.
-      //   `withSmallStringSizedStackBuffer` gives a stack pointer which is never nil.
-      // - bufferIdx is a UInt8 so the compiler knows it is never negative.
-      //   `UnsafeBufferPointer.init(start:count:)` traps on negative count, even in release mode.
-      //
-      // Check if there is still a benefit if/when progress is made on https://github.com/apple/swift/pull/34747
-      precondition(buffer.baseAddress != nil)
-      var bufferIdx: UInt8 = 0
-      var hasEncodedBytes = false
-
-      for byteGroup in self {
-        if bufferIdx &+ 3 > bufferSize {
-          writer(UnsafeBufferPointer(start: buffer.baseAddress, count: Int(truncatingIfNeeded: bufferIdx)))
-          bufferIdx = 0
-        }
-        // This appears to be the fastest way to fill the buffer. The non-loop alternative would be:
-        // `UnsafeMutableBufferPointer(rebasing: buffer[bufferIdx...]).initialize(from: element)`,
-        // which introduces all kinds of potential over/underflows and preconditions
-        // that the compiler will not eliminate.
-        for byte in byteGroup {
-          buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(truncatingIfNeeded: bufferIdx)).initialize(to: byte)
-          bufferIdx &+= 1
-        }
-        guard case .sourceByte = byteGroup else {
-          hasEncodedBytes = true
-          continue
-        }
+  /// Essentially, this is a `forEach` which _also_ returns whether any bytes were percent-encoded.
+  @inline(__always)
+  internal func write(to writer: (PercentEncodedByte) -> Void) -> Bool {
+    var didEscape = false
+    for byteGroup in self {
+      writer(byteGroup)
+      if case .percentEncodedByte = byteGroup {
+        didEscape = true
       }
-      writer(UnsafeBufferPointer(start: buffer.baseAddress, count: Int(truncatingIfNeeded: bufferIdx)))
-      return hasEncodedBytes
     }
+    return didEscape
   }
-
 }
 
 
@@ -415,28 +378,6 @@ extension LazilyPercentDecoded {
 // MARK: - URL encode sets.
 
 
-/// Percent-encodes the given UTF8 bytes with the appropriate `PercentEncodeSet` for a URL query string in a special/not-special scheme.
-///
-/// Equivalent to:
-/// `source.lazy.percentEncoded(using: T.self).writeBuffered(writer)`,
-/// where `T` is either `URLEncodeSet.Query_Special` or `.Query_NotSpecial`.
-///
-/// - seealso: `LazilyPercentEncoded.writeBuffered`
-///
-@discardableResult
-func writeBufferedPercentEncodedQuery<Source>(
-  _ source: Source,
-  isSpecial: Bool,
-  _ writer: (UnsafeBufferPointer<UInt8>) -> Void
-) -> Bool where Source: Collection, Source.Element == UInt8 {
-
-  if isSpecial {
-    return source.lazy.percentEncoded(using: URLEncodeSet.Query_Special.self).writeBuffered(writer)
-  } else {
-    return source.lazy.percentEncoded(using: URLEncodeSet.Query_NotSpecial.self).writeBuffered(writer)
-  }
-}
-
 /// An encode-set which does not escape or substitute any characters.
 ///
 /// This is useful for decoding percent-encoded strings when we don't expect any characters to have been substituted, or when
@@ -460,11 +401,11 @@ protocol DualImplementedPercentEncodeSet: PercentEncodeSet {
 extension DualImplementedPercentEncodeSet {
   @inline(__always)
   static func shouldEscape(character: ASCII) -> Bool {
-    // #if arch(x86_64)
+    #if arch(x86_64)
       return shouldEscape_table(character: character)
-    // #else
-    //   return shouldEscape_binary(character: character)
-    // #endif
+    #else
+      return shouldEscape_binary(character: character)
+    #endif
   }
 }
 

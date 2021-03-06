@@ -764,13 +764,13 @@ extension URLStorage {
   ///   - callback:  A callback through which the `encoder` provides this function with buffers of encoded content to process.
   ///                `callback` does not escape the pointer value, and may be called as many times as needed to encode the content.
   ///
-  mutating func setSimpleComponent<Input>(
+  mutating func setSimpleComponent<Input, EncodeSet>(
     _ component: WebURL.Component,
     to newValue: Input?,
     prefix: ASCII,
     lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
-    encoder: (_ bytes: Input, _ scheme: WebURL.SchemeKind, _ callback: (UnsafeBufferPointer<UInt8>) -> Void) -> Bool
-  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
+    encoder: EncodeSet.Type
+  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8, EncodeSet: PercentEncodeSet {
 
     let oldStructure = header.structure
 
@@ -784,7 +784,7 @@ extension URLStorage {
     }
 
     var bytesToWrite = 1  // leading separator.
-    let needsEncoding = encoder(newBytes, oldStructure.schemeKind) { bytesToWrite += $0.count }
+    let needsEncoding = newBytes.lazy.percentEncoded(using: EncodeSet.self).write { bytesToWrite += $0.count }
     let subrangeToReplace = oldStructure.rangeForReplacingCodeUnits(of: component)
     var newStructure = oldStructure
     newStructure[keyPath: lengthKey] = bytesToWrite
@@ -798,9 +798,17 @@ extension URLStorage {
       ptr.pointee = prefix.codePoint
       ptr += 1
       if needsEncoding {
-        _ = encoder(newBytes, oldStructure.schemeKind) { piece in
-          ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
-          ptr += piece.count
+        _ = newBytes.lazy.percentEncoded(using: EncodeSet.self).write { group in
+          switch group {
+          case .percentEncodedByte:
+            ptr[0] = group[0]
+            ptr[1] = group[1]
+            ptr[2] = group[2]
+            ptr += 3
+          case .sourceByte, .substitutedByte:
+            ptr[0] = group[0]
+            ptr += 1
+          }
         }
       } else {
         let n = UnsafeMutableBufferPointer(start: ptr, count: bytesToWrite - 1).initialize(from: newBytes).1

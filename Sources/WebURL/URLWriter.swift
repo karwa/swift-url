@@ -35,8 +35,8 @@ protocol URLWriter {
   ///
   /// Callers typically use this as shown:
   /// ```swift
-  /// writeUsername { writePiece in
-  ///   newValue.lazy.percentEncoded(using: ...).writeBuffered { piece in writePiece(piece) }
+  /// writeUsername { writeBytes in
+  ///   newValue.lazy.percentEncoded(using: ...).write(to: writeBytes)
   /// }
   /// ```
   /// in this example, `writePiece` is a `WriterFunc`, and its type is inferred as `(UnsafeBufferPointer<UInt8>)->Void`.
