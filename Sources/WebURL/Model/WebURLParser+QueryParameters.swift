@@ -73,13 +73,9 @@ extension WebURL.QueryParameters {
   static func serialiseQueryString<S>(_ queryComponents: S) -> String where S: Sequence, S.Element == (String, String) {
     var output = ""
     for (name, value) in queryComponents {
-      name.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered {
-        output.append(String(decoding: $0, as: UTF8.self))
-      }
+      output.append(name.urlFormEncoded)
       output.append("=")
-      value.utf8.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).writeBuffered {
-        output.append(String(decoding: $0, as: UTF8.self))
-      }
+      output.append(value.urlFormEncoded)
       output.append("&")
     }
     if !output.isEmpty { output.removeLast() }

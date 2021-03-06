@@ -284,6 +284,20 @@ extension ASCII {
   public var isHexDigit: Bool {
     ASCII.parseHexDigit(ascii: self) != ASCII.parse_NotFound
   }
+
+  public static var allCharacters: AnySequence<ASCII> {
+    AnySequence(
+      sequence(first: ASCII(_unchecked: 0x00)) { character in
+        ASCII(character.codePoint + 1)
+      })
+  }
+}
+
+extension ASCII: CustomStringConvertible {
+
+  var description: String {
+    String(Character(UnicodeScalar(codePoint)))
+  }
 }
 
 // Parsing/Printing utilities.

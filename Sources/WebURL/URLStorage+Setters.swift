@@ -92,7 +92,7 @@ extension URLStorage {
 
     var newStructure = oldStructure
     newStructure.usernameLength = 0
-    let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered {
+    let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write {
       newStructure.usernameLength += $0.count
     }
     let shouldAddSeparator = (oldStructure.hasCredentialSeparator == false)
@@ -101,9 +101,17 @@ extension URLStorage {
     let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       guard var ptr = dest.baseAddress else { return 0 }
       if needsEncoding {
-        newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered { piece in
-          ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
-          ptr += piece.count
+        _ = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write { group in
+          switch group {
+          case .percentEncodedByte:
+            ptr[0] = group[0]
+            ptr[1] = group[1]
+            ptr[2] = group[2]
+            ptr += 3
+          case .sourceByte, .substitutedByte:
+            ptr[0] = group[0]
+            ptr += 1
+          }
         }
       } else {
         ptr += UnsafeMutableBufferPointer(start: ptr, count: newStructure.usernameLength).initialize(from: newValue).1
@@ -144,7 +152,7 @@ extension URLStorage {
 
     var newStructure = oldStructure
     newStructure.passwordLength = 1  // leading ":"
-    let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered {
+    let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write {
       newStructure.passwordLength += $0.count
     }
     let bytesToWrite = newStructure.passwordLength + 1  // Always write the trailing "@".
@@ -156,9 +164,17 @@ extension URLStorage {
       ptr.pointee = ASCII.colon.codePoint
       ptr += 1
       if needsEncoding {
-        newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).writeBuffered { piece in
-          ptr.initialize(from: piece.baseAddress.unsafelyUnwrapped, count: piece.count)
-          ptr += piece.count
+        _ = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write { group in
+          switch group {
+          case .percentEncodedByte:
+            ptr[0] = group[0]
+            ptr[1] = group[1]
+            ptr[2] = group[2]
+            ptr += 3
+          case .sourceByte, .substitutedByte:
+            ptr[0] = group[0]
+            ptr += 1
+          }
         }
       } else {
         // swift-format-ignore
@@ -312,7 +328,7 @@ extension URLStorage {
         to: UnsafeBufferPointer?.none,
         prefix: .colon,
         lengthKey: \.portLength,
-        encoder: { _, _, _ in preconditionFailure("Cannot encode 'nil' contents") }
+        encoder: PassthroughEncodeSet.self
       )
       return (result, nil)
     }
@@ -325,10 +341,7 @@ extension URLStorage {
         to: ptr,
         prefix: .colon,
         lengthKey: \.portLength,
-        encoder: { bytes, _, callback in
-          callback(bytes)
-          return false
-        }
+        encoder: PassthroughEncodeSet.self
       )
     }
     return (result, nil)
@@ -391,13 +404,23 @@ extension URLStorage {
     to newValue: Input?
   ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
 
-    return setSimpleComponent(
-      .query,
-      to: newValue,
-      prefix: .questionMark,
-      lengthKey: \.queryLength,
-      encoder: { writeBufferedPercentEncodedQuery($0, isSpecial: $1.isSpecial, $2) }
-    )
+    if self.header.structure.schemeKind.isSpecial {
+      return setSimpleComponent(
+        .query,
+        to: newValue,
+        prefix: .questionMark,
+        lengthKey: \.queryLength,
+        encoder: URLEncodeSet.Query_Special.self
+      )
+    } else {
+      return setSimpleComponent(
+        .query,
+        to: newValue,
+        prefix: .questionMark,
+        lengthKey: \.queryLength,
+        encoder: URLEncodeSet.Query_NotSpecial.self
+      )
+    }
   }
 
   /// Attempts to set the query component to the given UTF8-encoded string.
@@ -413,7 +436,7 @@ extension URLStorage {
       to: newValue,
       prefix: .numberSign,
       lengthKey: \.fragmentLength,
-      encoder: { $0.lazy.percentEncoded(using: URLEncodeSet.Fragment.self).writeBuffered($2) }
+      encoder: URLEncodeSet.Fragment.self
     )
   }
 }

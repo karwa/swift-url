@@ -292,10 +292,8 @@ extension ParsedURLString.ProcessedMapping {
             writePiece(inputString[username])
           }
         } else {
-          writer.writeUsernameContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-            didEscape = inputString[username]
-              .lazy.percentEncoded(using: URLEncodeSet.UserInfo.self)
-              .writeBuffered { piece in writePiece(piece) }
+          writer.writeUsernameContents { writer in
+            didEscape = inputString[username].lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write(to: writer)
           }
         }
         writer.writeHint(.username, needsEscaping: didEscape)
@@ -308,10 +306,8 @@ extension ParsedURLString.ProcessedMapping {
             writePiece(inputString[password])
           }
         } else {
-          writer.writePasswordContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-            didEscape = inputString[password]
-              .lazy.percentEncoded(using: URLEncodeSet.UserInfo.self)
-              .writeBuffered { piece in writePiece(piece) }
+          writer.writePasswordContents { writer in
+            didEscape = inputString[password].lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write(to: writer)
           }
         }
         writer.writeHint(.password, needsEscaping: didEscape)
@@ -359,8 +355,8 @@ extension ParsedURLString.ProcessedMapping {
       if metrics?.componentsWhichMaySkipEscaping.contains(.path) == true {
         writer.writePath { $0(inputString[path]) }
       } else {
-        writer.writePath { writePiece in
-          didEscape = inputString[path].lazy.percentEncoded(using: URLEncodeSet.C0.self).writeBuffered(writePiece)
+        writer.writePath { writer in
+          didEscape = inputString[path].lazy.percentEncoded(using: URLEncodeSet.C0.self).write(to: writer)
         }
       }
       writer.writeHint(.path, needsEscaping: didEscape)
@@ -424,11 +420,14 @@ extension ParsedURLString.ProcessedMapping {
           writerPiece(inputString[query])
         }
       } else {
-        writer.writeQueryContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-          didEscape = writeBufferedPercentEncodedQuery(
-            inputString[query],
-            isSpecial: schemeKind.isSpecial
-          ) { piece in writePiece(piece) }
+        writer.writeQueryContents { (writer: (PercentEncodedByte) -> Void) in
+          if schemeKind.isSpecial {
+            didEscape = inputString[query].lazy.percentEncoded(using: URLEncodeSet.Query_Special.self)
+              .write(to: writer)
+          } else {
+            didEscape = inputString[query].lazy.percentEncoded(using: URLEncodeSet.Query_NotSpecial.self)
+              .write(to: writer)
+          }
         }
       }
       writer.writeHint(.query, needsEscaping: didEscape)
@@ -449,10 +448,8 @@ extension ParsedURLString.ProcessedMapping {
           writePiece(inputString[fragment])
         }
       } else {
-        writer.writeFragmentContents { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
-          didEscape = inputString[fragment]
-            .lazy.percentEncoded(using: URLEncodeSet.Fragment.self)
-            .writeBuffered { piece in writePiece(piece) }
+        writer.writeFragmentContents { writer in
+          didEscape = inputString[fragment].lazy.percentEncoded(using: URLEncodeSet.Fragment.self).write(to: writer)
         }
       }
       writer.writeHint(.fragment, needsEscaping: didEscape)
