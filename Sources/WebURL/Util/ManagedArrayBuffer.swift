@@ -240,14 +240,14 @@ struct ManagedArrayBuffer<Header: ManagedBufferHeader, Element> {
       return storage.header
     }
     @inline(__always) _modify {
-      let preModifyCapacity = storage.header.capacity
       ensureUnique()
+      let preModifyCapacity = storage.header.capacity
       yield &storage.header
       assert(storage.header.capacity == preModifyCapacity, "Invalid change of capacity")
     }
     @inline(__always) set {
-      let preModifyCapacity = storage.header.capacity
       ensureUnique()
+      let preModifyCapacity = storage.header.capacity
       storage.header = newValue
       assert(storage.header.capacity == preModifyCapacity, "Invalid change of capacity")
     }
@@ -418,7 +418,7 @@ extension ManagedArrayBuffer {
 
   @discardableResult
   mutating func append(_ element: Element) -> Index {
-    append(contentsOf: CollectionOfOne(element)).upperBound
+    append(contentsOf: CollectionOfOne(element)).lowerBound
   }
 }
 
