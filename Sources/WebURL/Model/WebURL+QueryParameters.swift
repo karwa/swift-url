@@ -64,7 +64,8 @@ extension WebURL.QueryParameters {
     }
   }
 
-  fileprivate mutating func withMutableOwnedString(_ body: (inout String) -> Void) {
+  @usableFromInline
+  internal mutating func withMutableOwnedString(_ body: (inout String) -> Void) {
     switch backing {
     case .owned(var string):
       body(&string)
@@ -220,7 +221,8 @@ extension WebURL.QueryParameters {
 
 extension WebURL.QueryParameters {
 
-  private static func append(
+  @usableFromInline
+  internal static func append(
     encodedKey: String, encodedValue: String, toFormEncodedString string: inout String
   ) {
     if string.isEmpty == false {
@@ -318,7 +320,99 @@ extension WebURL.QueryParameters {
   }
 }
 
+// removeAll, append(contentsOf:).
+
+extension WebURL.QueryParameters {
+
+  /// Removes all key-value pairs in these query parameters.
+  ///
+  public mutating func removeAll() {
+    self.backing = .owned("")
+  }
+
+  /// Appends the given sequence of key-value pairs to these query parameters. Existing values will not be removed.
+  ///
+  @inlinable
+  public mutating func append<SequenceType, KeyValueType>(
+    contentsOf keyValuePairs: SequenceType
+  ) where SequenceType: Sequence, SequenceType.Element == (KeyValueType, KeyValueType), KeyValueType: StringProtocol {
+
+    withMutableOwnedString { str in
+      for (key, value) in keyValuePairs {
+        WebURL.QueryParameters.append(
+          encodedKey: key.urlFormEncoded,
+          encodedValue: value.urlFormEncoded,
+          toFormEncodedString: &str
+        )
+      }
+    }
+  }
+
+  @inlinable
+  public static func += <SequenceType, KeyValueType>(
+    lhs: inout WebURL.QueryParameters, rhs: SequenceType
+  ) where SequenceType: Sequence, SequenceType.Element == (KeyValueType, KeyValueType), KeyValueType: StringProtocol {
+    lhs.append(contentsOf: rhs)
+  }
+
+  // Unfortunately, (String, String) and (key: String, value: String) appear to be treated as different types.
+  // Removing this overload gives an error, recommending we add conformance to RangeReplaceableCollection (?!).
+
+  /// Appends the given sequence of key-value pairs to these query parameters. Existing values will not be removed.
+  ///
+  @inlinable
+  public mutating func append<SequenceType, KeyValueType>(
+    contentsOf keyValuePairs: SequenceType
+  )
+  where
+    SequenceType: Sequence, SequenceType.Element == (key: KeyValueType, value: KeyValueType),
+    KeyValueType: StringProtocol
+  {
+    append(
+      contentsOf: keyValuePairs.lazy.map { ($0, $1) } as LazyMapSequence<SequenceType, (KeyValueType, KeyValueType)>
+    )
+  }
+
+  @inlinable
+  public static func += <SequenceType, KeyValueType>(
+    lhs: inout WebURL.QueryParameters, rhs: SequenceType
+  )
+  where
+    SequenceType: Sequence, SequenceType.Element == (key: KeyValueType, value: KeyValueType),
+    KeyValueType: StringProtocol
+  {
+    lhs.append(contentsOf: rhs)
+  }
+
+  // Add an overload for Dictionary, so that its key-value pairs at least get a predictable order.
+  // There is no way to enforce an order for Dictionary, so this isn't breaking anybody's expectations.
+
+  /// Appends the given sequence of key-value pairs to these query parameters. Existing values will not be removed.
+  ///
+  /// - Note: Since `Dictionary`'s contents are not ordered, this method will sort the key-value pairs by name before they are form-encoded
+  ///         (using the standard library's Unicode comparison), so that the results are at least predictable. If this order is not desirable, sort the key-value
+  ///         pairs before appending them.
+  ///
+  @inlinable
+  public mutating func append<KeyValueType>(
+    contentsOf keyValuePairs: [KeyValueType: KeyValueType]
+  ) where KeyValueType: StringProtocol {
+    append(
+      contentsOf: keyValuePairs.sorted(by: { lhs, rhs in
+        assert(lhs.key != rhs.key, "Dictionary with non-unique keys?")
+        return lhs.key < rhs.key
+      })
+    )
+  }
+
+  @inlinable
+  public static func += <KeyValueType>(
+    lhs: inout WebURL.QueryParameters, rhs: [KeyValueType: KeyValueType]
+  ) where KeyValueType: StringProtocol {
+    lhs.append(contentsOf: rhs)
+  }
+}
+
 // TODO:
-// append(contentsOf:), removeAll
 // Sequence view.
 // sort.

@@ -66,15 +66,15 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertNil(url0.queryParams.get(""))
     XCTAssertNil(url0.queryParams.get("?"))
 
-    // When emptying the queryItems, the URL's query gets set to nil rather than empty.
-    //    var url1 = WebURL("http://example.com?a=b&c is the key=d&&e=&e&=foo&e=g&h=👀&e=f")!
-    //    XCTAssertEqual(url1.serialized, "http://example.com/?a=b&c%20is%20the%20key=d&&e=&e&=foo&e=g&h=%F0%9F%91%80&e=f")
-    //    XCTAssertEqual(url1.query, "a=b&c%20is%20the%20key=d&&e=&e&=foo&e=g&h=%F0%9F%91%80&e=f")
-    //    XCTAssertEqual(url1.queryItems.count, 8)
-    //    url1.queryItems.removeAll()
-    //    XCTAssertEqual(url1.serialized, "http://example.com/")
-    //    XCTAssertNil(url1.query)
-    //    XCTAssertEqual(url1.queryItems, [])
+    // When emptying the queryParams, the URL's query gets set to nil rather than empty.
+    var url1 = WebURL("http://example.com?a=b&c is the key=d&&e=&e&=foo&e=g&h=👀&e=f")!
+    XCTAssertEqual(url1.serialized, "http://example.com/?a=b&c%20is%20the%20key=d&&e=&e&=foo&e=g&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url1.query, "a=b&c%20is%20the%20key=d&&e=&e&=foo&e=g&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url1.queryParams.h, "👀")
+    url1.queryParams.removeAll()
+    XCTAssertEqual(url1.serialized, "http://example.com/")
+    XCTAssertNil(url1.query)
+    XCTAssertNil(url1.queryParams.h)
   }
 
   func testAppend() {
@@ -113,6 +113,60 @@ final class QueryParametersTests: XCTestCase {
     )
   }
 
+  func testAppendSequence() {
+    // Start with a URL without query, use 'append' to build one.
+    var url = WebURL("http://example.com")!
+    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertNil(url.query)
+    url.queryParams += [
+      ("search query", "why are 🦆 so awesome?"),
+      ("`back`'tick'", ""),  // U+0027 is encoded by forms, and only by forms.
+    ]
+    XCTAssertEqual(
+      url.serialized,
+      "http://example.com/?search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27="
+    )
+    XCTAssertEqual(url.query, "search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=")
+    XCTAssertEqual(url.queryParams.get("search query"), "why are 🦆 so awesome?")
+    XCTAssertEqual(url.queryParams.get("`back`'tick'"), "")
+
+    // Store the params object and reset the query.
+    var storedParams = url.queryParams
+    url.query = nil
+    url.hostname = "foobar.org"
+    XCTAssertEqual(url.serialized, "http://foobar.org/")
+    XCTAssertNil(url.query)
+    XCTAssertFalse(url.queryParams.contains("search query"))
+    XCTAssertTrue(storedParams.contains("search query"))
+    // Append to the free-standing copy.
+    storedParams.append(contentsOf: [
+      (key: "still alive?", value: "should be!"),
+      (key: "owned and mutable?", value: "sure thing!"),
+    ])
+    XCTAssertEqual(storedParams.get("still alive?"), "should be!")
+    XCTAssertEqual(storedParams.get("owned and mutable?"), "sure thing!")
+    // Assign it to the URL.
+    url.queryParams = storedParams
+    XCTAssertEqual(
+      url.serialized,
+      "http://foobar.org/?search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&still+alive%3F=should+be%21&owned+and+mutable%3F=sure+thing%21"
+    )
+
+    // Dictionary has a concrete overload which sorts its key-value pairs,
+    // so appending a dictionary always gives predictable results.
+    var blankURL = WebURL("http://example.com")!
+    XCTAssertEqual(blankURL.serialized, "http://example.com/")
+    XCTAssertNil(blankURL.query)
+    let dictionary: [String: String] = [
+      "key one": "value one",
+      "key 2️⃣": "value %02",
+    ]
+    blankURL.queryParams += dictionary
+    XCTAssertEqual(blankURL.serialized, "http://example.com/?key+2%EF%B8%8F%E2%83%A3=value+%2502&key+one=value+one")
+    XCTAssertEqual(blankURL.query, "key+2%EF%B8%8F%E2%83%A3=value+%2502&key+one=value+one")
+    XCTAssertEqual(blankURL.queryParams.get("key one"), "value one")
+  }
+
   func testRemove() {
     var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
     XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
@@ -149,6 +203,20 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertNil(url.query)
     XCTAssertNil(url.queryParams.get("c is the key"))
     XCTAssertNil(url.queryParams.get(""))
+  }
+
+  func testRemoveAll() {
+    var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
+    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+
+    XCTAssertEqual(url.queryParams.e, "")
+    XCTAssertEqual(url.queryParams.a, "b")
+    url.queryParams.removeAll()
+    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertNil(url.query)
+    XCTAssertNil(url.queryParams.e)
+    XCTAssertNil(url.queryParams.a)
   }
 
   func testSet() {
