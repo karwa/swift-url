@@ -316,14 +316,14 @@ internal let _tempStorage = AnyURLStorage(
 
 extension WebURL {
 
-  private mutating func withMutableStorage(
+  internal mutating func withMutableStorage(
     _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> (AnyURLStorage),
     _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> (AnyURLStorage)
   ) {
     try! withMutableStorage({ (small(&$0), nil) }, { (generic(&$0), nil) })
   }
 
-  private mutating func withMutableStorage(
+  internal mutating func withMutableStorage(
     _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
     _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> (AnyURLStorage, URLSetterError?)
   ) throws {
