@@ -17,12 +17,45 @@ extension WebURL {
   @dynamicMemberLookup
   public struct QueryParameters {
     enum Backing {
+      // A borrowed backing gives read-only access to a URL's buffer.
+      // However, we need to assume it is percent-encoded rather than form-encoded.
       case borrowed(AnyURLStorage)
+      // An owned backing is our own String which we can write to.
+      // Upon transitioning from borrowed -> owned, the contents of the URL's buffer are re-encoded with form-encoding.
       case owned(String)
     }
     var backing: Backing
   }
 
+  /// A view of the `application/x-www-form-urlencoded` key-value pairs in this URL's `query`, if present.
+  ///
+  /// The `queryParams` view allows you to conveniently get and set the values for particular keys by accessing them as members.
+  /// For keys which are not valid Swift identifiers, the `get` and `set` functions provide equivalent functionality.
+  ///
+  /// ```swift
+  /// var url = WebURL("http://example.com/?keyOne=valueOne&keyTwo=valueTwo")!
+  /// assert(url.queryParams.keyOne == "valueOne")
+  ///
+  /// url.queryParams.keyThree = "valueThree"
+  /// assert(url.serialized == "http://example.com/?keyOne=valueOne&keyTwo=valueTwo&keyThree=valueThree")
+  ///
+  /// url.queryParams.keyTwo = nil
+  /// assert(url.serialized == "http://example.com/?keyOne=valueOne&keyThree=valueThree")
+  ///
+  /// url.queryParams.set(key: "my key", to: "🦆")
+  /// assert(url.serialized == "http://example.com/?keyOne=valueOne&keyThree=valueThree&my+key=%F0%9F%A6%86")
+  /// ```
+  ///
+  /// Additionally, you can iterate all of the key-value pairs using the `.allKeyValuePairs` property:
+  ///
+  /// ```swift
+  /// for (key, value) in url.queryParams.allKeyValuePairs {
+  ///   // ("keyOne", "valueOne")
+  ///   // ("keyThree", "valueThree")
+  ///   // ("my key", "🦆")
+  /// }
+  /// ```
+  ///
   public var queryParams: QueryParameters {
     get {
       return QueryParameters(backing: .borrowed(storage))
@@ -50,7 +83,7 @@ extension WebURL {
 
 extension WebURL.QueryParameters {
 
-  private func withBackingUTF8<ResultType>(_ body: (UnsafeBufferPointer<UInt8>) -> ResultType) -> ResultType {
+  fileprivate func withBackingUTF8<ResultType>(_ body: (UnsafeBufferPointer<UInt8>) -> ResultType) -> ResultType {
     switch backing {
     case .borrowed(let storage):
       return storage.withComponentBytes(.query) { maybeBytes in
@@ -413,6 +446,48 @@ extension WebURL.QueryParameters {
   }
 }
 
-// TODO:
-// Sequence view.
-// sort.
+// allKeyValuePairs (Sequence view).
+
+extension WebURL.QueryParameters {
+
+  /// A `Sequence` allowing the key-value pairs of these query parameters to be iterated over.
+  ///
+  public var allKeyValuePairs: KeyValuePairs {
+    KeyValuePairs(params: self)
+  }
+
+  /// A `Sequence` allowing the key-value pairs of these query parameters to be iterated over.
+  ///
+  public struct KeyValuePairs: Sequence {
+    var params: WebURL.QueryParameters
+
+    public func makeIterator() -> Iterator {
+      Iterator(params: params)
+    }
+
+    /// Whether or not these query parameters have any key-value pairs.
+    ///
+    public var isEmpty: Bool {
+      var iterator = makeIterator()
+      return iterator.next() == nil
+    }
+
+    public struct Iterator: IteratorProtocol {
+      var params: WebURL.QueryParameters
+      var utf8Offset: Int = 0
+
+      public mutating func next() -> (String, String)? {
+        return params.withBackingUTF8 { utf8Bytes in
+          guard utf8Offset != utf8Bytes.count else { return nil }
+          var resumedIter = RawKeyValuePairs(string: utf8Bytes.suffix(from: utf8Offset)).makeIterator()
+          guard let nextKVP = resumedIter.next() else {
+            utf8Offset = utf8Bytes.count
+            return nil
+          }
+          utf8Offset = nextKVP.pair.upperBound
+          return (utf8Bytes[nextKVP.key].urlFormDecodedString, utf8Bytes[nextKVP.value].urlFormDecodedString)
+        }
+      }
+    }
+  }
+}

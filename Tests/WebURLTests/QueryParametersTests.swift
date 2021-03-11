@@ -18,6 +18,29 @@ import XCTest
 
 final class QueryParametersTests: XCTestCase {
 
+  func testDocumentationExamples() {
+
+    // From documentation for `WebURL.queryParams`:
+    var url = WebURL("http://example.com/?keyOne=valueOne&keyTwo=valueTwo")!
+    XCTAssertEqual(url.queryParams.keyOne, "valueOne")
+    url.queryParams.keyThree = "valueThree"
+    XCTAssertEqual(url.serialized, "http://example.com/?keyOne=valueOne&keyTwo=valueTwo&keyThree=valueThree")
+    url.queryParams.keyTwo = nil
+    XCTAssertEqual(url.serialized, "http://example.com/?keyOne=valueOne&keyThree=valueThree")
+    url.queryParams.set(key: "my key", to: "🦆")
+    XCTAssertEqual(url.serialized, "http://example.com/?keyOne=valueOne&keyThree=valueThree&my+key=%F0%9F%A6%86")
+
+    let expected = [
+      ("keyOne", "valueOne"),
+      ("keyThree", "valueThree"),
+      ("my key", "🦆"),
+    ]
+    for (i, (key, value)) in url.queryParams.allKeyValuePairs.enumerated() {
+      XCTAssertEqual(key, expected[i].0)
+      XCTAssertEqual(value, expected[i].1)
+    }
+  }
+
   func testGet_Contains() {
     let url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
     XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
@@ -287,5 +310,54 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertNil(url0.query)
     XCTAssertEqual(url1.serialized, "foo://bar")
     XCTAssertNil(url1.query)
+
+    // Assigning a URL's query parameters to itself causes the string to be re-encoded.
+    var url2 = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
+    XCTAssertEqual(url2.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url2.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    url2.queryParams = url2.queryParams
+    XCTAssertEqual(url2.serialized, "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url2.query, "a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
+
+  }
+
+  func testKeyValuePairsSequence() {
+    var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
+    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertFalse(url.queryParams.allKeyValuePairs.isEmpty)
+
+    // Tuples are not Equatable :(
+    struct KeyValuePair: Equatable {
+      var key: String
+      var value: String
+    }
+    // Check that all elements are returned (even duplicates), and in the correct order.
+    let actualKVPs = url.queryParams.allKeyValuePairs.map { KeyValuePair(key: $0.0, value: $0.1) }
+    let expectedKVPs = [
+      ("a", "b"), ("c is the key", "d"), ("e", ""), ("", "foo"), ("e", "g"), ("e", ""), ("h", "👀"), ("e", "f"),
+    ].map { KeyValuePair(key: $0.0, value: $0.1) }
+
+    XCTAssertEqualElements(actualKVPs, expectedKVPs)
+
+    // Check that we can iterate again, with the same results.
+    let actualKVPs_secondIteration = url.queryParams.allKeyValuePairs.map { KeyValuePair(key: $0.0, value: $0.1) }
+    XCTAssertEqualElements(actualKVPs, actualKVPs_secondIteration)
+
+    // Dictionary construction.
+    let dictionary = Dictionary(url.queryParams.allKeyValuePairs, uniquingKeysWith: { earlier, later in earlier })
+    XCTAssertEqual(dictionary.count, 5)
+    XCTAssertEqual(dictionary["c is the key"], "d")
+
+    // 'isEmpty' property.
+    url.queryParams.removeAll()
+    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertNil(url.query)
+    XCTAssertTrue(url.queryParams.allKeyValuePairs.isEmpty)
+
+    url.queryParams.someKey = "someValue"
+    XCTAssertEqual(url.serialized, "http://example.com/?someKey=someValue")
+    XCTAssertEqual(url.query, "someKey=someValue")
+    XCTAssertFalse(url.queryParams.allKeyValuePairs.isEmpty)
   }
 }
