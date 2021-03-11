@@ -188,7 +188,7 @@ struct ScannedRangesAndFlags<InputString> where InputString: Collection {
   /// The components to copy from the base URL. If non-empty, there must be a base URL.
   /// Only the scheme and path may overlap with components detected in the input string - for the former, it is a meaningless quirk of the control flow,
   /// and the two schemes must be equal; for the latter, it means the two paths should be merged (i.e. that the input string's path is relative to the base URL's path).
-  fileprivate var componentsToCopyFromBase: ComponentsToCopy = []
+  fileprivate var componentsToCopyFromBase: CopyableURLComponentSet = []
 }
 
 extension ParsedURLString.ProcessedMapping {
@@ -470,20 +470,21 @@ extension ParsedURLString.ProcessedMapping {
 // MARK: - URL Scanner.
 
 
+//swift-format-ignore
 /// A set of components to be copied from a URL.
 ///
 /// - seealso: `ScannedRangesAndFlags.componentsToCopyFromBase`
 ///
-fileprivate struct ComponentsToCopy: OptionSet {
+fileprivate struct CopyableURLComponentSet: OptionSet {
   var rawValue: UInt8
   init(rawValue: UInt8) {
     self.rawValue = rawValue
   }
-  static var scheme: Self { Self(rawValue: 1 << 0) }
+  static var scheme: Self    { Self(rawValue: 1 << 0) }
   static var authority: Self { Self(rawValue: 1 << 1) }
-  static var path: Self { Self(rawValue: 1 << 2) }
-  static var query: Self { Self(rawValue: 1 << 3) }
-  static var fragment: Self { Self(rawValue: 1 << 4) }
+  static var path: Self      { Self(rawValue: 1 << 2) }
+  static var query: Self     { Self(rawValue: 1 << 3) }
+  static var fragment: Self  { Self(rawValue: 1 << 4) }
 }
 
 fileprivate enum ParsableComponent {
