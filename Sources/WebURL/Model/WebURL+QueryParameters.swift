@@ -137,18 +137,30 @@ extension WebURL.QueryParameters {
         guard remaining.isEmpty == false else {
           return nil
         }
+        // Find the next non-empty KVP.
         var thisKVP: Bytes.SubSequence
         repeat {
-          thisKVP = remaining.prefix(while: { $0 != ASCII.ampersand.codePoint })
-          remaining = remaining[thisKVP.endIndex...].dropFirst()
+          if let thisKVPEnd = remaining.firstIndex(of: ASCII.ampersand.codePoint) {
+            thisKVP = remaining[Range(uncheckedBounds: (remaining.startIndex, thisKVPEnd))]
+            remaining = remaining[Range(uncheckedBounds: (remaining.index(after: thisKVPEnd), remaining.endIndex))]
+          } else if remaining.isEmpty == false {
+            thisKVP = remaining
+            remaining = remaining[Range(uncheckedBounds: (remaining.endIndex, remaining.endIndex))]
+          } else {
+            return nil
+          }
         } while thisKVP.isEmpty
-        let key = thisKVP.prefix(while: { $0 != ASCII.equalSign.codePoint })
-        let value = thisKVP.suffix(from: key.endIndex).dropFirst()
-        return (
-          pair: Range(uncheckedBounds: (thisKVP.startIndex, remaining.startIndex)),
-          key: Range(uncheckedBounds: (key.startIndex, key.endIndex)),
-          value: Range(uncheckedBounds: (value.startIndex, value.endIndex))
-        )
+        // Split on the "=" sign if there is one.
+        let key: Range<Bytes.Index>
+        let value: Range<Bytes.Index>
+        if let keyValueSeparator = thisKVP.firstIndex(of: ASCII.equalSign.codePoint) {
+          key = Range(uncheckedBounds: (thisKVP.startIndex, keyValueSeparator))
+          value = Range(uncheckedBounds: (thisKVP.index(after: keyValueSeparator), thisKVP.endIndex))
+        } else {
+          key = Range(uncheckedBounds: (thisKVP.startIndex, thisKVP.endIndex))
+          value = Range(uncheckedBounds: (thisKVP.endIndex, thisKVP.endIndex))
+        }
+        return (pair: Range(uncheckedBounds: (thisKVP.startIndex, remaining.startIndex)), key: key, value: value)
       }
     }
 

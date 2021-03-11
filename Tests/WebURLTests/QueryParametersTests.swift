@@ -98,6 +98,17 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertEqual(url1.serialized, "http://example.com/")
     XCTAssertNil(url1.query)
     XCTAssertNil(url1.queryParams.h)
+
+    // KVPs without keys or values (so strings of "&" characters in the query) get removed by form-encoding
+    // and are the equivalent of an empty query.
+    var url2 = WebURL("http://example.com?&&&")!
+    XCTAssertEqual(url2.serialized, "http://example.com/?&&&")
+    XCTAssertEqual(url2.query, "&&&")
+    XCTAssertNil(url2.queryParams.get(""))
+    url2.queryParams = url2.queryParams
+    XCTAssertEqual(url2.serialized, "http://example.com/")
+    XCTAssertNil(url2.query)
+    XCTAssertNil(url2.queryParams.get(""))
   }
 
   func testAppend() {
@@ -312,9 +323,9 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertNil(url1.query)
 
     // Assigning a URL's query parameters to itself causes the string to be re-encoded.
-    var url2 = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-    XCTAssertEqual(url2.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
-    XCTAssertEqual(url2.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    var url2 = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f&&&")!
+    XCTAssertEqual(url2.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&")
+    XCTAssertEqual(url2.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&")
     url2.queryParams = url2.queryParams
     XCTAssertEqual(url2.serialized, "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url2.query, "a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
@@ -359,5 +370,14 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertEqual(url.serialized, "http://example.com/?someKey=someValue")
     XCTAssertEqual(url.query, "someKey=someValue")
     XCTAssertFalse(url.queryParams.allKeyValuePairs.isEmpty)
+
+    // Empty KVPs are ignored by form encoding.
+    url = WebURL("http://example.com/?&&&&")!
+    XCTAssertEqual(url.serialized, "http://example.com/?&&&&")
+    XCTAssertEqual(url.query, "&&&&")
+    XCTAssertTrue(url.queryParams.allKeyValuePairs.isEmpty)
+    for _ in url.queryParams.allKeyValuePairs {
+      XCTFail("Expected queryParams to be empty")
+    }
   }
 }
