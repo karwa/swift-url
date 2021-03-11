@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file contains the URLParserCallback protocol and conformers,
-// as well as `ValidationError` and the various error strings.
-
 /// An object which is informed by the URL parser if a validation error occurs.
 ///
 /// Most validation errors are non-fatal and parsing can continue regardless. If parsing fails, the last
 /// validation error typically describes the issue which caused it to fail.
 ///
-public protocol URLParserCallback: IPv6AddressParserCallback, IPv4AddressParserCallback {
+@usableFromInline
+protocol URLParserCallback: IPv6AddressParserCallback, IPv4AddressParserCallback {
   mutating func validationError(_ error: ValidationError)
 }
 
 extension URLParserCallback {
 
-  public mutating func validationError(ipv4 error: IPv4Address.ValidationError) {
+  @inlinable @inline(__always)
+  mutating func validationError(ipv4 error: IPv4Address.ValidationError) {
     let wrapped = ValidationError.AnyHostParserError.ipv4AddressError(error)
     validationError(.hostParserError(wrapped))
   }
-  public mutating func validationError(ipv6 error: IPv6Address.ValidationError) {
+  @inlinable @inline(__always)
+  mutating func validationError(ipv6 error: IPv6Address.ValidationError) {
     let wrapped = ValidationError.AnyHostParserError.ipv6AddressError(error)
     validationError(.hostParserError(wrapped))
   }
@@ -38,34 +38,38 @@ extension URLParserCallback {
 
 /// A `URLParserCallback` which simply ignores all validation errors.
 ///
-public struct IgnoreValidationErrors: URLParserCallback {
-  @inlinable @inline(__always) public init() {}
-  @inlinable @inline(__always) public mutating func validationError(_ error: ValidationError) {}
+@usableFromInline
+struct IgnoreValidationErrors: URLParserCallback {
+  @inlinable @inline(__always) init() {}
+  @inlinable @inline(__always) mutating func validationError(_ error: ValidationError) {}
 }
 
 /// A `URLParserCallback` which stores the last reported validation error.
 ///
-public struct LastValidationError: URLParserCallback {
-  public var error: ValidationError?
-  @inlinable @inline(__always) public init() {}
-  @inlinable @inline(__always) public mutating func validationError(_ error: ValidationError) {
+@usableFromInline
+struct LastValidationError: URLParserCallback {
+  @usableFromInline var error: ValidationError?
+  @inlinable @inline(__always) init() {}
+  @inlinable @inline(__always) mutating func validationError(_ error: ValidationError) {
     self.error = error
   }
 }
 
 /// A `URLParserCallback` which stores all reported validation errors in an `Array`.
 ///
-public struct CollectValidationErrors: URLParserCallback {
-  public var errors: [ValidationError] = []
-  @inlinable @inline(__always) public init() { errors.reserveCapacity(8) }
-  @inlinable @inline(__always) public mutating func validationError(_ error: ValidationError) {
+@usableFromInline
+struct CollectValidationErrors: URLParserCallback {
+  @usableFromInline var errors: [ValidationError] = []
+  @inlinable @inline(__always) init() { errors.reserveCapacity(8) }
+  @inlinable @inline(__always) mutating func validationError(_ error: ValidationError) {
     errors.append(error)
   }
 }
 
-public struct ValidationError: Equatable {
+@usableFromInline
+struct ValidationError: Equatable {
   private var code: UInt8
-  /* testable */ @usableFromInline private(set) var hostParserError: AnyHostParserError? = nil
+  @usableFromInline private(set) var hostParserError: AnyHostParserError? = nil
 
   @usableFromInline
   enum AnyHostParserError: Equatable, CustomStringConvertible {
@@ -121,7 +125,7 @@ extension ValidationError: CustomStringConvertible {
   internal static var _invalidUTF8:                       Self { Self(code: 98) }
   // Wrapped errors from the IPAddress parsers.
   internal static var hostParserError_errorCode: UInt8 = 97
-  internal static func hostParserError(_ err: AnyHostParserError) -> Self {
+  @usableFromInline static func hostParserError(_ err: AnyHostParserError) -> Self {
       Self(code: hostParserError_errorCode, hostParserError: err)
   }
 
