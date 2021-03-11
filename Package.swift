@@ -27,10 +27,7 @@ let package = Package(
     .package(url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
   ],
   targets: [
-    .target(name: "Algorithms"),
-    .testTarget(name: "AlgorithmsTests", dependencies: ["Algorithms", "Checkit"]),
-    
-    .target(name: "WebURL", dependencies: ["Algorithms"]),
+    .target(name: "WebURL"),
     .target(name: "WebURLTestSupport", dependencies: ["WebURL"]),
     .testTarget(name: "WebURLTests", dependencies: ["WebURL", "WebURLTestSupport", "Checkit"]),
   ]

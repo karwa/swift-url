@@ -15,7 +15,7 @@
 import Checkit
 import XCTest
 
-@testable import Algorithms
+@testable import WebURL
 
 class AlgorithmsTestCase: XCTestCase {}
 
