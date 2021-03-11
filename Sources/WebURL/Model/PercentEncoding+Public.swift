@@ -31,6 +31,14 @@ extension Collection where Element == UInt8 {
       $0.urlEncodedString(URLEncodeSet.Component.self)
     } ?? urlEncodedString(URLEncodeSet.Component.self)
   }
+
+  /// Interpets this collection's elements as a UTF-8 string, and returns its `urlFormEncoded` representation.
+  ///
+  public var urlFormEncodedString: String {
+    withContiguousStorageIfAvailable {
+      $0.urlEncodedString(URLEncodeSet.FormEncoded.self)
+    } ?? urlEncodedString(URLEncodeSet.FormEncoded.self)
+  }
 }
 
 extension StringProtocol {
@@ -68,9 +76,7 @@ extension StringProtocol {
     @_specialize(where Self == String)
     @_specialize(where Self == Substring)
     get {
-      utf8.withContiguousStorageIfAvailable {
-        $0.urlEncodedString(URLEncodeSet.FormEncoded.self)
-      } ?? utf8.urlEncodedString(URLEncodeSet.FormEncoded.self)
+      utf8.urlFormEncodedString
     }
   }
 }
@@ -87,6 +93,14 @@ extension Collection where Element == UInt8 {
     withContiguousStorageIfAvailable {
       String(decoding: $0.lazy.percentDecoded, as: UTF8.self)
     } ?? String(decoding: self.lazy.percentDecoded, as: UTF8.self)
+  }
+
+  /// Interpets this collection's elements as a UTF-8 string, and returns its `urlFormDecoded` representation.
+  ///
+  public var urlFormDecodedString: String {
+    withContiguousStorageIfAvailable {
+      String(decoding: $0.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
+    } ?? String(decoding: self.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
   }
 }
 
@@ -124,9 +138,7 @@ extension StringProtocol {
     @_specialize(where Self == String)
     @_specialize(where Self == Substring)
     get {
-      utf8.withContiguousStorageIfAvailable {
-        String(decoding: $0.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
-      } ?? String(decoding: utf8.lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self), as: UTF8.self)
+      utf8.urlFormDecodedString
     }
   }
 }

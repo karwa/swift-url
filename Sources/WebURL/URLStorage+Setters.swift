@@ -423,6 +423,20 @@ extension URLStorage {
     }
   }
 
+  /// Set the query component to the given UTF8-encoded string, assuming that the string is already `application/x-www-form-urlencoded`.
+  ///
+  mutating func setQuery<Input>(
+    toKnownFormEncoded newValue: Input
+  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
+    return setSimpleComponent(
+      .query,
+      to: newValue,
+      prefix: .questionMark,
+      lengthKey: \.queryLength,
+      encoder: PassthroughEncodeSet.self
+    )
+  }
+
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
   /// A value of `nil` removes the query.
