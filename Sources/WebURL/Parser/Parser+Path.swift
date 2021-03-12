@@ -116,7 +116,7 @@ extension WebURL {
   fileprivate func withNormalizedWindowsDriveLetter<T>(_ block: (Slice<UnsafeBufferPointer<UInt8>>?) -> T) -> T {
     return self.storage.withComponentBytes(.path) {
       // dropFirst() due to the leading slash.
-      if let path = $0?.dropFirst(), URLStringUtils.isNormalizedWindowsDriveLetter(path.prefix(2)) {
+      if let path = $0?.dropFirst(), PathComponentParser.isNormalizedWindowsDriveLetter(path.prefix(2)) {
         return block(path.prefix(2))
       } else {
         return block(nil)
@@ -362,18 +362,18 @@ extension PathParser {
       }
 
       switch pathComponent {
-      case _ where URLStringUtils.isDoubleDotPathSegment(pathComponent):
+      case _ where PathComponentParser.isDoubleDotPathSegment(pathComponent):
         state.popcount += 1
         fallthrough
 
-      case _ where URLStringUtils.isSingleDotPathSegment(pathComponent):
+      case _ where PathComponentParser.isSingleDotPathSegment(pathComponent):
         if pathComponent.endIndex == input.endIndex {
           // Don't defer this as it will be nulled by the popcount increment. Only matches "p1/p2/.." or "p1/p2/.".
           visitEmptyPathComponent()
           state.didYieldComponent = true
         }
 
-      case _ where isFileScheme && URLStringUtils.isWindowsDriveLetter(pathComponent):
+      case _ where isFileScheme && PathComponentParser.isWindowsDriveLetter(pathComponent):
         __flushDeferredComponent(&deferredComponent, &state)
         // Move the popcount in to deferredComponent and start a new count for the LHS of the Windows drive candidate.
         deferredComponent = .potentialWindowsDrive(pathComponent, state.popcount)
@@ -404,18 +404,18 @@ extension PathParser {
       // TODO: This is exactly the same as above, except for using a `while` loop to repeat the component.
       //       Good candidate for some refactoring.
       switch remainingInput {
-      case _ where URLStringUtils.isDoubleDotPathSegment(remainingInput):
+      case _ where PathComponentParser.isDoubleDotPathSegment(remainingInput):
         state.popcount += 1
         fallthrough
 
-      case _ where URLStringUtils.isSingleDotPathSegment(remainingInput):
+      case _ where PathComponentParser.isSingleDotPathSegment(remainingInput):
         if remainingInput.endIndex == input.endIndex {
           assert(state.didYieldComponent == false && deferredComponent == nil)
           visitEmptyPathComponent()
           state.didYieldComponent = true
         }
 
-      case _ where isFileScheme && URLStringUtils.isWindowsDriveLetter(remainingInput):
+      case _ where isFileScheme && PathComponentParser.isWindowsDriveLetter(remainingInput):
         __flushDeferredComponent(&deferredComponent, &state)
         deferredComponent = .potentialWindowsDrive(remainingInput, state.popcount)
         state.popcount = 0
@@ -473,7 +473,7 @@ extension PathParser {
 
       precondition(basePath.first == ASCII.forwardSlash.codePoint, "Normalized base paths must start with a /")
       // Drop the last path component (unless it is a Windows drive, of course).
-      guard !(isFileScheme && URLStringUtils.isNormalizedWindowsDriveLetter(basePath.dropFirst())) else {
+      guard !(isFileScheme && PathComponentParser.isNormalizedWindowsDriveLetter(basePath.dropFirst())) else {
         __flushDeferredComponent(&deferredComponent, &state)
         visitBasePathComponent(UnsafeBufferPointer(rebasing: basePath.dropFirst()))
         return
@@ -484,14 +484,14 @@ extension PathParser {
         let pathComponent = basePath[basePath.index(after: componentTerminatorIndex)..<basePath.endIndex]
         defer { basePath = basePath.prefix(upTo: componentTerminatorIndex) }
 
-        assert(URLStringUtils.isDoubleDotPathSegment(pathComponent) == false)
-        assert(URLStringUtils.isSingleDotPathSegment(pathComponent) == false)
+        assert(PathComponentParser.isDoubleDotPathSegment(pathComponent) == false)
+        assert(PathComponentParser.isSingleDotPathSegment(pathComponent) == false)
 
         switch pathComponent {
         // If the base path has a Windows drive letter, we can flush everything and end.
         case _
         where componentTerminatorIndex == basePath.startIndex && isFileScheme
-          && URLStringUtils.isNormalizedWindowsDriveLetter(pathComponent):
+          && PathComponentParser.isNormalizedWindowsDriveLetter(pathComponent):
           __flushDeferredComponent(&deferredComponent, &state)
           visitBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
           return
@@ -775,8 +775,87 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
 // MARK: - Path Utilities
 
 
-extension URLStringUtils where T: Sequence, T.Element == UInt8 {
+/// A namespace for functions relating to parsing of path components.
+///
+enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
 
+  /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
+  ///
+  /// https://url.spec.whatwg.org/#url-miscellaneous
+  ///
+  static func isWindowsDriveLetter(_ bytes: T) -> Bool {
+    var it = bytes.makeIterator()
+    guard let byte1 = it.next(), ASCII(byte1)?.isAlpha == true else { return false }
+    guard let byte2 = it.next(), ASCII(byte2) == .colon || ASCII(byte2) == .verticalBar else { return false }
+    guard it.next() == nil else { return false }
+    return true
+  }
+
+  /// A normalized Windows drive letter is a Windows drive letter of which the second code point is U+003A (:).
+  ///
+  /// https://url.spec.whatwg.org/#url-miscellaneous
+  ///
+  static func isNormalizedWindowsDriveLetter(_ bytes: T) -> Bool {
+    isWindowsDriveLetter(bytes) && (bytes.dropFirst().first.map { ASCII($0) == .colon } ?? false)
+  }
+
+  /// A string starts with a Windows drive letter if all of the following are true:
+  ///
+  /// - its length is greater than or equal to 2
+  /// - its first two code points are a Windows drive letter
+  /// - its length is 2 or its third code point is U+002F (/), U+005C (\), U+003F (?), or U+0023 (#).
+  ///
+  /// https://url.spec.whatwg.org/#url-miscellaneous
+  ///
+  static func hasWindowsDriveLetterPrefix(_ bytes: T) -> Bool {
+    var it = bytes.makeIterator()
+    guard let byte1 = it.next(), ASCII(byte1)?.isAlpha == true else { return false }
+    guard let byte2 = it.next(), ASCII(byte2) == .colon || ASCII(byte2) == .verticalBar else { return false }
+    guard let byte3 = it.next() else { return true }
+    switch ASCII(byte3) {
+    case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: return true
+    default: return false
+    }
+  }
+
+  /// Returns `true` if the next contents of `iterator` are either the ASCII byte U+002E (.), the string "%2e", or "%2E".
+  /// Otherwise, `false`.
+  ///
+  private static func checkForDotOrCaseInsensitivePercentEncodedDot(in iterator: inout T.Iterator) -> Bool {
+    guard let byte1 = iterator.next(), let ascii1 = ASCII(byte1) else { return false }
+    if ascii1 == .period { return true }
+    guard ascii1 == .percentSign,
+      let byte2 = iterator.next(), ASCII(byte2) == .n2,
+      let byte3 = iterator.next(), ASCII(byte3) == .E || ASCII(byte3) == .e
+    else {
+      return false
+    }
+    return true
+  }
+
+  /// Returns `true` if `bytes` contains a single U+002E (.), the ASCII string "%2e" or "%2E" only.
+  /// Otherwise, `false`.
+  ///
+  static func isSingleDotPathSegment(_ bytes: T) -> Bool {
+    var it = bytes.makeIterator()
+    guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+    guard it.next() == nil else { return false }
+    return true
+  }
+
+  /// Returns `true` if `bytes` contains two of either U+002E (.), the ASCII string "%2e" or "%2E" only.
+  /// Otherwise, `false`.
+  ///
+  static func isDoubleDotPathSegment(_ bytes: T) -> Bool {
+    var it = bytes.makeIterator()
+    guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+    guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+    guard it.next() == nil else { return false }
+    return true
+  }
+
+  /// Returns `true` if the given normalized path requires a path sigil when written to a URL that does not have an authority sigil.
+  ///
   static func doesNormalizedPathRequirePathSigil(_ path: T) -> Bool {
     var iter = path.makeIterator()
     guard iter.next() == ASCII.forwardSlash.codePoint, iter.next() == ASCII.forwardSlash.codePoint else {

@@ -37,6 +37,8 @@
 //    'urlFromBytes' calls 'constructURLObject' on the result of the previous step, which unconditionally writes
 //    the content to freshly-allocated storage. The actual construction process involves performing a dry-run
 //    to calculate the optimal result type and produce an allocation which is correctly sized to hold the result.
+//
+//-------------------------------------------------------------------------
 
 @inlinable
 func urlFromBytes<Bytes>(_ inputString: Bytes, baseURL: WebURL?) -> WebURL?
@@ -188,7 +190,24 @@ struct ScannedRangesAndFlags<InputString> where InputString: Collection {
   /// The components to copy from the base URL. If non-empty, there must be a base URL.
   /// Only the scheme and path may overlap with components detected in the input string - for the former, it is a meaningless quirk of the control flow,
   /// and the two schemes must be equal; for the latter, it means the two paths should be merged (i.e. that the input string's path is relative to the base URL's path).
-  fileprivate var componentsToCopyFromBase: ComponentsToCopy = []
+  fileprivate var componentsToCopyFromBase: CopyableURLComponentSet = []
+}
+
+//swift-format-ignore
+/// A set of components to be copied from a URL.
+///
+/// - seealso: `ScannedRangesAndFlags.componentsToCopyFromBase`
+///
+private struct CopyableURLComponentSet: OptionSet {
+  var rawValue: UInt8
+  init(rawValue: UInt8) {
+    self.rawValue = rawValue
+  }
+  static var scheme: Self    { Self(rawValue: 1 << 0) }
+  static var authority: Self { Self(rawValue: 1 << 1) }
+  static var path: Self      { Self(rawValue: 1 << 2) }
+  static var query: Self     { Self(rawValue: 1 << 3) }
+  static var fragment: Self  { Self(rawValue: 1 << 4) }
 }
 
 extension ParsedURLString.ProcessedMapping {
@@ -239,7 +258,7 @@ extension ParsedURLString.ProcessedMapping {
         }
         if isPathSeparator(pathContents.popFirst()),
           isPathSeparator(pathContents.first),
-          URLStringUtils.hasWindowsDriveLetterPrefix(pathContents.dropFirst())
+          PathComponentParser.hasWindowsDriveLetterPrefix(pathContents.dropFirst())
         {
           scannedInfo.pathRange = pathContents.startIndex..<pathContents.endIndex
         }
@@ -470,44 +489,40 @@ extension ParsedURLString.ProcessedMapping {
 // MARK: - URL Scanner.
 
 
-/// A set of components to be copied from a URL.
-///
-/// - seealso: `ScannedRangesAndFlags.componentsToCopyFromBase`
-///
-fileprivate struct ComponentsToCopy: OptionSet {
-  var rawValue: UInt8
-  init(rawValue: UInt8) {
-    self.rawValue = rawValue
-  }
-  static var scheme: Self { Self(rawValue: 1 << 0) }
-  static var authority: Self { Self(rawValue: 1 << 1) }
-  static var path: Self { Self(rawValue: 1 << 2) }
-  static var query: Self { Self(rawValue: 1 << 3) }
-  static var fragment: Self { Self(rawValue: 1 << 4) }
-}
-
-fileprivate enum ParsableComponent {
-  case authority
-  case host
-  case port
-  case pathStart  // better name?
-  case path
-  case query
-  case fragment
-}
-
 /// A namespace for URL scanning methods.
 ///
-fileprivate enum URLScanner<InputString, Callback>
+private enum URLScanner<InputString, Callback>
 where InputString: BidirectionalCollection, InputString.Element == UInt8, Callback: URLParserCallback {
 
-  enum ComponentParseResult {
+  /// The result of an operation which scans a non-failable component:
+  /// either to continue scanning from the given next component, or that scanning completed succesfully.
+  ///
+  enum ScanComponentResult {
+    case scan(_ component: ComponentToScan, _ startIndex: InputString.Index)
+    case scanningComplete
+  }
+
+  /// The result of an operation which scans a failable component:
+  /// either instructions about which component to scan next, or a signal to abort scanning.
+  ///
+  enum ScanFailableComponentResult {
+    case success(continueFrom: ScanComponentResult)
     case failed
-    case success(continueFrom: (ParsableComponent, InputString.Index)?)
   }
 
   typealias SchemeKind = WebURL.SchemeKind
   typealias InputSlice = InputString.SubSequence
+}
+
+private enum ComponentToScan {
+  case authority
+  case pathStart
+  case path
+  case query
+  case fragment
+  // host and port only used internally within scanAuthority.
+  case host
+  case port
 }
 
 extension URLScanner {
@@ -557,9 +572,7 @@ extension URLScanner {
       }
       scanResults.componentsToCopyFromBase = [.scheme, .path, .query]
       scanResults.cannotBeABaseURL = true
-      guard case .success = scanFragment(input.dropFirst(), &scanResults, callback: &callback) else {
-        return nil
-      }
+      _ = scanFragment(input.dropFirst(), &scanResults, callback: &callback)
       return scanResults
     }
     // (No scheme + valid base URL) = relative URL.
@@ -583,7 +596,7 @@ extension URLScanner {
 
     switch scheme {
     case .file:
-      if !URLStringUtils.hasDoubleSolidusPrefix(input) {
+      if !hasDoubleSolidusPrefix(input) {
         callback.validationError(.fileSchemeMissingFollowingSolidus)
       }
       return scanAllFileURLComponents(input, baseURL: baseURL, &mapping, callback: &callback)
@@ -603,7 +616,7 @@ extension URLScanner {
     default:
       // state: "special relative or authority"
       var authority = input[...]
-      if URLStringUtils.hasDoubleSolidusPrefix(input) {
+      if hasDoubleSolidusPrefix(input) {
         // state: "special authority slashes"
         authority = authority.dropFirst(2)
       } else {
@@ -628,36 +641,35 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   static func scanAllComponents(
-    from: ParsableComponent, _ input: InputSlice, scheme: WebURL.SchemeKind,
+    from initialComponent: ComponentToScan, _ input: InputSlice, scheme: WebURL.SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> Bool {
 
-    var component = from
     var remaining = input[...]
-    while true {
-      let componentResult: ComponentParseResult
-      switch component {
-      case .authority:
-        componentResult = scanAuthority(remaining, scheme: scheme, &mapping, callback: &callback)
-      case .pathStart:
-        componentResult = scanPathStart(remaining, scheme: scheme, &mapping, callback: &callback)
-      case .path:
-        componentResult = scanPath(remaining, scheme: scheme, &mapping, callback: &callback)
-      case .query:
-        componentResult = scanQuery(remaining, scheme: scheme, &mapping, callback: &callback)
-      case .fragment:
-        componentResult = scanFragment(remaining, &mapping, callback: &callback)
-      case .host, .port:
-        fatalError("Host and port should have been handled by scanAuthority")
-      }
-      guard case .success(let _nextComponent) = componentResult else {
+    var nextLocation: ScanComponentResult = .scan(initialComponent, remaining.startIndex)
+
+    if case .scan(.authority, _) = nextLocation {
+      switch scanAuthority(remaining, scheme: scheme, &mapping, callback: &callback) {
+      case .success(continueFrom: let afterAuthority):
+        nextLocation = afterAuthority
+      case .failed:
         return false
       }
-      guard let nextComponent = _nextComponent else {
-        break
+    }
+    while case .scan(let thisComponent, let thisStartIndex) = nextLocation {
+      remaining = remaining[thisStartIndex...]
+      switch thisComponent {
+      case .pathStart:
+        nextLocation = scanPathStart(remaining, scheme: scheme, &mapping, callback: &callback)
+      case .path:
+        nextLocation = scanPath(remaining, scheme: scheme, &mapping, callback: &callback)
+      case .query:
+        nextLocation = scanQuery(remaining, scheme: scheme, &mapping, callback: &callback)
+      case .fragment:
+        nextLocation = scanFragment(remaining, &mapping, callback: &callback)
+      case .host, .port, .authority:
+        fatalError("Component tried to return to scanning authority")
       }
-      component = nextComponent.0
-      remaining = remaining[nextComponent.1...]
     }
     return true
   }
@@ -673,7 +685,7 @@ extension URLScanner {
   static func scanAuthority(
     _ input: InputSlice, scheme: WebURL.SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanFailableComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.usernameRange == nil)
@@ -726,23 +738,23 @@ extension URLScanner {
         return .failed
       }
       mapping.hostnameRange = Range(uncheckedBounds: (hostStartIndex, hostStartIndex))
-      return .success(continueFrom: (.pathStart, hostStartIndex))
+      return .success(continueFrom: .scan(.pathStart, hostStartIndex))
     }
 
     guard case .success(let postHost) = scanHostname(hostname, scheme: scheme, &mapping, callback: &callback) else {
       return .failed
     }
     // Scan the port, if the host requested it.
-    guard let portComponent = postHost, case .port = portComponent.0 else {
+    guard case .scan(.port, let portStartIndex) = postHost else {
       return .success(continueFrom: postHost)
     }
-    return scanPort(authority[portComponent.1...], scheme: scheme, &mapping, callback: &callback)
+    return scanPort(authority[portStartIndex...], scheme: scheme, &mapping, callback: &callback)
   }
 
   static func scanHostname(
     _ input: InputSlice, scheme: SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanFailableComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.hostnameRange == nil)
@@ -783,16 +795,16 @@ extension URLScanner {
     // 4. Return the next component.
     mapping.hostnameRange = Range(uncheckedBounds: (hostname.startIndex, hostname.endIndex))
     if let hostnameEnd = hostnameEndIndex {
-      return .success(continueFrom: (.port, input.index(after: hostnameEnd)))
+      return .success(continueFrom: .scan(.port, input.index(after: hostnameEnd)))
     } else {
-      return .success(continueFrom: (.pathStart, input.endIndex))
+      return .success(continueFrom: .scan(.pathStart, input.endIndex))
     }
   }
 
   static func scanPort(
     _ input: InputSlice, scheme: SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanFailableComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.portRange == nil)
@@ -819,7 +831,7 @@ extension URLScanner {
 
     // 4. Return the next component.
     mapping.portRange = Range(uncheckedBounds: (portString.startIndex, portString.endIndex))
-    return .success(continueFrom: (.pathStart, portString.endIndex))
+    return .success(continueFrom: .scan(.pathStart, portString.endIndex))
   }
 
   /// Scans the URL string from the character immediately following the authority, and advises
@@ -828,7 +840,7 @@ extension URLScanner {
   static func scanPathStart(
     _ input: InputSlice, scheme: SchemeKind, _ mapping: inout ScannedRangesAndFlags<InputString>,
     callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.pathRange == nil)
@@ -837,19 +849,17 @@ extension URLScanner {
 
     // 2. Return the component to parse based on input.
     guard input.isEmpty == false else {
-      return .success(continueFrom: (.path, input.startIndex))
+      return .scan(.path, input.startIndex)
     }
 
     let c: ASCII? = ASCII(input[input.startIndex])
     switch c {
     case .questionMark?:
-      return .success(continueFrom: (.query, input.index(after: input.startIndex)))
-
+      return .scan(.query, input.index(after: input.startIndex))
     case .numberSign?:
-      return .success(continueFrom: (.fragment, input.index(after: input.startIndex)))
-
+      return .scan(.fragment, input.index(after: input.startIndex))
     default:
-      return .success(continueFrom: (.path, input.startIndex))
+      return .scan(.path, input.startIndex)
     }
   }
 
@@ -858,7 +868,7 @@ extension URLScanner {
   static func scanPath(
     _ input: InputSlice, scheme: SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.pathRange == nil)
@@ -879,12 +889,9 @@ extension URLScanner {
       mapping.pathRange = Range(uncheckedBounds: (path.startIndex, path.endIndex))
     }
     if let pathEnd = nextComponentStartIndex {
-      return .success(
-        continueFrom: (
-          ASCII(input[pathEnd]) == .questionMark ? .query : .fragment, input.index(after: pathEnd)
-        ))
+      return .scan(ASCII(input[pathEnd]) == .questionMark ? .query : .fragment, input.index(after: pathEnd))
     } else {
-      return .success(continueFrom: nil)
+      return .scanningComplete
     }
   }
 
@@ -893,7 +900,7 @@ extension URLScanner {
   static func scanQuery(
     _ input: InputSlice, scheme: SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.queryRange == nil)
@@ -908,11 +915,9 @@ extension URLScanner {
     // 3. Return the next component.
     mapping.queryRange = Range(uncheckedBounds: (input.startIndex, queryEndIndex ?? input.endIndex))
     if let queryEnd = queryEndIndex {
-      return .success(
-        continueFrom: ASCII(input[queryEnd]) == .numberSign ? (.fragment, input.index(after: queryEnd)) : nil
-      )
+      return .scan(.fragment, input.index(after: queryEnd))
     } else {
-      return .success(continueFrom: nil)
+      return .scanningComplete
     }
   }
 
@@ -921,7 +926,7 @@ extension URLScanner {
   static func scanFragment(
     _ input: InputSlice,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.fragmentRange == nil)
@@ -930,7 +935,7 @@ extension URLScanner {
     validateURLCodePointsAndPercentEncoding(input, callback: &callback)
 
     mapping.fragmentRange = Range(uncheckedBounds: (input.startIndex, input.endIndex))
-    return .success(continueFrom: nil)
+    return .scanningComplete
   }
 }
 
@@ -945,41 +950,34 @@ extension URLScanner {
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> Bool {
 
-    var remaining: InputSlice.SubSequence
-    var component: (ParsableComponent, InputString.Index)
-    switch parseFileURLStart(input, baseURL: baseURL, &mapping, callback: &callback) {
-    case .failed:
-      return false
-    case .success(continueFrom: .none):
+    var nextLocation = parseFileURLStart(input, baseURL: baseURL, &mapping, callback: &callback)
+    guard case .scan(_, let firstComponentStartIndex) = nextLocation else {
       return true
-    case .success(continueFrom: .some(let _component)):
-      component = _component
-      remaining = input.suffix(from: component.1)
     }
-    while true {
-      let componentResult: ComponentParseResult
-      switch component.0 {
-      case .authority:
-        componentResult = scanAuthority(remaining, scheme: .file, &mapping, callback: &callback)
-      case .pathStart:
-        componentResult = scanPathStart(remaining, scheme: .file, &mapping, callback: &callback)
-      case .path:
-        componentResult = scanPath(remaining, scheme: .file, &mapping, callback: &callback)
-      case .query:
-        componentResult = scanQuery(remaining, scheme: .file, &mapping, callback: &callback)
-      case .fragment:
-        componentResult = scanFragment(remaining, &mapping, callback: &callback)
-      case .host, .port:
-        fatalError()
-      }
-      guard case .success(let _nextComponent) = componentResult else {
+    var remaining = input.suffix(from: firstComponentStartIndex)
+
+    if case .scan(.authority, _) = nextLocation {
+      switch scanAuthority(remaining, scheme: .file, &mapping, callback: &callback) {
+      case .success(continueFrom: let afterAuthority):
+        nextLocation = afterAuthority
+      case .failed:
         return false
       }
-      guard let nextComponent = _nextComponent else {
-        break
+    }
+    while case .scan(let thisComponent, let thisStartIndex) = nextLocation {
+      remaining = remaining[thisStartIndex...]
+      switch thisComponent {
+      case .pathStart:
+        nextLocation = scanPathStart(remaining, scheme: .file, &mapping, callback: &callback)
+      case .path:
+        nextLocation = scanPath(remaining, scheme: .file, &mapping, callback: &callback)
+      case .query:
+        nextLocation = scanQuery(remaining, scheme: .file, &mapping, callback: &callback)
+      case .fragment:
+        nextLocation = scanFragment(remaining, &mapping, callback: &callback)
+      case .host, .port, .authority:
+        fatalError("Component tried to return to scanning authority")
       }
-      component = nextComponent
-      remaining = remaining.suffix(from: component.1)
     }
     return true
   }
@@ -987,7 +985,7 @@ extension URLScanner {
   static func parseFileURLStart(
     _ input: InputSlice, baseURL: WebURL?,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanComponentResult {
 
     // Note that file URLs may also be relative URLs. It all depends on what comes after "file:".
     // - 0 slashes:  copy base host, parse as path relative to base path.
@@ -1002,26 +1000,26 @@ extension URLScanner {
     guard cursor != input.endIndex, let c0 = ASCII(input[cursor]), c0 == .forwardSlash || c0 == .backslash else {
       // No slashes. May be a relative path ("file:usr/lib/Swift") or no path ("file:?someQuery").
       guard baseScheme == .file else {
-        return .success(continueFrom: (.path, cursor))
+        return .scan(.path, cursor)
       }
       assert(mapping.componentsToCopyFromBase.isEmpty || mapping.componentsToCopyFromBase == [.scheme])
       mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
 
       guard cursor != input.endIndex else {
-        return .success(continueFrom: nil)
+        return .scanningComplete
       }
       switch ASCII(input[cursor]) {
       case .questionMark?:
         mapping.componentsToCopyFromBase.remove(.query)
-        return .success(continueFrom: (.query, input.index(after: cursor)))
+        return .scan(.query, input.index(after: cursor))
       case .numberSign?:
-        return .success(continueFrom: (.fragment, input.index(after: cursor)))
+        return .scan(.fragment, input.index(after: cursor))
       default:
         mapping.componentsToCopyFromBase.remove(.query)
-        if URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
+        if PathComponentParser.hasWindowsDriveLetterPrefix(input[cursor...]) {
           callback.validationError(.unexpectedWindowsDriveLetter)
         }
-        return .success(continueFrom: (.path, cursor))
+        return .scan(.path, cursor)
       }
     }
     cursor = input.index(after: cursor)
@@ -1032,7 +1030,7 @@ extension URLScanner {
     guard cursor != input.endIndex, let c1 = ASCII(input[cursor]), c1 == .forwardSlash || c1 == .backslash else {
       // 1 slash. e.g. "file:/usr/lib/Swift". Absolute path.
       guard baseScheme == .file else {
-        return .success(continueFrom: (.path, input.startIndex))
+        return .scan(.path, input.startIndex)
       }
       mapping.componentsToCopyFromBase.formUnion([.authority])
 
@@ -1041,7 +1039,7 @@ extension URLScanner {
       mapping.absolutePathsCopyWindowsDriveFromBase = true
       mapping.componentsToCopyFromBase.formUnion([.path])
 
-      return .success(continueFrom: (.path, input.startIndex))
+      return .scan(.path, input.startIndex)
     }
 
     cursor = input.index(after: cursor)
@@ -1053,11 +1051,13 @@ extension URLScanner {
     return scanFileHost(input[cursor...], &mapping, callback: &callback)
   }
 
-
+  // Never fails - even if there is a port and the hostname is empty.
+  // In that case, the hostname will contain the port and ultimately get rejected for containing forbidden
+  // code-points. File URLs are forbidden from containing ports.
   static func scanFileHost(
     _ input: InputSlice,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.authorityRange == nil)
@@ -1079,18 +1079,18 @@ extension URLScanner {
     let hostname = input[..<hostnameEndIndex]
 
     // 3. Brief validation of the hostname. Will be fully validated at construction time.
-    if URLStringUtils.isWindowsDriveLetter(hostname) {
+    if PathComponentParser.isWindowsDriveLetter(hostname) {
       // TODO: Only if not in setter-mode.
       // FIXME: 'input' is in the authority position of its containing string.
       //        This requires logic in ProcessedMapping to adjust the path range.
       callback.validationError(.unexpectedWindowsDriveLetterHost)
-      return .success(continueFrom: (.path, input.startIndex))
+      return .scan(.path, input.startIndex)
     }
 
     // 4. Return the next component.
     mapping.authorityRange = Range(uncheckedBounds: (input.startIndex, hostnameEndIndex))
     mapping.hostnameRange = Range(uncheckedBounds: (input.startIndex, hostnameEndIndex))
-    return .success(continueFrom: (.pathStart, hostnameEndIndex))
+    return .scan(.pathStart, hostnameEndIndex)
   }
 }
 
@@ -1105,43 +1105,22 @@ extension URLScanner {
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> Bool {
 
-    var remaining: InputSlice.SubSequence
-    var component: (ParsableComponent, InputString.Index)
-    switch scanCannotBeABaseURLPath(input, &mapping, callback: &callback) {
-    case .failed:
-      return false
-    case .success(continueFrom: .none):
+    var nextLocation = scanCannotBeABaseURLPath(input, &mapping, callback: &callback)
+    guard case .scan(_, let firstComponentStartIndex) = nextLocation else {
       return true
-    case .success(continueFrom: .some(let _component)):
-      component = _component
-      remaining = input.suffix(from: component.1)
     }
-    while true {
-      let componentResult: ComponentParseResult
-      switch component.0 {
+    var remaining = input.suffix(from: firstComponentStartIndex)
+
+    while case .scan(let thisComponent, let thisStartIndex) = nextLocation {
+      remaining = remaining[thisStartIndex...]
+      switch thisComponent {
       case .query:
-        componentResult = scanQuery(remaining, scheme: scheme, &mapping, callback: &callback)
+        nextLocation = scanQuery(remaining, scheme: scheme, &mapping, callback: &callback)
       case .fragment:
-        componentResult = scanFragment(remaining, &mapping, callback: &callback)
-      case .path:
-        fatalError()
-      case .pathStart:
-        fatalError()
-      case .authority:
-        fatalError()
-      case .host:
-        fatalError()
-      case .port:
-        fatalError()
+        nextLocation = scanFragment(remaining, &mapping, callback: &callback)
+      case .pathStart, .path, .host, .port, .authority:
+        fatalError("Tried to scan invalid component for cannot-be-a-base URL")
       }
-      guard case .success(let _nextComponent) = componentResult else {
-        return false
-      }
-      guard let nextComponent = _nextComponent else {
-        break
-      }
-      component = nextComponent
-      remaining = remaining.suffix(from: component.1)
     }
     return true
   }
@@ -1149,7 +1128,7 @@ extension URLScanner {
   static func scanCannotBeABaseURLPath(
     _ input: InputSlice,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanComponentResult {
 
     // 1. Validate the mapping.
     assert(mapping.authorityRange == nil)
@@ -1174,13 +1153,10 @@ extension URLScanner {
     // 4. Return the next component.
     if let pathEnd = pathEndIndex {
       mapping.pathRange = Range(uncheckedBounds: (path.startIndex, pathEnd))
-      return .success(
-        continueFrom: (
-          ASCII(input[pathEnd]) == .questionMark ? .query : .fragment, input.index(after: pathEnd)
-        ))
+      return .scan(ASCII(input[pathEnd]) == .questionMark ? .query : .fragment, input.index(after: pathEnd))
     } else {
       mapping.pathRange = path.isEmpty ? nil : Range(uncheckedBounds: (input.startIndex, input.endIndex))
-      return .success(continueFrom: nil)
+      return .scanningComplete
     }
   }
 }
@@ -1196,43 +1172,34 @@ extension URLScanner {
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> Bool {
 
-    var remaining: InputSlice.SubSequence
-    var component: (ParsableComponent, InputString.Index)
-    switch parseRelativeURLStart(input, baseScheme: baseScheme, &mapping, callback: &callback) {
-    case .failed:
-      return false
-    case .success(continueFrom: .none):
+    var nextLocation = parseRelativeURLStart(input, baseScheme: baseScheme, &mapping, callback: &callback)
+    guard case .scan(_, let firstComponentStartIndex) = nextLocation else {
       return true
-    case .success(continueFrom: .some(let _component)):
-      component = _component
-      remaining = input.suffix(from: component.1)
     }
-    while true {
-      let componentResult: ComponentParseResult
-      switch component.0 {
-      case .path:
-        componentResult = scanPath(remaining, scheme: baseScheme, &mapping, callback: &callback)
-      case .query:
-        componentResult = scanQuery(remaining, scheme: baseScheme, &mapping, callback: &callback)
-      case .fragment:
-        componentResult = scanFragment(remaining, &mapping, callback: &callback)
-      case .pathStart:
-        componentResult = scanPathStart(remaining, scheme: baseScheme, &mapping, callback: &callback)
-      case .authority:
-        componentResult = scanAuthority(remaining, scheme: baseScheme, &mapping, callback: &callback)
-      case .host:
-        fatalError()
-      case .port:
-        fatalError()
-      }
-      guard case .success(let _nextComponent) = componentResult else {
+    var remaining = input.suffix(from: firstComponentStartIndex)
+
+    if case .scan(.authority, _) = nextLocation {
+      switch scanAuthority(remaining, scheme: baseScheme, &mapping, callback: &callback) {
+      case .success(continueFrom: let afterAuthority):
+        nextLocation = afterAuthority
+      case .failed:
         return false
       }
-      guard let nextComponent = _nextComponent else {
-        break
+    }
+    while case .scan(let thisComponent, let thisStartIndex) = nextLocation {
+      remaining = remaining[thisStartIndex...]
+      switch thisComponent {
+      case .path:
+        nextLocation = scanPath(remaining, scheme: baseScheme, &mapping, callback: &callback)
+      case .pathStart:
+        nextLocation = scanPathStart(remaining, scheme: baseScheme, &mapping, callback: &callback)
+      case .query:
+        nextLocation = scanQuery(remaining, scheme: baseScheme, &mapping, callback: &callback)
+      case .fragment:
+        nextLocation = scanFragment(remaining, &mapping, callback: &callback)
+      case .host, .port, .authority:
+        fatalError("Component tried to return to scanning authority")
       }
-      component = nextComponent
-      remaining = remaining.suffix(from: component.1)
     }
     return true
   }
@@ -1240,13 +1207,13 @@ extension URLScanner {
   static func parseRelativeURLStart(
     _ input: InputSlice, baseScheme: WebURL.SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
-  ) -> ComponentParseResult {
+  ) -> ScanComponentResult {
 
     mapping.componentsToCopyFromBase = [.scheme]
 
     guard input.isEmpty == false else {
       mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
-      return .success(continueFrom: nil)
+      return .scanningComplete
     }
 
     switch ASCII(input[input.startIndex]) {
@@ -1258,7 +1225,7 @@ extension URLScanner {
       var cursor = input.index(after: input.startIndex)
       guard cursor != input.endIndex else {
         mapping.componentsToCopyFromBase.formUnion([.authority])
-        return .success(continueFrom: (.path, input.startIndex))
+        return .scan(.path, input.startIndex)
       }
       switch ASCII(input[cursor]) {
       // Second character is also a slash. Parse as an authority.
@@ -1273,20 +1240,20 @@ extension URLScanner {
         } else {
           cursor = input.index(after: cursor)
         }
-        return .success(continueFrom: (.authority, cursor))
+        return .scan(.authority, cursor)
       // Otherwise, copy the base authority. Parse as a (absolute) path.
       default:
         mapping.componentsToCopyFromBase.formUnion([.authority])
-        return .success(continueFrom: (.path, input.startIndex))
+        return .scan(.path, input.startIndex)
       }
 
     // Initial query/fragment markers.
     case .questionMark?:
       mapping.componentsToCopyFromBase.formUnion([.authority, .path])
-      return .success(continueFrom: (.query, input.index(after: input.startIndex)))
+      return .scan(.query, input.index(after: input.startIndex))
     case .numberSign?:
       mapping.componentsToCopyFromBase.formUnion([.authority, .path, .query])
-      return .success(continueFrom: (.fragment, input.index(after: input.startIndex)))
+      return .scan(.fragment, input.index(after: input.startIndex))
 
     // Some other character. Parse as a relative path.
     default:
@@ -1295,7 +1262,7 @@ extension URLScanner {
       // Construction knows that if a path is found in the input string *and* we ask to copy from the base,
       // that the paths should be combined by stripping the base's last path component.
       mapping.componentsToCopyFromBase.formUnion([.authority, .path])
-      return .success(continueFrom: (.path, input.startIndex))
+      return .scan(.path, input.startIndex)
     }
   }
 }
@@ -1439,13 +1406,7 @@ func findEndOfHostnamePrefix<Input, Callback>(
     }
   }
   if scheme == .file {
-    guard case .success(_) = URLScanner.scanFileHost(hostname, &mapping, callback: &cb) else {
-      // Never fails - even if there is a port and the hostname is empty.
-      // In that case, the hostname will contain the port and ultimately get rejected for containing forbidden
-      // code-points. File URLs are forbidden from containing ports.
-      assertionFailure("Unexpected failure to scan file host")
-      return nil
-    }
+    _ = URLScanner.scanFileHost(hostname, &mapping, callback: &cb)
   } else {
     guard case .success(_) = URLScanner.scanHostname(hostname, scheme: scheme, &mapping, callback: &cb) else {
       // Only fails if there is a port and the hostname is empty.
@@ -1470,7 +1431,7 @@ where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
     return
   }
 
-  if URLStringUtils.hasNonURLCodePoints(input, allowPercentSign: true) {
+  if hasNonURLCodePoints(input, allowPercentSign: true) {
     callback.validationError(.invalidURLCodePoint)
   }
 

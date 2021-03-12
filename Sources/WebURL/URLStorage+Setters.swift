@@ -254,7 +254,7 @@ extension URLStorage {
         // Remove authority sigil, replacing it with a path sigil if necessary.
         if newValue == nil {
           let needsPathSigil = withComponentBytes(.path) { pathBytes -> Bool in
-            return pathBytes.map { URLStringUtils.doesNormalizedPathRequirePathSigil($0) } ?? false
+            return pathBytes.map { PathComponentParser.doesNormalizedPathRequirePathSigil($0) } ?? false
           }
           if needsPathSigil {
             commands.append(

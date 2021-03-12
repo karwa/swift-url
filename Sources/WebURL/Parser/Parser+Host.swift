@@ -75,7 +75,7 @@ extension ParsedHost {
         callback.validationError(.domainToASCIIFailure)
         return nil
       }
-      if URLStringUtils.isForbiddenHostCodePoint(ascii) {
+      if ascii.isForbiddenHostCodePoint {
         callback.validationError(.hostForbiddenCodePoint)
         return nil
       }
@@ -113,7 +113,7 @@ extension ParsedHost {
       guard let asciiChar = ASCII(byte) else {
         continue
       }
-      if URLStringUtils.isForbiddenHostCodePoint(asciiChar), asciiChar != .percentSign {
+      if asciiChar.isForbiddenHostCodePoint, asciiChar != .percentSign {
         callback.validationError(.hostForbiddenCodePoint)
         return false
       }
