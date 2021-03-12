@@ -48,7 +48,7 @@ extension PercentEncodingTests {
         }
         // Strings encoded by the 'component' set should not contain forbidden host code-points (other than '%').
         XCTAssertFalse(
-          URLStringUtils.isForbiddenHostCodePoint(ascii) && ascii != .percentSign,
+          ascii.isForbiddenHostCodePoint && ascii != .percentSign,
           "Forbidden host code point: \(Character(UnicodeScalar(ascii.codePoint)))"
         )
       }

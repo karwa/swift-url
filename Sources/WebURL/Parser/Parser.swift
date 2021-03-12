@@ -258,7 +258,7 @@ extension ParsedURLString.ProcessedMapping {
         }
         if isPathSeparator(pathContents.popFirst()),
           isPathSeparator(pathContents.first),
-          URLStringUtils.hasWindowsDriveLetterPrefix(pathContents.dropFirst())
+          PathComponentParser.hasWindowsDriveLetterPrefix(pathContents.dropFirst())
         {
           scannedInfo.pathRange = pathContents.startIndex..<pathContents.endIndex
         }
@@ -596,7 +596,7 @@ extension URLScanner {
 
     switch scheme {
     case .file:
-      if !URLStringUtils.hasDoubleSolidusPrefix(input) {
+      if !hasDoubleSolidusPrefix(input) {
         callback.validationError(.fileSchemeMissingFollowingSolidus)
       }
       return scanAllFileURLComponents(input, baseURL: baseURL, &mapping, callback: &callback)
@@ -616,7 +616,7 @@ extension URLScanner {
     default:
       // state: "special relative or authority"
       var authority = input[...]
-      if URLStringUtils.hasDoubleSolidusPrefix(input) {
+      if hasDoubleSolidusPrefix(input) {
         // state: "special authority slashes"
         authority = authority.dropFirst(2)
       } else {
@@ -1016,7 +1016,7 @@ extension URLScanner {
         return .scan(.fragment, input.index(after: cursor))
       default:
         mapping.componentsToCopyFromBase.remove(.query)
-        if URLStringUtils.hasWindowsDriveLetterPrefix(input[cursor...]) {
+        if PathComponentParser.hasWindowsDriveLetterPrefix(input[cursor...]) {
           callback.validationError(.unexpectedWindowsDriveLetter)
         }
         return .scan(.path, cursor)
@@ -1079,7 +1079,7 @@ extension URLScanner {
     let hostname = input[..<hostnameEndIndex]
 
     // 3. Brief validation of the hostname. Will be fully validated at construction time.
-    if URLStringUtils.isWindowsDriveLetter(hostname) {
+    if PathComponentParser.isWindowsDriveLetter(hostname) {
       // TODO: Only if not in setter-mode.
       // FIXME: 'input' is in the authority position of its containing string.
       //        This requires logic in ProcessedMapping to adjust the path range.
@@ -1431,7 +1431,7 @@ where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
     return
   }
 
-  if URLStringUtils.hasNonURLCodePoints(input, allowPercentSign: true) {
+  if hasNonURLCodePoints(input, allowPercentSign: true) {
     callback.validationError(.invalidURLCodePoint)
   }
 
