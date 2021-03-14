@@ -543,8 +543,8 @@ struct URLStorage<Header: URLHeader> {
 
 extension URLStorage {
 
-  func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) -> T) -> T {
-    return codeUnits.withUnsafeBufferPointer(block)
+  func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
+    return try codeUnits.withUnsafeBufferPointer(block)
   }
 
   var entireString: String {
@@ -932,10 +932,10 @@ extension AnyURLStorage {
     }
   }
 
-  func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) -> T) -> T {
+  func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
     switch self {
-    case .small(let storage): return storage.withEntireString(block)
-    case .generic(let storage): return storage.withEntireString(block)
+    case .small(let storage): return try storage.withEntireString(block)
+    case .generic(let storage): return try storage.withEntireString(block)
     }
   }
 
