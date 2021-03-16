@@ -240,7 +240,7 @@ extension URLStorage {
           oldStructure.rangeForReplacingSigil,
           withUninitializedSpace: Sigil.authority.length,
           newStructure: newStructure,
-          initializer: { return Sigil.authority.unsafeWrite(to: $0) }
+          initializer: { return Sigil.authority.unsafeWrite(to: &$0) }
         )
         return (result, nil)
 
@@ -259,7 +259,7 @@ extension URLStorage {
           if needsPathSigil {
             commands.append(
               .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.path.length) {
-                return Sigil.path.unsafeWrite(to: $0)
+                return Sigil.path.unsafeWrite(to: &$0)
               })
             newStructure.sigil = .path
           } else {
@@ -291,7 +291,7 @@ extension URLStorage {
 
     let commands: [ReplaceSubrangeOperation] = [
       .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.authority.length) {
-        return Sigil.authority.unsafeWrite(to: $0)
+        return Sigil.authority.unsafeWrite(to: &$0)
       },
       .replace(subrange: oldStructure.rangeForReplacingCodeUnits(of: .hostname), withCount: newStructure.hostnameLength)
       { dest in
@@ -378,7 +378,7 @@ extension URLStorage {
       newStructure.sigil = .path
       commands.append(
         .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.path.length) {
-          return Sigil.path.unsafeWrite(to: $0)
+          return Sigil.path.unsafeWrite(to: &$0)
         })
     }
     commands.append(

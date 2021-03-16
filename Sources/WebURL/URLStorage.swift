@@ -109,6 +109,8 @@ enum Sigil {
   case path
 }
 
+extension URLStructure: Equatable {}
+
 extension URLStructure {
 
   /// Creates an empty URL structure. Note that this structure does not represent a valid URL.
@@ -416,7 +418,7 @@ extension Sigil {
     return 2
   }
 
-  func unsafeWrite(to buffer: UnsafeMutableBufferPointer<UInt8>) -> Int {
+  func unsafeWrite(to buffer: inout UnsafeMutableBufferPointer<UInt8>) -> Int {
     guard let ptr = buffer.baseAddress else { return 0 }
     switch self {
     case .authority:

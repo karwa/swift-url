@@ -262,3 +262,161 @@ extension PathComponentsTests {
     }
   }
 }
+
+// Mutable path components.
+
+extension PathComponentsTests {
+
+  @inline(__always)
+  func checkNoCopy(_ url: inout WebURL, _ body: (inout WebURL)->Void) {
+    let addressBefore = url.storage.withEntireString { $0.baseAddress }
+    body(&url)
+    XCTAssertEqual(addressBefore, url.storage.withEntireString { $0.baseAddress })
+  }
+
+  func testMutating() {
+    var url = WebURL("http://example.com/a/b/c/d#someFragmentJustForCapacity")!
+    url.fragment = nil // just to reserve capacity.
+    checkNoCopy(&url) { url in
+      url.withMutablePathComponents { editor in
+        let range = editor.dropFirst().prefix(2)
+        editor.replacePathComponents(range.startIndex..<range.endIndex, with: [
+          "MAKE",
+          "S O M E",
+          "🔊"
+        ].lazy.map { $0.utf8 })
+      }
+    }
+    XCTAssertEqual(url.serialized, "http://example.com/a/MAKE/S%20O%20M%20E/%F0%9F%94%8A/d")
+    XCTAssertEqualElements(url.pathComponents!, ["a", "MAKE", "S O M E", "🔊", "d"])
+  }
+
+  func testReplaceWithEmpty() {
+    // We cannot set a special URL to an empty path.
+    do {
+      var url = WebURL("http://example.com/a/b/c/d?aQuery#someFragment")!
+      url.withMutablePathComponents { editor in
+        editor.replacePathComponents(editor.startIndex..<editor.endIndex, with: [[UInt8]]())
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/?aQuery#someFragment")
+      XCTAssertEqualElements(url.pathComponents!, [""])
+      checkIdempotence(url)
+    }
+    // We cannot set a non-special URL to an empty path, unless it has an authority.
+    do {
+      var url = WebURL("foo:/a/b/c/d?aQuery#someFragment")!
+      url.withMutablePathComponents { editor in
+        editor.replacePathComponents(editor.startIndex..<editor.endIndex, with: [[UInt8]]())
+      }
+      XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
+      XCTAssertEqualElements(url.pathComponents!, [""])
+      checkIdempotence(url)
+    }
+    do {
+      var url = WebURL("foo:/.//a/b/c/d?aQuery#someFragment")!
+      XCTAssertEqual(url.path, "//a/b/c/d")
+      url.withMutablePathComponents { editor in
+        editor.replacePathComponents(editor.startIndex..<editor.endIndex, with: [[UInt8]]())
+      }
+      XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
+      XCTAssertEqualElements(url.pathComponents!, [""])
+      checkIdempotence(url)
+    }
+    do {
+      var url = WebURL("foo://example.com/a/b/c/d?aQuery#someFragment")!
+      url.withMutablePathComponents { editor in
+        editor.replacePathComponents(editor.startIndex..<editor.endIndex, with: [[UInt8]]())
+      }
+      XCTAssertEqual(url.serialized, "foo://example.com?aQuery#someFragment")
+      XCTAssertEqualElements(url.pathComponents!, [])
+      checkIdempotence(url)
+    }
+  }
+
+  func checkIdempotence(_ url: WebURL) {
+    var serialized = url.serialized
+    serialized.makeContiguousUTF8()
+    guard let reparsed = WebURL(serialized) else {
+      XCTFail("Failed to reparse URL string: \(serialized)")
+      return
+    }
+    XCTAssertEqual(url.storage.structure, reparsed.storage.structure)
+    XCTAssertEqual(serialized, reparsed.serialized)
+  }
+
+  func testPathSigil() {
+		// A path sigil is required when a non-special URL has:
+    // - No authority
+    // - More than 1 path component, and
+    // - The first path component is empty
+    var url = WebURL("foo:/.//a/b/c/d?aQuery#someFragment")!
+    XCTAssertEqualElements(url.pathComponents!, ["", "a", "b", "c", "d"])
+    checkIdempotence(url)
+
+    // Path sigil should be removed when making the first component non-empty.
+    url.withMutablePathComponents { editor in
+      editor.replacePathComponents(editor.startIndex..<editor.index(after: editor.startIndex), with: ["boo".utf8])
+    }
+    XCTAssertEqual(url.serialized, "foo:/boo/a/b/c/d?aQuery#someFragment")
+    XCTAssertEqualElements(url.pathComponents!, ["boo", "a", "b", "c", "d"])
+    checkIdempotence(url)
+    // Path sigil should be inserted when making the first component empty.
+    url.withMutablePathComponents { editor in
+      editor.replacePathComponents(editor.startIndex..<editor.index(after: editor.startIndex), with: ["".utf8])
+    }
+    XCTAssertEqual(url.serialized, "foo:/.//a/b/c/d?aQuery#someFragment")
+    XCTAssertEqualElements(url.pathComponents!, ["", "a", "b", "c", "d"])
+    checkIdempotence(url)
+    // Path sigil is maintained when replacing later components.
+    url.withMutablePathComponents { editor in
+      editor.replacePathComponents(editor.index(editor.startIndex, offsetBy: 2)..<editor.endIndex, with: [
+        "e".utf8
+      ])
+    }
+    XCTAssertEqual(url.serialized, "foo:/.//a/e?aQuery#someFragment")
+    XCTAssertEqualElements(url.pathComponents!, ["", "a", "e"])
+    checkIdempotence(url)
+    // Path sigil is maintained when removing later components.
+    url.withMutablePathComponents { editor in
+      editor.replacePathComponents(editor.index(editor.startIndex, offsetBy: 2)..<editor.endIndex, with: [[UInt8]]())
+    }
+    XCTAssertEqual(url.serialized, "foo:/.//a?aQuery#someFragment")
+    XCTAssertEqualElements(url.pathComponents!, ["", "a"])
+    checkIdempotence(url)
+    // Removing all but the first component removes the sigil.
+    url.withMutablePathComponents { editor in
+      editor.replacePathComponents(editor.index(editor.startIndex, offsetBy: 1)..<editor.endIndex, with: [[UInt8]]())
+    }
+    XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
+    XCTAssertEqualElements(url.pathComponents!, [""])
+    checkIdempotence(url)
+    // Appending a component adds the sigil.
+    url.withMutablePathComponents { editor in
+      editor.replacePathComponents(editor.index(editor.startIndex, offsetBy: 1)..<editor.endIndex, with: [
+        "f".utf8
+      ])
+    }
+    XCTAssertEqual(url.serialized, "foo:/.//f?aQuery#someFragment")
+    XCTAssertEqualElements(url.pathComponents!, ["", "f"])
+    checkIdempotence(url)
+		// Path sigil is inserted when replacing the entire path contents.
+    url = WebURL("foo:/a/b/c")!
+    url.withMutablePathComponents { editor in
+      editor.replacePathComponents(editor.startIndex..<editor.endIndex, with: [
+        "",
+        "g"
+      ].map { $0.utf8 })
+    }
+    XCTAssertEqual(url.serialized, "foo:/.//g")
+    XCTAssertEqualElements(url.pathComponents!, ["", "g"])
+    checkIdempotence(url)
+    // Path sigil is inserted when a removal at the start causes an empty component to become first.
+    url = WebURL("foo:/a/b//c")!
+    url.withMutablePathComponents { editor in
+      editor.replacePathComponents(editor.startIndex..<editor.index(editor.startIndex, offsetBy: 2), with: [[UInt8]]())
+    }
+    XCTAssertEqual(url.serialized, "foo:/.//c")
+    XCTAssertEqualElements(url.pathComponents!, ["", "c"])
+    checkIdempotence(url)
+  }
+}
