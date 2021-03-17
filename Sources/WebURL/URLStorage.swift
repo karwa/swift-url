@@ -109,6 +109,8 @@ enum Sigil {
   case path
 }
 
+extension URLStructure: Equatable {}
+
 extension URLStructure {
 
   /// Creates an empty URL structure. Note that this structure does not represent a valid URL.
@@ -416,7 +418,7 @@ extension Sigil {
     return 2
   }
 
-  func unsafeWrite(to buffer: UnsafeMutableBufferPointer<UInt8>) -> Int {
+  func unsafeWrite(to buffer: inout UnsafeMutableBufferPointer<UInt8>) -> Int {
     guard let ptr = buffer.baseAddress else { return 0 }
     switch self {
     case .authority:
@@ -626,20 +628,21 @@ extension URLStorage {
     withUninitializedSpace insertCount: Int,
     newStructure: URLStructure<Int>,
     initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
-  ) -> AnyURLStorage {
+  ) -> (newStorage: AnyURLStorage, newSubrange: Range<Int>) {
 
     newStructure.checkInvariants()
     let newCount = codeUnits.count - subrangeToReplace.count + insertCount
 
     if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
-      codeUnits.unsafeReplaceSubrange(
+      let newSubrange = codeUnits.unsafeReplaceSubrange(
         subrangeToReplace, withUninitializedCapacity: insertCount, initializingWith: initializer
       )
       guard header.copyStructure(from: newStructure) else {
         preconditionFailure("Header didn't accept the new structure")
       }
-      return AnyURLStorage(self)
+      return (AnyURLStorage(self), newSubrange)
     }
+    let newSubrange = subrangeToReplace.lowerBound..<(subrangeToReplace.lowerBound + insertCount)
     let newStorage = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
       return codeUnits.withUnsafeBufferPointer { src in
         dest.initialize(from: src, replacingSubrange: subrangeToReplace, withElements: insertCount) { rgnStart, count in
@@ -649,7 +652,7 @@ extension URLStorage {
         }
       }
     }
-    return newStorage
+    return (newStorage, newSubrange)
   }
 
   /// Removes the given range of code-units.
@@ -665,7 +668,7 @@ extension URLStorage {
   ///
   mutating func removeSubrange(
     _ subrangeToRemove: Range<Int>, newStructure: URLStructure<Int>
-  ) -> AnyURLStorage {
+  ) -> (newStorage: AnyURLStorage, newSubrange: Range<Int>) {
     return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
   }
 
@@ -780,7 +783,7 @@ extension URLStorage {
       }
       var newStructure = oldStructure
       newStructure[keyPath: lengthKey] = 0
-      return removeSubrange(existingFragment, newStructure: newStructure)
+      return removeSubrange(existingFragment, newStructure: newStructure).newStorage
     }
 
     var bytesToWrite = 1  // leading separator.
@@ -815,7 +818,7 @@ extension URLStorage {
         ptr += n
       }
       return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
-    }
+    }.newStorage
   }
 }
 

@@ -87,7 +87,7 @@ extension URLStorage {
       var newStructure = oldStructure
       newStructure.usernameLength = 0
       let toRemove = oldUsername.lowerBound..<(oldUsername.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
-      return (removeSubrange(toRemove, newStructure: newStructure), nil)
+      return (removeSubrange(toRemove, newStructure: newStructure).newStorage, nil)
     }
 
     var newStructure = oldStructure
@@ -122,7 +122,7 @@ extension URLStorage {
       }
       return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
-    return (result, nil)
+    return (result.newStorage, nil)
   }
 
   /// Attempts to set the password component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
@@ -147,7 +147,7 @@ extension URLStorage {
       var newStructure = oldStructure
       newStructure.passwordLength = 0
       let toRemove = oldPassword.lowerBound..<(oldPassword.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
-      return (removeSubrange(toRemove, newStructure: newStructure), nil)
+      return (removeSubrange(toRemove, newStructure: newStructure).newStorage, nil)
     }
 
     var newStructure = oldStructure
@@ -185,7 +185,7 @@ extension URLStorage {
       ptr += 1
       return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
-    return (result, nil)
+    return (result.newStorage, nil)
   }
 
   /// Attempts to set the hostname component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
@@ -240,9 +240,9 @@ extension URLStorage {
           oldStructure.rangeForReplacingSigil,
           withUninitializedSpace: Sigil.authority.length,
           newStructure: newStructure,
-          initializer: { return Sigil.authority.unsafeWrite(to: $0) }
+          initializer: Sigil.authority.unsafeWrite
         )
-        return (result, nil)
+        return (result.newStorage, nil)
 
       case .some(let hostnameRange):
         precondition(oldStructure.sigil == .authority, "A URL with a hostname must have an authority sigil")
@@ -258,9 +258,11 @@ extension URLStorage {
           }
           if needsPathSigil {
             commands.append(
-              .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.path.length) {
-                return Sigil.path.unsafeWrite(to: $0)
-              })
+              .replace(
+                subrange: oldStructure.rangeForReplacingSigil,
+                withCount: Sigil.path.length,
+                writer: Sigil.path.unsafeWrite)
+            )
             newStructure.sigil = .path
           } else {
             commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
@@ -291,7 +293,7 @@ extension URLStorage {
 
     let commands: [ReplaceSubrangeOperation] = [
       .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.authority.length) {
-        return Sigil.authority.unsafeWrite(to: $0)
+        return Sigil.authority.unsafeWrite(to: &$0)
       },
       .replace(subrange: oldStructure.rangeForReplacingCodeUnits(of: .hostname), withCount: newStructure.hostnameLength)
       { dest in
@@ -377,9 +379,11 @@ extension URLStorage {
     case (.none, true):
       newStructure.sigil = .path
       commands.append(
-        .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.path.length) {
-          return Sigil.path.unsafeWrite(to: $0)
-        })
+        .replace(
+          subrange: oldStructure.rangeForReplacingSigil,
+          withCount: Sigil.path.length,
+          writer: Sigil.path.unsafeWrite)
+      )
     }
     commands.append(
       .replace(
