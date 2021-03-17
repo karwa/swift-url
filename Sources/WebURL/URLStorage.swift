@@ -241,6 +241,12 @@ extension URLStructure {
     return usernameLength != 0 || passwordLength != 0
   }
 
+  /// Whether the URL string has one or more of username/password/port.
+  ///
+  var hasCredentialsOrPort: Bool {
+    return usernameLength != 0 || passwordLength != 0 || portLength != 0
+  }
+
   /// > A URL cannot have a username/password/port if its host is null or the empty string,
   /// > its cannot-be-a-base-URL is true, or its scheme is "file".
   ///
