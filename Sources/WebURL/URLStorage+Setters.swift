@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+// --------------------------------------------
+// MARK: - Scheme
+// --------------------------------------------
+
+
 extension URLStorage {
 
   /// Attempts to set the scheme component to the given UTF8-encoded string.
@@ -21,29 +27,33 @@ extension URLStorage {
     to newValue: Input
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
-    guard let idx = findScheme(newValue),  // Checks scheme contents.
-      idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex,  // No content after scheme.
-      idx != newValue.startIndex  // Scheme cannot be empty.
+    // Check that the new value is a valid scheme.
+    guard let idx = findScheme(newValue),
+      idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex,
+      idx != newValue.startIndex
     else {
       return (AnyURLStorage(self), .error(.invalidScheme))
     }
+
+    // Check that the operation is semantically valid for the existing structure.
     let newSchemeBytes = newValue[..<idx]
-
+    let newSchemeKind = WebURL.SchemeKind(parsing: newSchemeBytes)
     let oldStructure = header.structure
-    var newStructure = oldStructure
-    newStructure.schemeKind = WebURL.SchemeKind(parsing: newSchemeBytes)
-    newStructure.schemeLength = newSchemeBytes.count + 1
 
-    if newStructure.schemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
+    if newSchemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
       return (AnyURLStorage(self), .error(.changeOfSchemeSpecialness))
     }
-    if newStructure.schemeKind == .file, oldStructure.hasCredentialSeparator || oldStructure.portLength != 0 {
+    if newSchemeKind == .file, oldStructure.hasCredentialSeparator || oldStructure.portLength != 0 {
       return (AnyURLStorage(self), .error(.newSchemeCannotHaveCredentialsOrPort))
     }
     if oldStructure.schemeKind == .file, oldStructure.hostnameLength == 0 {
-      return (AnyURLStorage(self), newStructure.schemeKind == .file ? nil : .error(.newSchemeCannotHaveEmptyHostname))
+      return (AnyURLStorage(self), newSchemeKind == .file ? nil : .error(.newSchemeCannotHaveEmptyHostname))
     }
-    // The operation is semantically valid.
+
+    // The operation is valid. Calculate the new structure and replace the code-units.
+    var newStructure = oldStructure
+    newStructure.schemeKind = newSchemeKind
+    newStructure.schemeLength = newSchemeBytes.count + 1
 
     var commands: [ReplaceSubrangeOperation] = [
       .replace(subrange: oldStructure.rangeForReplacingCodeUnits(of: .scheme), withCount: newStructure.schemeLength) {
@@ -64,6 +74,15 @@ extension URLStorage {
     }
     return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
   }
+}
+
+
+// --------------------------------------------
+// MARK: - Username, Password
+// --------------------------------------------
+
+
+extension URLStorage {
 
   /// Attempts to set the username component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
   ///
@@ -75,23 +94,23 @@ extension URLStorage {
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
-    guard oldStructure.cannotHaveCredentialsOrPort == false else {
+
+    if oldStructure.cannotHaveCredentialsOrPort {
       return (AnyURLStorage(self), .error(.cannotHaveCredentialsOrPort))
     }
-    // The operation is semantically valid.
+
+    // The operation is valid. Calculate the new structure and replace the code-units.
+    var newStructure = oldStructure
+    newStructure.usernameLength = 0
 
     guard let newValue = newValue, newValue.isEmpty == false else {
       guard let oldUsername = oldStructure.range(of: .username) else {
         return (AnyURLStorage(self), nil)
       }
-      var newStructure = oldStructure
-      newStructure.usernameLength = 0
       let toRemove = oldUsername.lowerBound..<(oldUsername.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
-      return (removeSubrange(toRemove, newStructure: newStructure), nil)
+      return (removeSubrange(toRemove, newStructure: newStructure).newStorage, nil)
     }
 
-    var newStructure = oldStructure
-    newStructure.usernameLength = 0
     let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write {
       newStructure.usernameLength += $0.count
     }
@@ -122,7 +141,7 @@ extension URLStorage {
       }
       return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
-    return (result, nil)
+    return (result.newStorage, nil)
   }
 
   /// Attempts to set the password component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
@@ -135,22 +154,23 @@ extension URLStorage {
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
-    guard oldStructure.cannotHaveCredentialsOrPort == false else {
+
+    if oldStructure.cannotHaveCredentialsOrPort {
       return (AnyURLStorage(self), .error(.cannotHaveCredentialsOrPort))
     }
-    // The operation is semantically valid.
+
+    // The operation is valid. Calculate the new structure and replace the code-units.
+    var newStructure = oldStructure
+    newStructure.passwordLength = 0
 
     guard let newValue = newValue, newValue.isEmpty == false else {
       guard let oldPassword = oldStructure.range(of: .password) else {
         return (AnyURLStorage(self), nil)
       }
-      var newStructure = oldStructure
-      newStructure.passwordLength = 0
       let toRemove = oldPassword.lowerBound..<(oldPassword.upperBound + (newStructure.hasCredentialSeparator ? 0 : 1))
-      return (removeSubrange(toRemove, newStructure: newStructure), nil)
+      return (removeSubrange(toRemove, newStructure: newStructure).newStorage, nil)
     }
 
-    var newStructure = oldStructure
     newStructure.passwordLength = 1  // leading ":"
     let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write {
       newStructure.passwordLength += $0.count
@@ -185,8 +205,17 @@ extension URLStorage {
       ptr += 1
       return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
     }
-    return (result, nil)
+    return (result.newStorage, nil)
   }
+}
+
+
+// --------------------------------------------
+// MARK: - Hostname
+// --------------------------------------------
+
+
+extension URLStorage {
 
   /// Attempts to set the hostname component to the given UTF8-encoded string. The value will be percent-encoded as appropriate.
   ///
@@ -199,104 +228,100 @@ extension URLStorage {
   ) -> (AnyURLStorage, URLSetterError?) where Input: BidirectionalCollection, Input.Element == UInt8 {
 
     let oldStructure = header.structure
-    guard oldStructure.cannotBeABaseURL == false else {
+
+    // Check that the operation is semantically valid for the existing structure.
+    if oldStructure.cannotBeABaseURL {
       return (AnyURLStorage(self), .error(.cannotSetHostOnCannotBeABaseURL))
     }
-    // Excluding 'cannotBeABaseURL' URLs doesn't mean we always have an authority sigil.
-    // Path-only URLs (e.g. "hello:/some/path") can be base URLs.
-    let hasCredentialsOrPort =
-      oldStructure.usernameLength != 0 || oldStructure.passwordLength != 0 || oldStructure.portLength != 0
 
     guard let newHostnameBytes = newValue, newHostnameBytes.isEmpty == false else {
-      // Special schemes (except file) do not support nil/empty hostnames.
+
       if oldStructure.schemeKind.isSpecial, oldStructure.schemeKind != .file {
         return (AnyURLStorage(self), .error(.schemeDoesNotSupportNilOrEmptyHostnames))
       }
-      // File does not support nil hostnames, only empty.
       if oldStructure.schemeKind == .file, newValue == nil {
         return (AnyURLStorage(self), .error(.schemeDoesNotSupportNilOrEmptyHostnames))
       }
-      // Cannot set empty/nil hostname if there are credentials or a port number.
-      guard hasCredentialsOrPort == false else {
+      if oldStructure.hasCredentialsOrPort {
         return (AnyURLStorage(self), .error(.cannotSetEmptyHostnameWithCredentialsOrPort))
       }
-      // Can only set a nil hostname if there is a path.
-      guard !(oldStructure.pathLength == 0 && newValue == nil) else {
+      if oldStructure.pathLength == 0, newValue == nil {
         return (AnyURLStorage(self), .error(.cannotRemoveHostnameWithoutPath))
       }
+
+      // The operation is valid. Calculate the new structure and replace the code-units.
+      var newStructure = oldStructure
+      newStructure.hostnameLength = 0
+
       switch oldStructure.range(of: .hostname) {
       case .none:
         // 'nil' -> 'nil'.
         guard newValue != nil else {
           return (AnyURLStorage(self), nil)
         }
-        // 'nil' -> empty host.
-        // Insert authority sigil, overwriting path sigil if present.
-        var newStructure = oldStructure
-        newStructure.sigil = .authority
-        newStructure.hostnameLength = 0
+        // 'nil' -> empty host: Insert authority sigil, overwriting path sigil if present.
         assert(oldStructure.sigil != .authority, "A URL without a hostname cannot have an authority sigil")
+        newStructure.sigil = .authority
+
         let result = replaceSubrange(
           oldStructure.rangeForReplacingSigil,
           withUninitializedSpace: Sigil.authority.length,
           newStructure: newStructure,
-          initializer: { return Sigil.authority.unsafeWrite(to: $0) }
+          initializer: Sigil.authority.unsafeWrite
         )
-        return (result, nil)
+        return (result.newStorage, nil)
 
       case .some(let hostnameRange):
-        precondition(oldStructure.sigil == .authority, "A URL with a hostname must have an authority sigil")
-        var newStructure = oldStructure
-        newStructure.hostnameLength = 0
-
+        assert(oldStructure.sigil == .authority, "A URL with a hostname must have an authority sigil")
         var commands: [ReplaceSubrangeOperation] = []
-        // hostname -> 'nil'.
-        // Remove authority sigil, replacing it with a path sigil if necessary.
+
+        // hostname -> 'nil': Remove authority sigil, replacing it with a path sigil if required.
         if newValue == nil {
           let needsPathSigil = withComponentBytes(.path) { pathBytes -> Bool in
             return pathBytes.map { PathComponentParser.doesNormalizedPathRequirePathSigil($0) } ?? false
           }
-          if needsPathSigil {
-            commands.append(
-              .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.path.length) {
-                return Sigil.path.unsafeWrite(to: $0)
-              })
-            newStructure.sigil = .path
-          } else {
-            commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
-            newStructure.sigil = .none
-          }
+          commands.append(
+            .replace(
+              subrange: oldStructure.rangeForReplacingSigil,
+              withCount: needsPathSigil ? Sigil.path.length : 0,
+              writer: needsPathSigil ? Sigil.path.unsafeWrite : { _ in 0 })
+          )
+          newStructure.sigil = needsPathSigil ? .path : .none
         }
-        // hostname -> empty hostname.
-        // Preserve authority sigil, only remove the hostname contents.
+        // hostname -> empty host: Preserve existing sigil, only remove the hostname contents.
         commands.append(.remove(subrange: hostnameRange))
         return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
       }
     }
 
+    // Check that the new value is a valid hostname.
     var callback = IgnoreValidationErrors()
     guard let newHost = ParsedHost(newHostnameBytes, schemeKind: oldStructure.schemeKind, callback: &callback) else {
       return (AnyURLStorage(self), .error(.invalidHostname))
     }
 
-    var counter = HostnameLengthCounter()
-    newHost.write(bytes: newHostnameBytes, using: &counter)
-
-    // * -> valid, non-nil host.
-    // Always write authority sigil, overwriting path sigil if present.
-
+    // The operation is valid. Calculate the new structure and replace the code-units.
+    // nil/empty/hostname -> hostname: Always write authority sigil, overwriting path sigil if present.
     var newStructure = oldStructure
-    newStructure.hostnameLength = counter.length
     newStructure.sigil = .authority
 
+    var counter = HostnameLengthCounter()
+    newHost.write(bytes: newHostnameBytes, using: &counter)
+    newStructure.hostnameLength = counter.length
+
     let commands: [ReplaceSubrangeOperation] = [
-      .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.authority.length) {
-        return Sigil.authority.unsafeWrite(to: $0)
-      },
-      .replace(subrange: oldStructure.rangeForReplacingCodeUnits(of: .hostname), withCount: newStructure.hostnameLength)
-      { dest in
+      .replace(
+        subrange: oldStructure.rangeForReplacingSigil,
+        withCount: Sigil.authority.length,
+        writer: Sigil.authority.unsafeWrite),
+      .replace(
+        subrange: oldStructure.rangeForReplacingCodeUnits(of: .hostname),
+        withCount: newStructure.hostnameLength
+      ) { dest in
         guard var ptr = dest.baseAddress else { return 0 }
-        var writer = UnsafeBufferHostnameWriter(buffer: UnsafeMutableBufferPointer(start: ptr, count: counter.length))
+        var writer = UnsafeBufferHostnameWriter(
+          buffer: UnsafeMutableBufferPointer(start: ptr, count: counter.length)
+        )
         newHost.write(bytes: newHostnameBytes, using: &writer)
         ptr = writer.buffer.baseAddress.unsafelyUnwrapped
         return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
@@ -305,6 +330,15 @@ extension URLStorage {
 
     return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
   }
+}
+
+
+// --------------------------------------------
+// MARK: - Port
+// --------------------------------------------
+
+
+extension URLStorage {
 
   /// Attempts to set the port component to the given value. A value of `nil` removes the port.
   ///
@@ -346,6 +380,15 @@ extension URLStorage {
     }
     return (result, nil)
   }
+}
+
+
+// --------------------------------------------
+// MARK: - Path
+// --------------------------------------------
+
+
+extension URLStorage {
 
   /// Attempts to set the path component to the given UTF8-encoded string.
   ///
@@ -377,9 +420,11 @@ extension URLStorage {
     case (.none, true):
       newStructure.sigil = .path
       commands.append(
-        .replace(subrange: oldStructure.rangeForReplacingSigil, withCount: Sigil.path.length) {
-          return Sigil.path.unsafeWrite(to: $0)
-        })
+        .replace(
+          subrange: oldStructure.rangeForReplacingSigil,
+          withCount: Sigil.path.length,
+          writer: Sigil.path.unsafeWrite)
+      )
     }
     commands.append(
       .replace(
@@ -395,6 +440,15 @@ extension URLStorage {
         }))
     return (multiReplaceSubrange(commands: commands, newStructure: newStructure), nil)
   }
+}
+
+
+// --------------------------------------------
+// MARK: - Query, Fragment.
+// --------------------------------------------
+
+
+extension URLStorage {
 
   /// Attempts to set the query component to the given UTF8-encoded string.
   ///
@@ -456,7 +510,9 @@ extension URLStorage {
 }
 
 
-// MARK: - Errors.
+// --------------------------------------------
+// MARK: - Errors
+// --------------------------------------------
 
 
 /// An error which may be returned when a `URLStorage` setter operation fails.

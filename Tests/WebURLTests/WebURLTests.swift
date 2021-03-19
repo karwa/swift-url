@@ -65,48 +65,56 @@ extension WebURLTests {
     url.scheme = "https"
     XCTAssertEqual(url.serialized, "https://example.com/a/b?c=d&e=f#gh")
     XCTAssertEqual(url.scheme, "https")
+    XCTAssertURLIsIdempotent(url)
     checkOriginalHasNotChanged()
     url = original
     // Username.
     url.username = "user"
     XCTAssertEqual(url.serialized, "http://user@example.com/a/b?c=d&e=f#gh")
     XCTAssertEqual(url.username, "user")
+    XCTAssertURLIsIdempotent(url)
     checkOriginalHasNotChanged()
     url = original
     // Password.
     url.password = "pass"
     XCTAssertEqual(url.serialized, "http://:pass@example.com/a/b?c=d&e=f#gh")
     XCTAssertEqual(url.password, "pass")
+    XCTAssertURLIsIdempotent(url)
     checkOriginalHasNotChanged()
     url = original
     // Hostname.
     url.hostname = "test.test"
     XCTAssertEqual(url.serialized, "http://test.test/a/b?c=d&e=f#gh")
     XCTAssertEqual(url.hostname, "test.test")
+    XCTAssertURLIsIdempotent(url)
     checkOriginalHasNotChanged()
     url = original
     // Port.
     url.port = 8080
     XCTAssertEqual(url.serialized, "http://example.com:8080/a/b?c=d&e=f#gh")
     XCTAssertEqual(url.port, 8080)
+    XCTAssertURLIsIdempotent(url)
     checkOriginalHasNotChanged()
     url = original
     // Path.
     url.path = "/foo/bar/baz"
     XCTAssertEqual(url.serialized, "http://example.com/foo/bar/baz?c=d&e=f#gh")
     XCTAssertEqual(url.path, "/foo/bar/baz")
+    XCTAssertURLIsIdempotent(url)
     checkOriginalHasNotChanged()
     url = original
     // Query
     url.query = "foo=bar&baz=qux"
     XCTAssertEqual(url.serialized, "http://example.com/a/b?foo=bar&baz=qux#gh")
     XCTAssertEqual(url.query, "foo=bar&baz=qux")
+    XCTAssertURLIsIdempotent(url)
     checkOriginalHasNotChanged()
     url = original
     // Fragment
     url.fragment = "foo"
     XCTAssertEqual(url.serialized, "http://example.com/a/b?c=d&e=f#foo")
     XCTAssertEqual(url.fragment, "foo")
+    XCTAssertURLIsIdempotent(url)
     checkOriginalHasNotChanged()
   }
 
@@ -120,13 +128,6 @@ extension WebURLTests {
     var url = WebURL("wss://user:pass@example.com:90/a/b?c=d&e=f#gh")!
     XCTAssertEqual(url.serialized, "wss://user:pass@example.com:90/a/b?c=d&e=f#gh")
 
-    func checkDoesNotCopy(_ object: inout WebURL, _ perform: (inout WebURL) -> Void) {
-      let addressBefore = object.storage.withEntireString { $0.baseAddress }
-      perform(&object)
-      let addressAfter = object.storage.withEntireString { $0.baseAddress }
-      XCTAssertEqual(addressBefore, addressAfter)
-    }
-
     // All new values must be the same length, so we can be sure we have enough capacity.
 
     // Scheme.
@@ -134,41 +135,49 @@ extension WebURLTests {
       $0.scheme = "ftp"
     }
     XCTAssertEqual(url.serialized, "ftp://user:pass@example.com:90/a/b?c=d&e=f#gh")
+    XCTAssertURLIsIdempotent(url)
     // Username.
     checkDoesNotCopy(&url) {
       $0.username = "resu"
     }
     XCTAssertEqual(url.serialized, "ftp://resu:pass@example.com:90/a/b?c=d&e=f#gh")
+    XCTAssertURLIsIdempotent(url)
     // Password.
     checkDoesNotCopy(&url) {
       $0.password = "ssap"
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@example.com:90/a/b?c=d&e=f#gh")
+    XCTAssertURLIsIdempotent(url)
     // Hostname.
     checkDoesNotCopy(&url) {
       $0.hostname = "moc.elpmaxe"
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:90/a/b?c=d&e=f#gh")
+    XCTAssertURLIsIdempotent(url)
     // Port.
     checkDoesNotCopy(&url) {
       $0.port = 42
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/a/b?c=d&e=f#gh")
+    XCTAssertURLIsIdempotent(url)
     // Path
     checkDoesNotCopy(&url) {
       $0.path = "/j/k"
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/j/k?c=d&e=f#gh")
+    XCTAssertURLIsIdempotent(url)
     // Query
     checkDoesNotCopy(&url) {
       $0.query = "m=n&o=p"
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/j/k?m=n&o=p#gh")
+    XCTAssertURLIsIdempotent(url)
     // Fragment
     checkDoesNotCopy(&url) {
       $0.fragment = "zz"
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/j/k?m=n&o=p#zz")
+    XCTAssertURLIsIdempotent(url)
   }
 }
 
@@ -192,24 +201,38 @@ extension WebURLTests {
       XCTAssertThrowsSpecific(URLSetterError.error(.invalidScheme)) {
         try url.setScheme(to: "🤯")
       }
+      XCTAssertEqual(url.serialized, "http://example.com/a/b?c=d&e=f#gh")
+      XCTAssertURLIsIdempotent(url)
+
       // [Throw] Change of special-ness.
       XCTAssertThrowsSpecific(URLSetterError.error(.changeOfSchemeSpecialness)) {
         try url.setScheme(to: "foo")
       }
+      XCTAssertEqual(url.serialized, "http://example.com/a/b?c=d&e=f#gh")
+      XCTAssertURLIsIdempotent(url)
+
       // [Deviation] If there is content after the ":", the operation fails. The JS model silently discards it.
       XCTAssertThrowsSpecific(URLSetterError.error(.invalidScheme)) {
         try url.setScheme(to: "http://foo/")
       }
+      XCTAssertEqual(url.serialized, "http://example.com/a/b?c=d&e=f#gh")
+      XCTAssertURLIsIdempotent(url)
+
       // ":" is allowed as the final character, but not required.
       XCTAssertNoThrow(try url.setScheme(to: "ws"))
       XCTAssertEqual(url.serialized, "ws://example.com/a/b?c=d&e=f#gh")
+      XCTAssertURLIsIdempotent(url)
+
       XCTAssertNoThrow(try url.setScheme(to: "https:"))
       XCTAssertEqual(url.serialized, "https://example.com/a/b?c=d&e=f#gh")
+      XCTAssertURLIsIdempotent(url)
 
       // [Deviation] Tabs and newlines are not ignored, cause setter to fail. The JS model ignores them.
       XCTAssertThrowsSpecific(URLSetterError.error(.invalidScheme)) {
         try url.setScheme(to: "\th\nttp:")
       }
+      XCTAssertEqual(url.serialized, "https://example.com/a/b?c=d&e=f#gh")
+      XCTAssertURLIsIdempotent(url)
     }
 
     do {
@@ -220,6 +243,7 @@ extension WebURLTests {
       }
       XCTAssertNoThrow(try url.setScheme(to: "https"))
       XCTAssertEqual(url.serialized, "https://user:pass@somehost/")
+      XCTAssertURLIsIdempotent(url)
 
       url = WebURL("http://somehost:8080/")!
       XCTAssertThrowsSpecific(URLSetterError.error(.newSchemeCannotHaveCredentialsOrPort)) {
@@ -227,6 +251,7 @@ extension WebURLTests {
       }
       XCTAssertNoThrow(try url.setScheme(to: "https"))
       XCTAssertEqual(url.serialized, "https://somehost:8080/")
+      XCTAssertURLIsIdempotent(url)
     }
 
     do {
@@ -237,6 +262,7 @@ extension WebURLTests {
       }
       XCTAssertNoThrow(try url.setScheme(to: "file"))
       XCTAssertEqual(url.serialized, "file:///")
+      XCTAssertURLIsIdempotent(url)
     }
   }
 
@@ -251,32 +277,37 @@ extension WebURLTests {
     var url = WebURL("http://example.com/")!
     XCTAssertNil(url.username)
     XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     url.username = "some username"
     XCTAssertEqual(url.username, "some%20username")
     XCTAssertEqual(url.serialized, "http://some%20username@example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     // [Deviation] Setting the empty string is the same as setting 'nil'.
     url.username = ""
     XCTAssertNil(url.username)
     XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     url.username = "some username"
     XCTAssertEqual(url.username, "some%20username")
     XCTAssertEqual(url.serialized, "http://some%20username@example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     // [Deviation] Setting 'nil' is the same as setting the empty string.
     url.username = nil
     XCTAssertNil(url.username)
     XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
 
-    // [Throw]: Setting credentials when the scheme does not allow them.
+    // [Throw] Setting credentials when the scheme does not allow them.
     url = WebURL("file://somehost/p1/p2")!
     XCTAssertNil(url.username)
     XCTAssertEqual(url.serialized, "file://somehost/p1/p2")
-    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) {
-      try url.setUsername(to: "user")
-    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) { try url.setUsername(to: "user") }
+    XCTAssertEqual(url.serialized, "file://somehost/p1/p2")
+    XCTAssertURLIsIdempotent(url)
   }
 
   /// Tests the Swift model 'password' property.
@@ -290,32 +321,37 @@ extension WebURLTests {
     var url = WebURL("http://example.com/")!
     XCTAssertNil(url.password)
     XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     url.password = "🤫"
     XCTAssertEqual(url.password, "%F0%9F%A4%AB")
     XCTAssertEqual(url.serialized, "http://:%F0%9F%A4%AB@example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     // [Deviation] Setting the empty string is the same as setting 'nil'.
     url.password = ""
     XCTAssertNil(url.password)
     XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     url.password = "🤫"
     XCTAssertEqual(url.password, "%F0%9F%A4%AB")
     XCTAssertEqual(url.serialized, "http://:%F0%9F%A4%AB@example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     // [Deviation] Setting the 'nil' is the same as setting the empty string.
     url.password = nil
     XCTAssertNil(url.password)
     XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     // [Throw]: Setting credentials when the scheme does not allow them.
     url = WebURL("file://somehost/p1/p2")!
     XCTAssertNil(url.password)
     XCTAssertEqual(url.serialized, "file://somehost/p1/p2")
-    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) {
-      try url.setPassword(to: "pass")
-    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) { try url.setPassword(to: "pass") }
+    XCTAssertEqual(url.serialized, "file://somehost/p1/p2")
+    XCTAssertURLIsIdempotent(url)
   }
 
   /// Tests the Swift model 'hostname' property.
@@ -327,19 +363,22 @@ extension WebURLTests {
 
     // [Deviation] Hostname is not trimmed; invalid host code points such as "?", "#", or ":" cause the setter to fail.
     var url = WebURL("http://example.com/")!
-    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
-      try url.setHostname(to: "hello?")
-    }
-    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
-      try url.setHostname(to: "hello#")
-    }
-    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
-      try url.setHostname(to: "hel:lo")
-    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) { try url.setHostname(to: "hello?") }
+    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
+
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) { try url.setHostname(to: "hello#") }
+    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
+
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) { try url.setHostname(to: "hel:lo") }
+    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
+
     // [Deviation] Hostname is not filtered. Tabs and newlines are invalid host code points, cause setter to fail.
-    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
-      try url.setHostname(to: "\thel\nlo")
-    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) { try url.setHostname(to: "\thel\nlo") }
+    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
 
     // [Deviation] Swift model can distinguish between empty and not-present hostnames.
     XCTAssertNil(WebURL("unix:/some/path")!.hostname)
@@ -351,6 +390,9 @@ extension WebURLTests {
     XCTAssertThrowsSpecific(URLSetterError.error(.schemeDoesNotSupportNilOrEmptyHostnames)) {
       try url.setHostname(to: String?.none)
     }
+    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertURLIsIdempotent(url)
+
     // 'file' allows empty hostnames, but not 'nil' hostnames.
     url = WebURL("file:///some/path")!
     XCTAssertEqual(url.hostname, "")
@@ -359,10 +401,14 @@ extension WebURLTests {
     XCTAssertThrowsSpecific(URLSetterError.error(.schemeDoesNotSupportNilOrEmptyHostnames)) {
       try url.setHostname(to: String?.none)
     }
+    XCTAssertEqual(url.serialized, "file:///some/path")
+    XCTAssertURLIsIdempotent(url)
+
     // Non-special schemes allow 'nil' hostnames.
     url = WebURL("unix:///some/path")!
     XCTAssertNoThrow(try url.setHostname(to: String?.none))
     XCTAssertEqual(url.serialized, "unix:/some/path")
+    XCTAssertURLIsIdempotent(url)
     // But not if they already have credentials or ports.
     url = WebURL("unix://user:pass@example/some/path")!
     XCTAssertEqual(url.hostname, "example")
@@ -370,12 +416,17 @@ extension WebURLTests {
     XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetEmptyHostnameWithCredentialsOrPort)) {
       try url.setHostname(to: String?.none)
     }
+    XCTAssertEqual(url.serialized, "unix://user:pass@example/some/path")
+    XCTAssertURLIsIdempotent(url)
+
     url = WebURL("unix://example:99/some/path")!
     XCTAssertEqual(url.hostname, "example")
     XCTAssertEqual(url.port, 99)
     XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetEmptyHostnameWithCredentialsOrPort)) {
       try url.setHostname(to: String?.none)
     }
+    XCTAssertEqual(url.serialized, "unix://example:99/some/path")
+    XCTAssertURLIsIdempotent(url)
     // When setting a hostname to/from 'nil', we may need to add/remove a path sigil.
     do {
       func check_has_path_sigil(url: WebURL) {
@@ -383,12 +434,14 @@ extension WebURLTests {
         XCTAssertEqual(url.storage.structure.sigil, .path)
         XCTAssertEqual(url.hostname, nil)
         XCTAssertEqual(url.path, "//not-a-host/test")
+        XCTAssertURLIsIdempotent(url)
       }
       func check_has_auth_sigil(url: WebURL, hostname: String) {
         XCTAssertEqual(url.serialized, "web+demo://\(hostname)//not-a-host/test")
         XCTAssertEqual(url.storage.structure.sigil, .authority)
         XCTAssertEqual(url.hostname, hostname)
         XCTAssertEqual(url.path, "//not-a-host/test")
+        XCTAssertURLIsIdempotent(url)
       }
       // Start with a 'nil' host, path sigil.
       var test_url = WebURL("web+demo:/.//not-a-host/test")!
@@ -404,7 +457,7 @@ extension WebURLTests {
       check_has_path_sigil(url: test_url)
     }
 
-    // [Throw]: Cannot set hostname on cannot-be-a-base URLs.
+    // [Throw] Cannot set hostname on cannot-be-a-base URLs.
     url = WebURL("mailto:bob")!
     XCTAssertNil(url.hostname)
     XCTAssertTrue(url._cannotBeABaseURL)
@@ -413,8 +466,9 @@ extension WebURLTests {
       try url.setHostname(to: "somehost")
     }
     XCTAssertEqual(url.serialized, "mailto:bob")
+    XCTAssertURLIsIdempotent(url)
 
-    // [Throw]: Cannot set empty hostname on special schemes.
+    // [Throw] Cannot set empty hostname on special schemes.
     url = WebURL("http://example.com/p1/p2")!
     XCTAssertEqual(url.hostname, "example.com")
     XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
@@ -422,8 +476,9 @@ extension WebURLTests {
       try url.setHostname(to: "")
     }
     XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
+    XCTAssertURLIsIdempotent(url)
 
-    // [Throw]: Cannot set empty hostname if the URL contains credentials or port.
+    // [Throw] Cannot set empty hostname if the URL contains credentials or port.
     url = WebURL("foo://user@example.com/p1/p2")!
     XCTAssertEqual(url.username, "user")
     XCTAssertEqual(url.hostname, "example.com")
@@ -432,6 +487,7 @@ extension WebURLTests {
       try url.setHostname(to: "")
     }
     XCTAssertEqual(url.serialized, "foo://user@example.com/p1/p2")
+    XCTAssertURLIsIdempotent(url)
 
     url = WebURL("foo://example.com:8080/p1/p2")!
     XCTAssertEqual(url.port, 8080)
@@ -441,23 +497,23 @@ extension WebURLTests {
       try url.setHostname(to: "")
     }
     XCTAssertEqual(url.serialized, "foo://example.com:8080/p1/p2")
+    XCTAssertURLIsIdempotent(url)
 
-    // [Throw]: Invalid hostnames.
+    // [Throw] Invalid hostnames.
     url = WebURL("foo://example.com/")!
     XCTAssertEqual(url.hostname, "example.com")
     XCTAssertEqual(url.serialized, "foo://example.com/")
-    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
-      try url.setHostname(to: "@")
-    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) { try url.setHostname(to: "@") }
     XCTAssertEqual(url.serialized, "foo://example.com/")
-    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
-      try url.setHostname(to: "/a/b/c")
-    }
+    XCTAssertURLIsIdempotent(url)
+
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) { try url.setHostname(to: "/a/b/c") }
     XCTAssertEqual(url.serialized, "foo://example.com/")
-    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) {
-      try url.setHostname(to: "[:::]")
-    }
+    XCTAssertURLIsIdempotent(url)
+
+    XCTAssertThrowsSpecific(URLSetterError.error(.invalidHostname)) { try url.setHostname(to: "[:::]") }
     XCTAssertEqual(url.serialized, "foo://example.com/")
+    XCTAssertURLIsIdempotent(url)
   }
 
   /// Tests the Swift model 'port' property.
@@ -468,27 +524,31 @@ extension WebURLTests {
 
     // [Throw] Adding a port to a URL which does not allow them.
     var url = WebURL("file://somehost/p1/p2")!
-    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) {
-      try url.setPort(to: 99)
-    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotHaveCredentialsOrPort)) { try url.setPort(to: 99) }
+    XCTAssertEqual(url.serialized, "file://somehost/p1/p2")
+    XCTAssertURLIsIdempotent(url)
+
     // [Throw] Setting a port to a non-valid UInt16 value.
     url = WebURL("http://example.com/p1/p2")!
-    XCTAssertThrowsSpecific(URLSetterError.error(.portValueOutOfBounds)) {
-      try url.setPort(to: -99)
-    }
-    XCTAssertThrowsSpecific(URLSetterError.error(.portValueOutOfBounds)) {
-      try url.setPort(to: Int(UInt32.max))
-    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.portValueOutOfBounds)) { try url.setPort(to: -99) }
+    XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
+    XCTAssertURLIsIdempotent(url)
+    XCTAssertThrowsSpecific(URLSetterError.error(.portValueOutOfBounds)) { try url.setPort(to: Int(UInt32.max)) }
+    XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
+    XCTAssertURLIsIdempotent(url)
+
     // [Deviation] Non-present port is represented as 'nil', rather than empty string.
     XCTAssertNil(url.port)
     // Set the port to a non-nil value.
     XCTAssertNoThrow(try url.setPort(to: 42))
     XCTAssertEqual(url.port, 42)
     XCTAssertEqual(url.serialized, "http://example.com:42/p1/p2")
+    XCTAssertURLIsIdempotent(url)
     // And back to nil.
     XCTAssertNoThrow(try url.setPort(to: nil))
     XCTAssertNil(url.port)
     XCTAssertEqual(url.serialized, "http://example.com/p1/p2")
+    XCTAssertURLIsIdempotent(url)
   }
 
   /// Tests the Swift model 'path' property.
@@ -501,15 +561,16 @@ extension WebURLTests {
     var url = WebURL("mailto:bob")!
     XCTAssertEqual(url.path, "bob")
     XCTAssertTrue(url._cannotBeABaseURL)
-    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetPathOnCannotBeABaseURL)) {
-      try url.setPath(to: "frank")
-    }
+    XCTAssertThrowsSpecific(URLSetterError.error(.cannotSetPathOnCannotBeABaseURL)) { try url.setPath(to: "frank") }
+    XCTAssertEqual(url.serialized, "mailto:bob")
+    XCTAssertURLIsIdempotent(url)
 
     // [Deviation] Tabs and newlines are not trimmed.
     url = WebURL("file:///hello/world?someQuery")!
     XCTAssertNoThrow(try url.setPath(to: "\t\n\t"))
     XCTAssertEqual(url.path, "/%09%0A%09")
     XCTAssertEqual(url.serialized, "file:///%09%0A%09?someQuery")
+    XCTAssertURLIsIdempotent(url)
   }
 
   /// Tests the Swift model 'query' property.
@@ -519,7 +580,7 @@ extension WebURLTests {
   ///
   func testQuery() {
 
-    // [Deviation]: The Swift model does not include the leading "?" in the getter, uses 'nil' to mean 'not present'.
+    // [Deviation] The Swift model does not include the leading "?" in the getter, uses 'nil' to mean 'not present'.
     var url = WebURL("http://example.com/hello")!
     XCTAssertEqual(url.serialized, "http://example.com/hello")
     XCTAssertNil(url.query)
@@ -527,24 +588,29 @@ extension WebURLTests {
     url.query = ""
     XCTAssertEqual(url.serialized, "http://example.com/hello?")
     XCTAssertEqual(url.query, "")
+    XCTAssertURLIsIdempotent(url)
 
     url.query = "a=b&c=d"
     XCTAssertEqual(url.serialized, "http://example.com/hello?a=b&c=d")
     XCTAssertEqual(url.query, "a=b&c=d")
+    XCTAssertURLIsIdempotent(url)
 
     url.query = nil
     XCTAssertEqual(url.serialized, "http://example.com/hello")
     XCTAssertNil(url.query)
+    XCTAssertURLIsIdempotent(url)
 
-    // [Deviation]: The Swift model does not trim the leading "?" from the new value when setting.
+    // [Deviation] The Swift model does not trim the leading "?" from the new value when setting.
     url.query = "?e=f&g=h"
     XCTAssertEqual(url.serialized, "http://example.com/hello??e=f&g=h")
     XCTAssertEqual(url.query, "?e=f&g=h")
+    XCTAssertURLIsIdempotent(url)
 
-    // [Deviation]: Newlines and tabs are not filtered.
+    // [Deviation] Newlines and tabs are not filtered.
     url.query = "\tso\nmething"
     XCTAssertEqual(url.serialized, "http://example.com/hello?%09so%0Amething")
     XCTAssertEqual(url.query, "%09so%0Amething")
+    XCTAssertURLIsIdempotent(url)
   }
 
   /// Tests the Swift model 'fragment' property.
@@ -562,24 +628,29 @@ extension WebURLTests {
     url.fragment = ""
     XCTAssertEqual(url.serialized, "http://example.com/hello#")
     XCTAssertEqual(url.fragment, "")
+    XCTAssertURLIsIdempotent(url)
 
     url.fragment = "test"
     XCTAssertEqual(url.serialized, "http://example.com/hello#test")
     XCTAssertEqual(url.fragment, "test")
+    XCTAssertURLIsIdempotent(url)
 
     url.fragment = nil
     XCTAssertEqual(url.serialized, "http://example.com/hello")
     XCTAssertNil(url.fragment)
+    XCTAssertURLIsIdempotent(url)
 
     // [Deviation]: The Swift model does not trim the leading "#" from the new value when setting.
     url.fragment = "#test"
     XCTAssertEqual(url.serialized, "http://example.com/hello##test")
     XCTAssertEqual(url.fragment, "#test")
+    XCTAssertURLIsIdempotent(url)
 
     // [Deviation]: Newlines and tabs are not filtered.
     url.fragment = "\tso\nmething"
     XCTAssertEqual(url.serialized, "http://example.com/hello#%09so%0Amething")
     XCTAssertEqual(url.fragment, "%09so%0Amething")
+    XCTAssertURLIsIdempotent(url)
   }
 }
 
@@ -602,6 +673,8 @@ extension WebURLTests {
     XCTAssertThrowsSpecific(URLSetterError.error(.cannotRemoveHostnameWithoutPath)) {
       try url.setHostname(to: String?.none)
     }
+    XCTAssertEqual(url.serialized, "foo://somehost")
+    XCTAssertURLIsIdempotent(url)
 
     // Check that we require a host in order to remove a path.
 
@@ -623,12 +696,14 @@ extension WebURLTests {
     XCTAssertNil(url.hostname)
     XCTAssertFalse(url._cannotBeABaseURL)
     XCTAssertTrue(WebURL(url.serialized)!._cannotBeABaseURL)
+    // XCTAssertURLIsIdempotent(url) - see comment above.
 
     url.path = "test"
     XCTAssertEqual(url.serialized, "foo:/test?someQuery")
     XCTAssertEqual(url.path, "/test")
     XCTAssertNil(url.hostname)
     XCTAssertFalse(url._cannotBeABaseURL)
+    XCTAssertURLIsIdempotent(url)
   }
 
   func testJSModelSetters() {
