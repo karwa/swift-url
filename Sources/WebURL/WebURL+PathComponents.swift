@@ -413,7 +413,7 @@ extension URLStorage {
     }
     // This value being nil is taken as meaning the components are empty.
     let firstNewComponentLength = components.first.map {
-      1 + $0.lazy.percentEncoded(using: URLEncodeSet.Path.self).joined().count
+      1 + $0.lazy.percentEncoded(using: PathComponentEncodeSet.self).joined().count
     }
 
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
@@ -459,7 +459,7 @@ extension URLStorage {
     var pathStartOffset = 0
 
     let insertedPathLength = components.dropFirst().reduce(into: firstNewComponentLength ?? 0) { counter, component in
-      counter += 1 + component.lazy.percentEncoded(using: URLEncodeSet.Path.self).joined().count
+      counter += 1 + component.lazy.percentEncoded(using: PathComponentEncodeSet.self).joined().count
     }
 
     // Find out if the new path requires adding/removing a path sigil.
@@ -525,7 +525,7 @@ extension URLStorage {
             bytesWritten &+= 1
             bytesWritten &+=
               UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...])
-              .initialize(from: component.lazy.percentEncoded(using: URLEncodeSet.Path.self).joined()).1
+              .initialize(from: component.lazy.percentEncoded(using: PathComponentEncodeSet.self).joined()).1
           }
           return bytesWritten
         })

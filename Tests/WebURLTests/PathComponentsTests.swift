@@ -380,6 +380,53 @@ extension PathComponentsTests {
     }
   }
 
+  func testReplaceComponents_Slashes() {
+
+    // Slashes are percent-encoded in inserted components, even though they are not technically
+    // part of the 'path' encode-set.
+    do {
+      var url = WebURL("foo://example.com/a/b?aQuery#someFragment")!
+      url.withMutablePathComponents { editor in
+        let range = editor.replaceComponents(editor.endIndex..<editor.endIndex, with: ["//boo/"])
+        XCTAssertEqual(range.lowerBound, editor.index(before: editor.endIndex))
+        XCTAssertEqual(range.upperBound, editor.endIndex)
+        XCTAssertEqualElements(editor[range], ["//boo/"])
+      }
+      XCTAssertEqual(url.serialized, "foo://example.com/a/b/%2F%2Fboo%2F?aQuery#someFragment")
+      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "//boo/"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Slashes cannot be used to sneak a "." or ".." component through - at least,
+    // not in such a way that it would cause an idempotence failure when reparsed.
+    do {
+      var url = WebURL("foo://example.com/a/b?aQuery#someFragment")!
+      url.withMutablePathComponents { editor in
+        let range = editor.replaceComponents(editor.endIndex..<editor.endIndex, with: ["/.."])
+        XCTAssertEqual(range.lowerBound, editor.index(before: editor.endIndex))
+        XCTAssertEqual(range.upperBound, editor.endIndex)
+        XCTAssertEqualElements(editor[range], ["/.."])
+      }
+      XCTAssertEqual(url.serialized, "foo://example.com/a/b/%2F..?aQuery#someFragment")
+      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "/.."])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Backslashes are also encoded, as they are treated like regular slashes in special URLs.
+    do {
+      var url = WebURL("foo://example.com/a/b?aQuery#someFragment")!
+      url.withMutablePathComponents { editor in
+        let range = editor.replaceComponents(editor.endIndex..<editor.endIndex, with: ["\\"])
+        XCTAssertEqual(range.lowerBound, editor.index(before: editor.endIndex))
+        XCTAssertEqual(range.upperBound, editor.endIndex)
+        XCTAssertEqualElements(editor[range], ["\\"])
+      }
+      XCTAssertEqual(url.serialized, "foo://example.com/a/b/%5C?aQuery#someFragment")
+      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "\\"])
+      XCTAssertURLIsIdempotent(url)
+    }
+  }
+
   func testReplaceComponents_PathSigil() {
     // A path sigil is required when a non-special URL has:
     // - No authority

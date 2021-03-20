@@ -390,6 +390,24 @@ struct PassthroughEncodeSet: PercentEncodeSet {
   }
 }
 
+/// An encode-set used for escaping path components.
+///
+/// The regular 'path' URLEncodeSet does not include the forward-slash character,
+/// as the URL parser won't ever see them in a path component. Unfortunately, that makes
+/// detecting "." or ".." components more difficult, so we encode the slashes to avoid the path changing
+/// when re-parsed.
+///
+/// The backslash character is also included, even though it is only considered a separator for special URLs.
+/// It's simpler to just encode both of them, rather than having separate special path component/regular path component sets.
+///
+struct PathComponentEncodeSet: PercentEncodeSet {
+  @inline(__always)
+  static func shouldEscape(character: ASCII) -> Bool {
+    URLEncodeSet.Path.shouldEscape(character: character) || character == ASCII.forwardSlash
+      || character == ASCII.backslash
+  }
+}
+
 // ARM and x86 seem to have wildly different performance characteristics.
 // The lookup table seems to be about 8-12% better than bitshifting on x86, but can be 90% slower on ARM.
 
