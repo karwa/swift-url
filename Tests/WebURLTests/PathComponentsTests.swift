@@ -1077,6 +1077,21 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
 
+    // Insert after root path.
+    do {
+      var url = WebURL("http://example.com/")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.insert(contentsOf: ["hello", "world"], at: path.endIndex)
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/hello/world")
+      XCTAssertEqual(url.path, "/hello/world")
+      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["hello", "world"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
     // Insert to introduce path sigil.
     do {
       var url = WebURL("foo:/1/2/3")!
@@ -1089,6 +1104,348 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
       XCTAssertEqual(url.pathComponents!.index(after: url.pathComponents!.startIndex), range.upperBound)
       XCTAssertEqualElements(url.pathComponents![range], [""])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Insert non-normalized Windows drive letter.
+    do {
+      var url = WebURL("file:///Users/jim/")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.insert(contentsOf: ["C|"], at: path.startIndex)
+      }
+      XCTAssertEqual(url.serialized, "file:///C:/Users/jim/")
+      XCTAssertEqual(url.path, "/C:/Users/jim/")
+      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.index(after: url.pathComponents!.startIndex), range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["C:"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Insert ".." components.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.insert(contentsOf: ["..", ".."], at: path.endIndex)
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/2/3")
+      XCTAssertEqual(url.path, "/1/2/3")
+      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Insert components with slashes.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.insert(contentsOf: ["/a", #"\b"#], at: path.endIndex)
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/%2Fa/%5Cb")
+      XCTAssertEqual(url.path, "/1/2/3/%2Fa/%5Cb")
+      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents!.index(url.pathComponents!.endIndex, offsetBy: -2), range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["/a", #"\b"#])
+      XCTAssertURLIsIdempotent(url)
+    }
+  }
+
+  func testAppendContents() {
+
+    // Regular append on to non-root path.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.append(contentsOf: ["a", "b"])
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/a/b")
+      XCTAssertEqual(url.path, "/1/2/3/a/b")
+      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents!.index(url.pathComponents!.endIndex, offsetBy: -2), range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["a", "b"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending to root path.
+    do {
+      var url = WebURL("http://example.com/")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.append(contentsOf: ["hello", "world"])
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/hello/world")
+      XCTAssertEqual(url.path, "/hello/world")
+      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["hello", "world"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending to introduce path sigil.
+    do {
+      var url = WebURL("foo:/")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.append(contentsOf: ["", "bar"])
+      }
+      XCTAssertEqual(url.serialized, "foo:/.//bar")
+      XCTAssertEqual(url.path, "//bar")
+      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["", "bar"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending non-normalized Windows drive letter to root path.
+    do {
+      var url = WebURL("file://host/")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.append(contentsOf: ["C|", "Windows", "System32", ""])
+      }
+      XCTAssertEqual(url.serialized, "file://host/C:/Windows/System32/")
+      XCTAssertEqual(url.path, "/C:/Windows/System32/")
+      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["C:", "Windows", "System32", ""])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending ".." components.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.append(contentsOf: ["..", ".."])
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/2/3")
+      XCTAssertEqual(url.path, "/1/2/3")
+      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending components with slashes.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path -> Range<PathComponentIndex> in
+        return path.append(contentsOf: ["/a", #"\b"#])
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/%2Fa/%5Cb")
+      XCTAssertEqual(url.path, "/1/2/3/%2Fa/%5Cb")
+      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents!.index(url.pathComponents!.endIndex, offsetBy: -2), range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["/a", #"\b"#])
+      XCTAssertURLIsIdempotent(url)
+    }
+  }
+
+  func testRemoveSubrange() {
+    // Removal from the front.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let idx = url.withMutablePathComponents { path in
+        path.removeSubrange(path.startIndex..<path.index(after: path.startIndex))
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/2/3")
+      XCTAssertEqual(url.path, "/2/3")
+      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents!.startIndex, idx)
+      XCTAssertEqual(url.pathComponents![idx], "2")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Removal from the middle.
+    do {
+      var url = WebURL("http://example.com/1/2/3/4")!
+      let idx = url.withMutablePathComponents { path in
+        path.removeSubrange(path.index(after: path.startIndex)..<path.index(path.startIndex, offsetBy: 3))
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/4")
+      XCTAssertEqual(url.path, "/1/4")
+      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents!.index(after: url.pathComponents!.startIndex), idx)
+      XCTAssertEqual(url.pathComponents![idx], "4")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Removal from the end.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let idx = url.withMutablePathComponents { path in
+        path.removeSubrange(path.index(after: path.startIndex)..<path.endIndex)
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1")
+      XCTAssertEqual(url.path, "/1")
+      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents!.endIndex, idx)
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Removal from root path.
+    do {
+      var url = WebURL("http://example.com/")!
+      let idx = url.withMutablePathComponents { path in
+        path.removeSubrange(path.startIndex..<path.endIndex)
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.path, "/")
+      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents!.endIndex, idx)
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Removal which introduces path sigil.
+    do {
+      var url = WebURL("foo:/a/b//c/d")!
+      let idx = url.withMutablePathComponents { path in
+        path.removeSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2))
+      }
+      XCTAssertEqual(url.serialized, "foo:/.//c/d")
+      XCTAssertEqual(url.path, "//c/d")
+      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents!.startIndex, idx)
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Removal which introduces non-normalized Windows drive letter.
+    do {
+      var url = WebURL("file:///a/b/C|/d")!
+      let idx = url.withMutablePathComponents { path in
+        path.removeSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2))
+      }
+      XCTAssertEqual(url.serialized, "file:///C:/d")
+      XCTAssertEqual(url.path, "/C:/d")
+      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents!.startIndex, idx)
+      XCTAssertURLIsIdempotent(url)
+    }
+  }
+
+  func testReplaceSingle() {
+    // Replacement at the front.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path in
+        path.replaceComponent(at: path.startIndex, with: "a")
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/a/2/3")
+      XCTAssertEqual(url.path, "/a/2/3")
+      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.index(after: url.pathComponents!.startIndex), range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Replacement in the middle.
+    do {
+      var url = WebURL("http://example.com/1/2/3/4")!
+      let range = url.withMutablePathComponents { path in
+        path.replaceComponent(at: path.index(after: path.startIndex), with: "a")
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/a/3/4")
+      XCTAssertEqual(url.path, "/1/a/3/4")
+      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents!.index(after: url.pathComponents!.startIndex), range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2), range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Replacement at the end.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path in
+        path.replaceComponent(at: path.index(before: path.endIndex), with: "a")
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/2/a")
+      XCTAssertEqual(url.path, "/1/2/a")
+      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents!.index(before: url.pathComponents!.endIndex), range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Replacement of root path.
+    do {
+      var url = WebURL("http://example.com/")!
+      let range = url.withMutablePathComponents { path in
+        path.replaceComponent(at: path.startIndex, with: "a")
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/a")
+      XCTAssertEqual(url.path, "/a")
+      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Replacement which introduces path sigil.
+    do {
+      var url = WebURL("foo:/a/b/c/d")!
+      let range = url.withMutablePathComponents { path in
+        path.replaceComponent(at: path.startIndex, with: "")
+      }
+      XCTAssertEqual(url.serialized, "foo:/.//b/c/d")
+      XCTAssertEqual(url.path, "//b/c/d")
+      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.index(after: url.pathComponents!.startIndex), range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], [""])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Replacement which introduces non-normalized Windows drive letter.
+    do {
+      var url = WebURL("file:///a/b/c/d")!
+      let range = url.withMutablePathComponents { path in
+        path.replaceComponent(at: path.startIndex, with: "C|")
+      }
+      XCTAssertEqual(url.serialized, "file:///C:/b/c/d")
+      XCTAssertEqual(url.path, "/C:/b/c/d")
+      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.index(after: url.pathComponents!.startIndex), range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], ["C:"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Replacement with ".." component.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path in
+        path.replaceComponent(at: path.startIndex, with: "..")
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/2/3")
+      XCTAssertEqual(url.path, "/2/3")
+      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.startIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Replacement containing with slashes.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      let range = url.withMutablePathComponents { path in
+        path.replaceComponent(at: path.index(after: path.startIndex), with: #"\b"#)
+      }
+      XCTAssertEqual(url.serialized, "http://example.com/1/%5Cb/3")
+      XCTAssertEqual(url.path, "/1/%5Cb/3")
+      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents!.index(after: url.pathComponents!.startIndex), range.lowerBound)
+      XCTAssertEqual(url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2), range.upperBound)
+      XCTAssertEqualElements(url.pathComponents![range], [#"\b"#])
       XCTAssertURLIsIdempotent(url)
     }
   }

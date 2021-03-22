@@ -190,7 +190,7 @@ extension WebURL {
   ///     var url = WebURL("http://example.com/foo/bar")!
   ///     url.withMutablePathComponents { path in
   ///       if path.last == "bar" {
-  ///         path.appendComponent("cheese")
+  ///         path.append("cheese")
   ///       }
   ///     }
   ///     print(url)
@@ -568,6 +568,7 @@ extension WebURL.UnsafeMutablePathComponents {
   ///
   @discardableResult
   public mutating func remove(at position: Index) -> Index {
+    precondition(position != endIndex, "Cannot remove component at endIndex")
     return removeSubrange(position..<index(after: position))
   }
 }
