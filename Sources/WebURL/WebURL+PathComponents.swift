@@ -827,7 +827,24 @@ extension URLStorage {
         })
     )
 
-    let replaced = multiReplaceSubrange(commands: commands, newStructure: newStructure)
+    var replaced = multiReplaceSubrange(commands: commands, newStructure: newStructure)
+
+    // Normalize Windows drive letters.
+    // It is much simpler to fix this up after the replacement, as the first component could come from either
+    // the user-provided components or the existing path. Luckily, it doesn't change the length or structure of the URL,
+    // so we don't need to worry about switching URLStorage representations and can do a straight code-unit swap.
+    if case .file = newStructure.schemeKind {
+      switch replaced {
+      case .small(var small):
+        replaced = _tempStorage
+        small.normalizeWindowsDriveLetterIfPresent()
+        replaced = AnyURLStorage(small)
+      case .generic(var generic):
+        replaced = _tempStorage
+        generic.normalizeWindowsDriveLetterIfPresent()
+        replaced = AnyURLStorage(generic)
+      }
+    }
 
     // Calculate the path component ranges for the new lower/upperBound.
     let lowerBoundStartPosition = replacedRange.lowerBound + pathStartOffset
@@ -845,5 +862,15 @@ extension URLStorage {
     let newLowerBound = PathComponentIndex(codeUnitRange: lowerBoundStartPosition..<lowerBoundEndPosition)
     let newUpperBound = PathComponentIndex(codeUnitRange: upperBoundStartPosition..<upperBoundEndPosition)
     return (replaced, .left(Range(uncheckedBounds: (newLowerBound, newUpperBound))))
+  }
+
+  private mutating func normalizeWindowsDriveLetterIfPresent() {
+    guard case .file = header.structure.schemeKind else { return }
+    let path = codeUnits[header.structure.rangeForReplacingCodeUnits(of: .path)]
+    if PathComponentParser.isWindowsDriveLetter(path.dropFirst().prefix(2)),
+      path.dropFirst(3).first == nil || path.dropFirst(3).first == ASCII.forwardSlash.codePoint
+    {
+      codeUnits[path.startIndex + 2] = ASCII.colon.codePoint
+    }
   }
 }

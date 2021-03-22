@@ -487,7 +487,7 @@ extension PathComponentsTests {
     // Must be normalized to be idempotent.
     do {
       var url = WebURL("file:///")!
-      XCTAssertEqualElements(url.pathComponents!, [])
+      XCTAssertEqualElements(url.pathComponents!, [""])
       url.withMutablePathComponents { path in
         let range = path.replaceComponents(path.endIndex..<path.endIndex, with: ["C|", "Windows"])
         XCTAssertEqual(range.lowerBound, path.startIndex)
@@ -500,10 +500,26 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
 
+    // Does not apply to non-file URLs.
+    do {
+      var url = WebURL("http://example/")!
+      XCTAssertEqualElements(url.pathComponents!, [""])
+      url.withMutablePathComponents { path in
+        let range = path.replaceComponents(path.endIndex..<path.endIndex, with: ["C|", "Windows"])
+        XCTAssertEqual(range.lowerBound, path.startIndex)
+        XCTAssertEqual(range.upperBound, path.endIndex)
+        XCTAssertNotEqual(range.lowerBound, range.upperBound)
+        XCTAssertEqualElements(path[range], ["C|", "Windows"])
+      }
+      XCTAssertEqual(url.serialized, "http://example/C|/Windows")
+      XCTAssertEqualElements(url.pathComponents!, ["C|", "Windows"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
     // Removing components which lead to a non-normalized Windows drive letter becoming first.
     // Must be normalized to be idempotent.
     do {
-      var url = WebURL("file:///windrive-blocker/C|/foo/")!
+      var url = WebURL("file://host/windrive-blocker/C|/foo/")!
       XCTAssertEqualElements(url.pathComponents!, ["windrive-blocker", "C|", "foo", ""])
       url.withMutablePathComponents { path in
         let range = path.replaceComponents(path.startIndex..<path.index(after: path.startIndex), with: [String]())
@@ -512,8 +528,24 @@ extension PathComponentsTests {
         XCTAssertEqual(range.lowerBound, range.upperBound)
         XCTAssertEqualElements(path[range], [])
       }
-      XCTAssertEqual(url.serialized, "file:///C:/foo")
-      XCTAssertEqualElements(url.pathComponents!, ["C:", "foo"])
+      XCTAssertEqual(url.serialized, "file://host/C:/foo/")
+      XCTAssertEqualElements(url.pathComponents!, ["C:", "foo", ""])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Does not apply to non-file URLs.
+    do {
+      var url = WebURL("http://host/windrive-blocker/C|/foo/")!
+      XCTAssertEqualElements(url.pathComponents!, ["windrive-blocker", "C|", "foo", ""])
+      url.withMutablePathComponents { path in
+        let range = path.replaceComponents(path.startIndex..<path.index(after: path.startIndex), with: [String]())
+        XCTAssertEqual(range.lowerBound, path.startIndex)
+        XCTAssertEqual(range.upperBound, path.startIndex)
+        XCTAssertEqual(range.lowerBound, range.upperBound)
+        XCTAssertEqualElements(path[range], [])
+      }
+      XCTAssertEqual(url.serialized, "http://host/C|/foo/")
+      XCTAssertEqualElements(url.pathComponents!, ["C|", "foo", ""])
       XCTAssertURLIsIdempotent(url)
     }
   }
