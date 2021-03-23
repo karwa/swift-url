@@ -12,57 +12,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// The position of a path component within a URL string.
-///
-public struct PathComponentIndex: Equatable, Comparable {
+extension Optional where Wrapped == WebURL.PathComponents {
 
-  /// The range of the component in the overall URL string's code-units.
-  /// Note that this includes the leading "/", so paths which end in a "/" include a trailing empty component before reaching endIndex.
-  internal var range: Range<Int>
-
-  internal init(codeUnitRange: Range<Int>) {
-    self.range = codeUnitRange
-  }
-
-  public static func < (lhs: PathComponentIndex, rhs: PathComponentIndex) -> Bool {
-    lhs.range.lowerBound < rhs.range.lowerBound
+  /// Modifies the given URL path components in-place.
+  /// If the URL does not have a hierarchical path (i.e. it is a "cannot-be-a-base" URL), a runtime error is triggered.
+  ///
+  @inlinable @inline(__always)
+  public mutating func modify<Result>(_ body: (inout Wrapped) throws -> Result) rethrows -> Result {
+    try body(&self!)
   }
 }
 
-
-// --------------------------------------------
-// MARK: - PathComponents
-// --------------------------------------------
-
-
 extension WebURL {
 
-  /// This URL's path components, if it has a hierarchical path.
+  /// The URL's path components, if it has a hierarchical path.
   ///
-  /// This collection gives you efficient, bidirectional access to the URL's path components:
+  /// This collection gives you efficient, bidirectional, read-write access to the URL's path components. Components are retrieved in their percent-decoded form.
   ///
   /// ```swift
-  /// let url = WebURL("http://example.com/swift/packages/swift-url")!
-  /// for component in url.pathComponents! {
-  ///  print(component) // Prints "swift", "packages", "swift-url"
-  /// }
+  /// var url = WebURL("http://example.com/swift/packages/%F0%9F%A6%86%20tracker")!
   /// print(url.pathComponents!.first!) // Prints "swift"
-  /// print(url.pathComponents!.last!) // Prints "swift-url"
+  /// print(url.pathComponents!.last!) // Prints "🦆 tracker"
+  ///
+  /// url.pathComponents!.removeLast()
+  /// url.pathComponents!.append("swift-url")
+  /// print(url) // Prints "http://example.com/swift/packages/swift-url"
   /// ```
   ///
-  /// Components are retrieved in their percent-decoded form. Paths which end in a "/" are considered to end with an empty component:
+  /// Paths which end in a trailing "/" (also referred to as directory paths), end with an empty component. When appending to such a path, this empty component
+  /// is merged with the appended components. To create a directory path, append an empty component or call `ensureDirectoryPath`.
   ///
   /// ```swift
-  /// let url = WebURL("http://example.com/swift/packages/🦆/")!
-  /// for component in url.pathComponents! {
-  ///  print(component) // "swift", "packages", "🦆", ""
-  /// }
-  /// print(url.pathComponents!.count) // 4
-  /// print(url.pathComponents!.last) // ""
-  /// print(url.pathComponents!.dropLast().last) // "🦆"
+  /// let url = WebURL("http://example.com/")!
+  /// print(url.pathComponents!.last!) // Prints ""
+  /// print(url.pathComponents!.count) // Prints "1"
+  ///
+  /// url.pathComponents!.append(contentsOf: ["swift", "packages", "swift-url"])
+  ///
+  /// print(url) // Prints "http://example.com/swift/packages/swift-url"
+  /// print(url.pathComponents!.count) // Prints "3"
+  ///
+  /// url.pathComponents!.ensureDirectoryPath()
+  /// print(url) // Prints "http://example.com/swift/packages/swift-url/"
+  /// print(url.pathComponents!.count) // Prints "4"
   /// ```
   ///
-  /// Mutating the URL, such as by setting its `.path` or any other properties, invalidates all indexes from this collection.
+  /// Note that even though we appended 3 path components to a path containing 1 component, the result has 3 components (not 4). This sort of result
+  /// is typical when manipulating path components. In general, if you need to continue processing a path after modifying it, use the indices
+  /// returned by path-modifying functions rather than making assumptions about the position, number, or lengths of inserted/removed components.
+  ///
+  /// Mutating the URL, such as by setting its `.path` or any other properties, invalidates all path component indices.
   ///
   /// Almost all URLs have hierarchical paths. The ones which _don't_ are known as "cannot-be-a-base" URLs - and they can be recognized by the lack of slashes
   /// immediately following their scheme. Examples of such URLs are:
@@ -71,43 +70,116 @@ extension WebURL {
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  /// These URLs tend to be rare, and if you do not expect to deal with them, it is reasonable to force-unwrap this property.
-  /// URLs with _special_ schemes, such as http(s) and file URLs, always have a hostname and non-empty, hierarchical path.
+  /// These URLs tend to be rare, and if you do not expect to encounter them, it is reasonable to force-unwrap this property or use the `modify` function.
+  /// URLs with _special_ schemes, such as http(s) and file URLs, are never "cannot-be-a-base".
   ///
   /// Note that the complexity of the subscript operation is O(*m*), where *m* is the length of the component being read, due to the need to
   /// percent-decode the component's contents and return them as a `String`. A component's raw, percent-encoded bytes can be accessed in O(*1*) using
   /// the `withUTF8` method.
   ///
-  public var pathComponents: PathComponents? {
-    guard self._cannotBeABaseURL == false else { return nil }
-    return PathComponents(_url: self, startIndex: self.storage.pathComponentsStartIndex)
-  }
-
-  /// A read-only view of the components in a URL's path.
+  /// - important: If this value is `nil`, it must not be set to any value other than `nil`. Likewise, if it is non-`nil`, it must not be set to `nil`.
+  ///              Otherwise, a runtime error is triggered.
   ///
-  public struct PathComponents: _PathComponentCollection {
+  public var pathComponents: PathComponents? {
+    get {
+      guard self._cannotBeABaseURL == false else { return nil }
+      return PathComponents(url: self, startIndex: self.storage.pathComponentsStartIndex)
+    }
+    _modify {
+      guard self._cannotBeABaseURL == false else {
+        var value: PathComponents? = nil
+        yield &value
+        precondition(value == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
+        return
+      }
+      var components = Optional(PathComponents(url: self, startIndex: self.storage.pathComponentsStartIndex))
+      self.storage = _tempStorage
+      defer {
+        guard let modifiedURL = components?.url else {
+          preconditionFailure("Cannot set nil pathComponents on URL unless it cannot-be-a-base")
+        }
+        self.storage = modifiedURL.storage
+      }
+      yield &components
+    }
+    set {
+      guard self._cannotBeABaseURL == false else {
+        precondition(newValue == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
+        return
+      }
+      guard let newPathSource = newValue?.url else {
+        preconditionFailure("Cannot set nil pathComponents on URL unless it cannot-be-a-base")
+      }
+      self.path = newPathSource.path
+    }
+  }
 
-    public let _url: WebURL
-    public let startIndex: PathComponentIndex
-
-    public typealias Index = PathComponentIndex
-    public typealias Element = String
+  /// A view of the components which make up a URL's path.
+  ///
+  public struct PathComponents {
+    fileprivate var url: WebURL
+    public fileprivate(set) var startIndex: Index
   }
 }
 
-/// This is an internal `WebURL` implementation detail. ** Do not conform to this protocol. **
-///
-public protocol _PathComponentCollection: BidirectionalCollection where Index == PathComponentIndex, Element == String {
-  var _url: WebURL { get }
-}
 
-extension _PathComponentCollection {
+// --------------------------------------------
+// MARK: - Reading
+// --------------------------------------------
 
-  public var endIndex: PathComponentIndex {
-    _url.storage.pathComponentsEndIndex
+
+extension WebURL.PathComponents {
+
+  /// The position of a path component within a URL string.
+  ///
+  public struct Index: Equatable, Comparable {
+
+    /// The range of the component in the overall URL string's code-units.
+    /// Note that this includes the leading "/", so paths which end in a "/" include a trailing empty component before reaching endIndex.
+    ///
+    internal var range: Range<Int>
+
+    internal init(codeUnitRange: Range<Int>) {
+      self.range = codeUnitRange
+    }
+
+    public static func < (lhs: Index, rhs: Index) -> Bool {
+      lhs.range.lowerBound < rhs.range.lowerBound
+    }
   }
 
-  public subscript(position: PathComponentIndex) -> String {
+  /// Invokes `body` with a pointer to the contiguous UTF8 content of the requested component.
+  /// The component is not percent-decoded from its form in the URL string.
+  ///
+  /// - important: The provided pointer is valid only for the duration of `body`. Do not store or return the pointer for later use.
+  /// - complexity: O(*1*)
+  /// - parameters:
+  ///   - component: The index of the component to be read. Must be a valid path-component index.
+  ///   - body: A closure which processes the content of the path component.
+  ///
+  public func withUTF8<Result>(
+    component: Index, _ body: (UnsafeBufferPointer<UInt8>) throws -> Result
+  ) rethrows -> Result {
+
+    try url.storage.withEntireString { string in
+      let pathRange = url.storage.structure.rangeForReplacingCodeUnits(of: .path)
+      precondition(
+        component.range.lowerBound >= pathRange.lowerBound && component.range.upperBound <= pathRange.upperBound,
+        "Index does not refer to a location within the path"
+      )
+      assert(string[component.range.lowerBound] == ASCII.forwardSlash.codePoint)
+      return try body(UnsafeBufferPointer(rebasing: string[component.range].dropFirst()))
+    }
+  }
+}
+
+extension WebURL.PathComponents: BidirectionalCollection {
+
+  public var endIndex: Index {
+    url.storage.pathComponentsEndIndex
+  }
+
+  public subscript(position: Index) -> String {
     withUTF8(component: position) { $0.urlDecodedString }
   }
 
@@ -115,7 +187,7 @@ extension _PathComponentCollection {
     guard start <= end else {
       return -1 * distance(from: end, to: start)
     }
-    return _url.storage.withEntireString { string in
+    return url.storage.withEntireString { string in
       var count = 0
       for char in string[start.range.lowerBound..<end.range.lowerBound] {
         if char == ASCII.forwardSlash.codePoint {
@@ -126,16 +198,16 @@ extension _PathComponentCollection {
     }
   }
 
-  public func formIndex(after i: inout PathComponentIndex) {
+  public func formIndex(after i: inout Index) {
     // Collection does not require us to trap on incrementing endIndex; this just keeps returning endIndex.
     i.range = Range(
-      uncheckedBounds: (i.range.upperBound, _url.storage.endOfPathComponent(startingAt: i.range.upperBound))
+      uncheckedBounds: (i.range.upperBound, url.storage.endOfPathComponent(startingAt: i.range.upperBound))
     )
   }
 
   public func formIndex(before i: inout Index) {
     // Collection does not require us to trap on decrementing startIndex; this just keeps returning startIndex.
-    guard let newStart = _url.storage.startOfPathComponent(endingAt: i.range.lowerBound) else { return }
+    guard let newStart = url.storage.startOfPathComponent(endingAt: i.range.lowerBound) else { return }
     i.range = Range(uncheckedBounds: (newStart, i.range.lowerBound))
   }
 
@@ -152,100 +224,13 @@ extension _PathComponentCollection {
   }
 }
 
-extension _PathComponentCollection {
-
-  /// Invokes `body` with a pointer to the UTF8 content of the requested component. The component is not percent-decoded from its form in the URL string.
-  ///
-  /// - important: The provided pointer is valid only for the duration of `body`. Do not store or return the pointer for later use.
-  ///
-  public func withUTF8<Result>(
-    component: PathComponentIndex, _ body: (UnsafeBufferPointer<UInt8>) throws -> Result
-  ) rethrows -> Result {
-
-    try _url.storage.withEntireString { string in
-      let pathRange = _url.storage.structure.rangeForReplacingCodeUnits(of: .path)
-      precondition(
-        component.range.lowerBound >= pathRange.lowerBound && component.range.upperBound <= pathRange.upperBound,
-        "Invalid index"
-      )
-      assert(string[component.range.lowerBound] == ASCII.forwardSlash.codePoint)
-      return try body(UnsafeBufferPointer(rebasing: string[component.range].dropFirst()))
-    }
-  }
-}
-
 
 // --------------------------------------------
-// MARK: - UnsafeMutablePathComponents
+// MARK: - Writing
 // --------------------------------------------
 
 
-extension WebURL {
-
-  /// Calls the given closure with a view through which it may read and modify the URL's path components.
-  ///
-  /// The following example shows how modifying the contents of the `UnsafeMutablePathComponents` argument to `body` alters the contents of
-  /// the URL:
-  ///
-  ///     var url = WebURL("http://example.com/foo/bar")!
-  ///     url.withMutablePathComponents { path in
-  ///       if path.last == "bar" {
-  ///         path.append("cheese")
-  ///       }
-  ///     }
-  ///     print(url)
-  ///     // Prints "http://example.com/foo/bar/cheese"
-  ///
-  /// The view passed as an argument to `body` is valid only during the execution of `withMutablePathComponents(_:)`.
-  /// Do not store or return the view for later use.
-  ///
-  /// Note that the complexity of the subscript operation is O(*m*), where *m* is the length of the component being read, due to the need to
-  /// percent-decode the component's contents and return them as a `String`. A component's raw, percent-encoded bytes can be accessed in O(*1*) using
-  /// the `withUTF8` method.
-  ///
-  public mutating func withMutablePathComponents<Result>(
-    _ body: (inout UnsafeMutablePathComponents) throws -> Result
-  ) rethrows -> Result {
-
-    precondition(_cannotBeABaseURL == false, "Cannot view or edit path components on a cannot-be-a-base URL")
-
-    return try withUnsafeMutablePointer(to: &self) {
-      var pathEditor = UnsafeMutablePathComponents(pointer: $0)
-      return try body(&pathEditor)
-    }
-  }
-
-  /// A view which allows both reading and writing a URL's path components.
-  ///
-  /// Instances of `UnsafeMutablePathComponents` are valid only during the execution of `WebURL.withMutablePathComponents(_:)`.
-  /// Do not store or return the instance for later use.
-  ///
-  public struct UnsafeMutablePathComponents: _PathComponentCollection {
-
-    private let pointer: UnsafeMutablePointer<WebURL>
-    public private(set) var startIndex: Index
-
-    public typealias Index = PathComponentIndex
-    public typealias Element = String
-
-    internal init(pointer: UnsafeMutablePointer<WebURL>) {
-      self.pointer = pointer
-      self.startIndex = pointer.pointee.storage.pathComponentsStartIndex
-    }
-
-    public var _url: WebURL {
-      pointer.pointee
-    }
-  }
-}
-
-extension WebURL.UnsafeMutablePathComponents {
-
-  private mutating func withMutableURL<Result>(
-    _ body: (_ urlPtr: UnsafeMutablePointer<WebURL>, _ startIndex: inout PathComponentIndex) -> Result
-  ) -> Result {
-    body(pointer, &startIndex)
-  }
+extension WebURL.PathComponents {
 
   /// Replaces the specified subrange of path components with the contents of the given collection.
   ///
@@ -256,42 +241,49 @@ extension WebURL.UnsafeMutablePathComponents {
   ///
   /// ```
   /// var url = WebURL("file:///usr/bin/swift")!
-  /// url.withMutablePathComponents { path in
-  ///     path.replaceComponents(path.index(after: path.startIndex)..<path.endIndex, with: [
-  ///       "lib",
-  ///       "swift-6.0",
-  ///       "linux",
-  ///       "libswiftCore.so"
-  ///     ])
+  /// url.pathComponents.modify { path in
+  ///   let lastTwo = path.index(path.endIndex, offsetBy: -2)..<path.endIndex
+  ///   path.replaceSubrange(lastTwo, with: [
+  ///     "lib",
+  ///     "swift",
+  ///     "linux",
+  ///     "libswiftCore.so"
+  ///   ])
   /// }
-  /// print(url) // Prints "file:///usr/lib/swift-6.0/linux/libswiftCore.so"
+  /// print(url) // Prints "file:///usr/lib/swift/linux/libswiftCore.so"
   /// ```
   ///
   /// If you pass a zero-length range as the `range` parameter, this method inserts the elements of `newComponents` at `range.lowerBound`.
-  /// Calling the `insert(contentsOf:at:)` method instead is preferred. If appending to a root path, the path's existing empty component is dropped:
+  /// Calling the `insert(contentsOf:at:)` method instead is preferred. If appending to a path which ends in a "/" (i.e. an empty component),
+  /// the empty component will be replaced by the first appended component. Note how the following example appends 2 components to a path with 2 components
+  /// (the last component of which is empty), and emerges with 3 components rather than 4:
   ///
   /// ```
-  /// var url = WebURL("file:///")!
-  /// url.withMutablePathComponents { path in
-  ///   print(path.count, path.first!) // Prints (1, "")
-  ///   path.replaceComponents(path.endIndex..<path.endIndex, with: ["usr", "bin", "swift"])
-  ///   print(path.count, path.first!) // Prints (3, "usr")
+  /// var url = WebURL("file:///usr/")!
+  /// print(url.pathComponents!.count, url.pathComponents!.last!) // Prints (2, "")
+  ///
+  /// url.pathComponents.modify { path in
+  ///   path.replaceSubrange(path.endIndex..<path.endIndex, with: ["bin", "swift"])
   /// }
+  ///
+  /// print(url.pathComponents!.count, url.pathComponents!.last!) // Prints (3, "swift")
   /// print(url) // Prints "file:///usr/bin/swift"
   /// ```
   ///
-  /// Likewise, if you pass a zero-length collection as the `newComponents` parameter, this method removes the components in the given subrange
+  /// If you pass a zero-length collection as the `newComponents` parameter, this method removes the components in the given subrange
   /// without replacement. Calling the `removeSubrange(_:)` method instead is preferred. Some URLs may not allow empty paths; attempting to remove
   /// all components from such a URL will instead set its path to the root path ("/").
   ///
   /// ```
   /// var url = WebURL("http://example.com/foo/index.html")!
-  /// url.withMutablePathComponents { path in
-  ///   print(path.count, path.first!) // Prints (2, "foo")
-  ///   path.replaceComponents(path.startIndex..<path.endIndex, with: [String]())
-  ///   print(path.count, path.first!) // Prints (1, "")
+  /// print(url.pathComponents!.count, url.pathComponents!.first!) // Prints (2, "foo")
+  ///
+  /// url.pathComponents.modify { path in
+  ///   path.replaceSubrange(path.startIndex..<path.endIndex, with: [] as [String])
   /// }
+  ///
   /// print(url) // Prints "http://example.com/"
+  /// print(url.pathComponents!.count, url.pathComponents!.first!) // Prints (1, "")
   /// ```
   ///
   /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), those components are ignored.
@@ -300,7 +292,7 @@ extension WebURL.UnsafeMutablePathComponents {
   /// Calling this method invalidates any existing indices for this URL.
   ///
   /// - parameters:
-  ///   - range: The range of the path to replace. The bounds of the range must be valid path-component indices.
+  ///   - bounds: The subrange of the path to replace. The bounds of the range must be valid path-component indices.
   ///   - newComponents: The new components to add to the path.
   /// -  returns: A new range of indices corresponding to the location of the new components in the path.
   ///
@@ -309,7 +301,7 @@ extension WebURL.UnsafeMutablePathComponents {
   @_specialize(where Components == CollectionOfOne<String>)
   @_specialize(where Components == CollectionOfOne<Substring>)
   @discardableResult
-  public mutating func replaceComponents<Components>(
+  public mutating func replaceSubrange<Components>(
     _ bounds: Range<Index>, with newComponents: Components
   ) -> Range<Index> where Components: Collection, Components.Element: StringProtocol {
     return replaceComponents(bounds, withUTF8: newComponents.lazy.map { $0.utf8 })
@@ -322,47 +314,45 @@ extension WebURL.UnsafeMutablePathComponents {
   ) -> Range<Index>
   where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
 
-    return withMutableURL { ptr, newStart in
-      var newSubrange: Range<PathComponentIndex>?
-      ptr.pointee.withMutableStorage(
-        { small -> AnyURLStorage in
-          let result = small.replacePathComponents(range, with: newComponents)
-          switch result.firstComponentOrError {
-          case .left(let _newSubrange): newSubrange = _newSubrange
-          case .right(let error): fatalError("Unxpected error replacing path components: \(error)")
-          }
-          return result.0
-        },
-        { generic -> AnyURLStorage in
-          let result = generic.replacePathComponents(range, with: newComponents)
-          switch result.firstComponentOrError {
-          case .left(let _newSubrange): newSubrange = _newSubrange
-          case .right(let error): fatalError("Unxpected error replacing path components: \(error)")
-          }
-          return result.0
+    var newSubrange: Range<Index>?
+    url.withMutableStorage(
+      { small -> AnyURLStorage in
+        let result = small.replacePathComponents(range, with: newComponents)
+        switch result.firstComponentOrError {
+        case .left(let _newSubrange): newSubrange = _newSubrange
+        case .right(let error): fatalError("Unxpected error replacing path components: \(error)")
         }
-      )
-      newStart = ptr.pointee.storage.pathComponentsStartIndex
-      return newSubrange!
-    }
+        return result.0
+      },
+      { generic -> AnyURLStorage in
+        let result = generic.replacePathComponents(range, with: newComponents)
+        switch result.firstComponentOrError {
+        case .left(let _newSubrange): newSubrange = _newSubrange
+        case .right(let error): fatalError("Unxpected error replacing path components: \(error)")
+        }
+        return result.0
+      }
+    )
+    self.startIndex = url.storage.pathComponentsStartIndex
+    return newSubrange!
   }
 }
 
-// Insert, Append, Remove, Replace (single).
+// Insert, Append, Remove, Replace.
 
-extension WebURL.UnsafeMutablePathComponents {
+extension WebURL.PathComponents {
 
   /// Inserts the elements of a collection into the path at the specified position.
   ///
   /// The new components are inserted before the component currently at the specified index.
   /// If you pass the path's `endIndex` property as the `index` parameter, the new elements are appended to the path.
-  /// If appending to a root path, the path's existing empty component is dropped. See `append` for more information.
+  /// If appending to a path which ends in a "/" (i.e. an empty component), the empty component will be replaced by the first appended component.
   ///
   /// Here's an example of inserting an array of path components in the middle of a path:
   ///
   /// ```
   /// var url = WebURL("file:///usr/swift")!
-  /// url.withMutablePathComponents { path in
+  /// url.pathComponents.modify { path in
   ///   path.insert(contentsOf: ["local", "bin"], at: path.index(after: path.startIndex))
   /// }
   /// print(url) // Prints "file:///usr/local/bin/swift"
@@ -382,22 +372,22 @@ extension WebURL.UnsafeMutablePathComponents {
   public mutating func insert<Components>(
     contentsOf newComponents: Components, at position: Index
   ) -> Range<Index> where Components: Collection, Components.Element: StringProtocol {
-    return replaceComponents(position..<position, with: newComponents)
+    return replaceSubrange(position..<position, with: newComponents)
   }
 
   /// Adds the elements of a collection to the end of this path.
   ///
-  /// If appending to a root path, the path's existing empty component is dropped.
+  /// If appending to a path which ends in a "/" (i.e. an empty component), the empty component will be replaced by the first appended component.
   /// Here's an example of building a path by appending path components. Note that the first `append` does not change the `count`.
   ///
   /// ```
   /// var url = WebURL("file:///")!
-  /// url.withMutablePathComponents { path in
-  ///   print(path.count, path.first!) // Prints (1, "")
-  ///   path.append(contentsOf: ["tmp"])
-  ///   print(path.count, path.first!) // Prints (1, "tmp")
-  ///   path.append(contentsOf: ["my_app", "data.json"])
-  /// }
+  /// print(url.pathComponents!.count, url.pathComponents!.first!) // Prints (1, "")
+  ///
+  /// url.pathComponents!.append(contentsOf: ["tmp"])
+  /// print(url.pathComponents!.count, url.pathComponents!.first!) // Prints (1, "tmp")
+  ///
+  /// url.pathComponents!.append(contentsOf: ["my_app", "data.json"])
   /// print(url) // Prints "file:///tmp/my_app/data.json"
   /// ```
   ///
@@ -419,8 +409,8 @@ extension WebURL.UnsafeMutablePathComponents {
   /// Removes the specified subrange of components from the path.
   ///
   /// ```
-  /// var url = WebURL("http://example.com/projects/swift/swift-url/Sources/")!
-  /// url.withMutablePathComponents { path in
+  /// var url = WebURL("http://example.com/projects/swift/swift-url/")!
+  /// url.pathComponents.modify { path in
   ///   path.removeSubrange(path.index(after: path.startIndex)..<path.endIndex)
   /// }
   /// print(url) // Prints "http://example.com/projects"
@@ -430,7 +420,7 @@ extension WebURL.UnsafeMutablePathComponents {
   ///
   /// ```
   /// var url = WebURL("http://example.com/foo/index.html")!
-  /// url.withMutablePathComponents { path in
+  /// url.pathComponents.modify { path in
   ///   path.removeSubrange(path.startIndex..<path.endIndex)
   /// }
   /// print(url) // Prints "http://example.com/"
@@ -450,11 +440,9 @@ extension WebURL.UnsafeMutablePathComponents {
   ///
   /// If the new component is "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), the component is removed.
   ///
-  /// Here's an example of replacing a path component:
-  ///
   /// ```
   /// var url = WebURL("file:///usr/bin/swift")!
-  /// url.withMutablePathComponents { path in
+  /// url.pathComponents.modify { path in
   ///   path.replaceComponent(at: path.index(after: path.startIndex), with: "lib")
   /// }
   /// print(url) // Prints "file:///usr/lib/swift"
@@ -474,20 +462,21 @@ extension WebURL.UnsafeMutablePathComponents {
     at position: Index, with newComponent: Component
   ) -> Range<Index> where Component: StringProtocol {
     precondition(position != endIndex, "Cannot replace component at endIndex")
-    return replaceComponents(position..<index(after: position), with: CollectionOfOne(newComponent))
+    return replaceSubrange(position..<index(after: position), with: CollectionOfOne(newComponent))
   }
 
   /// Inserts a component into the path at the specified position.
   ///
   /// The new component is inserted before the component currently at the specified index.
   /// If you pass the path's `endIndex` property as the `index` parameter, the new component is appended to the path.
-  /// If appending to a root path, the path's existing empty component is dropped. See `append` for more information.
+  /// If appending to a path which ends in a "/" (i.e. an empty component), the empty component will be replaced by the first appended component.
+  /// See `append` for more information.
   ///
   /// Here's an example of inserting a path component in the middle of a path:
   ///
   /// ```
   /// var url = WebURL("file:///usr/swift")!
-  /// url.withMutablePathComponents { path in
+  /// url.pathComponents.modify { path in
   ///   path.insert("bin", at: path.index(after: path.startIndex))
   /// }
   /// print(url) // Prints "file:///usr/bin/swift"
@@ -512,17 +501,17 @@ extension WebURL.UnsafeMutablePathComponents {
 
   /// Adds a component to the end of this path.
   ///
-  /// If appending to a root path, the path's existing empty component is dropped.
+  /// If appending to a path which ends in a "/" (i.e. an empty component), the empty component will be replaced by the first appended component.
   /// Here's an example of building a path by appending path components. Note that the first `append` does not change the `count`.
   ///
   /// ```
   /// var url = WebURL("file:///")!
-  /// url.withMutablePathComponents { path in
-  ///   print(path.count, path.first!) // Prints (1, "")
-  ///   path.append("tmp")
-  ///   print(path.count, path.first!) // Prints (1, "tmp")
-  ///   path.append("data.json")
-  /// }
+  /// print(url.pathComponents!.count, url.pathComponents!.first!) // Prints (1, "")
+  ///
+  /// url.pathComponents!.append("tmp")
+  /// print(url.pathComponents!.count, url.pathComponents!.first!) // Prints (1, "tmp")
+  ///
+  /// url.pathComponents!.append("data.json")
   /// print(url) // Prints "file:///tmp/data.json"
   /// ```
   ///
@@ -545,7 +534,7 @@ extension WebURL.UnsafeMutablePathComponents {
   ///
   /// ```
   /// var url = WebURL("http://example.com/projects/swift/swift-url/Sources/")!
-  /// url.withMutablePathComponents { path in
+  /// url.pathComponents.modify { path in
   ///   path.remove(at: path.index(after: path.startIndex))
   /// }
   /// print(url) // Prints "http://example.com/projects/swift-url/Sources/"
@@ -555,9 +544,7 @@ extension WebURL.UnsafeMutablePathComponents {
   ///
   /// ```
   /// var url = WebURL("http://example.com/foo")!
-  /// url.withMutablePathComponents { path in
-  ///   path.remove(at: path.startIndex)
-  /// }
+  /// url.pathComponents!.remove(at: url.pathComponents!.startIndex)
   /// print(url) // Prints "http://example.com/"
   /// ```
   ///
@@ -573,29 +560,50 @@ extension WebURL.UnsafeMutablePathComponents {
   }
 }
 
-// RemoveLast, RemoveLastIfEmpty, etc.
+extension WebURL.PathComponents {
 
-extension WebURL.UnsafeMutablePathComponents {
-
-  @discardableResult
-  public mutating func removeLast() -> Index {
-    return removeSubrange(index(before: endIndex)..<endIndex)
+  /// Removes the specified number of components from the end of the path.
+  ///
+  /// Attempting to remove more elements than exist in the collection triggers a runtime error.
+  /// Some URLs may not allow empty paths; attempting to remove all components from such a URL will instead set its path to the root path ("/"):
+  ///
+  /// ```
+  /// var url = WebURL("http://example.com/foo/bar")!
+  /// url.pathComponents!.removeLast(2)
+  /// print(url) // Prints "http://example.com/"
+  /// ```
+  ///
+  /// Calling this method invalidates any existing indices for this URL.
+  ///
+  /// - parameter k: The number of elements to remove from the path.
+  ///                `k` must be greater than or equal to zero and must not exceed the number of components in the path.
+  ///
+  public mutating func removeLast(_ k: Int = 1) {
+    precondition(k >= 0, "Cannot remove a negative number of path components")
+    removeSubrange(index(endIndex, offsetBy: -k, limitedBy: startIndex)!..<endIndex)
   }
 
+  /// Appends an empty component to the path, if it does not already end with an empty component.
+  /// This has the effect of ensuring the path ends with a trailing slash.
+  ///
+  /// The following example demonstrates building a file path by appending, followed by `ensureDirectoryPath` to finish the path
+  /// with a trailing slash:
+  ///
+  /// ```
+  /// var url = WebURL("file:///")!
+  /// url.pathComponents!.append(contentsOf: ["Users", "karl", "Desktop"]) // url: "file:///Users/karl/Desktop"
+  /// url.pathComponents!.ensureDirectoryPath() // url: "file:///Users/karl/Desktop/"
+  /// ```
+  ///
+  /// If the path already ends in a trailing slash (or is a root path), this method has no effect.
+  ///
+  /// - returns: The index of the last component, which will be an empty component.
+  ///
   @discardableResult
-  public mutating func removeLastIfEmpty() -> Index? {
-    let lastIndex = index(before: endIndex)
-    let lastIsEmpty = withUTF8(component: lastIndex) { utf8 in utf8.isEmpty }
-    guard lastIsEmpty else { return nil }
-    return removeSubrange(lastIndex..<endIndex)
-  }
-
-  @discardableResult
-  public mutating func appendEmptyIfLastNotEmpty() -> Range<Index>? {
-    let lastIndex = index(before: endIndex)
-    let lastIsEmpty = withUTF8(component: lastIndex) { utf8 in utf8.isEmpty }
-    guard !lastIsEmpty else { return nil }
-    return append("")
+  public mutating func ensureDirectoryPath() -> Index {
+    let range = append("")
+    assert(range.upperBound == endIndex)
+    return range.lowerBound
   }
 }
 
@@ -621,14 +629,14 @@ extension AnyURLStorage {
     }
   }
 
-  internal var pathComponentsStartIndex: PathComponentIndex {
+  internal var pathComponentsStartIndex: WebURL.PathComponents.Index {
     switch self {
     case .small(let small): return small.pathComponentsStartIndex
     case .generic(let generic): return generic.pathComponentsStartIndex
     }
   }
 
-  internal var pathComponentsEndIndex: PathComponentIndex {
+  internal var pathComponentsEndIndex: WebURL.PathComponents.Index {
     switch self {
     case .small(let small): return small.pathComponentsEndIndex
     case .generic(let generic): return generic.pathComponentsEndIndex
@@ -638,19 +646,19 @@ extension AnyURLStorage {
 
 extension URLStorage {
 
-  internal var pathComponentsStartIndex: PathComponentIndex {
+  internal var pathComponentsStartIndex: WebURL.PathComponents.Index {
     let pathStart = header.structure.rangeForReplacingCodeUnits(of: .path).lowerBound
-    return PathComponentIndex(codeUnitRange: pathStart..<endOfPathComponent(startingAt: pathStart))
+    return WebURL.PathComponents.Index(codeUnitRange: pathStart..<endOfPathComponent(startingAt: pathStart))
   }
 
-  internal var pathComponentsEndIndex: PathComponentIndex {
+  internal var pathComponentsEndIndex: WebURL.PathComponents.Index {
     let pathEnd = header.structure.rangeForReplacingCodeUnits(of: .path).upperBound
-    return PathComponentIndex(codeUnitRange: pathEnd..<pathEnd)
+    return WebURL.PathComponents.Index(codeUnitRange: pathEnd..<pathEnd)
   }
 
-  internal var pathIsRoot: Bool {
+  internal var pathEndsWithTrailingSlash: Bool {
     let pathRange = header.structure.rangeForReplacingCodeUnits(of: .path)
-    return pathRange.count == 1 && withEntireString { $0[pathRange.lowerBound] == ASCII.forwardSlash.codePoint }
+    return pathRange.count >= 1 && withEntireString { $0[pathRange.upperBound - 1] == ASCII.forwardSlash.codePoint }
   }
 
   internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int {
@@ -687,9 +695,9 @@ extension URLStorage {
   /// Analogous to `replaceSubrange` from `RangeReplaceableCollection`.
   ///
   internal mutating func replacePathComponents<Components>(
-    _ replacedIndices: Range<PathComponentIndex>,
+    _ replacedIndices: Range<WebURL.PathComponents.Index>,
     with components: Components
-  ) -> (AnyURLStorage, firstComponentOrError: Either<Range<PathComponentIndex>, URLSetterError>)
+  ) -> (AnyURLStorage, firstComponentOrError: Either<Range<WebURL.PathComponents.Index>, URLSetterError>)
   where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
 
     let oldStructure = header.structure
@@ -706,13 +714,16 @@ extension URLStorage {
       1 + $0.lazy.percentEncoded(using: PathComponentEncodeSet.self).joined().count
     }
 
-    // If inserting elements at the end of a root path, widen the replacement range so we drop the root path's
-    // leading "/". This means that appending "foo" to "/" results in "/foo", rather than "//foo".
+    // If inserting elements at the end of a path which ends in a trailing slash,
+    // widen the replacement range so we drop the trailing empty component.
+    // This means that appending "foo" to "/" or "/usr/" results in "/foo" or "/usr/foo",
+    // rather than "//foo" or "/usr//foo".
     var replacedIndices = replacedIndices
     if replacedIndices.lowerBound.range.lowerBound == oldPathRange.upperBound, firstNewComponentLength != nil,
-      pathIsRoot
+      pathEndsWithTrailingSlash
     {
-      replacedIndices = PathComponentIndex(codeUnitRange: oldPathRange)..<replacedIndices.upperBound
+      let newLowerBound = replacedIndices.lowerBound.range.lowerBound - 1..<replacedIndices.lowerBound.range.lowerBound
+      replacedIndices = WebURL.PathComponents.Index(codeUnitRange: newLowerBound)..<replacedIndices.upperBound
     }
     let replacedRange = replacedIndices.lowerBound.range.lowerBound..<replacedIndices.upperBound.range.lowerBound
 
@@ -745,8 +756,8 @@ extension URLStorage {
         }
         let newPathStart = replaced.structure.pathStart
         let newPathEnd = replaced.structure.pathStart &+ replaced.structure.pathLength
-        let newLowerBound = PathComponentIndex(codeUnitRange: newPathStart..<newPathEnd)
-        let newUpperBound = PathComponentIndex(codeUnitRange: newPathEnd..<newPathEnd)
+        let newLowerBound = WebURL.PathComponents.Index(codeUnitRange: newPathStart..<newPathEnd)
+        let newUpperBound = WebURL.PathComponents.Index(codeUnitRange: newPathEnd..<newPathEnd)
         return (replaced, .left(Range(uncheckedBounds: (newLowerBound, newUpperBound))))
       }
     }
@@ -860,8 +871,8 @@ extension URLStorage {
       lowerBoundEndPosition = lowerBoundStartPosition + replacedIndices.upperBound.range.count
       upperBoundEndPosition = lowerBoundEndPosition
     }
-    let newLowerBound = PathComponentIndex(codeUnitRange: lowerBoundStartPosition..<lowerBoundEndPosition)
-    let newUpperBound = PathComponentIndex(codeUnitRange: upperBoundStartPosition..<upperBoundEndPosition)
+    let newLowerBound = WebURL.PathComponents.Index(codeUnitRange: lowerBoundStartPosition..<lowerBoundEndPosition)
+    let newUpperBound = WebURL.PathComponents.Index(codeUnitRange: upperBoundStartPosition..<upperBoundEndPosition)
     return (replaced, .left(Range(uncheckedBounds: (newLowerBound, newUpperBound))))
   }
 
