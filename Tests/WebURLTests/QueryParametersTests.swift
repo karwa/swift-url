@@ -21,19 +21,24 @@ final class QueryParametersTests: XCTestCase {
   func testDocumentationExamples() {
 
     // From documentation for `WebURL.queryParams`:
-    var url = WebURL("http://example.com/?keyOne=valueOne&keyTwo=valueTwo")!
-    XCTAssertEqual(url.queryParams.keyOne, "valueOne")
-    url.queryParams.keyThree = "valueThree"
-    XCTAssertEqual(url.serialized, "http://example.com/?keyOne=valueOne&keyTwo=valueTwo&keyThree=valueThree")
-    url.queryParams.keyTwo = nil
-    XCTAssertEqual(url.serialized, "http://example.com/?keyOne=valueOne&keyThree=valueThree")
-    url.queryParams.set(key: "my key", to: "🦆")
-    XCTAssertEqual(url.serialized, "http://example.com/?keyOne=valueOne&keyThree=valueThree&my+key=%F0%9F%A6%86")
+    var url = WebURL("http://example.com/shopping/deals?category=food&limit=25")!
+    XCTAssertEqual(url.queryParams.category, "food")
+
+    url.queryParams.distance = "10km"
+    XCTAssertEqual(url.serialized, "http://example.com/shopping/deals?category=food&limit=25&distance=10km")
+
+    url.queryParams.limit = nil
+    XCTAssertEqual(url.serialized, "http://example.com/shopping/deals?category=food&distance=10km")
+
+    url.queryParams.set("cuisine", to: "🇮🇹")
+    XCTAssertEqual(
+      url.serialized, "http://example.com/shopping/deals?category=food&distance=10km&cuisine=%F0%9F%87%AE%F0%9F%87%B9"
+    )
 
     let expected = [
-      ("keyOne", "valueOne"),
-      ("keyThree", "valueThree"),
-      ("my key", "🦆"),
+      ("category", "food"),
+      ("distance", "10km"),
+      ("cuisine", "🇮🇹"),
     ]
     for (i, (key, value)) in url.queryParams.allKeyValuePairs.enumerated() {
       XCTAssertEqual(key, expected[i].0)
@@ -116,13 +121,18 @@ final class QueryParametersTests: XCTestCase {
     var url = WebURL("http://example.com")!
     XCTAssertEqual(url.serialized, "http://example.com/")
     XCTAssertNil(url.query)
-    url.queryParams.append(key: "search query", value: "why are 🦆 so awesome?")
-    url.queryParams.append(key: "`back`'tick'", value: "")  // U+0027 is encoded by forms, and only by forms.
+    url.queryParams.append("non_escaped", value: "true")  // Neither key or value need escaping.
+    url.queryParams.append("spa ce", value: "")  // key needs escaping due to substitution only.
+    url.queryParams.append("search query", value: "why are 🦆 so awesome?")  // both need escaping.
+    url.queryParams.append("`back`'tick'", value: "")  // U+0027 is encoded by forms, and only by forms.
     XCTAssertEqual(
       url.serialized,
-      "http://example.com/?search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27="
+      "http://example.com/?non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27="
     )
-    XCTAssertEqual(url.query, "search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=")
+    XCTAssertEqual(
+      url.query, "non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27="
+    )
+    XCTAssertEqual(url.queryParams.get("non_escaped"), "true")
     XCTAssertEqual(url.queryParams.get("search query"), "why are 🦆 so awesome?")
     XCTAssertEqual(url.queryParams.get("`back`'tick'"), "")
 
@@ -135,16 +145,23 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertFalse(url.queryParams.contains("search query"))
     XCTAssertTrue(storedParams.contains("search query"))
     // Append to the free-standing copy.
-    storedParams.append(key: "still alive?", value: "should be!")
-    storedParams.append(key: "owned and mutable?", value: "sure thing!")
+    storedParams.append("still alive?", value: "should be!")
+    storedParams.append("owned and mutable?", value: "sure thing!")
     XCTAssertEqual(storedParams.get("still alive?"), "should be!")
     XCTAssertEqual(storedParams.get("owned and mutable?"), "sure thing!")
     // Assign it to the URL.
     url.queryParams = storedParams
     XCTAssertEqual(
       url.serialized,
-      "http://foobar.org/?search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&still+alive%3F=should+be%21&owned+and+mutable%3F=sure+thing%21"
+      "http://foobar.org/?non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&still+alive%3F=should+be%21&owned+and+mutable%3F=sure+thing%21"
     )
+
+    // Ensure that we can append to an empty (not 'nil') query.
+    url = WebURL("foo://bar?")!
+    XCTAssertEqual(url.serialized, "foo://bar?")
+    XCTAssertEqual(url.query, "")
+    url.queryParams.append("test", value: "works!")
+    XCTAssertEqual(url.serialized, "foo://bar?test=works%21")
   }
 
   func testAppendSequence() {
@@ -208,7 +225,7 @@ final class QueryParametersTests: XCTestCase {
 
     // Removal from the front.
     XCTAssertEqual(url.queryParams.a, "b")
-    url.queryParams.remove(key: "a")
+    url.queryParams.remove("a")
     XCTAssertEqual(url.serialized, "http://example.com/?c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
     XCTAssertNil(url.queryParams.a)
@@ -216,14 +233,14 @@ final class QueryParametersTests: XCTestCase {
     // Removal of a key with multiple entries.
     XCTAssertEqual(url.queryParams.e, "")
     XCTAssertEqual(url.queryParams.getAll("e"), ["", "g", "", "f"])
-    url.queryParams.remove(key: "e")
+    url.queryParams.remove("e")
     XCTAssertEqual(url.serialized, "http://example.com/?c+is+the+key=d&=foo&h=%F0%9F%91%80")
     XCTAssertEqual(url.query, "c+is+the+key=d&=foo&h=%F0%9F%91%80")
     XCTAssertNil(url.queryParams.e)
 
     // Removal from the back.
     XCTAssertEqual(url.queryParams.h, "👀")
-    url.queryParams.remove(key: "h")
+    url.queryParams.remove("h")
     XCTAssertEqual(url.serialized, "http://example.com/?c+is+the+key=d&=foo")
     XCTAssertEqual(url.query, "c+is+the+key=d&=foo")
     XCTAssertNil(url.queryParams.h)
@@ -231,8 +248,8 @@ final class QueryParametersTests: XCTestCase {
     // Removing all key-value pairs results in a 'nil' query.
     XCTAssertEqual(url.queryParams.get("c is the key"), "d")
     XCTAssertEqual(url.queryParams.get(""), "foo")
-    url.queryParams.remove(key: "c is the key")
-    url.queryParams.remove(key: "")
+    url.queryParams.remove("c is the key")
+    url.queryParams.remove("")
     XCTAssertEqual(url.serialized, "http://example.com/")
     XCTAssertNil(url.query)
     XCTAssertNil(url.queryParams.get("c is the key"))
@@ -266,7 +283,7 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertEqual(url.queryParams.a, "THIS ONE")
 
     XCTAssertEqual(url.queryParams.h, "👀")
-    url.queryParams.set(key: "h", to: "ALSO THIS ONE")
+    url.queryParams.set("h", to: "ALSO THIS ONE")
     XCTAssertEqual(url.serialized, "http://example.com/?a=THIS+ONE&c+is+the+key=d&e=&=foo&e=g&e=&h=ALSO+THIS+ONE&e=f")
     XCTAssertEqual(url.query, "a=THIS+ONE&c+is+the+key=d&e=&=foo&e=g&e=&h=ALSO+THIS+ONE&e=f")
     XCTAssertEqual(url.queryParams.h, "ALSO THIS ONE")

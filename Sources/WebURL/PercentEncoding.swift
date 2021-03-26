@@ -232,8 +232,11 @@ extension LazilyPercentEncoded {
     var didEscape = false
     for byteGroup in self {
       writer(byteGroup)
-      if case .percentEncodedByte = byteGroup {
+      switch byteGroup {
+      case .percentEncodedByte(_), .substitutedByte(_):
         didEscape = true
+      case .sourceByte(_):
+        break
       }
     }
     return didEscape

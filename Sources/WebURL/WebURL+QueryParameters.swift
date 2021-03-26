@@ -14,67 +14,67 @@
 
 extension WebURL {
 
-  @dynamicMemberLookup
-  public struct QueryParameters {
-    enum Backing {
-      // A borrowed backing gives read-only access to a URL's buffer.
-      // However, we need to assume it is percent-encoded rather than form-encoded.
-      case borrowed(AnyURLStorage)
-      // An owned backing is our own String which we can write to.
-      // Upon transitioning from borrowed -> owned, the contents of the URL's buffer are re-encoded with form-encoding.
-      case owned(String)
-    }
-    var backing: Backing
-  }
-
-  /// A view of the `application/x-www-form-urlencoded` key-value pairs in this URL's `query`, if present.
+  /// A view of the `application/x-www-form-urlencoded` key-value pairs in this URL's `query`.
   ///
   /// The `queryParams` view allows you to conveniently get and set the values for particular keys by accessing them as members.
-  /// For keys which are not valid Swift identifiers, the `get` and `set` functions provide equivalent functionality.
+  /// For keys which cannot be written as members, the `get` and `set` functions provide equivalent functionality.
   ///
   /// ```swift
-  /// var url = WebURL("http://example.com/?keyOne=valueOne&keyTwo=valueTwo")!
-  /// assert(url.queryParams.keyOne == "valueOne")
+  /// var url = WebURL("http://example.com/shopping/deals?category=food&limit=25")!
+  /// assert(url.queryParams.category == "food")
   ///
-  /// url.queryParams.keyThree = "valueThree"
-  /// assert(url.serialized == "http://example.com/?keyOne=valueOne&keyTwo=valueTwo&keyThree=valueThree")
+  /// url.queryParams.distance = "10km"
+  /// assert(url.serialized == "http://example.com/shopping/deals?category=food&limit=25&distance=10km")
   ///
-  /// url.queryParams.keyTwo = nil
-  /// assert(url.serialized == "http://example.com/?keyOne=valueOne&keyThree=valueThree")
+  /// url.queryParams.limit = nil
+  /// assert(url.serialized == "http://example.com/shopping/deals?category=food&distance=10km")
   ///
-  /// url.queryParams.set(key: "my key", to: "🦆")
-  /// assert(url.serialized == "http://example.com/?keyOne=valueOne&keyThree=valueThree&my+key=%F0%9F%A6%86")
+  /// url.queryParams.set("cuisine", to: "🇮🇹")
+  /// assert(url.serialized == "http://example.com/shopping/deals?category=food&distance=10km&cuisine=%F0%9F%87%AE%F0%9F%87%B9")
   /// ```
   ///
   /// Additionally, you can iterate all of the key-value pairs using the `.allKeyValuePairs` property:
   ///
   /// ```swift
   /// for (key, value) in url.queryParams.allKeyValuePairs {
-  ///   // ("keyOne", "valueOne")
-  ///   // ("keyThree", "valueThree")
-  ///   // ("my key", "🦆")
+  ///   // ("category", "food")
+  ///   // ("distance", "10km")
+  ///   // ("cuisine", "🇮🇹")
   /// }
   /// ```
   ///
   public var queryParams: QueryParameters {
     get {
-      return QueryParameters(backing: .borrowed(storage))
+      return QueryParameters(url: self)
+    }
+    _modify {
+      var params = QueryParameters(url: self)
+      self.storage = _tempStorage
+      defer { self.storage = params.url.storage }
+      yield &params
     }
     set {
-      switch newValue.backing {
-      case .borrowed(_):
-        var mutableNewValue = newValue
-        mutableNewValue.withMutableOwnedString { self.query = $0.isEmpty ? nil : $0 }
-      case .owned(let serialized):
-        guard serialized.isEmpty == false else {
-          self.query = nil
-          return
-        }
-        withMutableStorage(
-          { small in small.setQuery(toKnownFormEncoded: serialized.utf8) },
-          { generic in generic.setQuery(toKnownFormEncoded: serialized.utf8) }
-        )
+      guard let formEncodedString = newValue.formEncodedQuery.flatMap({ $0.isEmpty ? nil : $0 }) else {
+        self.query = nil
+        return
       }
+      withMutableStorage(
+        { small in small.setQuery(toKnownFormEncoded: formEncodedString.utf8) },
+        { generic in generic.setQuery(toKnownFormEncoded: formEncodedString.utf8) }
+      )
+    }
+  }
+
+  /// A view of the `application/x-www-form-urlencoded` key-value pairs in a URL's `query`.
+  ///
+  @dynamicMemberLookup
+  public struct QueryParameters {
+
+    @usableFromInline
+    internal var url: WebURL
+
+    internal init(url: WebURL) {
+      self.url = url
     }
   }
 }
@@ -83,348 +83,312 @@ extension WebURL {
 
 extension WebURL.QueryParameters {
 
-  fileprivate func withBackingUTF8<ResultType>(_ body: (UnsafeBufferPointer<UInt8>) -> ResultType) -> ResultType {
-    switch backing {
-    case .borrowed(let storage):
-      return storage.withComponentBytes(.query) { maybeBytes in
-        guard let bytes = maybeBytes, bytes.count > 1 else {
-          return body(UnsafeBufferPointer(start: nil, count: 0))
-        }
-        return body(UnsafeBufferPointer(rebasing: bytes.dropFirst()))
+  internal func withQueryUTF8<ResultType>(_ body: (UnsafeBufferPointer<UInt8>) -> ResultType) -> ResultType {
+    return url.storage.withComponentBytes(.query) { maybeBytes in
+      guard let bytes = maybeBytes, bytes.count > 1 else {
+        return body(UnsafeBufferPointer(start: nil, count: 0))
       }
-    case .owned(var ownedString):
-      return ownedString.withUTF8(body)
+      return body(UnsafeBufferPointer(rebasing: bytes.dropFirst()))
     }
   }
 
-  @usableFromInline
-  internal mutating func withMutableOwnedString(_ body: (inout String) -> Void) {
-    switch backing {
-    case .owned(var string):
-      body(&string)
-      self.backing = .owned(string)
-    case .borrowed:
-      var string = withBackingUTF8 { WebURL.QueryParameters.reencode(rawQueryUTF8: $0) }
-      body(&string)
-      self.backing = .owned(string)
+  internal var formEncodedQuery: String? {
+    self.url.storage.withComponentBytes(.query) { queryBytes in
+      guard let rawQueryUTF8 = queryBytes.map({ UnsafeBufferPointer(rebasing: $0.dropFirst()) }) else {
+        return nil
+      }
+      let reencodedQuery = RawKeyValuePairs(utf8: rawQueryUTF8)
+        // Re-encode key and value separately, and join them back together.
+        .lazy.map { (_, key, value) in
+          [
+            rawQueryUTF8[key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
+              .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
+            rawQueryUTF8[value].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
+              .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
+          ].joined(separator: CollectionOfOne(ASCII.equalSign.codePoint))
+          // Join each key-value pair.
+        }.joined(separator: CollectionOfOne(ASCII.ampersand.codePoint))
+      return String(decoding: Array(reencodedQuery), as: UTF8.self)
+    }
+  }
+
+  internal mutating func reencodeQueryIfNeeded() {
+    // TODO: (performance): Can we be smarter about re-encoding? Since every mutation/assignment will re-encode,
+    //                      subsequent ones will be doing redundant work.
+    if let reencodedQuery = formEncodedQuery {
+      url.withMutableStorage(
+        { small in small.setQuery(toKnownFormEncoded: reencodedQuery.utf8) },
+        { generic in generic.setQuery(toKnownFormEncoded: reencodedQuery.utf8) }
+      )
     }
   }
 }
 
-// Iteration and serialization.
+
+// --------------------------------------------
+// MARK: - Reading
+// --------------------------------------------
+
 
 extension WebURL.QueryParameters {
 
-  /// A sequence which allows iterating the key-value pairs within a given UTF8 string.
-  /// The sequence assumes the "&" and "=" characters have not been escaped, but otherwise
-  /// does not assume the keys or values to be `application/x-www-form-urlencoded`.
+  /// A `Sequence` allowing iteration over all key-value pairs contained by the query parameters.
   ///
-  struct RawKeyValuePairs<Bytes>: Sequence where Bytes: Collection, Bytes.Element == UInt8 {
+  public var allKeyValuePairs: KeyValuePairs {
+    KeyValuePairs(params: self)
+  }
 
-    /// - Note: `pair` includes the trailing ampersand separator, unless the key-value pair ends at the end of the query string.
-    typealias Ranges = (pair: Range<Bytes.Index>, key: Range<Bytes.Index>, value: Range<Bytes.Index>)
+  /// A `Sequence` allowing iteration over all key-value pairs contained by a set of query parameters.
+  ///
+  public struct KeyValuePairs: Sequence {
 
-    var string: Bytes
+    internal var params: WebURL.QueryParameters
 
-    func makeIterator() -> Iterator {
-      return Iterator(remaining: string[...])
+    internal init(params: WebURL.QueryParameters) {
+      self.params = params
     }
 
-    struct Iterator: IteratorProtocol {
-      var remaining: Bytes.SubSequence
+    /// Whether or not these query parameters contain any key-value pairs.
+    ///
+    public var isEmpty: Bool {
+      var iterator = makeIterator()
+      return iterator.next() == nil
+    }
 
-      mutating func next() -> Ranges? {
+    public func makeIterator() -> Iterator {
+      Iterator(params: params)
+    }
+
+    public struct Iterator: IteratorProtocol {
+
+      internal var params: WebURL.QueryParameters
+      internal var utf8Offset: Int
+
+      internal init(params: WebURL.QueryParameters) {
+        self.params = params
+        self.utf8Offset = 0
+      }
+
+      public mutating func next() -> (String, String)? {
+        return params.withQueryUTF8 { utf8Bytes in
+          guard utf8Offset != utf8Bytes.count else { return nil }
+          var resumedIter = RawKeyValuePairs(utf8: utf8Bytes.suffix(from: utf8Offset)).makeIterator()
+          guard let nextKVP = resumedIter.next() else {
+            utf8Offset = utf8Bytes.count
+            return nil
+          }
+          utf8Offset = nextKVP.pair.upperBound
+          return (utf8Bytes[nextKVP.key].urlFormDecodedString, utf8Bytes[nextKVP.value].urlFormDecodedString)
+        }
+      }
+    }
+  }
+
+  /// A sequence which allows iterating the key-value pairs within a collection of UTF8 bytes.
+  /// The sequence assumes the "&" and "=" separator characters have _not_ been escaped, but otherwise
+  /// does not assume the content of the keys or values to be escaped in any particular way.
+  ///
+  internal struct RawKeyValuePairs<UTF8Bytes>: Sequence where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+
+    /// - Note: `pair` includes the trailing ampersand separator, unless the key-value pair ends at the end of the query string.
+    internal typealias Ranges = (
+      pair: Range<UTF8Bytes.Index>, key: Range<UTF8Bytes.Index>, value: Range<UTF8Bytes.Index>
+    )
+
+    internal var utf8: UTF8Bytes
+
+    internal init(utf8: UTF8Bytes) {
+      self.utf8 = utf8
+    }
+
+    internal func makeIterator() -> Iterator {
+      return Iterator(remaining: utf8[...])
+    }
+
+    internal struct Iterator: IteratorProtocol {
+
+      internal var remaining: UTF8Bytes.SubSequence
+
+      internal mutating func next() -> Ranges? {
+
         guard remaining.isEmpty == false else {
           return nil
         }
-        // Find the next non-empty KVP.
-        var thisKVP: Bytes.SubSequence
+        var nextKVP: UTF8Bytes.SubSequence
         repeat {
-          if let thisKVPEnd = remaining.firstIndex(of: ASCII.ampersand.codePoint) {
-            thisKVP = remaining[Range(uncheckedBounds: (remaining.startIndex, thisKVPEnd))]
-            remaining = remaining[Range(uncheckedBounds: (remaining.index(after: thisKVPEnd), remaining.endIndex))]
+          if let nextKVPEnd = remaining.firstIndex(of: ASCII.ampersand.codePoint) {
+            nextKVP = remaining[..<nextKVPEnd]
+            remaining = remaining[remaining.index(after: nextKVPEnd)...]
           } else if remaining.isEmpty == false {
-            thisKVP = remaining
-            remaining = remaining[Range(uncheckedBounds: (remaining.endIndex, remaining.endIndex))]
+            nextKVP = remaining
+            remaining = remaining[remaining.endIndex...]
           } else {
             return nil
           }
-        } while thisKVP.isEmpty
-        // Split on the "=" sign if there is one.
-        let key: Range<Bytes.Index>
-        let value: Range<Bytes.Index>
-        if let keyValueSeparator = thisKVP.firstIndex(of: ASCII.equalSign.codePoint) {
-          key = Range(uncheckedBounds: (thisKVP.startIndex, keyValueSeparator))
-          value = Range(uncheckedBounds: (thisKVP.index(after: keyValueSeparator), thisKVP.endIndex))
+        } while nextKVP.isEmpty
+        // If there is no "=" sign, the standard requires that 'value' be the empty string.
+        let key: Range<UTF8Bytes.Index>
+        let value: Range<UTF8Bytes.Index>
+        if let keyValueSeparator = nextKVP.firstIndex(of: ASCII.equalSign.codePoint) {
+          key = nextKVP.startIndex..<keyValueSeparator
+          value = nextKVP.index(after: keyValueSeparator)..<nextKVP.endIndex
         } else {
-          key = Range(uncheckedBounds: (thisKVP.startIndex, thisKVP.endIndex))
-          value = Range(uncheckedBounds: (thisKVP.endIndex, thisKVP.endIndex))
+          key = nextKVP.startIndex..<nextKVP.endIndex
+          value = nextKVP.endIndex..<nextKVP.endIndex
         }
-        return (pair: Range(uncheckedBounds: (thisKVP.startIndex, remaining.startIndex)), key: key, value: value)
+        return (pair: nextKVP.startIndex..<remaining.startIndex, key: key, value: value)
       }
     }
 
-    func filteredToKey<KeyType>(
-      _ keyToFind: KeyType
-    ) -> LazyFilterSequence<LazySequence<Self>.Elements> where KeyType: StringProtocol {
+    internal func filteredToUnencodedKey<StringType>(
+      _ keyToFind: StringType
+    ) -> LazyFilterSequence<Self> where StringType: StringProtocol {
       self.lazy.filter { (_, key, _) in
-        string[key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self).elementsEqual(keyToFind.utf8)
+        utf8[key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self).elementsEqual(keyToFind.utf8)
       }
     }
-  }
-
-  /// Parses the raw key-value pairs from the given UTF8 bytes, and returns a new query string by re-encoding them
-  /// as `application/x-www-form-urlencoded`. The relative order of key-value pairs is preserved.
-  ///
-  static func reencode(rawQueryUTF8: UnsafeBufferPointer<UInt8>) -> String {
-
-    // TODO: (performance): Can we be smarter about re-encoding? Since every mutation/assignment will re-encode,
-    //                      subsequent ones will be doing redundant work.
-
-    // Query strings borrowed from WebURL might not be form-encoded, so we have to recode them.
-    // A query string which is owned (and thus mutable) by `QueryParameters` needs to be properly form-encoded.
-    let reencodedQuery = RawKeyValuePairs(string: rawQueryUTF8)
-      // Re-encode key and value separately, and join them back together.
-      .lazy.map { (_, key, value) in
-        [
-          rawQueryUTF8[key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-            .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
-          rawQueryUTF8[value].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-            .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
-        ].joined(separator: CollectionOfOne(ASCII.equalSign.codePoint))
-        // Join each key-value pair.
-      }.joined(separator: CollectionOfOne(ASCII.ampersand.codePoint))
-
-    // Unlike regular encoding/decoding, re-encoding an already-encoded string is
-    // rarely going to change the 'count' by a huge amount.
-    // If available, reserve approximate space and write directly in to the String buffer.
-    #if false
-      if #available(macOS 11.0, iOS 14.0, watchOS 7.0, tvOS 14.0, *) {
-        var iter = (false) ? reencodedQuery.makeIterator() : nil
-        var string = String(unsafeUninitializedCapacity: raw.count) { newStringBuffer in
-          let (_iter, count) = newStringBuffer.initialize(from: lazyRecoded)
-          iter = _iter
-          return count
-        }
-        string.append(String(decoding: Array(IteratorSequence(iter!)), as: UTF8.self))
-        return string
-      }
-    #endif
-    return String(decoding: Array(reencodedQuery), as: UTF8.self)
   }
 }
 
-// 'contains', 'get', 'getAll'.
-
 extension WebURL.QueryParameters {
 
-  /// Whether or not these parameters contain a value for the given key.
+  /// Whether or not these query parameters contain a value for the given key.
   ///
-  /// - complexity: O(_n_ + _m_), where _n_ is the length of the query string and _m_ is the length of the key.
-  ///
-  @_specialize(where KeyType == String)
-  @_specialize(where KeyType == Substring)
-  public func contains<KeyType>(_ keyToFind: KeyType) -> Bool where KeyType: StringProtocol {
-    withBackingUTF8 {
-      var iter = RawKeyValuePairs(string: $0).filteredToKey(keyToFind).makeIterator()
+  @_specialize(where StringType == String)
+  @_specialize(where StringType == Substring)
+  public func contains<StringType>(_ keyToFind: StringType) -> Bool where StringType: StringProtocol {
+    withQueryUTF8 {
+      var iter = RawKeyValuePairs(utf8: $0).filteredToUnencodedKey(keyToFind).makeIterator()
       return iter.next() != nil
     }
   }
 
   /// Returns the first value matching the given key, if present. The value is decoded from `application/x-www-form-urlencoded`.
   ///
-  /// - complexity: O(_n_ + _m_), where _n_ is the length of the query string and _m_ is the length of the key.
-  ///
-  @_specialize(where KeyType == String)
-  @_specialize(where KeyType == Substring)
-  public func get<KeyType>(_ keyToFind: KeyType) -> String? where KeyType: StringProtocol {
-    withBackingUTF8 { utf8 in
-      var iter = RawKeyValuePairs(string: utf8).filteredToKey(keyToFind).makeIterator()
+  @_specialize(where StringType == String)
+  @_specialize(where StringType == Substring)
+  public func get<StringType>(_ keyToFind: StringType) -> String? where StringType: StringProtocol {
+    withQueryUTF8 { utf8 in
+      var iter = RawKeyValuePairs(utf8: utf8).filteredToUnencodedKey(keyToFind).makeIterator()
       return iter.next().map { utf8[$0.value].urlFormDecodedString }
     }
   }
 
   /// Returns all values matching the given key. The values are decoded from `application/x-www-form-urlencoded`.
   ///
-  /// - complexity: O(_n_ + _m_), where _n_ is the length of the query string and _m_ is the length of the key.
-  ///
-  @_specialize(where KeyType == String)
-  @_specialize(where KeyType == Substring)
-  public func getAll<KeyType>(_ keyToFind: KeyType) -> [String] where KeyType: StringProtocol {
-    withBackingUTF8 { utf8 in
-      RawKeyValuePairs(string: utf8).filteredToKey(keyToFind).map { utf8[$0.value].urlFormDecodedString }
+  @_specialize(where StringType == String)
+  @_specialize(where StringType == Substring)
+  public func getAll<StringType>(_ keyToFind: StringType) -> [String] where StringType: StringProtocol {
+    withQueryUTF8 { utf8 in
+      RawKeyValuePairs(utf8: utf8).filteredToUnencodedKey(keyToFind).map { utf8[$0.value].urlFormDecodedString }
     }
   }
 
+  @inlinable
   public subscript(dynamicMember dynamicMember: String) -> String? {
     get { get(dynamicMember) }
-    set { set(key: dynamicMember, to: newValue) }
+    set { set(dynamicMember, to: newValue) }
   }
 }
 
-// append, delete, set.
+
+// --------------------------------------------
+// MARK: - Writing
+// --------------------------------------------
+
 
 extension WebURL.QueryParameters {
 
-  @usableFromInline
-  internal static func append(
-    encodedKey: String, encodedValue: String, toFormEncodedString string: inout String
-  ) {
-    if string.isEmpty == false {
-      string.append("&")
-    }
-    string.append("\(encodedKey)=\(encodedValue)")
-  }
-
-  private static func remove<KeyType>(
-    encodedKey: KeyType, fromFormEncodedString string: inout String, utf8Offset: Int = 0
-  ) where KeyType: StringProtocol {
-
-    // Find the UTF8 offsets of all KVPs with the given key.
-    // Note that the string and key are already enoded, so we can do a literal search.
-    let utf8OffsetRanges = string.withUTF8 { stringBuffer in
-      RawKeyValuePairs(string: stringBuffer.suffix(from: utf8Offset)).compactMap {
-        (pair, key, _) in stringBuffer[key].elementsEqual(encodedKey.utf8) ? pair : nil
-      }
-    }
-    // Remove KVPs in reverse order to avoid clobbering.
-    // It's okay to force-unwrap the String.Index creation, because the string is form-encoded and therefore ASCII.
-    for range in utf8OffsetRanges.reversed() {
-      let start = string.utf8.index(string.utf8.startIndex, offsetBy: range.lowerBound).samePosition(in: string)!
-      let end = string.utf8.index(string.utf8.startIndex, offsetBy: range.upperBound).samePosition(in: string)!
-      string.removeSubrange(start..<end)
-    }
-    // The range for the last key-value pair doesn't include a trailing ampersand (since it doesn't have one),
-    // but if we remove it, we would leave a trailing ampersand from the _new_ last key-value pair.
-    if string.utf8.last == ASCII.ampersand.codePoint {
-      string.removeLast()
-    }
-  }
-
   /// Appends the given key-value pair to the query parameters. No existing key-value pairs are removed.
   ///
-  @_specialize(where KeyValueType == String)
-  @_specialize(where KeyValueType == Substring)
-  public mutating func append<KeyValueType>(key: KeyValueType, value: KeyValueType) where KeyValueType: StringProtocol {
-    withMutableOwnedString {
-      WebURL.QueryParameters.append(
-        encodedKey: key.urlFormEncoded,
-        encodedValue: value.urlFormEncoded,
-        toFormEncodedString: &$0
-      )
-    }
+  @inlinable
+  public mutating func append<StringType>(_ key: StringType, value: StringType) where StringType: StringProtocol {
+    append(contentsOf: CollectionOfOne((key, value)))
   }
 
   /// Removes all instances of the given key from the query parameters.
   ///
-  @_specialize(where KeyType == String)
-  @_specialize(where KeyType == Substring)
-  public mutating func remove<KeyType>(key keyToDelete: KeyType) where KeyType: StringProtocol {
-    withMutableOwnedString {
-      WebURL.QueryParameters.remove(encodedKey: keyToDelete.urlFormEncoded, fromFormEncodedString: &$0)
-    }
+  @inlinable
+  public mutating func remove<StringType>(_ keyToDelete: StringType) where StringType: StringProtocol {
+    set(keyToDelete, to: nil)
   }
-
-  /// Sets the given key to the given value, if present, and appends if otherwise. If `newValue` is `nil`, the key is removed if present.
-  ///
-  /// If a key is present multiple times, all but the first instance will be removed. It is this first instance which is paired with the new value.
-  ///
-  @_specialize(where KeyValueType == String)
-  @_specialize(where KeyValueType == Substring)
-  public mutating func set<KeyValueType>(
-    key keyToSet: KeyValueType, to newValue: KeyValueType?
-  ) where KeyValueType: StringProtocol {
-
-    guard let newValue = newValue else {
-      remove(key: keyToSet)
-      return
-    }
-
-    let encodedKeyToSet = keyToSet.urlFormEncoded
-    let encodedNewValue = newValue.urlFormEncoded
-    withMutableOwnedString { str in
-
-      let firstMatch = str.withUTF8 { stringBuffer in
-        RawKeyValuePairs(string: stringBuffer).first {
-          (_, key, value) in stringBuffer[key].elementsEqual(encodedKeyToSet.utf8)
-        }
-      }
-      if let match = firstMatch {
-        WebURL.QueryParameters.remove(
-          encodedKey: encodedKeyToSet, fromFormEncodedString: &str, utf8Offset: match.pair.upperBound
-        )
-        let start = str.utf8.index(str.utf8.startIndex, offsetBy: match.value.lowerBound).samePosition(in: str)!
-        let end = str.utf8.index(str.utf8.startIndex, offsetBy: match.value.upperBound).samePosition(in: str)!
-        str.replaceSubrange(start..<end, with: encodedNewValue)
-      } else {
-        WebURL.QueryParameters.append(
-          encodedKey: encodedKeyToSet, encodedValue: encodedNewValue, toFormEncodedString: &str
-        )
-      }
-    }
-  }
-}
-
-// removeAll, append(contentsOf:).
-
-extension WebURL.QueryParameters {
 
   /// Removes all key-value pairs in these query parameters.
   ///
+  @inlinable
   public mutating func removeAll() {
-    self.backing = .owned("")
+    url.query = nil
   }
+
+  /// Sets the given key to the given value, if present, or appends if otherwise. If `newValue` is `nil`, all pairs with the given key are removed.
+  ///
+  /// If a key is present multiple times, all but the first instance will be removed. It is this first instance which is set to the new value, so the relative order
+  /// of key-value pairs in the overall string is maintained.
+  ///
+  @_specialize(where StringType == String)
+  @_specialize(where StringType == Substring)
+  public mutating func set<StringType>(
+    _ keyToSet: StringType, to newValue: StringType?
+  ) where StringType: StringProtocol {
+    reencodeQueryIfNeeded()
+    let encodedKeyToSet = keyToSet.urlFormEncoded
+    let encodedNewValue = newValue?.urlFormEncoded
+    url.withMutableStorage(
+      { small in small.setQueryPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) },
+      { generic in generic.setQueryPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) }
+    )
+  }
+}
+
+// The many faces of append(contentsOf:).
+
+extension WebURL.QueryParameters {
 
   /// Appends the given sequence of key-value pairs to these query parameters. Existing values will not be removed.
   ///
-  @inlinable
-  public mutating func append<SequenceType, KeyValueType>(
-    contentsOf keyValuePairs: SequenceType
-  ) where SequenceType: Sequence, SequenceType.Element == (KeyValueType, KeyValueType), KeyValueType: StringProtocol {
-
-    withMutableOwnedString { str in
-      for (key, value) in keyValuePairs {
-        WebURL.QueryParameters.append(
-          encodedKey: key.urlFormEncoded,
-          encodedValue: value.urlFormEncoded,
-          toFormEncodedString: &str
-        )
-      }
-    }
-  }
-
-  @inlinable
-  public static func += <SequenceType, KeyValueType>(
-    lhs: inout WebURL.QueryParameters, rhs: SequenceType
-  ) where SequenceType: Sequence, SequenceType.Element == (KeyValueType, KeyValueType), KeyValueType: StringProtocol {
-    lhs.append(contentsOf: rhs)
-  }
-
-  // Unfortunately, (String, String) and (key: String, value: String) appear to be treated as different types.
-  // Removing this overload gives an error, recommending we add conformance to RangeReplaceableCollection (?!).
-
-  /// Appends the given sequence of key-value pairs to these query parameters. Existing values will not be removed.
-  ///
-  @inlinable
-  public mutating func append<SequenceType, KeyValueType>(
-    contentsOf keyValuePairs: SequenceType
-  )
-  where
-    SequenceType: Sequence, SequenceType.Element == (key: KeyValueType, value: KeyValueType),
-    KeyValueType: StringProtocol
-  {
-    append(
-      contentsOf: keyValuePairs.lazy.map { ($0, $1) } as LazyMapSequence<SequenceType, (KeyValueType, KeyValueType)>
+  @_specialize(where CollectionType == CollectionOfOne<String>, StringType == String)
+  @_specialize(where CollectionType == CollectionOfOne<Substring>, StringType == Substring)
+  @_specialize(where CollectionType == [String], StringType == String)
+  @_specialize(where CollectionType == [Substring], StringType == Substring)
+  public mutating func append<CollectionType, StringType>(
+    contentsOf keyValuePairs: CollectionType
+  ) where CollectionType: Collection, CollectionType.Element == (StringType, StringType), StringType: StringProtocol {
+    reencodeQueryIfNeeded()
+    url.withMutableStorage(
+      { small in small.appendPairsToQuery(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) },
+      { generic in generic.appendPairsToQuery(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) }
     )
   }
 
   @inlinable
-  public static func += <SequenceType, KeyValueType>(
-    lhs: inout WebURL.QueryParameters, rhs: SequenceType
+  public static func += <CollectionType, StringType>(
+    lhs: inout WebURL.QueryParameters, rhs: CollectionType
+  ) where CollectionType: Collection, CollectionType.Element == (StringType, StringType), StringType: StringProtocol {
+    lhs.append(contentsOf: rhs)
+  }
+
+  // Unfortunately, (String, String) and (key: String, value: String) appear to be treated as different types.
+
+  /// Appends the given sequence of key-value pairs to these query parameters. Existing values will not be removed.
+  ///
+  @inlinable
+  public mutating func append<CollectionType, StringType>(
+    contentsOf keyValuePairs: CollectionType
   )
   where
-    SequenceType: Sequence, SequenceType.Element == (key: KeyValueType, value: KeyValueType),
-    KeyValueType: StringProtocol
+    CollectionType: Collection, CollectionType.Element == (key: StringType, value: StringType),
+    StringType: StringProtocol
+  {
+    append(contentsOf: keyValuePairs.lazy.map { ($0, $1) } as LazyMapCollection)
+  }
+
+  @inlinable
+  public static func += <CollectionType, StringType>(
+    lhs: inout WebURL.QueryParameters, rhs: CollectionType
+  )
+  where
+    CollectionType: Collection, CollectionType.Element == (key: StringType, value: StringType),
+    StringType: StringProtocol
   {
     lhs.append(contentsOf: rhs)
   }
@@ -439,67 +403,235 @@ extension WebURL.QueryParameters {
   ///         pairs before appending them.
   ///
   @inlinable
-  public mutating func append<KeyValueType>(
-    contentsOf keyValuePairs: [KeyValueType: KeyValueType]
-  ) where KeyValueType: StringProtocol {
+  public mutating func append<StringType>(
+    contentsOf keyValuePairs: [StringType: StringType]
+  ) where StringType: StringProtocol {
     append(
       contentsOf: keyValuePairs.sorted(by: { lhs, rhs in
         assert(lhs.key != rhs.key, "Dictionary with non-unique keys?")
         return lhs.key < rhs.key
-      })
-    )
+      }))
   }
 
   @inlinable
-  public static func += <KeyValueType>(
-    lhs: inout WebURL.QueryParameters, rhs: [KeyValueType: KeyValueType]
-  ) where KeyValueType: StringProtocol {
+  public static func += <StringType>(
+    lhs: inout WebURL.QueryParameters, rhs: [StringType: StringType]
+  ) where StringType: StringProtocol {
     lhs.append(contentsOf: rhs)
   }
 }
 
-// allKeyValuePairs (Sequence view).
 
-extension WebURL.QueryParameters {
+// --------------------------------------------
+// MARK: - URLStorage + QueryParameters
+// --------------------------------------------
 
-  /// A `Sequence` allowing the key-value pairs of these query parameters to be iterated over.
+
+extension URLStorage {
+
+  /// Appends the given key-value pairs to this URL's query, form-encoding them as it does so.
   ///
-  public var allKeyValuePairs: KeyValuePairs {
-    KeyValuePairs(params: self)
+  internal mutating func appendPairsToQuery<CollectionType, UTF8Bytes>(
+    fromUnencoded keyValuePairs: CollectionType
+  ) -> AnyURLStorage
+  where
+    CollectionType: Collection, CollectionType.Element == (UTF8Bytes, UTF8Bytes),
+    UTF8Bytes: Collection, UTF8Bytes.Element == UInt8
+  {
+
+    let combinedLength: Int
+    let needsEscaping: Bool
+    (combinedLength, needsEscaping) = keyValuePairs.reduce(into: (0, false)) { info, kvp in
+      let encodeKey = kvp.0.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).write { info.0 += $0.count }
+      let encodeVal = kvp.1.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).write { info.0 += $0.count }
+      info.1 = info.1 || encodeKey || encodeVal
+    }
+    if needsEscaping {
+      return appendPairsToQuery(
+        fromEncoded: keyValuePairs.lazy.map {
+          (
+            $0.0.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
+            $0.1.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).joined()
+          )
+        },
+        knownLength: combinedLength
+      )
+    } else {
+      return appendPairsToQuery(fromEncoded: keyValuePairs, knownLength: combinedLength)
+    }
   }
 
-  /// A `Sequence` allowing the key-value pairs of these query parameters to be iterated over.
+  /// Appends the given key-value pairs to this URL's query, assuming that they are already form-encoded.
   ///
-  public struct KeyValuePairs: Sequence {
-    var params: WebURL.QueryParameters
+  /// - parameters:
+  ///   - keyValuePairs: The key-value pairs to be appended to the query. Must be form-encoded.
+  ///   - knownLength:   The combined length of all keys and values, if known. Must not include `=` or `&` separator characters.
+  ///
+  internal mutating func appendPairsToQuery<CollectionType, UTF8Bytes>(
+    fromEncoded keyValuePairs: CollectionType, knownLength: Int? = nil
+  ) -> AnyURLStorage
+  where
+    CollectionType: Collection, CollectionType.Element == (UTF8Bytes, UTF8Bytes),
+    UTF8Bytes: Collection, UTF8Bytes.Element == UInt8
+  {
 
-    public func makeIterator() -> Iterator {
-      Iterator(params: params)
+    let oldStructure = header.structure
+
+    let appendedStringLength: Int
+    if let knownLength = knownLength {
+      appendedStringLength = knownLength + (keyValuePairs.count * 2 /* '=' and '&' */) - 1 /* one too many '&'s */
+    } else {
+      appendedStringLength =
+        keyValuePairs.reduce(into: 0) { info, kvp in
+          info += kvp.0.count + 1 /* '=' */ + kvp.1.count + 1 /* '&' */
+        } - 1 /* one too many '&'s */
     }
 
-    /// Whether or not these query parameters have any key-value pairs.
-    ///
-    public var isEmpty: Bool {
-      var iterator = makeIterator()
-      return iterator.next() == nil
+    let separatorLength: Int
+    if oldStructure.queryLength == 0 {
+      separatorLength = 1  // "?"
+    } else if oldStructure.queryLength == 1 {
+      separatorLength = 0  // queryLength == 1 means there is already a "?" and we are appending immediately after it.
+    } else {
+      separatorLength = 1  // "&"
     }
 
-    public struct Iterator: IteratorProtocol {
-      var params: WebURL.QueryParameters
-      var utf8Offset: Int = 0
-
-      public mutating func next() -> (String, String)? {
-        return params.withBackingUTF8 { utf8Bytes in
-          guard utf8Offset != utf8Bytes.count else { return nil }
-          var resumedIter = RawKeyValuePairs(string: utf8Bytes.suffix(from: utf8Offset)).makeIterator()
-          guard let nextKVP = resumedIter.next() else {
-            utf8Offset = utf8Bytes.count
-            return nil
-          }
-          utf8Offset = nextKVP.pair.upperBound
-          return (utf8Bytes[nextKVP.key].urlFormDecodedString, utf8Bytes[nextKVP.value].urlFormDecodedString)
+    var newStructure = oldStructure
+    newStructure.queryLength += separatorLength + appendedStringLength
+    return replaceSubrange(
+      oldStructure.fragmentStart..<oldStructure.fragmentStart,
+      withUninitializedSpace: separatorLength + appendedStringLength,
+      newStructure: newStructure
+    ) { buffer in
+      var bytesWritten = 0
+      if oldStructure.queryLength == 0 {
+        buffer[0] = ASCII.questionMark.codePoint
+        bytesWritten += 1
+      } else if oldStructure.queryLength != 1 {
+        buffer[0] = ASCII.ampersand.codePoint
+        bytesWritten += 1
+      }
+      for (key, value) in keyValuePairs {
+        bytesWritten += UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...]).initialize(from: key).1
+        buffer[bytesWritten] = ASCII.equalSign.codePoint
+        bytesWritten += 1
+        bytesWritten += UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...]).initialize(from: value).1
+        if bytesWritten < buffer.count {
+          buffer[bytesWritten] = ASCII.ampersand.codePoint
+          bytesWritten += 1
         }
       }
+      return bytesWritten
+    }.newStorage
+  }
+
+  /// Sets the first key-value pair whose key matches `encodedKey` to `encodedValue`, and removes all other pairs with a matching key.
+  /// If `encodedValue` is `nil`, removes all matching pairs.
+  ///
+  /// - important: This method assumes that the query string is already minimally `application/x-www-form-urlencoded`; i.e. that
+  ///              pairs which match the given key encode it using exactly the same code-units.
+  ///
+  internal mutating func setQueryPair<UTF8Bytes>(
+    encodedKey: UTF8Bytes, encodedValue: UTF8Bytes?
+  ) -> AnyURLStorage where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+
+    let oldQueryRange = header.structure.rangeForReplacingCodeUnits(of: .query).dropFirst()
+
+    // If we have a new value to set, find the first matching KVP.
+    // The standard requires us to alter this pair's value in-place, and remove any other pairs with the same key.
+    // - Important: These offsets are relative to the start of the query.
+    let firstOccurence: (pairEnd: Int, value: Range<Int>)
+    if let encodedValue = encodedValue {
+      let _firstMatch = codeUnits.withUnsafeBufferPointer(range: oldQueryRange) { queryBytes in
+        WebURL.QueryParameters.RawKeyValuePairs(utf8: queryBytes)
+          .first(where: { queryBytes[$0.key].elementsEqual(encodedKey) })
+      }
+      guard let firstMatch = _firstMatch else {
+        return appendPairsToQuery(fromEncoded: CollectionOfOne((encodedKey, encodedValue)))
+      }
+      firstOccurence = (firstMatch.pair.upperBound, firstMatch.value)
+    } else {
+      firstOccurence = (0, 0..<0)
     }
+
+    // Remove key-value pairs from the code-units directly.
+    // We don't need to worry about swapping header types, since all headers support *fewer* code-units,
+    // even if they are not the optimal headers for the shrunk-down URL string.
+    // This is fixed-up later by copying to the optimal header representation if required.
+    var totalRemovedBytes = 0
+    codeUnits.unsafeTruncate(oldQueryRange.lowerBound + firstOccurence.pairEnd..<oldQueryRange.upperBound) { query in
+      var remaining = query
+      while let nextMatch = WebURL.QueryParameters.RawKeyValuePairs(utf8: remaining)
+        .first(where: { remaining[$0.key].elementsEqual(encodedKey) })
+      {
+        (remaining.baseAddress! + nextMatch.pair.lowerBound).assign(
+          from: remaining.baseAddress! + nextMatch.pair.upperBound, count: remaining.count - nextMatch.pair.upperBound
+        )
+        remaining = UnsafeMutableBufferPointer(
+          rebasing: remaining[nextMatch.pair.lowerBound..<remaining.endIndex - nextMatch.pair.count]
+        )
+        totalRemovedBytes += nextMatch.pair.count
+      }
+      // The 'pair' range for the last key-value pair in the query doesn't include a trailing ampersand
+      // (since it doesn't have one), but if we remove it, we leave a _new_ key-value pair at the end,
+      // which needs its trailing ampersand removed.
+      if totalRemovedBytes != query.count, query[query.count - totalRemovedBytes - 1] == ASCII.ampersand.codePoint {
+        totalRemovedBytes += 1
+      }
+      (query.baseAddress! + query.count - totalRemovedBytes).deinitialize(count: totalRemovedBytes)
+
+      return query.count - totalRemovedBytes
+    }
+
+    var newStructure = header.structure
+    newStructure.queryLength -= totalRemovedBytes
+
+    if let encodedValue = encodedValue {
+      let firstValueAbsoluteOffset = oldQueryRange.lowerBound + firstOccurence.value.lowerBound
+      newStructure.queryLength +=
+        codeUnits.replaceSubrange(
+          firstValueAbsoluteOffset..<firstValueAbsoluteOffset + firstOccurence.value.count,
+          with: encodedValue
+        ).count - firstOccurence.value.count
+
+    } else if newStructure.queryLength == 1 {
+      // If the query is just a lone "?", set it to nil instead.
+      assert(codeUnits[newStructure.queryStart] == ASCII.questionMark.codePoint)
+      codeUnits.replaceSubrange(newStructure.queryStart..<newStructure.queryStart + 1, with: EmptyCollection())
+      newStructure.queryLength = 0
+    }
+
+    let didUpdateStructure = header.copyStructure(from: newStructure)
+    precondition(didUpdateStructure, "Header did not accept new structure")
+
+    if !AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: codeUnits.count, structure: header.structure) {
+      return AnyURLStorage(optimalStorageForCapacity: codeUnits.count, structure: header.structure) { buffer in
+        buffer.initialize(from: codeUnits).1
+      }
+    }
+    return AnyURLStorage(self)
+  }
+}
+
+extension ManagedArrayBuffer {
+
+  /// Calls `body`, allowing it to alter or truncate the elements in the given range. `body` must return the new number of elements within the range, `n`.
+  /// The `n` elements at the start of the buffer must be initialized, and elements from `n` until the end of the buffer must be deinitialized.
+  ///
+  internal mutating func unsafeTruncate(
+    _ range: Range<Index>, _ body: (inout UnsafeMutableBufferPointer<Element>) -> Int
+  ) {
+    var removedElements = 0
+    withUnsafeMutableBufferPointer { buffer in
+      var slice = UnsafeMutableBufferPointer(rebasing: buffer[range])
+      let newSliceCount = body(&slice)
+      precondition(newSliceCount <= slice.count, "unsafeTruncate cannot initialize more content than it had space for")
+      // Space in the range newSliceCount..<range.upperBound is now uninitialized. Move elements to fill the gap.
+      (buffer.baseAddress! + range.lowerBound + newSliceCount).moveInitialize(
+        from: (buffer.baseAddress! + range.upperBound), count: buffer.count - range.upperBound
+      )
+      removedElements = range.count - newSliceCount
+    }
+    self.header.count -= removedElements
   }
 }

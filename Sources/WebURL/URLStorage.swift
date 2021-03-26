@@ -1061,6 +1061,7 @@ extension GenericURLHeader: URLHeader where SizeType: AnyURLStorageErasableGener
   }
 
   mutating func copyStructure(from newStructure: URLStructure<Int>) -> Bool {
+    newStructure.checkInvariants()
     self._structure = .init(copying: newStructure)
     return true
   }
