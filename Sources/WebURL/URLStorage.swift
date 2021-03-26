@@ -102,6 +102,12 @@ struct URLStructure<SizeType: FixedWidthInteger> {
   /// does not begin with a `/` (e.g. `mailto:somebody@somehost.com` or `javascript:alert("hello")`.
   ///
   var cannotBeABaseURL: Bool
+
+  /// Whether this URL's query string is known to be `application/x-www-form-urlencoded`.
+  ///
+  /// Only URLs without a query, or with an empty query, are required to set this flag when they are constructed.
+  ///
+  var queryIsKnownFormEncoded: Bool
 }
 
 enum Sigil {
@@ -109,7 +115,16 @@ enum Sigil {
   case path
 }
 
-extension URLStructure: Equatable {}
+extension URLStructure: Equatable {
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.schemeLength == rhs.schemeLength && lhs.usernameLength == rhs.usernameLength
+      && lhs.passwordLength == rhs.passwordLength && lhs.hostnameLength == rhs.hostnameLength
+      && lhs.portLength == rhs.portLength && lhs.pathLength == rhs.pathLength && lhs.queryLength == rhs.queryLength
+      && lhs.fragmentLength == rhs.fragmentLength && lhs.sigil == rhs.sigil && lhs.schemeKind == rhs.schemeKind
+      && lhs.cannotBeABaseURL == rhs.cannotBeABaseURL
+  }
+}
 
 extension URLStructure {
 
@@ -127,6 +142,7 @@ extension URLStructure {
     self.sigil = .none
     self.schemeKind = .other
     self.cannotBeABaseURL = false
+    self.queryIsKnownFormEncoded = false
   }
 
   /// Creates a new URL structure with the same information as `otherStructure`, but whose values are stored using a different integer type.
@@ -148,7 +164,8 @@ extension URLStructure {
       fragmentLength: SizeType(otherStructure.fragmentLength),
       sigil: otherStructure.sigil,
       schemeKind: otherStructure.schemeKind,
-      cannotBeABaseURL: otherStructure.cannotBeABaseURL
+      cannotBeABaseURL: otherStructure.cannotBeABaseURL,
+      queryIsKnownFormEncoded: otherStructure.queryIsKnownFormEncoded
     )
     // Cannot check invariants here because of the 'tempStorage' hack we use to implement COW.
     // checkInvariants()
@@ -211,6 +228,10 @@ extension URLStructure {
       assert(passwordLength == 0, "A URL without authority sigil cannot have a password")
       assert(hostnameLength == 0, "A URL without authority sigil cannot have a hostname")
       assert(portLength == 0, "A URL without authority sigil cannot have a port")
+    }
+
+    if queryLength == 0 || queryLength == 1 {
+      assert(queryIsKnownFormEncoded, "Empty and nil queries must always be flagged as being form-encoded")
     }
   }
 }
@@ -766,19 +787,17 @@ extension URLStorage {
   ///   - newValue:  The new value of the component.
   ///   - prefix:    A single ASCII character to write before the new value. If `newValue` is not `nil`, this is _always_ written.
   ///   - lengthKey: The `URLStructure` field to update with the component's new length. Said length will include the single-character prefix.
-  ///   - encoder:   A closure which encodes the new value for writing in a URL string.
-  ///
-  ///   - bytes:     The bytes to encode as the component's new content.
-  ///   - scheme:    The scheme of the final URL.
-  ///   - callback:  A callback through which the `encoder` provides this function with buffers of encoded content to process.
-  ///                `callback` does not escape the pointer value, and may be called as many times as needed to encode the content.
+  ///   - encodeSet: The `PercentEncodeSet` which should be used to encode the new value.
+  ///   - adjustStructure: A closure which allows setting additional properties of the structure to be tweaked before writing.
+  ///                      This closure is invoked after the structure's `lengthKey` has been updated with the component's new length.
   ///
   mutating func setSimpleComponent<Input, EncodeSet>(
     _ component: WebURL.Component,
     to newValue: Input?,
     prefix: ASCII,
     lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
-    encoder: EncodeSet.Type
+    encodeSet: EncodeSet.Type,
+    adjustStructure: (inout URLStructure<Int>) -> Void = { _ in }
   ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8, EncodeSet: PercentEncodeSet {
 
     let oldStructure = header.structure
@@ -789,6 +808,7 @@ extension URLStorage {
       }
       var newStructure = oldStructure
       newStructure[keyPath: lengthKey] = 0
+      adjustStructure(&newStructure)
       return removeSubrange(existingFragment, newStructure: newStructure).newStorage
     }
 
@@ -797,6 +817,7 @@ extension URLStorage {
     let subrangeToReplace = oldStructure.rangeForReplacingCodeUnits(of: component)
     var newStructure = oldStructure
     newStructure[keyPath: lengthKey] = bytesToWrite
+    adjustStructure(&newStructure)
 
     return replaceSubrange(
       subrangeToReplace,
@@ -1061,6 +1082,7 @@ extension GenericURLHeader: URLHeader where SizeType: AnyURLStorageErasableGener
   }
 
   mutating func copyStructure(from newStructure: URLStructure<Int>) -> Bool {
+    newStructure.checkInvariants()
     self._structure = .init(copying: newStructure)
     return true
   }

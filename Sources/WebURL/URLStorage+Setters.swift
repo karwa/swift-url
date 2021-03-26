@@ -362,7 +362,7 @@ extension URLStorage {
         to: UnsafeBufferPointer?.none,
         prefix: .colon,
         lengthKey: \.portLength,
-        encoder: PassthroughEncodeSet.self
+        encodeSet: PassthroughEncodeSet.self
       )
       return (result, nil)
     }
@@ -375,7 +375,7 @@ extension URLStorage {
         to: ptr,
         prefix: .colon,
         lengthKey: \.portLength,
-        encoder: PassthroughEncodeSet.self
+        encodeSet: PassthroughEncodeSet.self
       )
     }
     return (result, nil)
@@ -464,7 +464,11 @@ extension URLStorage {
         to: newValue,
         prefix: .questionMark,
         lengthKey: \.queryLength,
-        encoder: URLEncodeSet.Query_Special.self
+        encodeSet: URLEncodeSet.Query_Special.self,
+        adjustStructure: { structure in
+          // Empty and nil queries are considered form-encoded (i.e. they do not need to be re-encoded).
+          structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
+        }
       )
     } else {
       return setSimpleComponent(
@@ -472,7 +476,10 @@ extension URLStorage {
         to: newValue,
         prefix: .questionMark,
         lengthKey: \.queryLength,
-        encoder: URLEncodeSet.Query_NotSpecial.self
+        encodeSet: URLEncodeSet.Query_NotSpecial.self,
+        adjustStructure: { structure in
+          structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
+        }
       )
     }
   }
@@ -480,14 +487,18 @@ extension URLStorage {
   /// Set the query component to the given UTF8-encoded string, assuming that the string is already `application/x-www-form-urlencoded`.
   ///
   mutating func setQuery<Input>(
-    toKnownFormEncoded newValue: Input
+    toKnownFormEncoded newValue: Input?
   ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
+
     return setSimpleComponent(
       .query,
       to: newValue,
       prefix: .questionMark,
       lengthKey: \.queryLength,
-      encoder: PassthroughEncodeSet.self
+      encodeSet: PassthroughEncodeSet.self,
+      adjustStructure: { structure in
+        structure.queryIsKnownFormEncoded = true
+      }
     )
   }
 
@@ -504,7 +515,7 @@ extension URLStorage {
       to: newValue,
       prefix: .numberSign,
       lengthKey: \.fragmentLength,
-      encoder: URLEncodeSet.Fragment.self
+      encodeSet: URLEncodeSet.Fragment.self
     )
   }
 }
