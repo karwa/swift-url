@@ -481,6 +481,9 @@ extension ParsedURLString.ProcessedMapping {
       }
     }
 
+    // 7: Finalize.
+    writer.finalize()
+
     return  // End of writing.
   }
 }

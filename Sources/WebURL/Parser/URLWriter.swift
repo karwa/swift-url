@@ -141,6 +141,10 @@ protocol URLWriter {
   /// The default implementation does nothing.
   ///
   mutating func writePathMetricsHint(_ pathMetrics: PathMetrics)
+
+  /// Optional function which informs the writer that the URL has completed writing. No more content or hints will be written after this function is called.
+  ///
+  mutating func finalize()
 }
 
 extension URLWriter {
@@ -149,6 +153,9 @@ extension URLWriter {
     // Not required.
   }
   mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
+    // Not required.
+  }
+  mutating func finalize() {
     // Not required.
   }
 }
@@ -310,6 +317,11 @@ struct StructureAndMetricsCollector: URLWriter {
 
   mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
     metrics.pathMetrics = pathMetrics
+  }
+
+  mutating func finalize() {
+    // Empty and nil queries are considered form-encoded (i.e. they do not need to be re-encoded).
+    structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
   }
 }
 

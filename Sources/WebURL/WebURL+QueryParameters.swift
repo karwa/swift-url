@@ -54,13 +54,20 @@ extension WebURL {
       yield &params
     }
     set {
-      guard let formEncodedString = newValue.formEncodedQuery.flatMap({ $0.isEmpty ? nil : $0 }) else {
-        self.query = nil
+      if newValue.url.storage.structure.queryIsKnownFormEncoded {
+        newValue.withQueryUTF8 { src in
+          let src = src.isEmpty ? nil : src
+          withMutableStorage(
+            { small in small.setQuery(toKnownFormEncoded: src) },
+            { generic in generic.setQuery(toKnownFormEncoded: src) }
+          )
+        }
         return
       }
+      let formEncoded = newValue.formEncodedQueryBytes
       withMutableStorage(
-        { small in small.setQuery(toKnownFormEncoded: formEncodedString.utf8) },
-        { generic in generic.setQuery(toKnownFormEncoded: formEncodedString.utf8) }
+        { small in small.setQuery(toKnownFormEncoded: formEncoded) },
+        { generic in generic.setQuery(toKnownFormEncoded: formEncoded) }
       )
     }
   }
@@ -92,35 +99,33 @@ extension WebURL.QueryParameters {
     }
   }
 
-  internal var formEncodedQuery: String? {
-    self.url.storage.withComponentBytes(.query) { queryBytes in
-      guard let rawQueryUTF8 = queryBytes.map({ UnsafeBufferPointer(rebasing: $0.dropFirst()) }) else {
-        return nil
+  internal var formEncodedQueryBytes: [UInt8]? {
+    withQueryUTF8 { queryBytes in
+      var result = [UInt8]()
+      result.reserveCapacity(queryBytes.count + 1)
+      for kvp in RawKeyValuePairs(utf8: queryBytes) {
+        result.append(contentsOf: queryBytes[kvp.key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
+                        .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
+        result.append(ASCII.equalSign.codePoint)
+        result.append(contentsOf: queryBytes[kvp.value].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
+                        .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
+        result.append(ASCII.ampersand.codePoint)
       }
-      let reencodedQuery = RawKeyValuePairs(utf8: rawQueryUTF8)
-        // Re-encode key and value separately, and join them back together.
-        .lazy.map { (_, key, value) in
-          [
-            rawQueryUTF8[key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-              .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
-            rawQueryUTF8[value].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-              .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
-          ].joined(separator: CollectionOfOne(ASCII.equalSign.codePoint))
-          // Join each key-value pair.
-        }.joined(separator: CollectionOfOne(ASCII.ampersand.codePoint))
-      return String(decoding: Array(reencodedQuery), as: UTF8.self)
+      _ = result.popLast()
+      // Non-empty queries may become empty once form-encoded (e.g. "&&&&").
+      // These should result in 'nil' queries.
+      return result.isEmpty ? nil : result
     }
   }
 
   internal mutating func reencodeQueryIfNeeded() {
-    // TODO: (performance): Can we be smarter about re-encoding? Since every mutation/assignment will re-encode,
-    //                      subsequent ones will be doing redundant work.
-    if let reencodedQuery = formEncodedQuery {
-      url.withMutableStorage(
-        { small in small.setQuery(toKnownFormEncoded: reencodedQuery.utf8) },
-        { generic in generic.setQuery(toKnownFormEncoded: reencodedQuery.utf8) }
-      )
-    }
+    guard url.storage.structure.queryIsKnownFormEncoded == false else { return }
+    let reencodedQuery = formEncodedQueryBytes
+    url.withMutableStorage(
+      { small in small.setQuery(toKnownFormEncoded: reencodedQuery) },
+      { generic in generic.setQuery(toKnownFormEncoded: reencodedQuery) }
+    )
+    assert(url.storage.structure.queryIsKnownFormEncoded)
   }
 }
 
