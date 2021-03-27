@@ -17,27 +17,15 @@ import XCTest
 
 @testable import WebURL
 
-// MARK: - Helpers.
-
-
-#if canImport(Glibc)
-  import Glibc
-#elseif canImport(Darwin)
-  import Darwin
-#else
-  #error("Unknown libc variant")
-#endif
-
 extension Array {
-
-  fileprivate init(fromIPv6Octets addr: IPv6Address.Octets) where Element == UInt8 {
+  fileprivate init(ipv6Octets addr: IPv6Address.Octets) where Element == UInt8 {
     self = [
       addr.0, addr.1, addr.2, addr.3, addr.4, addr.5, addr.6, addr.7,
       addr.8, addr.9, addr.10, addr.11, addr.12, addr.13, addr.14, addr.15,
     ]
   }
 
-  fileprivate init(fromIPv6Pieces addr: IPv6Address.Pieces) where Element == UInt16 {
+  fileprivate init(ipv6Pieces addr: IPv6Address.Pieces) where Element == UInt16 {
     self = [addr.0, addr.1, addr.2, addr.3, addr.4, addr.5, addr.6, addr.7]
   }
 }
@@ -49,79 +37,10 @@ extension ValidationError {
   }
 }
 
-#if canImport(Darwin)
-  let in6_union_property = \in6_addr.__u6_addr
-#else
-  let in6_union_property = \in6_addr.__in6_u
-#endif
-
-fileprivate func pton_octets(_ input: String) -> [UInt8]? {
-  var result = in6_addr()
-  guard inet_pton(AF_INET6, input, &result) != 0 else { return nil }
-  return withUnsafeBytes(of: &result[keyPath: in6_union_property].__u6_addr8) { ptr in
-    let u16 = ptr.bindMemory(to: UInt8.self)
-    return Array(u16)
-  }
-}
-
-fileprivate func pton_pieces(_ input: String) -> [UInt16]? {
-  var result = in6_addr()
-  guard inet_pton(AF_INET6, input, &result) != 0 else { return nil }
-  return withUnsafeBytes(of: &result[keyPath: in6_union_property].__u6_addr16) { ptr in
-    let u16 = ptr.bindMemory(to: UInt16.self)
-    return Array(u16)
-  }
-}
-
-fileprivate func ntop_octets(_ input: [UInt8]) -> String? {
-  var src = in6_addr()
-  src[keyPath: in6_union_property].__u6_addr8.0 = input[0]
-  src[keyPath: in6_union_property].__u6_addr8.1 = input[1]
-  src[keyPath: in6_union_property].__u6_addr8.2 = input[2]
-  src[keyPath: in6_union_property].__u6_addr8.3 = input[3]
-  src[keyPath: in6_union_property].__u6_addr8.4 = input[4]
-  src[keyPath: in6_union_property].__u6_addr8.5 = input[5]
-  src[keyPath: in6_union_property].__u6_addr8.6 = input[6]
-  src[keyPath: in6_union_property].__u6_addr8.7 = input[7]
-  src[keyPath: in6_union_property].__u6_addr8.8 = input[8]
-  src[keyPath: in6_union_property].__u6_addr8.9 = input[9]
-  src[keyPath: in6_union_property].__u6_addr8.10 = input[10]
-  src[keyPath: in6_union_property].__u6_addr8.11 = input[11]
-  src[keyPath: in6_union_property].__u6_addr8.12 = input[12]
-  src[keyPath: in6_union_property].__u6_addr8.13 = input[13]
-  src[keyPath: in6_union_property].__u6_addr8.14 = input[14]
-  src[keyPath: in6_union_property].__u6_addr8.15 = input[15]
-  let bytes = [CChar](unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) { buffer, count in
-    let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
-    count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
-  }
-  return bytes.isEmpty ? nil : String(cString: bytes)
-}
-
-fileprivate func ntop_pieces(_ input: [UInt16]) -> String? {
-  var src = in6_addr()
-  src[keyPath: in6_union_property].__u6_addr16.0 = input[0]
-  src[keyPath: in6_union_property].__u6_addr16.1 = input[1]
-  src[keyPath: in6_union_property].__u6_addr16.2 = input[2]
-  src[keyPath: in6_union_property].__u6_addr16.3 = input[3]
-  src[keyPath: in6_union_property].__u6_addr16.4 = input[4]
-  src[keyPath: in6_union_property].__u6_addr16.5 = input[5]
-  src[keyPath: in6_union_property].__u6_addr16.6 = input[6]
-  src[keyPath: in6_union_property].__u6_addr16.7 = input[7]
-  let bytes = [CChar](unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) { buffer, count in
-    let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
-    count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
-  }
-  return bytes.isEmpty ? nil : String(cString: bytes)
-}
-
-
-// MARK: - Tests
-
-
 final class IPv6AddressTests: XCTestCase {
 
   func testBasic() {
+
     let testData: [(String, String, [UInt8], [UInt16])] = [
       // Canonical
       (
@@ -160,23 +79,18 @@ final class IPv6AddressTests: XCTestCase {
         XCTFail("Failed to parse valid address: \(string)")
         continue
       }
-      // Octets.
-      XCTAssertEqual(Array(fromIPv6Octets: addr.octets), expectedOctets, "Octet mismatch: \(string)")
-      XCTAssertEqual(Array(fromIPv6Octets: addr.octets), pton_octets(string), "Octet mismatch: \(string)")
-      // Pieces.
-      XCTAssertEqual(Array(fromIPv6Pieces: addr[pieces: .numeric]), expectedNumericPieces, "Piece mismatch: \(string)")
-      XCTAssertEqual(Array(fromIPv6Pieces: addr[pieces: .binary]), pton_pieces(string), "Piece mismatch: \(string)")
-      // Serialization.
+
+      XCTAssertEqual(Array(ipv6Octets: addr.octets), expectedOctets)
       XCTAssertEqual(addr.serialized, expectedDescription)
-      // Idempotence.
-      if let reparsedAddr = IPv6Address(addr.serialized) {
-        XCTAssertEqual(
-          Array(fromIPv6Octets: addr.octets), Array(fromIPv6Octets: reparsedAddr.octets),
-          "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'"
-        )
-      } else {
-        XCTFail("Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
+      XCTAssertEqual(Array(ipv6Pieces: addr[pieces: .numeric]), expectedNumericPieces)
+      XCTAssertEqual(Array(ipv6Pieces: addr[pieces: .binary]), expectedNumericPieces.map { UInt16(bigEndian: $0) })
+
+      guard let reparsedAddr = IPv6Address(addr.serialized) else {
+        XCTFail("Failed to reparse. Original: '\(string)'. Parsed: '\(addr.serialized)'")
+        continue
       }
+      XCTAssertEqual(Array(ipv6Octets: addr.octets), Array(ipv6Octets: reparsedAddr.octets))
+      XCTAssertEqual(addr.serialized, reparsedAddr.serialized)
     }
   }
 
@@ -213,30 +127,23 @@ final class IPv6AddressTests: XCTestCase {
         XCTFail("Failed to parse valid address: \(string)")
         continue
       }
-      // Octets.
-      XCTAssertEqual(Array(fromIPv6Octets: addr.octets), expectedOctets, "Octet mismatch: \(string)")
-      XCTAssertEqual(Array(fromIPv6Octets: addr.octets), pton_octets(string), "Octet mismatch: \(string)")
-      // Pieces.
-      XCTAssertEqual(
-        Array(fromIPv6Pieces: addr[pieces: .numeric]), expectedNumericPieces,
-        "Piece mismatch: \(string)")
-      XCTAssertEqual(
-        Array(fromIPv6Pieces: addr[pieces: .binary]), pton_pieces(string),
-        "Piece mismatch: \(string)")
-      // Serialization.
+
+      XCTAssertEqual(Array(ipv6Octets: addr.octets), expectedOctets)
       XCTAssertEqual(addr.serialized, expectedDescription)
-      // Idempotence.
-      if let reparsedAddr = IPv6Address(addr.serialized) {
-        XCTAssertEqual(
-          Array(fromIPv6Octets: addr.octets), Array(fromIPv6Octets: reparsedAddr.octets),
-          "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
-      } else {
-        XCTFail("Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
+      XCTAssertEqual(Array(ipv6Pieces: addr[pieces: .numeric]), expectedNumericPieces)
+      XCTAssertEqual(Array(ipv6Pieces: addr[pieces: .binary]), expectedNumericPieces.map { UInt16(bigEndian: $0) })
+
+      guard let reparsedAddr = IPv6Address(addr.serialized) else {
+        XCTFail("Failed to reparse. Original: '\(string)'. Parsed: '\(addr.serialized)'")
+        continue
       }
+      XCTAssertEqual(Array(ipv6Octets: addr.octets), Array(ipv6Octets: reparsedAddr.octets))
+      XCTAssertEqual(addr.serialized, reparsedAddr.serialized)
     }
   }
 
   func testInvalid() {
+
     let invalidAddresses: [(String, IPv6Address.ValidationError)] = [
       // - Invalid piece.
       ("12345::", .unexpectedCharacter),
@@ -280,50 +187,124 @@ final class IPv6AddressTests: XCTestCase {
   }
 }
 
-extension IPv6AddressTests {
+// Randomized testing.
 
-  /// Generate 1000 random IP addresses, serialize them via IPAddress.
-  /// Then serialize the same addresss via `ntop`, and ensure it returns the same string.
-  /// Then parse our serialized version back via `pton`, and ensure it returns the same address.
-  ///
-  func testRandom_Serialization() {
-    for _ in 0..<1000 {
-      let expected = IPv6Address.Utils.randomAddress()
-      let address = IPv6Address(pieces: expected, .binary)
-      if address.serialized.contains("::") {
-        XCTAssertTrue(Array(fromIPv6Pieces: expected).longestSubrange(equalTo: 0).length > 0)
-      }
+#if canImport(Glibc) || canImport(Darwin)
 
-      // Serialize with libc. It should return the same String.
-      let libcStr = ntop_pieces(Array(fromIPv6Pieces: expected))
-      if libcStr?.contains(".") == true {
-        // Exception: if the address <= UInt32.max, libc may print this as an embedded IPv4 address on some platforms
-        // (e.g. it prints "::198.135.80.188", we print "::c687:50bc").
-        XCTAssertTrue(Array(fromIPv6Pieces: expected).dropLast(2).allSatisfy { $0 == 0 })
-      } else {
-        XCTAssertEqual(libcStr, address.serialized)
-      }
+  #if canImport(Glibc)
+    import Glibc
+    let in6_union_property = \in6_addr.__in6_u
+  #elseif canImport(Darwin)
+    import Darwin
+    let in6_union_property = \in6_addr.__u6_addr
+  #endif
 
-      // Parse our serialized output with libc. It should return the same address.
-      XCTAssertEqual(pton_octets(address.serialized), Array(fromIPv6Octets: address.octets))
-      XCTAssertEqual(pton_pieces(address.serialized), Array(fromIPv6Pieces: address[pieces: .binary]))
+  fileprivate func pton_octets(_ input: String) -> [UInt8]? {
+    var result = in6_addr()
+    guard inet_pton(AF_INET6, input, &result) != 0 else { return nil }
+    return withUnsafeBytes(of: &result[keyPath: in6_union_property].__u6_addr8) { ptr in
+      let u16 = ptr.bindMemory(to: UInt8.self)
+      return Array(u16)
     }
   }
 
-  /// Generate 1000 random IP Address Strings, parse them via IPAddress,
-  /// check that the numerical value matches the expected network address,
-  /// and that `pton` gets the same result when parsing the same random String.
-  ///
-  func testRandom_Parsing() {
-    for _ in 0..<1000 {
-      let (randomPieces, randomAddressString) = IPv6Address.Utils.randomString()
-      guard let parsedAddress = IPv6Address(randomAddressString) else {
-        XCTFail("Failed to parse address: \(randomAddressString); expected pieces: \(randomPieces)")
-        continue
-      }
-      XCTAssertEqual(Array(fromIPv6Octets: parsedAddress.octets), pton_octets(randomAddressString))
-      XCTAssertEqual(Array(fromIPv6Pieces: parsedAddress[pieces: .binary]), Array(fromIPv6Pieces: randomPieces))
-      XCTAssertEqual(Array(fromIPv6Pieces: parsedAddress[pieces: .binary]), pton_pieces(randomAddressString))
+  fileprivate func pton_pieces(_ input: String) -> [UInt16]? {
+    var result = in6_addr()
+    guard inet_pton(AF_INET6, input, &result) != 0 else { return nil }
+    return withUnsafeBytes(of: &result[keyPath: in6_union_property].__u6_addr16) { ptr in
+      let u16 = ptr.bindMemory(to: UInt16.self)
+      return Array(u16)
     }
   }
-}
+
+  fileprivate func ntop_octets(_ input: [UInt8]) -> String? {
+    var src = in6_addr()
+    src[keyPath: in6_union_property].__u6_addr8.0 = input[0]
+    src[keyPath: in6_union_property].__u6_addr8.1 = input[1]
+    src[keyPath: in6_union_property].__u6_addr8.2 = input[2]
+    src[keyPath: in6_union_property].__u6_addr8.3 = input[3]
+    src[keyPath: in6_union_property].__u6_addr8.4 = input[4]
+    src[keyPath: in6_union_property].__u6_addr8.5 = input[5]
+    src[keyPath: in6_union_property].__u6_addr8.6 = input[6]
+    src[keyPath: in6_union_property].__u6_addr8.7 = input[7]
+    src[keyPath: in6_union_property].__u6_addr8.8 = input[8]
+    src[keyPath: in6_union_property].__u6_addr8.9 = input[9]
+    src[keyPath: in6_union_property].__u6_addr8.10 = input[10]
+    src[keyPath: in6_union_property].__u6_addr8.11 = input[11]
+    src[keyPath: in6_union_property].__u6_addr8.12 = input[12]
+    src[keyPath: in6_union_property].__u6_addr8.13 = input[13]
+    src[keyPath: in6_union_property].__u6_addr8.14 = input[14]
+    src[keyPath: in6_union_property].__u6_addr8.15 = input[15]
+    let bytes = [CChar](unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) { buffer, count in
+      let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
+      count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
+    }
+    return bytes.isEmpty ? nil : String(cString: bytes)
+  }
+
+  fileprivate func ntop_pieces(_ input: [UInt16]) -> String? {
+    var src = in6_addr()
+    src[keyPath: in6_union_property].__u6_addr16.0 = input[0]
+    src[keyPath: in6_union_property].__u6_addr16.1 = input[1]
+    src[keyPath: in6_union_property].__u6_addr16.2 = input[2]
+    src[keyPath: in6_union_property].__u6_addr16.3 = input[3]
+    src[keyPath: in6_union_property].__u6_addr16.4 = input[4]
+    src[keyPath: in6_union_property].__u6_addr16.5 = input[5]
+    src[keyPath: in6_union_property].__u6_addr16.6 = input[6]
+    src[keyPath: in6_union_property].__u6_addr16.7 = input[7]
+    let bytes = [CChar](unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) { buffer, count in
+      let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
+      count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
+    }
+    return bytes.isEmpty ? nil : String(cString: bytes)
+  }
+
+  extension IPv6AddressTests {
+
+    /// Generate 1000 random IP addresses, serialize them via IPAddress.
+    /// Then serialize the same addresss via `ntop`, and ensure it returns the same string.
+    /// Then parse our serialized version back via `pton`, and ensure it returns the same address.
+    ///
+    func testRandom_Serialization() {
+      for _ in 0..<1000 {
+        let expected = IPv6Address.Utils.randomAddress()
+        let address = IPv6Address(pieces: expected, .binary)
+        if address.serialized.contains("::") {
+          XCTAssertTrue(Array(ipv6Pieces: expected).longestSubrange(equalTo: 0).length > 0)
+        }
+
+        // Serialize with libc. It should return the same String.
+        let libcStr = ntop_pieces(Array(ipv6Pieces: expected))
+        if libcStr?.contains(".") == true {
+          // Exception: if the address <= UInt32.max, libc may print this as an embedded IPv4 address on some platforms
+          // (e.g. it prints "::198.135.80.188", we print "::c687:50bc").
+          XCTAssertTrue(Array(ipv6Pieces: expected).dropLast(2).allSatisfy { $0 == 0 })
+        } else {
+          XCTAssertEqual(libcStr, address.serialized)
+        }
+
+        // Parse our serialized output with libc. It should return the same address.
+        XCTAssertEqual(pton_octets(address.serialized), Array(ipv6Octets: address.octets))
+        XCTAssertEqual(pton_pieces(address.serialized), Array(ipv6Pieces: address[pieces: .binary]))
+      }
+    }
+
+    /// Generate 1000 random IP Address Strings, parse them via IPAddress,
+    /// check that the numerical value matches the expected network address,
+    /// and that `pton` gets the same result when parsing the same random String.
+    ///
+    func testRandom_Parsing() {
+      for _ in 0..<1000 {
+        let (randomPieces, randomAddressString) = IPv6Address.Utils.randomString()
+        guard let parsedAddress = IPv6Address(randomAddressString) else {
+          XCTFail("Failed to parse address: \(randomAddressString); expected pieces: \(randomPieces)")
+          continue
+        }
+        XCTAssertEqual(Array(ipv6Octets: parsedAddress.octets), pton_octets(randomAddressString))
+        XCTAssertEqual(Array(ipv6Pieces: parsedAddress[pieces: .binary]), Array(ipv6Pieces: randomPieces))
+        XCTAssertEqual(Array(ipv6Pieces: parsedAddress[pieces: .binary]), pton_pieces(randomAddressString))
+      }
+    }
+  }
+
+#endif

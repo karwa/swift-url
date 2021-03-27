@@ -17,51 +17,23 @@ import XCTest
 
 @testable import WebURL
 
-// MARK: - Helpers
-
-
-#if canImport(Glibc)
-  import Glibc
-#elseif canImport(Darwin)
-  import Darwin
-#else
-  #error("Unknown libc variant")
-#endif
-
 extension UInt32 {
-  var octets: [UInt8] {
+  fileprivate var octets: [UInt8] {
     withUnsafeBytes(of: self) { Array($0) }
   }
 }
 
 extension Array {
-  init(ipv4Octets: IPv4Address.Octets) where Element == UInt8 {
+  fileprivate init(ipv4Octets: IPv4Address.Octets) where Element == UInt8 {
     self = [ipv4Octets.0, ipv4Octets.1, ipv4Octets.2, ipv4Octets.3]
   }
 }
 
-fileprivate func libc_aton(_ straddr: String) -> UInt32? {
-  var addr = in_addr()
-  guard inet_aton(straddr, &addr) != 0 else { return nil }
-  return addr.s_addr
-}
-
-fileprivate func libc_ntoa(_ netaddr: UInt32) -> String {
-  var addr = in_addr()
-  addr.s_addr = netaddr
-  return String(cString: inet_ntoa(addr))
-}
-
-
-// MARK: - Tests
-
-
 final class IPv4AddressTests: XCTestCase {
 
   func testBasic() {
-    // "192.255.2.5" = (192 * 256^3) + (255 * 256^2) + (2 * 256) + (5 * 1) = 3237937669
-    let expectedNumericAddress: UInt32 = 3_237_937_669
 
+    let expectedNumericAddress: UInt32 = 3_237_937_669
     let strings = [
       "3237937669",  // 1 component, decimal.
       "0xC0.077601005",  // 2 components, hex/octal.
@@ -74,71 +46,70 @@ final class IPv4AddressTests: XCTestCase {
         XCTFail("Failed to parse valid address: \(string)")
         continue
       }
-      // Octets.
-      XCTAssertEqual(Array(ipv4Octets: addr.octets), libc_aton(string)?.octets, "Octet mismatch: \(string)")
-      // UInt32.
-      XCTAssertEqual(addr[value: .numeric], expectedNumericAddress, "Value mismatch: \(string)")
-      XCTAssertEqual(addr[value: .binary], libc_aton(string), "Value mismatch: \(string)")
-      // Serialization.
+      XCTAssertEqual(Array(ipv4Octets: addr.octets), [192, 255, 2, 5])
       XCTAssertEqual(addr.serialized, "192.255.2.5")
-      // Idempotence.
-      if let reparsedAddr = IPv4Address(addr.serialized) {
-        XCTAssertEqual(
-          Array(ipv4Octets: addr.octets), Array(ipv4Octets: reparsedAddr.octets),
-          "Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
-      } else {
-        XCTFail("Not idempotent. Original: '\(string)'. Printed: '\(addr.serialized)'")
+      XCTAssertEqual(addr[value: .numeric], expectedNumericAddress)
+      XCTAssertEqual(addr[value: .binary], UInt32(bigEndian: expectedNumericAddress))
+
+      guard let reparsedAddr = IPv4Address(addr.serialized) else {
+        XCTFail("Failed to reparse. Original: '\(string)'. Parsed: '\(addr.serialized)'")
+        continue
       }
+      XCTAssertEqual(Array(ipv4Octets: addr.octets), Array(ipv4Octets: reparsedAddr.octets))
+      XCTAssertEqual(addr.serialized, reparsedAddr.serialized)
     }
   }
 
   func testTrailingDots() {
-    let expectedNumericAddress: UInt32 = 2_071_690_107
+
+    let expectedNumericAddress: UInt32 = 16_909_060
 
     // Zero trailing dots are allowed (obviously).
-    if let addr = IPv4Address("123.123.123.123") {
+    if let addr = IPv4Address("1.2.3.4") {
+      XCTAssertEqual(Array(ipv4Octets: addr.octets), [1, 2, 3, 4])
+      XCTAssertEqual(addr.serialized, "1.2.3.4")
       XCTAssertEqual(addr[value: .numeric], expectedNumericAddress)
-      XCTAssertEqual(addr.serialized, "123.123.123.123")
-      XCTAssertEqual(Array(ipv4Octets: addr.octets), libc_aton("123.123.123.123")?.octets)
-      XCTAssertEqual(addr[value: .binary], libc_aton("123.123.123.123"))
+      XCTAssertEqual(addr[value: .binary], UInt32(bigEndian: expectedNumericAddress))
     } else {
       XCTFail("Failed to parse valid address")
     }
-    // One trailing dot is allowed (by us, but not libc).
-    if let addr = IPv4Address("123.123.123.123.") {
+
+    // One trailing dot is allowed.
+    if let addr = IPv4Address("1.2.3.4.") {
+      XCTAssertEqual(Array(ipv4Octets: addr.octets), [1, 2, 3, 4])
+      XCTAssertEqual(addr.serialized, "1.2.3.4")
       XCTAssertEqual(addr[value: .numeric], expectedNumericAddress)
-      XCTAssertEqual(addr.serialized, "123.123.123.123")
-      // Same value as without trailing dot.
-      XCTAssertEqual(Array(ipv4Octets: addr.octets), libc_aton("123.123.123.123")?.octets)
-      XCTAssertEqual(addr[value: .binary], libc_aton("123.123.123.123"))
+      XCTAssertEqual(addr[value: .binary], UInt32(bigEndian: expectedNumericAddress))
     } else {
       XCTFail("Failed to parse valid address")
     }
+
     // Two or more trailing dots are not allowed.
-    if let _ = IPv4Address("123.123.123.123..") { XCTFail("Expected fail") }
-    if let _ = IPv4Address("123.123.123.123...") { XCTFail("Expected fail") }
-    if let _ = IPv4Address("123.123.123.123....") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("1.2.3.4..") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("1.2.3.4...") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("1.2.3.4....") { XCTFail("Expected fail") }
     // More than 4 components are not allowed.
-    if let _ = IPv4Address("123.123.123.123.123") { XCTFail("Expected fail") }
-    if let _ = IPv4Address("123.123.123.123.123.") { XCTFail("Expected fail") }
-    if let _ = IPv4Address("123.123.123.123.123..") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("1.2.3.4.5") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("1.2.3.4.5.") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("1.2.3.4.5..") { XCTFail("Expected fail") }
   }
 
   func testTrailingZeroes() {
+
     if let addr = IPv4Address("234") {
       XCTAssertEqual(Array(ipv4Octets: addr.octets), [0, 0, 0, 234])
-      XCTAssertEqual(addr[value: .binary], libc_aton("234"))
-      XCTAssertEqual(addr[value: .numeric], 234)
       XCTAssertEqual(addr.serialized, "0.0.0.234")
+      XCTAssertEqual(addr[value: .numeric], 234)
+      XCTAssertEqual(addr[value: .binary], UInt32(bigEndian: 234))
     } else {
       XCTFail("Failed to parse valid address")
     }
 
     if let addr = IPv4Address("234.0") {
       XCTAssertEqual(Array(ipv4Octets: addr.octets), [234, 0, 0, 0])
-      XCTAssertEqual(addr[value: .binary], libc_aton("234.0"))
-      XCTAssertEqual(addr[value: .numeric], 3_925_868_544)
       XCTAssertEqual(addr.serialized, "234.0.0.0")
+      XCTAssertEqual(addr[value: .numeric], 3_925_868_544)
+      XCTAssertEqual(addr[value: .binary], UInt32(bigEndian: 3_925_868_544))
     } else {
       XCTFail("Failed to parse valid address")
     }
@@ -156,18 +127,18 @@ final class IPv4AddressTests: XCTestCase {
         XCTFail("Failed to parse valid address")
         continue
       }
-      // inet_aton doesn't accept trailing dots, but the WHATWG URL spec does.
-      let libcString = string.hasSuffix(".") ? String(string.dropLast()) : string
 
       XCTAssertEqual(Array(ipv4Octets: addr.octets), [234, 0, 0, 9])
-      XCTAssertEqual(addr[value: .binary], libc_aton(libcString))
-      XCTAssertEqual(addr[value: .numeric], expectedNumericAddress)
       XCTAssertEqual(addr.serialized, "234.0.0.9")
-      if let reparsed = IPv4Address(addr.serialized) {
-        XCTAssertEqual(Array(ipv4Octets: addr.octets), Array(ipv4Octets: reparsed.octets))
-      } else {
-        XCTFail("Address was not idempotent: \(addr.serialized)")
+      XCTAssertEqual(addr[value: .numeric], expectedNumericAddress)
+      XCTAssertEqual(addr[value: .binary], UInt32(bigEndian: expectedNumericAddress))
+
+      guard let reparsedAddr = IPv4Address(addr.serialized) else {
+        XCTFail("Failed to reparse. Original: '\(string)'. Parsed: '\(addr.serialized)'")
+        continue
       }
+      XCTAssertEqual(Array(ipv4Octets: addr.octets), Array(ipv4Octets: reparsedAddr.octets))
+      XCTAssertEqual(addr.serialized, reparsedAddr.serialized)
     }
 
     // Next, test that we parse the correct value with any valid number of trailing zeroes.
@@ -187,18 +158,17 @@ final class IPv4AddressTests: XCTestCase {
         continue
       }
 
-      // inet_aton doesn't accept trailing dots, but the WHATWG URL spec does.
-      let libcString = string.hasSuffix(".") ? String(string.dropLast()) : string
-
       XCTAssertEqual(Array(ipv4Octets: addr.octets), [234, 9, 0, 0])
-      XCTAssertEqual(addr[value: .binary], libc_aton(libcString))
-      XCTAssertEqual(addr[value: .numeric], expectedNumericAddress)
       XCTAssertEqual(addr.serialized, "234.9.0.0")
-      if let reparsed = IPv4Address(addr.serialized) {
-        XCTAssertEqual(Array(ipv4Octets: addr.octets), Array(ipv4Octets: reparsed.octets))
-      } else {
-        XCTFail("Address was not idempotent: \(addr.serialized)")
+      XCTAssertEqual(addr[value: .numeric], expectedNumericAddress)
+      XCTAssertEqual(addr[value: .binary], UInt32(bigEndian: expectedNumericAddress))
+
+      guard let reparsedAddr = IPv4Address(addr.serialized) else {
+        XCTFail("Failed to reparse. Original: '\(string)'. Parsed: '\(addr.serialized)'")
+        continue
       }
+      XCTAssertEqual(Array(ipv4Octets: addr.octets), Array(ipv4Octets: reparsedAddr.octets))
+      XCTAssertEqual(addr.serialized, reparsedAddr.serialized)
     }
 
     // Finally, test that we reject an invalid number of trailing zeroes.
@@ -241,51 +211,74 @@ final class IPv4AddressTests: XCTestCase {
 
 // Randomized testing.
 
-extension IPv4AddressTests {
+#if canImport(Glibc) || canImport(Darwin)
 
-  /// Generate 1000 random IP addresses, serialize them via IPAddress.
-  /// Then serialize the same addresss via `ntoa`, and ensure it returns the same string.
-  /// Then parse our serialized version back via `aton`, and ensure it returns the same address.
-  /// Then parse our serialized version again, and ensure that it returns the same address.
-  ///
-  func testRandom_Serialisation() {
-    for _ in 0..<1000 {
-      let expected = IPv4Address.Utils.randomAddress()
-      let address = IPv4Address(value: expected, .numeric)
+  #if canImport(Glibc)
+    import Glibc
+  #else
+    import Darwin
+  #endif
 
-      // Serialize the same address with libc (note: ntoa expects network byte order). It should return the same String.
-      XCTAssertEqual(libc_ntoa(expected.bigEndian), address.serialized)
+  func libc_aton(_ straddr: String) -> UInt32? {
+    var addr = in_addr()
+    guard inet_aton(straddr, &addr) != 0 else { return nil }
+    return addr.s_addr
+  }
 
-      // Parse our serialized output with libc. It should return the same address.
-      let libcAddress = libc_aton(address.serialized)
-      XCTAssertEqual(libcAddress?.octets, Array(ipv4Octets: address.octets), "Mismatch detected for address \(address)")
-      XCTAssertEqual(libcAddress, address[value: .binary], "Mismatch detected for address \(address)")
+  func libc_ntoa(_ netaddr: UInt32) -> String {
+    var addr = in_addr()
+    addr.s_addr = netaddr
+    return String(cString: inet_ntoa(addr))
+  }
 
-      // Re-parse our serialized output. It should return the same address.
-      if let reparsed = IPv4Address(address.serialized) {
-        XCTAssertEqual(Array(ipv4Octets: address.octets), Array(ipv4Octets: reparsed.octets))
-      } else {
-        XCTFail("Address is not idempotent: \(address.serialized)")
+  extension IPv4AddressTests {
+
+    /// Generate 1000 random IP addresses, serialize them via IPAddress.
+    /// Then serialize the same addresss via `ntoa`, and ensure it returns the same string.
+    /// Then parse our serialized version back via `aton`, and ensure it returns the same address.
+    /// Then parse our serialized version again, and ensure that it returns the same address.
+    ///
+    func testRandom_Serialisation() {
+      for _ in 0..<1000 {
+        let expected = IPv4Address.Utils.randomAddress()
+        let address = IPv4Address(value: expected, .numeric)
+
+        // Serialize the same address with libc (note: ntoa expects network byte order). It should return the same String.
+        XCTAssertEqual(libc_ntoa(expected.bigEndian), address.serialized)
+
+        // Parse our serialized output with libc. It should return the same address.
+        let libcAddress = libc_aton(address.serialized)
+        XCTAssertEqual(
+          libcAddress?.octets, Array(ipv4Octets: address.octets), "Mismatch detected for address \(address)")
+        XCTAssertEqual(libcAddress, address[value: .binary], "Mismatch detected for address \(address)")
+
+        // Re-parse our serialized output. It should return the same address.
+        if let reparsed = IPv4Address(address.serialized) {
+          XCTAssertEqual(Array(ipv4Octets: address.octets), Array(ipv4Octets: reparsed.octets))
+        } else {
+          XCTFail("Address is not idempotent: \(address.serialized)")
+        }
+      }
+    }
+
+    /// Generate 1000 random IP Address Strings, parse them via IPAddress,
+    /// check that the numerical value matches the expected network address,
+    /// and that `aton` gets the same result when parsing the same random String.
+    ///
+    func testRandom_Parsing() {
+      for _ in 0..<1000 {
+        let randomNumericAddress = IPv4Address.Utils.randomAddress()
+        let randomAddressString = IPv4Address.Utils.randomString(address: randomNumericAddress)
+
+        guard let parsed = IPv4Address(randomAddressString) else {
+          XCTFail("Failed to parse address: \(randomAddressString); expected address: \(randomNumericAddress)")
+          continue
+        }
+        XCTAssertEqual(Array(ipv4Octets: parsed.octets), libc_aton(randomAddressString)?.octets)
+        XCTAssertEqual(parsed[value: .numeric], randomNumericAddress)
+        XCTAssertEqual(parsed[value: .binary], libc_aton(randomAddressString))
       }
     }
   }
 
-  /// Generate 1000 random IP Address Strings, parse them via IPAddress,
-  /// check that the numerical value matches the expected network address,
-  /// and that `aton` gets the same result when parsing the same random String.
-  ///
-  func testRandom_Parsing() {
-    for _ in 0..<1000 {
-      let randomNumericAddress = IPv4Address.Utils.randomAddress()
-      let randomAddressString = IPv4Address.Utils.randomString(address: randomNumericAddress)
-
-      guard let parsed = IPv4Address(randomAddressString) else {
-        XCTFail("Failed to parse address: \(randomAddressString); expected address: \(randomNumericAddress)")
-        continue
-      }
-      XCTAssertEqual(Array(ipv4Octets: parsed.octets), libc_aton(randomAddressString)?.octets)
-      XCTAssertEqual(parsed[value: .numeric], randomNumericAddress)
-      XCTAssertEqual(parsed[value: .binary], libc_aton(randomAddressString))
-    }
-  }
-}
+#endif
