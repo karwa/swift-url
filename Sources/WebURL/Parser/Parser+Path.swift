@@ -526,6 +526,9 @@ struct PathMetrics {
   /// The precise length of the simplified, escaped path string, in bytes.
   private(set) var requiredCapacity: Int
 
+  /// The length of the first path component, in bytes, including its leading "/".
+  private(set) var firstComponentLength: Int
+
   /// The number of components in the simplified path.
   private(set) var numberOfComponents: Int
 
@@ -557,6 +560,7 @@ extension PathMetrics {
 
   private init() {
     self.requiredCapacity = 0
+    self.firstComponentLength = 0
     self.numberOfComponents = 0
     self.needsEscaping = false
     self.requiresSigil = false
@@ -570,18 +574,20 @@ extension PathMetrics {
       _ pathComponent: InputString.SubSequence, isWindowsDriveLetter: Bool
     ) {
       metrics.numberOfComponents += 1
-      metrics.requiredCapacity += 1  // "/"
+      metrics.firstComponentLength = 1  // "/"
       for byteGroup in pathComponent.lazy.percentEncoded(using: URLEncodeSet.Path.self) {
         if case .percentEncodedByte = byteGroup {
           metrics.needsEscaping = true
         }
-        metrics.requiredCapacity += byteGroup.count
+        metrics.firstComponentLength += byteGroup.count
       }
+      metrics.requiredCapacity += metrics.firstComponentLength
     }
 
     mutating func visitEmptyPathComponents(_ n: Int) {
       metrics.numberOfComponents += n
       metrics.requiredCapacity += n
+      metrics.firstComponentLength = 1
     }
 
     mutating func visitPathSigil() {
@@ -590,7 +596,8 @@ extension PathMetrics {
 
     mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
       metrics.numberOfComponents += 1
-      metrics.requiredCapacity += 1 /* "/" */ + pathComponent.count
+      metrics.firstComponentLength = 1 /* "/" */ + pathComponent.count
+      metrics.requiredCapacity += metrics.firstComponentLength
     }
   }
 }

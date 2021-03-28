@@ -409,6 +409,7 @@ extension URLStorage {
       absolutePathsCopyWindowsDriveFromBase: false)
     var newStructure = oldStructure
     newStructure.pathLength = pathInfo.requiredCapacity
+    newStructure.firstPathComponentLength = pathInfo.firstComponentLength
 
     var commands: [ReplaceSubrangeOperation] = []
     switch (oldStructure.sigil, pathInfo.requiresSigil) {

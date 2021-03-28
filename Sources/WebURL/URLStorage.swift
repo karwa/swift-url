@@ -82,6 +82,10 @@ struct URLStructure<SizeType: FixedWidthInteger> {
   ///
   var fragmentLength: SizeType
 
+  /// The length of the first path component. If zero, the path does not contain any components (e.g. it may not have a path, or may be a 'cannot-be-a-base' URL).
+  ///
+  var firstPathComponentLength: SizeType
+
   /// The sigil, if present. The sigil comes immediately after the scheme and identifies the component following it.
   ///
   /// If `sigil == .authority`, the next component is an authority, consisting of username/password/hostname/port components.
@@ -120,7 +124,8 @@ extension URLStructure: Equatable {
   static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.schemeLength == rhs.schemeLength && lhs.usernameLength == rhs.usernameLength
       && lhs.passwordLength == rhs.passwordLength && lhs.hostnameLength == rhs.hostnameLength
-      && lhs.portLength == rhs.portLength && lhs.pathLength == rhs.pathLength && lhs.queryLength == rhs.queryLength
+      && lhs.portLength == rhs.portLength && lhs.pathLength == rhs.pathLength
+      && lhs.firstPathComponentLength == rhs.firstPathComponentLength && lhs.queryLength == rhs.queryLength
       && lhs.fragmentLength == rhs.fragmentLength && lhs.sigil == rhs.sigil && lhs.schemeKind == rhs.schemeKind
       && lhs.cannotBeABaseURL == rhs.cannotBeABaseURL
   }
@@ -139,6 +144,7 @@ extension URLStructure {
     self.pathLength = 0
     self.queryLength = 0
     self.fragmentLength = 0
+    self.firstPathComponentLength = 0
     self.sigil = .none
     self.schemeKind = .other
     self.cannotBeABaseURL = false
@@ -162,6 +168,7 @@ extension URLStructure {
       pathLength: SizeType(otherStructure.pathLength),
       queryLength: SizeType(otherStructure.queryLength),
       fragmentLength: SizeType(otherStructure.fragmentLength),
+      firstPathComponentLength: SizeType(otherStructure.firstPathComponentLength),
       sigil: otherStructure.sigil,
       schemeKind: otherStructure.schemeKind,
       cannotBeABaseURL: otherStructure.cannotBeABaseURL,
@@ -232,6 +239,15 @@ extension URLStructure {
 
     if queryLength == 0 || queryLength == 1 {
       assert(queryIsKnownFormEncoded, "Empty and nil queries must always be flagged as being form-encoded")
+    }
+
+    if cannotBeABaseURL {
+      assert(firstPathComponentLength == 0, "cannot-be-a-base URLs do not have path components")
+    } else {
+      assert(firstPathComponentLength <= pathLength, "First path component is longer than the entire path")
+      if pathLength != 0 {
+        assert(firstPathComponentLength != 0, "First path component length not set")
+      }
     }
   }
 }
