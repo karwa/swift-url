@@ -372,9 +372,9 @@ extension ParsedURLString.ProcessedMapping {
     case .some(let path) where info.cannotBeABaseURL:
       var didEscape = false
       if metrics?.componentsWhichMaySkipEscaping.contains(.path) == true {
-        writer.writePath { $0(inputString[path]) }
+        writer.writePath(firstComponentLength: 0) { $0(inputString[path]) }
       } else {
-        writer.writePath { writer in
+        writer.writePath(firstComponentLength: 0) { writer in
           didEscape = inputString[path].lazy.percentEncoded(using: URLEncodeSet.C0.self).write(to: writer)
         }
       }
@@ -396,7 +396,10 @@ extension ParsedURLString.ProcessedMapping {
       if pathMetrics.requiresSigil && (hasAuthority == false) {
         writer.writePathSigil()
       }
-      writer.writeUnsafePath(length: pathMetrics.requiredCapacity) { buffer in
+      writer.writeUnsafePath(
+        length: pathMetrics.requiredCapacity,
+        firstComponentLength: pathMetrics.firstComponentLength
+      ) { buffer in
         return buffer.writeNormalizedPath(
           parsing: inputString[path],
           schemeKind: schemeKind,
@@ -417,13 +420,15 @@ extension ParsedURLString.ProcessedMapping {
           if case .path = baseURL.storage.structure.sigil, hasAuthority == false {
             writer.writePathSigil()
           }
-          writer.writePath { writePiece in writePiece(basePath) }
+          writer.writePath(firstComponentLength: baseURL.storage.structure.firstPathComponentLength) { writePiece in
+            writePiece(basePath)
+          }
         }
       }
 
     case .none where schemeKind.isSpecial:
       // Special URLs always have a path.
-      writer.writePath { writePiece in
+      writer.writePath(firstComponentLength: 1) { writePiece in
         writePiece(CollectionOfOne(ASCII.forwardSlash.codePoint))
       }
 

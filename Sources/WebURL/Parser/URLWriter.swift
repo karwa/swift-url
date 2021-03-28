@@ -102,7 +102,7 @@ protocol URLWriter {
   /// Appends the bytes given by `writer`.
   /// The content must already be percent-encoded. No separators are added before or after the content.
   ///
-  mutating func writePath<T>(_ writer: (WriterFunc<T>) -> Void)
+  mutating func writePath<T>(firstComponentLength: Int, _ writer: (WriterFunc<T>) -> Void)
   where T: Collection, T.Element == UInt8
 
   /// Appends an uninitialized space of size `length` and calls the given closure to allow for the path content to be written out of order.
@@ -110,7 +110,7 @@ protocol URLWriter {
   /// Content written in to the buffer must already be percent-encoded. No separators are added before or after the content.
   ///
   mutating func writeUnsafePath(
-    length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
+    length: Int, firstComponentLength: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
   )
 
   /// Appends the query separator character (`?`), followed by the bytes provided by `queryWriter`.
@@ -273,8 +273,9 @@ struct StructureAndMetricsCollector: URLWriter {
     requiredCapacity += authority.count
   }
 
-  mutating func writePath<T>(_ writer: ((T) -> Void) -> Void)
+  mutating func writePath<T>(firstComponentLength: Int, _ writer: ((T) -> Void) -> Void)
   where T: Collection, T.Element == UInt8 {
+    structure.firstPathComponentLength = firstComponentLength
     structure.pathLength = 0
     writer {
       structure.pathLength += $0.count
@@ -283,8 +284,9 @@ struct StructureAndMetricsCollector: URLWriter {
   }
 
   mutating func writeUnsafePath(
-    length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
+    length: Int, firstComponentLength: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
+    structure.firstPathComponentLength = firstComponentLength
     structure.pathLength = length
     requiredCapacity += length
   }
@@ -417,14 +419,16 @@ struct UnsafePresizedBufferWriter: URLWriter {
     writeBytes(authority)
   }
 
-  mutating func writePath<T>(_ writer: ((T) -> Void) -> Void)
+  mutating func writePath<T>(firstComponentLength: Int, _ writer: ((T) -> Void) -> Void)
   where T: Collection, T.Element == UInt8 {
     writer { piece in
       writeBytes(piece)
     }
   }
 
-  mutating func writeUnsafePath(length: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int) {
+  mutating func writeUnsafePath(
+    length: Int, firstComponentLength: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
+  ) {
     let space = UnsafeMutableBufferPointer(start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten, count: length)
     let pathBytesWritten = writer(space)
     assert(pathBytesWritten == length)

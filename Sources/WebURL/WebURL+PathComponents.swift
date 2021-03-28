@@ -83,7 +83,7 @@ extension WebURL {
   public var pathComponents: PathComponents? {
     get {
       guard self._cannotBeABaseURL == false else { return nil }
-      return PathComponents(url: self, startIndex: self.storage.pathComponentsStartIndex)
+      return PathComponents(url: self)
     }
     _modify {
       guard self._cannotBeABaseURL == false else {
@@ -92,7 +92,7 @@ extension WebURL {
         precondition(value == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
         return
       }
-      var components = Optional(PathComponents(url: self, startIndex: self.storage.pathComponentsStartIndex))
+      var components = Optional(PathComponents(url: self))
       self.storage = _tempStorage
       defer {
         guard let modifiedURL = components?.url else {
@@ -114,11 +114,16 @@ extension WebURL {
     }
   }
 
-  /// A view of the components which make up a URL's path.
+  /// A view of the components in a URL's `path`.
   ///
   public struct PathComponents {
-    fileprivate var url: WebURL
-    public fileprivate(set) var startIndex: Index
+
+    @usableFromInline
+    internal var url: WebURL
+
+    internal init(url: WebURL) {
+      self.url = url
+    }
   }
 }
 
@@ -174,6 +179,10 @@ extension WebURL.PathComponents {
 }
 
 extension WebURL.PathComponents: BidirectionalCollection {
+
+  public var startIndex: Index {
+    url.storage.pathComponentsStartIndex
+  }
 
   public var endIndex: Index {
     url.storage.pathComponentsEndIndex
@@ -333,7 +342,6 @@ extension WebURL.PathComponents {
         return result.0
       }
     )
-    self.startIndex = url.storage.pathComponentsStartIndex
     return newSubrange!
   }
 }
@@ -615,20 +623,6 @@ extension WebURL.PathComponents {
 
 extension AnyURLStorage {
 
-  internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int {
-    switch self {
-    case .small(let small): return small.endOfPathComponent(startingAt: componentStartOffset)
-    case .generic(let generic): return generic.endOfPathComponent(startingAt: componentStartOffset)
-    }
-  }
-
-  internal func startOfPathComponent(endingAt componentEndOffset: Int) -> Int? {
-    switch self {
-    case .small(let small): return small.startOfPathComponent(endingAt: componentEndOffset)
-    case .generic(let generic): return generic.startOfPathComponent(endingAt: componentEndOffset)
-    }
-  }
-
   internal var pathComponentsStartIndex: WebURL.PathComponents.Index {
     switch self {
     case .small(let small): return small.pathComponentsStartIndex
@@ -642,23 +636,32 @@ extension AnyURLStorage {
     case .generic(let generic): return generic.pathComponentsEndIndex
     }
   }
+
+  internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int {
+    switch self {
+    case .small(let small): return small.endOfPathComponent(startingAt: componentStartOffset)
+    case .generic(let generic): return generic.endOfPathComponent(startingAt: componentStartOffset)
+    }
+  }
+
+  internal func startOfPathComponent(endingAt componentEndOffset: Int) -> Int? {
+    switch self {
+    case .small(let small): return small.startOfPathComponent(endingAt: componentEndOffset)
+    case .generic(let generic): return generic.startOfPathComponent(endingAt: componentEndOffset)
+    }
+  }
 }
 
 extension URLStorage {
 
   internal var pathComponentsStartIndex: WebURL.PathComponents.Index {
     let pathStart = header.structure.rangeForReplacingCodeUnits(of: .path).lowerBound
-    return WebURL.PathComponents.Index(codeUnitRange: pathStart..<endOfPathComponent(startingAt: pathStart))
+    return WebURL.PathComponents.Index(codeUnitRange: pathStart..<pathStart + header.structure.firstPathComponentLength)
   }
 
   internal var pathComponentsEndIndex: WebURL.PathComponents.Index {
     let pathEnd = header.structure.rangeForReplacingCodeUnits(of: .path).upperBound
     return WebURL.PathComponents.Index(codeUnitRange: pathEnd..<pathEnd)
-  }
-
-  internal var pathEndsWithTrailingSlash: Bool {
-    let pathRange = header.structure.rangeForReplacingCodeUnits(of: .path)
-    return pathRange.count >= 1 && withEntireString { $0[pathRange.upperBound - 1] == ASCII.forwardSlash.codePoint }
   }
 
   internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int {
@@ -735,6 +738,7 @@ extension URLStorage {
         if !oldStructure.schemeKind.isSpecial, oldStructure.hasAuthority {
           var newStructure = oldStructure
           newStructure.pathLength = 0
+          newStructure.firstPathComponentLength = 0
           replaced = removeSubrange(oldPathRange, newStructure: newStructure).newStorage
         } else {
           var commands = [ReplaceSubrangeOperation]()
@@ -744,6 +748,7 @@ extension URLStorage {
             newStructure.sigil = .none
           }
           newStructure.pathLength = 1
+          newStructure.firstPathComponentLength = 1
           commands.append(
             .replace(
               subrange: oldPathRange, withCount: 1,
@@ -770,55 +775,62 @@ extension URLStorage {
       counter += 1 + component.lazy.percentEncoded(using: PathComponentEncodeSet.self).joined().count
     }
 
-    // Find out if the new path requires adding/removing a path sigil.
-    // We need a sigil if there is no authority, the path has >1 component, and the first component is empty.
-    if oldStructure.hasAuthority == false {
-      if replacedRange.lowerBound == oldPathRange.lowerBound {
-        if let firstInsertedComponentLength = firstNewComponentLength {
-          // Inserting at the front of the path. The first component is from the new components.
-          let firstComponentEmpty = (firstInsertedComponentLength == 1)
-          let hasCmptsAfter =
-            (replacedRange.upperBound != oldPathRange.upperBound)
-            || (insertedPathLength != firstInsertedComponentLength)
-          newStructure.sigil = firstComponentEmpty && hasCmptsAfter ? .path : .none
-        } else {
-          // Removing at the front of the path. The first component (if any) is at the end of the range.
-          let firstComponentEmpty = (replacedIndices.upperBound.range.count == 1)
-          let hasCmptsAfter = (replacedIndices.upperBound.range.upperBound != oldPathRange.upperBound)
-          newStructure.sigil = firstComponentEmpty && hasCmptsAfter ? .path : .none
-        }
-      } else {
-        let oldStartIndex = pathComponentsStartIndex
-        let firstComponentEmpty = (oldStartIndex.range.count == 1)
-        let hasCmptsAfter: Bool
-        if firstNewComponentLength != nil {
-          // Inserting after the first component means there will certainly be >1 component.
-          hasCmptsAfter = true
-        } else {
-          // When removing, unless removing everything after the first component, there will be >1 component.
-          hasCmptsAfter =
-            (replacedRange.lowerBound != oldStartIndex.range.upperBound)
-            || (replacedRange.upperBound != oldPathRange.upperBound)
-        }
+    // Calculate what the new first component will be, and whether the URL might require a path sigil.
+    // A URL requires a sigil if there is no authority, the path has >1 component, and the first component is empty.
+
+    if replacedRange.lowerBound == oldPathRange.lowerBound {
+      if let firstInsertedComponentLength = firstNewComponentLength {
+        // Inserting at the front of the path.
+        // The first component will be from the inserted content.
+        let firstComponentEmpty = (firstInsertedComponentLength == 1)
+        let hasCmptsAfter =
+          (replacedRange.upperBound != oldPathRange.upperBound)
+          || (insertedPathLength != firstInsertedComponentLength)
         newStructure.sigil = firstComponentEmpty && hasCmptsAfter ? .path : .none
+        newStructure.firstPathComponentLength = firstInsertedComponentLength
+      } else {
+        // Removing at the front of the path.
+        // The first component (if any) will be at replacedIndices.upperBound.
+        let firstComponentEmpty = (replacedIndices.upperBound.range.count == 1)
+        let hasCmptsAfter = (replacedIndices.upperBound.range.upperBound != oldPathRange.upperBound)
+        newStructure.sigil = firstComponentEmpty && hasCmptsAfter ? .path : .none
+        newStructure.firstPathComponentLength = replacedIndices.upperBound.range.count
       }
-      switch (oldStructure.sigil, newStructure.sigil) {
-      case (.authority, _), (_, .authority):
-        fatalError()
-      case (.none, .none), (.path, .path):
-        break
-      case (.none, .path):
-        commands.append(
-          .replace(
-            subrange: oldStructure.rangeForReplacingSigil,
-            withCount: Sigil.path.length,
-            writer: Sigil.path.unsafeWrite)
-        )
-        pathStartOffset = 2
-      case (.path, .none):
-        commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
-        pathStartOffset = -2
+    } else {
+      // Insertion/removal elsewhere in the path.
+      // The current first component will be maintained.
+      let oldStartIndex = pathComponentsStartIndex
+      let firstComponentEmpty = (oldStartIndex.range.count == 1)
+      let hasCmptsAfter: Bool
+      if firstNewComponentLength != nil {
+        // Inserting after the first component means there will certainly be >1 component.
+        hasCmptsAfter = true
+      } else {
+        // Unless removing everything after the first component, there will be >1 component remaining.
+        hasCmptsAfter =
+          (replacedRange.lowerBound != oldStartIndex.range.upperBound)
+          || (replacedRange.upperBound != oldPathRange.upperBound)
       }
+      newStructure.sigil = firstComponentEmpty && hasCmptsAfter ? .path : .none
+    }
+    switch (oldStructure.sigil, newStructure.sigil) {
+    case (.authority, _):
+      newStructure.sigil = .authority
+    case (.none, .none), (.path, .path):
+      break
+    case (.none, .path):
+      commands.append(
+        .replace(
+          subrange: oldStructure.rangeForReplacingSigil,
+          withCount: Sigil.path.length,
+          writer: Sigil.path.unsafeWrite)
+      )
+      pathStartOffset = 2
+    case (.path, .none):
+      commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
+      pathStartOffset = -2
+    case (_, .authority):
+      preconditionFailure("Modifying the path cannot cause an authority sigil to be inserted")
     }
 
     newStructure.pathLength -= replacedRange.count
@@ -844,7 +856,7 @@ extension URLStorage {
     // Normalize Windows drive letters.
     // It is much simpler to fix this up after the replacement, as the first component could come from either
     // the user-provided components or the existing path. Luckily, it doesn't change the length or structure of the URL,
-    // so we don't need to worry about switching URLStorage representations and can do a straight code-unit swap.
+    // so we don't need to worry about switching URLStorage representations and can do a simple code-unit swap.
     if case .file = newStructure.schemeKind {
       switch replaced {
       case .small(var small):
@@ -874,6 +886,11 @@ extension URLStorage {
     let newLowerBound = WebURL.PathComponents.Index(codeUnitRange: lowerBoundStartPosition..<lowerBoundEndPosition)
     let newUpperBound = WebURL.PathComponents.Index(codeUnitRange: upperBoundStartPosition..<upperBoundEndPosition)
     return (replaced, .left(Range(uncheckedBounds: (newLowerBound, newUpperBound))))
+  }
+
+  private var pathEndsWithTrailingSlash: Bool {
+    let pathRange = header.structure.rangeForReplacingCodeUnits(of: .path)
+    return pathRange.count >= 1 && withEntireString { $0[pathRange.upperBound - 1] == ASCII.forwardSlash.codePoint }
   }
 
   private mutating func normalizeWindowsDriveLetterIfPresent() {
