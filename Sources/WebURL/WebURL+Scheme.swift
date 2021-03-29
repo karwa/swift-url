@@ -47,34 +47,34 @@ extension WebURL.SchemeKind {
 
     var iter = ASCII.Lowercased(schemeContent).makeIterator()
     switch iter.next() {
-    case .h?:
-      if iter.next() == .t, iter.next() == .t, iter.next() == .p {
+    case ASCII.h.codePoint:
+      if iter.next() == ASCII.t.codePoint, iter.next() == ASCII.t.codePoint, iter.next() == ASCII.p.codePoint {
         if let char = iter.next() {
-          self = (char == .s && iter.next() == nil) ? .https : .other
+          self = (char == ASCII.s.codePoint && iter.next() == nil) ? .https : .other
         } else {
           self = .http
         }
         return
       }
-    case .f?:
+    case ASCII.f.codePoint:
       switch iter.next() {
-      case .i?:
-        if iter.next() == .l, iter.next() == .e, iter.next() == nil {
+      case ASCII.i.codePoint:
+        if iter.next() == ASCII.l.codePoint, iter.next() == ASCII.e.codePoint, iter.next() == nil {
           self = .file
           return
         }
-      case .t?:
-        if iter.next() == .p, iter.next() == nil {
+      case ASCII.t.codePoint:
+        if iter.next() == ASCII.p.codePoint, iter.next() == nil {
           self = .ftp
           return
         }
       default:
         break
       }
-    case .w?:
-      if iter.next() == .s {
+    case ASCII.w.codePoint:
+      if iter.next() == ASCII.s.codePoint {
         if let char = iter.next() {
-          self = (char == .s && iter.next() == nil) ? .wss : .other
+          self = (char == ASCII.s.codePoint && iter.next() == nil) ? .wss : .other
         } else {
           self = .ws
         }

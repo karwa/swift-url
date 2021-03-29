@@ -104,11 +104,13 @@ extension WebURL.QueryParameters {
       var result = [UInt8]()
       result.reserveCapacity(queryBytes.count + 1)
       for kvp in RawKeyValuePairs(utf8: queryBytes) {
-        result.append(contentsOf: queryBytes[kvp.key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-                        .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
+        result.append(
+          contentsOf: queryBytes[kvp.key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
+            .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
         result.append(ASCII.equalSign.codePoint)
-        result.append(contentsOf: queryBytes[kvp.value].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-                        .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
+        result.append(
+          contentsOf: queryBytes[kvp.value].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
+            .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
         result.append(ASCII.ampersand.codePoint)
       }
       _ = result.popLast()
@@ -351,10 +353,10 @@ extension WebURL.QueryParameters {
 
   /// Appends the given sequence of key-value pairs to these query parameters. Existing values will not be removed.
   ///
-  @_specialize(where CollectionType == CollectionOfOne<String>, StringType == String)
-  @_specialize(where CollectionType == CollectionOfOne<Substring>, StringType == Substring)
-  @_specialize(where CollectionType == [String], StringType == String)
-  @_specialize(where CollectionType == [Substring], StringType == Substring)
+  //  @_specialize(where CollectionType == CollectionOfOne<String>, StringType == String)
+  //  @_specialize(where CollectionType == CollectionOfOne<Substring>, StringType == Substring)
+  //  @_specialize(where CollectionType == [String], StringType == String)
+  //  @_specialize(where CollectionType == [Substring], StringType == Substring)
   public mutating func append<CollectionType, StringType>(
     contentsOf keyValuePairs: CollectionType
   ) where CollectionType: Collection, CollectionType.Element == (StringType, StringType), StringType: StringProtocol {

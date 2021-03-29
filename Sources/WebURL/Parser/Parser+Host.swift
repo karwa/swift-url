@@ -40,8 +40,8 @@ extension ParsedHost {
       return
     }
     var ipv6Slice = hostname[...]
-    if ipv6Slice.removeFirst() == ASCII.leftSquareBracket {
-      guard ipv6Slice.popLast() == ASCII.rightSquareBracket else {
+    if ipv6Slice.removeFirst() == ASCII.leftSquareBracket.codePoint {
+      guard ipv6Slice.popLast() == ASCII.rightSquareBracket.codePoint else {
         callback.validationError(.unclosedIPv6Address)
         return nil
       }

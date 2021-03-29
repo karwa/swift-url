@@ -369,9 +369,9 @@ extension IPv6Address {
       var idx = input.startIndex
 
       // Handle leading compressed pieces ('::').
-      if input[idx] == ASCII.colon {
+      if input[idx] == ASCII.colon.codePoint {
         idx = input.index(after: idx)
-        guard idx != input.endIndex, input[idx] == ASCII.colon else {
+        guard idx != input.endIndex, input[idx] == ASCII.colon.codePoint else {
           callback.validationError(ipv6: .unexpectedLeadingColon)
           return nil
         }
@@ -386,7 +386,7 @@ extension IPv6Address {
           return nil
         }
         // If the piece starts with a ':', it must be a compressed group of pieces.
-        guard input[idx] != ASCII.colon else {
+        guard input[idx] != ASCII.colon.codePoint else {
           guard compress == -1 else {
             callback.validationError(ipv6: .multipleCompressedPieces)
             return nil
@@ -418,7 +418,7 @@ extension IPv6Address {
         // Parse characters after the numeric value.
         // - ':' signifies the end of the piece.
         // - '.' signifies that we should re-parse the piece as an IPv4 address.
-        guard _slowPath(input[idx] != ASCII.colon) else {
+        guard _slowPath(input[idx] != ASCII.colon.codePoint) else {
           parsedPieces[pieceIndex] = value
           pieceIndex &+= 1
           idx = input.index(after: idx)
@@ -428,7 +428,7 @@ extension IPv6Address {
           }
           continue parseloop
         }
-        guard _slowPath(input[idx] != ASCII.period) else {
+        guard _slowPath(input[idx] != ASCII.period.codePoint) else {
           guard length != 0 else {
             callback.validationError(ipv6: .unexpectedPeriod)
             return nil
@@ -887,7 +887,7 @@ extension IPv4Address {
             idx = input.index(after: idx)
             if idx != input.endIndex {
               switch input[idx] {
-              case ASCII.x, ASCII.X:
+              case ASCII.x.codePoint, ASCII.X.codePoint:
                 radix = 16
                 idx = input.index(after: idx)
               default:
@@ -925,7 +925,7 @@ extension IPv4Address {
         pieceIndex &+= 1
         parsedPieces[pieceIndex] = value
         // Allow one trailing '.' after the piece, even if it's the last piece.
-        guard idx != input.endIndex, input[idx] == ASCII.period else {
+        guard idx != input.endIndex, input[idx] == ASCII.period.codePoint else {
           break
         }
         idx = input.index(after: idx)

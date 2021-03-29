@@ -12,29 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-struct ASCII {
-  public let codePoint: UInt8
+@usableFromInline
+internal struct ASCII {
+
+  @usableFromInline
+  internal let codePoint: UInt8
 }
 
 // Initialisation.
 
 extension ASCII {
 
-  @inlinable internal init(_unchecked v: UInt8) {
+  @inlinable @inline(__always)
+  internal init(_unchecked v: UInt8) {
     assert(v & 0x80 == 0, "Extended ASCII is not supported")
     self.codePoint = v
   }
 
-  @inlinable public init?(_ v: UInt8) {
+  @inlinable @inline(__always)
+  internal init?(_ v: UInt8) {
     guard v & 0x80 == 0 else { return nil }
     self.init(_unchecked: v)
   }
 
-  @inlinable public init?(_ c: Character) {
-    guard let asciiVal = c.asciiValue else { return nil }
-    self.init(_unchecked: asciiVal)
-  }
-
+  @inlinable @inline(__always)
   internal init?(flatMap v: UInt8?) {
     guard let byte = v, byte & 0x80 == 0 else { return nil }
     self.init(_unchecked: byte)
@@ -43,71 +44,16 @@ extension ASCII {
 
 // Homogeneous comparison.
 
-extension ASCII: Comparable, Equatable, Hashable {
+extension ASCII: Comparable, Equatable {
 
-  @inlinable public static func < (lhs: ASCII, rhs: ASCII) -> Bool {
+  @inlinable @inline(__always)
+  internal static func < (lhs: ASCII, rhs: ASCII) -> Bool {
     lhs.codePoint < rhs.codePoint
   }
-}
 
-// Heterogeneous comparison.
-
-extension ASCII {
-
-  // UInt8.
-  @inlinable public static func == (lhs: UInt8, rhs: ASCII) -> Bool {
-    lhs == rhs.codePoint
-  }
-  @inlinable public static func != (lhs: UInt8, rhs: ASCII) -> Bool {
-    !(lhs == rhs)
-  }
-  @inlinable public static func ~= (pattern: UInt8, value: ASCII) -> Bool {
-    pattern == value.codePoint
-  }
-  @inlinable public static func ~= (pattern: ASCII, value: UInt8) -> Bool {
-    value == pattern.codePoint
-  }
-
-  // UInt8?.
-  @inlinable public static func == (lhs: UInt8?, rhs: ASCII) -> Bool {
-    lhs == rhs.codePoint
-  }
-  @inlinable public static func != (lhs: UInt8?, rhs: ASCII) -> Bool {
-    !(lhs == rhs)
-  }
-  @inlinable public static func ~= (pattern: UInt8?, value: ASCII) -> Bool {
-    pattern == value.codePoint
-  }
-  @inlinable public static func ~= (pattern: ASCII, value: UInt8?) -> Bool {
-    value == pattern.codePoint
-  }
-
-  // Character.
-  @inlinable public static func == (lhs: Character, rhs: ASCII) -> Bool {
-    lhs.asciiValue.map { $0 == rhs } ?? false
-  }
-  @inlinable public static func != (lhs: Character, rhs: ASCII) -> Bool {
-    !(lhs == rhs)
-  }
-  @inlinable public static func ~= (pattern: Character, value: ASCII) -> Bool {
-    pattern == value
-  }
-  @inlinable public static func ~= (pattern: ASCII, value: Character) -> Bool {
-    value == pattern
-  }
-
-  // Character?.
-  @inlinable public static func == (lhs: Character?, rhs: ASCII) -> Bool {
-    lhs?.asciiValue.map { $0 == rhs } ?? false
-  }
-  @inlinable public static func != (lhs: Character?, rhs: ASCII) -> Bool {
-    !(lhs == rhs)
-  }
-  @inlinable public static func ~= (pattern: Character?, value: ASCII) -> Bool {
-    pattern == value
-  }
-  @inlinable public static func ~= (pattern: ASCII, value: Character?) -> Bool {
-    value == pattern
+  @inlinable @inline(__always)
+  internal static func == (lhs: ASCII, rhs: ASCII) -> Bool {
+    lhs.codePoint == rhs.codePoint
   }
 }
 
@@ -295,7 +241,8 @@ extension ASCII {
 
 extension ASCII: CustomStringConvertible {
 
-  var description: String {
+  @usableFromInline
+  internal var description: String {
     String(Character(UnicodeScalar(codePoint)))
   }
 }
