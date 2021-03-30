@@ -59,7 +59,7 @@ func _urlFromBytes_impl<Bytes, Callback>(
   // Trim leading/trailing C0 control characters and spaces.
   let trimmedInput = inputString.trim {
     switch ASCII($0) {
-    case ASCII.ranges.controlCharacters?, .space?: return true
+    case ASCII.ranges.c0Control?, .space?: return true
     default: return false
     }
   }

@@ -12,20 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// An ASCII character.
+///
 @usableFromInline
 internal struct ASCII {
 
+  /// The Unicode codepoint of this character (also the value of this character's UTF8 code-unit).
+  /// This value is validated at construction to be in the range `0..<128`.
+  ///
   @usableFromInline
   internal let codePoint: UInt8
 }
-
-// Initialisation.
 
 extension ASCII {
 
   @inlinable @inline(__always)
   internal init(_unchecked v: UInt8) {
-    assert(v & 0x80 == 0, "Extended ASCII is not supported")
+    assert(v & 0x80 == 0, "Not an ASCII code point")
     self.codePoint = v
   }
 
@@ -42,9 +45,9 @@ extension ASCII {
   }
 }
 
-// Homogeneous comparison.
+// Standard protocols.
 
-extension ASCII: Comparable, Equatable {
+extension ASCII: Comparable, Equatable, CustomStringConvertible {
 
   @inlinable @inline(__always)
   internal static func < (lhs: ASCII, rhs: ASCII) -> Bool {
@@ -55,12 +58,23 @@ extension ASCII: Comparable, Equatable {
   internal static func == (lhs: ASCII, rhs: ASCII) -> Bool {
     lhs.codePoint == rhs.codePoint
   }
+
+  @inlinable
+  internal var description: String {
+    String(decoding: CollectionOfOne(codePoint), as: UTF8.self)
+  }
 }
+
+
+// --------------------------------------------
+// MARK: - Character table
+// --------------------------------------------
+
 
 // swift-format-ignore
 extension ASCII {
 
-    // Control Characters.
+    // C0 Control Characters.
     @inlinable static var null                  : ASCII { ASCII(_unchecked: 0x00) }
     @inlinable static var startOfHeading        : ASCII { ASCII(_unchecked: 0x01) }
     @inlinable static var startOfText           : ASCII { ASCII(_unchecked: 0x02) }
@@ -198,62 +212,77 @@ extension ASCII {
     @inlinable static var delete           : ASCII { ASCII(_unchecked: 0x7F) }
 }
 
+
+// --------------------------------------------
+// MARK: - Character classes
+// --------------------------------------------
+
+
 extension ASCII {
-  public struct Ranges {
-    public var controlCharacters: Range<ASCII> { ASCII(_unchecked: 0x00)..<ASCII(_unchecked: 0x20) }
-    public var specialCharacters: Range<ASCII> { ASCII(_unchecked: 0x20)..<ASCII(_unchecked: 0x30) }
-    public var digits: Range<ASCII> { ASCII(_unchecked: 0x30)..<ASCII(_unchecked: 0x3A) }
-    public var uppercaseAlpha: Range<ASCII> { ASCII(_unchecked: 0x41)..<ASCII(_unchecked: 0x5B) }
-    public var lowercaseAlpha: Range<ASCII> { ASCII(_unchecked: 0x61)..<ASCII(_unchecked: 0x7B) }
-  }
 
-  public static var ranges: Ranges { Ranges() }
+  @usableFromInline
+  internal struct ranges {
 
-  public func isA(_ range: KeyPath<ASCII.Ranges, Range<ASCII>>) -> Bool {
-    return ASCII.ranges[keyPath: range].contains(self)
+    @inlinable
+    internal static var c0Control: Range<ASCII> {
+      ASCII(_unchecked: 0x00)..<ASCII(_unchecked: 0x20)
+    }
+
+    @inlinable
+    internal static var digits: Range<ASCII> {
+      ASCII(_unchecked: 0x30)..<ASCII(_unchecked: 0x3A)
+    }
+
+    @inlinable
+    internal static var uppercaseAlpha: Range<ASCII> {
+      ASCII(_unchecked: 0x41)..<ASCII(_unchecked: 0x5B)
+    }
+
+    @inlinable
+    internal static var lowercaseAlpha: Range<ASCII> {
+      ASCII(_unchecked: 0x61)..<ASCII(_unchecked: 0x7B)
+    }
   }
 
   /// Whether or not this is an alpha character (a-z, A-Z).
   ///
-  public var isAlpha: Bool {
-    ASCII.ranges.uppercaseAlpha.contains(self) || ASCII.ranges.lowercaseAlpha.contains(self)
+  @inlinable
+  internal var isAlpha: Bool {
+    let uppercased = ASCII(_unchecked: codePoint & 0b11011111)
+    return ASCII.ranges.uppercaseAlpha.contains(uppercased)
+  }
+
+  /// Whether or not this is a decimal digit (0-9).
+  ///
+  @inlinable
+  internal var isDigit: Bool {
+    ASCII.ranges.digits.contains(self)
   }
 
   /// Whether or not this is an alphanumeric character (a-z, A-Z, 0-9).
   ///
-  public var isAlphaNumeric: Bool {
-    isAlpha || ASCII.ranges.digits.contains(self)
+  @inlinable
+  internal var isAlphaNumeric: Bool {
+    isAlpha || isDigit
   }
 
   /// Whether or not this is a hex digit (a-f, A-F, 0-9).
   ///
-  public var isHexDigit: Bool {
-    ASCII.parseHexDigit(ascii: self) != ASCII.parse_NotFound
-  }
-
-  public static var allCharacters: AnySequence<ASCII> {
-    AnySequence(
-      sequence(first: ASCII(_unchecked: 0x00)) { character in
-        ASCII(character.codePoint + 1)
-      })
+  @inlinable
+  internal var isHexDigit: Bool {
+    hexNumberValue != nil
   }
 }
 
-extension ASCII: CustomStringConvertible {
 
-  @usableFromInline
-  internal var description: String {
-    String(Character(UnicodeScalar(codePoint)))
-  }
-}
+// --------------------------------------------
+// MARK: - Parsing and printing
+// --------------------------------------------
 
-// Parsing/Printing utilities.
 
-// TODO: Clean these up.
-
-private let DC: UInt8 = 99
+@usableFromInline internal let DC: UInt8 = 99
 // swift-format-ignore
-private let _parseHex_table: [UInt8] = [
+@usableFromInline internal let _parseHex_table: [UInt8] = [
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC, // 48 invalid chars.
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC,
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC,
@@ -273,44 +302,51 @@ private let _parseHex_table: [UInt8] = [
 
 extension ASCII {
 
-  /// Returns the ASCII character corresponding to the low nibble of `number`, in hex.
-  static func getHexDigit_upper(_ number: UInt8) -> ASCII {
+  /// If this character is a hex digit, returns the digit's numeric value.
+  ///
+  @inlinable
+  internal var hexNumberValue: UInt8? {
+    assert(_parseHex_table.count == 128)
+    let numericValue = _parseHex_table.withUnsafeBufferPointer { $0[Int(codePoint)] }
+    return numericValue == DC ? nil : numericValue
+  }
+
+  /// If this character is a decimal digit, returns the digit's numeric value.
+  ///
+  @inlinable
+  internal var decimalNumberValue: UInt8? {
+    hexNumberValue.flatMap { $0 < 10 ? $0 : nil }
+  }
+}
+
+extension ASCII {
+
+  /// Returns the uppercase hex digit corresponding to the low nibble of `number`.
+  ///
+  @inlinable
+  internal static func uppercaseHexDigit(of number: UInt8) -> ASCII {
     let table: StaticString = "0123456789ABCDEF"
     return table.withUTF8Buffer { table in
       ASCII(_unchecked: table[Int(number & 0x0F)])
     }
   }
 
-  static func getHexDigit_lower(_ number: UInt8) -> ASCII {
+  /// Returns the lowercase hex digit corresponding to the low nibble of `number`.
+  ///
+  @inlinable
+  internal static func lowercaseHexDigit(of number: UInt8) -> ASCII {
     let table: StaticString = "0123456789abcdef"
     return table.withUTF8Buffer { table in
       ASCII(_unchecked: table[Int(number & 0x0F)])
     }
   }
 
-  /// Returns the ASCII character corresponding to the value of `number`.
-  /// If `number` is >= 10, returns `ASCII.null`.
+  /// If `number` is in the range `0..<10`, returns the decimal digit corresponding to the value of `number`.
   ///
-  static func getDecimalDigit(_ number: UInt8) -> ASCII {
-    return number < 10 ? getHexDigit_upper(number) : .null
+  @inlinable
+  internal static func decimalDigit(of number: UInt8) -> ASCII? {
+    return number < 10 ? uppercaseHexDigit(of: number) : nil
   }
-
-  static var parse_NotFound: UInt8 { DC }
-
-  /// Returns the numerical value of a hex digit.
-  static func parseHexDigit(ascii: ASCII) -> UInt8 {
-    assert(_parseHex_table.count == 128)
-    return _parseHex_table.withUnsafeBufferPointer { $0[Int(ascii.codePoint)] }
-  }
-
-  static func parseDecimalDigit(ascii: ASCII) -> UInt8 {
-    let hexValue = parseHexDigit(ascii: ascii)
-    // Yes, there's a branch, but I didn't fancy a second lookup table.
-    return hexValue < 10 ? hexValue : DC
-  }
-}
-
-extension ASCII {
 
   /// Prints the decimal representation of `number` in to `stringBuffer`.
   /// `stringBuffer` requires at least 3 bytes worth of space.
@@ -331,7 +367,7 @@ extension ASCII {
     while number != 0 {
       let digit: UInt8
       (number, digit) = number.quotientAndRemainder(dividingBy: 10)
-      stringBuffer[idx] = ASCII.getDecimalDigit(UInt8(truncatingIfNeeded: digit)).codePoint
+      stringBuffer[idx] = ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit)).unsafelyUnwrapped.codePoint
       idx &+= 1
     }
     stringBuffer[pieceStart..<idx].reverse()
@@ -358,7 +394,7 @@ extension ASCII {
     while number != 0 {
       let digit: B
       (number, digit) = number.quotientAndRemainder(dividingBy: 16)
-      stringBuffer[idx] = ASCII.getHexDigit_lower(UInt8(truncatingIfNeeded: digit)).codePoint
+      stringBuffer[idx] = ASCII.lowercaseHexDigit(of: UInt8(truncatingIfNeeded: digit)).codePoint
       idx &+= 1
     }
     stringBuffer[Range(uncheckedBounds: (pieceStart, idx))].reverse()
@@ -366,9 +402,24 @@ extension ASCII {
   }
 }
 
+// Misc.
+
 extension ASCII {
-  var lowercased: ASCII {
+
+  @inlinable
+  internal var lowercased: ASCII {
     guard ASCII.ranges.uppercaseAlpha.contains(self) else { return self }
-    return ASCII(_unchecked: ASCII.a.codePoint + (self.codePoint - ASCII.A.codePoint))
+    return ASCII(_unchecked: codePoint | 0b00100000)
+  }
+}
+
+extension ASCII {
+
+  internal static var allCharacters: AnySequence<ASCII> {
+    AnySequence(
+      sequence(first: ASCII(_unchecked: 0x00)) { character in
+        ASCII(character.codePoint + 1)
+      }
+    )
   }
 }

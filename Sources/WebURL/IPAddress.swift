@@ -400,9 +400,7 @@ extension IPv6Address {
         let pieceStartIndex = idx
         var value: UInt16 = 0
         var length: UInt8 = 0
-        while length < 4, idx != input.endIndex, let asciiChar = ASCII(input[idx]) {
-          let numberValue = ASCII.parseHexDigit(ascii: asciiChar)
-          guard numberValue != ASCII.parse_NotFound else { break }
+        while length < 4, idx != input.endIndex, let numberValue = ASCII(input[idx])?.hexNumberValue {
           value <<= 4
           value &+= UInt16(numberValue)
           length &+= 1
@@ -899,9 +897,7 @@ extension IPv4Address {
 
         // Parse remaining digits in piece.
         while idx != input.endIndex {
-          guard let numericValue = ASCII(input[idx]).map({ ASCII.parseHexDigit(ascii: $0) }),
-            numericValue != ASCII.parse_NotFound
-          else {
+          guard let numericValue = ASCII(input[idx])?.hexNumberValue else {
             break
           }
           guard numericValue < radix else {
@@ -1014,9 +1010,7 @@ extension IPv4Address {
       }
       // Consume decimal digits from the piece.
       var ipv4Piece = -1  // We treat -1 as "null".
-      while idx != input.endIndex, let asciiChar = ASCII(input[idx]), ASCII.ranges.digits.contains(asciiChar) {
-        let digit = ASCII.parseDecimalDigit(ascii: asciiChar)
-        assert(digit != ASCII.parse_NotFound)  // We already checked it was a digit.
+      while idx != input.endIndex, let digit = ASCII(input[idx])?.decimalNumberValue {
         switch ipv4Piece {
         case -1:
           ipv4Piece = Int(digit)
