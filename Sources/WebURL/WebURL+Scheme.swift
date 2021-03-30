@@ -91,22 +91,22 @@ extension WebURL.SchemeKind {
     // Zeroing the 6th bit of each byte (i.e. AND-ing with 11011111) normalizes the code-unit to uppercase ASCII.
     switch count {
     case 2:
-      var s = ptr.load(as: UInt16.self)
+      var s = ptr.loadUnaligned(as: UInt16.self)
       s &= 0b11011111_11011111
       self = (s == Self._ws) ? .ws : .other
     case 3:
       // On big-endian machines, we need to swap-widen-swap:
       // [F, T] ->(swap)-> [T, F] ->(widen)-> [0, 0, T, F] ->(swap)-> [F, T, 0, 0].
-      var s = UInt32(ptr.load(as: UInt16.self).littleEndian).littleEndian
+      var s = UInt32(ptr.loadUnaligned(as: UInt16.self).littleEndian).littleEndian
       withUnsafeMutableBytes(of: &s) { $0[2] = ptr.load(fromByteOffset: 2, as: UInt8.self) }
       s &= 0b11011111_11011111_11011111_11011111
       self = (s == Self._wss) ? .wss : (s == Self._ftp) ? .ftp : .other
     case 4:
-      var s = ptr.load(as: UInt32.self)
+      var s = ptr.loadUnaligned(as: UInt32.self)
       s &= 0b11011111_11011111_11011111_11011111
       self = (s == Self._http) ? .http : (s == Self._file) ? .file : .other
     case 5:
-      var s = ptr.load(as: UInt32.self)
+      var s = ptr.loadUnaligned(as: UInt32.self)
       s &= 0b11011111_11011111_11011111_11011111
       self =
         ((s == Self._http) && ptr.load(fromByteOffset: 4, as: UInt8.self) & 0b11011111 == ASCII.S.codePoint)
