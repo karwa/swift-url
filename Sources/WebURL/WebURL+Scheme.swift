@@ -22,6 +22,7 @@ extension WebURL {
   /// Note that this type intentionally does not conform to `Equatable`.
   /// Two URLs with the same `SchemeKind` may have different schemes if the scheme is not special.
   ///
+  @usableFromInline
   enum SchemeKind {
     case ftp
     case file

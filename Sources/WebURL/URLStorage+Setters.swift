@@ -28,16 +28,14 @@ extension URLStorage {
   ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
 
     // Check that the new value is a valid scheme.
-    guard let idx = findScheme(newValue),
-      idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex,
-      idx != newValue.startIndex
+    guard let (idx, newSchemeKind) = parseScheme(newValue),
+      idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex
     else {
       return (AnyURLStorage(self), .error(.invalidScheme))
     }
 
     // Check that the operation is semantically valid for the existing structure.
     let newSchemeBytes = newValue[..<idx]
-    let newSchemeKind = WebURL.SchemeKind(parsing: newSchemeBytes)
     let oldStructure = header.structure
 
     if newSchemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
