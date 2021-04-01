@@ -17,17 +17,103 @@ import XCTest
 
 @testable import WebURL
 
-// TODO:
-// Test plan.
-//================
-// - UInt8 -> ASCII Hex
-// - UInt8 -> ASCII Decimal
-// - ASCII Hex -> UInt8
-// - ASCII Dec -> UInt8
-// - ASCII.insertHexString
-// - More? lowercased/isAlpha/ranges/etc?
-
 final class ASCIITests: XCTestCase {
+
+  func testASCIIHexValue() {
+    // Test that hex digits have the appropriate character classes,
+    // that we can get the numeric value of a character and the character of a numeric value.
+
+    // uppercase.
+    do {
+      for (numericValue, character) in "0123456789ABCDEF".enumerated() {
+        guard let asciiChar = ASCII(flatMap: character.asciiValue) else {
+          XCTFail("\(character) not recognized as ASCII")
+          continue
+        }
+
+        XCTAssertTrue(asciiChar.isHexDigit)
+        XCTAssertTrue(asciiChar.isAlphaNumeric)
+        if numericValue < 10 {
+          XCTAssertTrue(asciiChar.isDigit)
+        } else {
+          XCTAssertTrue(asciiChar.isAlpha)
+        }
+
+        XCTAssertEqual(asciiChar.hexNumberValue.map { Int($0) }, numericValue)
+        XCTAssertEqual(asciiChar, ASCII.uppercaseHexDigit(of: UInt8(numericValue)))
+      }
+      for invalidChar in [ASCII.G, .O, .X] {
+        XCTAssertFalse(invalidChar.isHexDigit)
+        XCTAssertNil(invalidChar.hexNumberValue)
+
+        XCTAssertTrue(invalidChar.isAlpha)
+        XCTAssertTrue(invalidChar.isAlphaNumeric)
+      }
+      for cycledNumber in 16...UInt8.max {
+        XCTAssertEqual(ASCII.uppercaseHexDigit(of: cycledNumber).hexNumberValue, cycledNumber % 16)
+      }
+    }
+
+    // lowercase.
+    do {
+      for (numericValue, character) in "0123456789abcdef".enumerated() {
+        guard let asciiChar = ASCII(flatMap: character.asciiValue) else {
+          XCTFail("\(character) not recognized as ASCII")
+          continue
+        }
+
+        XCTAssertTrue(asciiChar.isHexDigit)
+        XCTAssertTrue(asciiChar.isAlphaNumeric)
+        if numericValue < 10 {
+          XCTAssertTrue(asciiChar.isDigit)
+        } else {
+          XCTAssertTrue(asciiChar.isAlpha)
+        }
+
+        XCTAssertEqual(asciiChar.hexNumberValue.map { Int($0) }, numericValue)
+        XCTAssertEqual(asciiChar, ASCII.lowercaseHexDigit(of: UInt8(numericValue)))
+      }
+      for invalidChar in [ASCII.g, .o, .x] {
+        XCTAssertFalse(invalidChar.isHexDigit)
+        XCTAssertNil(invalidChar.hexNumberValue)
+
+        XCTAssertTrue(invalidChar.isAlpha)
+        XCTAssertTrue(invalidChar.isAlphaNumeric)
+      }
+      for cycledNumber in 16...UInt8.max {
+        XCTAssertEqual(ASCII.lowercaseHexDigit(of: cycledNumber).hexNumberValue, cycledNumber % 16)
+      }
+    }
+  }
+
+  func testASCIIDecimalValue() {
+    // Test that decimal digits have the appropriate character classes,
+    // that we can get the numeric value of a character and the character of a numeric value.
+
+    for (numericValue, character) in "0123456789".enumerated() {
+      guard let asciiChar = ASCII(flatMap: character.asciiValue) else {
+        XCTFail("\(character) not recognized as ASCII")
+        continue
+      }
+
+      XCTAssertTrue(asciiChar.isDigit)
+      XCTAssertTrue(asciiChar.isHexDigit)
+      XCTAssertFalse(asciiChar.isAlpha)
+      XCTAssertTrue(asciiChar.isAlphaNumeric)
+
+      XCTAssertEqual(asciiChar.decimalNumberValue.map { Int($0) }, numericValue)
+      XCTAssertEqual(asciiChar, ASCII.decimalDigit(of: UInt8(numericValue)))
+    }
+    for invalidChar in [ASCII.A, .B, .C, .D, .E, .F, .G, .O, .X, .a, .b, .c, .d, .e, .f, .g, .o, .x] {
+      XCTAssertFalse(invalidChar.isDigit)
+      XCTAssertTrue(invalidChar.isAlpha)
+      XCTAssertTrue(invalidChar.isAlphaNumeric)
+      XCTAssertNil(invalidChar.decimalNumberValue)
+    }
+    for invalidNumber in 10...UInt8.max {
+      XCTAssertNil(ASCII.decimalDigit(of: invalidNumber))
+    }
+  }
 
   func testASCIIDecimalPrinting() {
     var buf: [UInt8] = [0, 0, 0, 0]
