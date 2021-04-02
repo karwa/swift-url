@@ -66,7 +66,7 @@ func _urlFromBytes_impl<Bytes, Callback>(
   if trimmedInput.startIndex != inputString.startIndex || trimmedInput.endIndex != inputString.endIndex {
     callback.validationError(.unexpectedC0ControlOrSpace)
   }
-  return ASCII.NewlineAndTabFiltered.filterIfNeeded(trimmedInput).map(
+  return ASCII.filterNewlinesAndTabs(from: trimmedInput).map(
     left: { filtered in
       ParsedURLString(parsing: filtered, baseURL: baseURL, callback: &callback)?.constructURLObject()
     },
