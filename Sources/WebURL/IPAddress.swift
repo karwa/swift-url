@@ -531,10 +531,11 @@ extension IPv6Address {
             continue
           }
           // Print the piece and, if not the last piece, the separator.
-          stringIndex &+= ASCII.insertHexString(
+          let bytesWritten = ASCII.writeHexString(
             for: piecesBuffer[pieceIndex],
-            into: UnsafeMutableRawBufferPointer(rebasing: stringBuffer[stringIndex...])
+            to: stringBuffer.baseAddress.unsafelyUnwrapped + stringIndex
           )
+          stringIndex &+= Int(bytesWritten)
           if pieceIndex != 7 {
             stringBuffer[stringIndex] = ASCII.colon.codePoint
             stringIndex &+= 1
@@ -544,6 +545,7 @@ extension IPv6Address {
         return stringIndex
       }
     }
+    assert((0...39).contains(count))
     return (_stringBuffer, UInt8(truncatingIfNeeded: count))
   }
 }
@@ -1060,25 +1062,24 @@ extension IPv4Address {
   var serializedDirect: (buffer: (UInt64, UInt64), count: UInt8) {
 
     // The maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX") is 15 bytes.
+    // We write one-too-many separators and chop it off at the end, so 16 bytes are needed.
     var _stringBuffer: (UInt64, UInt64) = (0, 0)
     let count = withUnsafeMutableBytes(of: &_stringBuffer) { stringBuffer -> Int in
       return withUnsafeBytes(of: octets) { octetBytes -> Int in
         var stringBufferIdx = stringBuffer.startIndex
         for i in 0..<4 {
-          stringBufferIdx &+= ASCII.insertDecimalString(
+          let bytesWritten = ASCII.writeDecimalString(
             for: octetBytes[i],
-            into: UnsafeMutableRawBufferPointer(
-              rebasing: stringBuffer[Range(uncheckedBounds: (stringBufferIdx, stringBuffer.endIndex))]
-            )
+            to: stringBuffer.baseAddress.unsafelyUnwrapped + stringBufferIdx
           )
-          if i != 3 {
-            stringBuffer[stringBufferIdx] = ASCII.period.codePoint
-            stringBufferIdx &+= 1
-          }
+          stringBufferIdx &+= Int(bytesWritten)
+          stringBuffer[stringBufferIdx] = ASCII.period.codePoint
+          stringBufferIdx &+= 1
         }
-        return stringBufferIdx
+        return stringBufferIdx &- 1
       }
     }
+    assert((0...15).contains(count))
     return (_stringBuffer, UInt8(truncatingIfNeeded: count))
   }
 }

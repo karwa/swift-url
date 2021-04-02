@@ -116,13 +116,43 @@ final class ASCIITests: XCTestCase {
   }
 
   func testASCIIDecimalPrinting() {
+
     var buf: [UInt8] = [0, 0, 0, 0]
+
     buf.withUnsafeMutableBytes { buffer in
       for num in (UInt8.min)...(UInt8.max) {
-        let bufferContentsEnd = ASCII.insertDecimalString(for: num, into: buffer)
-        let asciiContents = Array(buffer[..<bufferContentsEnd])
-        let stdlibString = Array(String(num, radix: 10).utf8)
-        XCTAssertEqual(stdlibString, asciiContents)
+        let bufferContentsCount = ASCII.writeDecimalString(for: num, to: buffer.baseAddress!)
+        XCTAssertEqualElements(buffer[..<Int(bufferContentsCount)], String(num, radix: 10).utf8)
+      }
+    }
+  }
+
+  func testASCIIHexPrinting() {
+
+    var buf: [UInt8] = [0, 0, 0, 0, 0, 0, 0, 0]
+
+    // UInt8.
+    buf.withUnsafeMutableBytes { buffer in
+      for num in (UInt8.min)...(UInt8.max) {
+        let bufferContentsCount = ASCII.writeHexString(for: num, to: buffer.baseAddress!)
+        XCTAssertEqualElements(buffer[..<Int(bufferContentsCount)], String(num, radix: 16).utf8)
+      }
+    }
+
+    // UInt16.
+    buf.withUnsafeMutableBytes { buffer in
+      for num in (UInt16.min)...(UInt16.max) {
+        let bufferContentsCount = ASCII.writeHexString(for: num, to: buffer.baseAddress!)
+        XCTAssertEqualElements(buffer[..<Int(bufferContentsCount)], String(num, radix: 16).utf8)
+      }
+    }
+
+    // Random sample of UInt32s.
+    buf.withUnsafeMutableBytes { buffer in
+      for _ in 0..<10_000 {
+        let num = UInt32.random(in: 0...UInt32.max)
+        let bufferContentsCount = ASCII.writeHexString(for: num, to: buffer.baseAddress!)
+        XCTAssertEqualElements(buffer[..<Int(bufferContentsCount)], String(num, radix: 16).utf8)
       }
     }
   }

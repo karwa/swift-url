@@ -348,61 +348,88 @@ extension ASCII {
     return number < 10 ? uppercaseHexDigit(of: number) : nil
   }
 
-  /// Prints the decimal representation of `number` in to `stringBuffer`.
-  /// `stringBuffer` requires at least 3 bytes worth of space.
+  /// Prints the decimal representation of `number` to the memory location given by `stringBuffer`.
+  /// A maximum of 3 bytes will be written.
   ///
-  /// - returns:  The index one-past-the-end of the resulting text.
+  /// - returns:  The number of bytes written to `stringBuffer`.
   ///
-  static func insertDecimalString(for number: UInt8, into stringBuffer: UnsafeMutableRawBufferPointer) -> Int {
-    var idx = stringBuffer.startIndex
-    guard _fastPath(stringBuffer.count >= 3) else { return idx }
+  @inlinable
+  internal static func writeDecimalString(for number: UInt8, to stringBuffer: UnsafeMutableRawPointer) -> UInt8 {
 
-    guard number != 0 else {
-      stringBuffer[idx] = ASCII.n0.codePoint
-      idx &+= 1
-      return idx
-    }
-    var number = number
-    let pieceStart = idx
-    while number != 0 {
+    var count: UInt8 = 0
+    var remaining = number
+    do {
       let digit: UInt8
-      (number, digit) = number.quotientAndRemainder(dividingBy: 10)
-      stringBuffer[idx] = ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit)).unsafelyUnwrapped.codePoint
-      idx &+= 1
+      (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 100)
+      if digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit))!.codePoint,
+          toByteOffset: 0,
+          as: UInt8.self
+        )
+        count += 1
+      }
     }
-    stringBuffer[pieceStart..<idx].reverse()
-    return idx
+    do {
+      let digit: UInt8
+      (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 10)
+      if count != 0 || digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit))!.codePoint,
+          toByteOffset: Int(count),
+          as: UInt8.self
+        )
+        count += 1
+      }
+    }
+    stringBuffer.storeBytes(
+      of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: remaining))!.codePoint,
+      toByteOffset: Int(count),
+      as: UInt8.self
+    )
+    count += 1
+    return count
   }
 
-  /// Prints the decimal representation of `number` in to `stringBuffer`.
-  /// `stringBuffer` requires at least `B.bitWidth / 4` bytes of space.
+  /// Prints the hex representation of `number` to the memory location given by `stringBuffer`.
+  /// A maximum of `B.bitWidth / 4` bytes will be written (e.g. 2 bytes for an 8-bit integer, 4 bytes for a 16-bit integer, etc).
   ///
-  /// - returns:  The index one-past-the-end of the resulting text.
+  /// The hex representation is written without any leading zeroes, and in lowercase.
   ///
-  static func insertHexString<B>(for number: B, into stringBuffer: UnsafeMutableRawBufferPointer) -> Int
-  where B: BinaryInteger {
-    var idx = stringBuffer.startIndex
-    assert(stringBuffer.count >= number.bitWidth / 4)
+  /// - returns:  The number of bytes written to `stringBuffer`.
+  ///
+  @inlinable
+  internal static func writeHexString<B>(
+    for number: B, to stringBuffer: UnsafeMutableRawPointer
+  ) -> UInt8 where B: FixedWidthInteger & UnsignedInteger {
 
-    guard number != 0 else {
-      stringBuffer[idx] = ASCII.n0.codePoint
-      idx &+= 1
-      return idx
+    var count: UInt8 = 0
+    for nibbleIdx in 1..<(B.bitWidth / 4) {
+      let digit = number &>> (B.bitWidth - (nibbleIdx * 4))
+      if count != 0 || digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.lowercaseHexDigit(of: UInt8(truncatingIfNeeded: digit)).codePoint,
+          toByteOffset: Int(count),
+          as: UInt8.self
+        )
+        count += 1
+      }
     }
-    var number = number
-    let pieceStart = idx
-    while number != 0 {
-      let digit: B
-      (number, digit) = number.quotientAndRemainder(dividingBy: 16)
-      stringBuffer[idx] = ASCII.lowercaseHexDigit(of: UInt8(truncatingIfNeeded: digit)).codePoint
-      idx &+= 1
-    }
-    stringBuffer[Range(uncheckedBounds: (pieceStart, idx))].reverse()
-    return idx
+    stringBuffer.storeBytes(
+      of: ASCII.lowercaseHexDigit(of: UInt8(truncatingIfNeeded: number)).codePoint,
+      toByteOffset: Int(count),
+      as: UInt8.self
+    )
+    count += 1
+    return count
   }
 }
 
-// Misc.
+
+// --------------------------------------------
+// MARK: - Misc
+// --------------------------------------------
+
 
 extension ASCII {
 
@@ -411,9 +438,6 @@ extension ASCII {
     guard ASCII.ranges.uppercaseAlpha.contains(self) else { return self }
     return ASCII(_unchecked: codePoint | 0b00100000)
   }
-}
-
-extension ASCII {
 
   internal static var allCharacters: AnySequence<ASCII> {
     AnySequence(
