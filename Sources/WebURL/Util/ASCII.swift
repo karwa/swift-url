@@ -12,109 +12,69 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-struct ASCII {
-  public let codePoint: UInt8
-}
+/// An ASCII character.
+///
+@usableFromInline
+internal struct ASCII {
 
-// Initialisation.
+  /// The Unicode codepoint of this character (also the value of this character's UTF8 code-unit).
+  /// This value is validated at construction to be in the range `0..<128`.
+  ///
+  @usableFromInline
+  internal let codePoint: UInt8
+}
 
 extension ASCII {
 
-  @inlinable internal init(_unchecked v: UInt8) {
-    assert(v & 0x80 == 0, "Extended ASCII is not supported")
+  @inlinable @inline(__always)
+  internal init(_unchecked v: UInt8) {
+    assert(v & 0x80 == 0, "Not an ASCII code point")
     self.codePoint = v
   }
 
-  @inlinable public init?(_ v: UInt8) {
+  @inlinable @inline(__always)
+  internal init?(_ v: UInt8) {
     guard v & 0x80 == 0 else { return nil }
     self.init(_unchecked: v)
   }
 
-  @inlinable public init?(_ c: Character) {
-    guard let asciiVal = c.asciiValue else { return nil }
-    self.init(_unchecked: asciiVal)
-  }
-
+  @inlinable @inline(__always)
   internal init?(flatMap v: UInt8?) {
     guard let byte = v, byte & 0x80 == 0 else { return nil }
     self.init(_unchecked: byte)
   }
 }
 
-// Homogeneous comparison.
+// Standard protocols.
 
-extension ASCII: Comparable, Equatable, Hashable {
+extension ASCII: Comparable, Equatable, CustomStringConvertible {
 
-  @inlinable public static func < (lhs: ASCII, rhs: ASCII) -> Bool {
+  @inlinable @inline(__always)
+  internal static func < (lhs: ASCII, rhs: ASCII) -> Bool {
     lhs.codePoint < rhs.codePoint
   }
+
+  @inlinable @inline(__always)
+  internal static func == (lhs: ASCII, rhs: ASCII) -> Bool {
+    lhs.codePoint == rhs.codePoint
+  }
+
+  @inlinable
+  internal var description: String {
+    String(decoding: CollectionOfOne(codePoint), as: UTF8.self)
+  }
 }
 
-// Heterogeneous comparison.
 
-extension ASCII {
+// --------------------------------------------
+// MARK: - Character table
+// --------------------------------------------
 
-  // UInt8.
-  @inlinable public static func == (lhs: UInt8, rhs: ASCII) -> Bool {
-    lhs == rhs.codePoint
-  }
-  @inlinable public static func != (lhs: UInt8, rhs: ASCII) -> Bool {
-    !(lhs == rhs)
-  }
-  @inlinable public static func ~= (pattern: UInt8, value: ASCII) -> Bool {
-    pattern == value.codePoint
-  }
-  @inlinable public static func ~= (pattern: ASCII, value: UInt8) -> Bool {
-    value == pattern.codePoint
-  }
-
-  // UInt8?.
-  @inlinable public static func == (lhs: UInt8?, rhs: ASCII) -> Bool {
-    lhs == rhs.codePoint
-  }
-  @inlinable public static func != (lhs: UInt8?, rhs: ASCII) -> Bool {
-    !(lhs == rhs)
-  }
-  @inlinable public static func ~= (pattern: UInt8?, value: ASCII) -> Bool {
-    pattern == value.codePoint
-  }
-  @inlinable public static func ~= (pattern: ASCII, value: UInt8?) -> Bool {
-    value == pattern.codePoint
-  }
-
-  // Character.
-  @inlinable public static func == (lhs: Character, rhs: ASCII) -> Bool {
-    lhs.asciiValue.map { $0 == rhs } ?? false
-  }
-  @inlinable public static func != (lhs: Character, rhs: ASCII) -> Bool {
-    !(lhs == rhs)
-  }
-  @inlinable public static func ~= (pattern: Character, value: ASCII) -> Bool {
-    pattern == value
-  }
-  @inlinable public static func ~= (pattern: ASCII, value: Character) -> Bool {
-    value == pattern
-  }
-
-  // Character?.
-  @inlinable public static func == (lhs: Character?, rhs: ASCII) -> Bool {
-    lhs?.asciiValue.map { $0 == rhs } ?? false
-  }
-  @inlinable public static func != (lhs: Character?, rhs: ASCII) -> Bool {
-    !(lhs == rhs)
-  }
-  @inlinable public static func ~= (pattern: Character?, value: ASCII) -> Bool {
-    pattern == value
-  }
-  @inlinable public static func ~= (pattern: ASCII, value: Character?) -> Bool {
-    value == pattern
-  }
-}
 
 // swift-format-ignore
 extension ASCII {
 
-    // Control Characters.
+    // C0 Control Characters.
     @inlinable static var null                  : ASCII { ASCII(_unchecked: 0x00) }
     @inlinable static var startOfHeading        : ASCII { ASCII(_unchecked: 0x01) }
     @inlinable static var startOfText           : ASCII { ASCII(_unchecked: 0x02) }
@@ -252,61 +212,77 @@ extension ASCII {
     @inlinable static var delete           : ASCII { ASCII(_unchecked: 0x7F) }
 }
 
+
+// --------------------------------------------
+// MARK: - Character classes
+// --------------------------------------------
+
+
 extension ASCII {
-  public struct Ranges {
-    public var controlCharacters: Range<ASCII> { ASCII(_unchecked: 0x00)..<ASCII(_unchecked: 0x20) }
-    public var specialCharacters: Range<ASCII> { ASCII(_unchecked: 0x20)..<ASCII(_unchecked: 0x30) }
-    public var digits: Range<ASCII> { ASCII(_unchecked: 0x30)..<ASCII(_unchecked: 0x3A) }
-    public var uppercaseAlpha: Range<ASCII> { ASCII(_unchecked: 0x41)..<ASCII(_unchecked: 0x5B) }
-    public var lowercaseAlpha: Range<ASCII> { ASCII(_unchecked: 0x61)..<ASCII(_unchecked: 0x7B) }
-  }
 
-  public static var ranges: Ranges { Ranges() }
+  @usableFromInline
+  internal struct ranges {
 
-  public func isA(_ range: KeyPath<ASCII.Ranges, Range<ASCII>>) -> Bool {
-    return ASCII.ranges[keyPath: range].contains(self)
+    @inlinable
+    internal static var c0Control: Range<ASCII> {
+      ASCII(_unchecked: 0x00)..<ASCII(_unchecked: 0x20)
+    }
+
+    @inlinable
+    internal static var digits: Range<ASCII> {
+      ASCII(_unchecked: 0x30)..<ASCII(_unchecked: 0x3A)
+    }
+
+    @inlinable
+    internal static var uppercaseAlpha: Range<ASCII> {
+      ASCII(_unchecked: 0x41)..<ASCII(_unchecked: 0x5B)
+    }
+
+    @inlinable
+    internal static var lowercaseAlpha: Range<ASCII> {
+      ASCII(_unchecked: 0x61)..<ASCII(_unchecked: 0x7B)
+    }
   }
 
   /// Whether or not this is an alpha character (a-z, A-Z).
   ///
-  public var isAlpha: Bool {
-    ASCII.ranges.uppercaseAlpha.contains(self) || ASCII.ranges.lowercaseAlpha.contains(self)
+  @inlinable
+  internal var isAlpha: Bool {
+    let uppercased = ASCII(_unchecked: codePoint & 0b11011111)
+    return ASCII.ranges.uppercaseAlpha.contains(uppercased)
+  }
+
+  /// Whether or not this is a decimal digit (0-9).
+  ///
+  @inlinable
+  internal var isDigit: Bool {
+    ASCII.ranges.digits.contains(self)
   }
 
   /// Whether or not this is an alphanumeric character (a-z, A-Z, 0-9).
   ///
-  public var isAlphaNumeric: Bool {
-    isAlpha || ASCII.ranges.digits.contains(self)
+  @inlinable
+  internal var isAlphaNumeric: Bool {
+    isAlpha || isDigit
   }
 
   /// Whether or not this is a hex digit (a-f, A-F, 0-9).
   ///
-  public var isHexDigit: Bool {
-    ASCII.parseHexDigit(ascii: self) != ASCII.parse_NotFound
-  }
-
-  public static var allCharacters: AnySequence<ASCII> {
-    AnySequence(
-      sequence(first: ASCII(_unchecked: 0x00)) { character in
-        ASCII(character.codePoint + 1)
-      })
+  @inlinable
+  internal var isHexDigit: Bool {
+    hexNumberValue != nil
   }
 }
 
-extension ASCII: CustomStringConvertible {
 
-  var description: String {
-    String(Character(UnicodeScalar(codePoint)))
-  }
-}
+// --------------------------------------------
+// MARK: - Parsing and printing
+// --------------------------------------------
 
-// Parsing/Printing utilities.
 
-// TODO: Clean these up.
-
-private let DC: UInt8 = 99
+@usableFromInline internal let DC: UInt8 = 99
 // swift-format-ignore
-private let _parseHex_table: [UInt8] = [
+@usableFromInline internal let _parseHex_table: [UInt8] = [
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC, // 48 invalid chars.
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC,
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC,
@@ -326,102 +302,148 @@ private let _parseHex_table: [UInt8] = [
 
 extension ASCII {
 
-  /// Returns the ASCII character corresponding to the low nibble of `number`, in hex.
-  static func getHexDigit_upper(_ number: UInt8) -> ASCII {
+  /// If this character is a hex digit, returns the digit's numeric value.
+  ///
+  @inlinable
+  internal var hexNumberValue: UInt8? {
+    assert(_parseHex_table.count == 128)
+    let numericValue = _parseHex_table.withUnsafeBufferPointer { $0[Int(codePoint)] }
+    return numericValue == DC ? nil : numericValue
+  }
+
+  /// If this character is a decimal digit, returns the digit's numeric value.
+  ///
+  @inlinable
+  internal var decimalNumberValue: UInt8? {
+    hexNumberValue.flatMap { $0 < 10 ? $0 : nil }
+  }
+}
+
+extension ASCII {
+
+  /// Returns the uppercase hex digit corresponding to the low nibble of `number`.
+  ///
+  @inlinable
+  internal static func uppercaseHexDigit(of number: UInt8) -> ASCII {
     let table: StaticString = "0123456789ABCDEF"
     return table.withUTF8Buffer { table in
       ASCII(_unchecked: table[Int(number & 0x0F)])
     }
   }
 
-  static func getHexDigit_lower(_ number: UInt8) -> ASCII {
+  /// Returns the lowercase hex digit corresponding to the low nibble of `number`.
+  ///
+  @inlinable
+  internal static func lowercaseHexDigit(of number: UInt8) -> ASCII {
     let table: StaticString = "0123456789abcdef"
     return table.withUTF8Buffer { table in
       ASCII(_unchecked: table[Int(number & 0x0F)])
     }
   }
 
-  /// Returns the ASCII character corresponding to the value of `number`.
-  /// If `number` is >= 10, returns `ASCII.null`.
+  /// If `number` is in the range `0..<10`, returns the decimal digit corresponding to the value of `number`.
   ///
-  static func getDecimalDigit(_ number: UInt8) -> ASCII {
-    return number < 10 ? getHexDigit_upper(number) : .null
+  @inlinable
+  internal static func decimalDigit(of number: UInt8) -> ASCII? {
+    return number < 10 ? uppercaseHexDigit(of: number) : nil
   }
 
-  static var parse_NotFound: UInt8 { DC }
-
-  /// Returns the numerical value of a hex digit.
-  static func parseHexDigit(ascii: ASCII) -> UInt8 {
-    assert(_parseHex_table.count == 128)
-    return _parseHex_table.withUnsafeBufferPointer { $0[Int(ascii.codePoint)] }
-  }
-
-  static func parseDecimalDigit(ascii: ASCII) -> UInt8 {
-    let hexValue = parseHexDigit(ascii: ascii)
-    // Yes, there's a branch, but I didn't fancy a second lookup table.
-    return hexValue < 10 ? hexValue : DC
-  }
-}
-
-extension ASCII {
-
-  /// Prints the decimal representation of `number` in to `stringBuffer`.
-  /// `stringBuffer` requires at least 3 bytes worth of space.
+  /// Prints the decimal representation of `number` to the memory location given by `stringBuffer`.
+  /// A maximum of 3 bytes will be written.
   ///
-  /// - returns:  The index one-past-the-end of the resulting text.
+  /// - returns:  The number of bytes written to `stringBuffer`.
   ///
-  static func insertDecimalString(for number: UInt8, into stringBuffer: UnsafeMutableRawBufferPointer) -> Int {
-    var idx = stringBuffer.startIndex
-    guard _fastPath(stringBuffer.count >= 3) else { return idx }
+  @inlinable
+  internal static func writeDecimalString(for number: UInt8, to stringBuffer: UnsafeMutableRawPointer) -> UInt8 {
 
-    guard number != 0 else {
-      stringBuffer[idx] = ASCII.n0.codePoint
-      idx &+= 1
-      return idx
-    }
-    var number = number
-    let pieceStart = idx
-    while number != 0 {
+    var count: UInt8 = 0
+    var remaining = number
+    do {
       let digit: UInt8
-      (number, digit) = number.quotientAndRemainder(dividingBy: 10)
-      stringBuffer[idx] = ASCII.getDecimalDigit(UInt8(truncatingIfNeeded: digit)).codePoint
-      idx &+= 1
+      (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 100)
+      if digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit))!.codePoint,
+          toByteOffset: 0,
+          as: UInt8.self
+        )
+        count += 1
+      }
     }
-    stringBuffer[pieceStart..<idx].reverse()
-    return idx
+    do {
+      let digit: UInt8
+      (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 10)
+      if count != 0 || digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit))!.codePoint,
+          toByteOffset: Int(count),
+          as: UInt8.self
+        )
+        count += 1
+      }
+    }
+    stringBuffer.storeBytes(
+      of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: remaining))!.codePoint,
+      toByteOffset: Int(count),
+      as: UInt8.self
+    )
+    count += 1
+    return count
   }
 
-  /// Prints the decimal representation of `number` in to `stringBuffer`.
-  /// `stringBuffer` requires at least `B.bitWidth / 4` bytes of space.
+  /// Prints the hex representation of `number` to the memory location given by `stringBuffer`.
+  /// A maximum of `B.bitWidth / 4` bytes will be written (e.g. 2 bytes for an 8-bit integer, 4 bytes for a 16-bit integer, etc).
   ///
-  /// - returns:  The index one-past-the-end of the resulting text.
+  /// The hex representation is written without any leading zeroes, and in lowercase.
   ///
-  static func insertHexString<B>(for number: B, into stringBuffer: UnsafeMutableRawBufferPointer) -> Int
-  where B: BinaryInteger {
-    var idx = stringBuffer.startIndex
-    assert(stringBuffer.count >= number.bitWidth / 4)
+  /// - returns:  The number of bytes written to `stringBuffer`.
+  ///
+  @inlinable
+  internal static func writeHexString<B>(
+    for number: B, to stringBuffer: UnsafeMutableRawPointer
+  ) -> UInt8 where B: FixedWidthInteger & UnsignedInteger {
 
-    guard number != 0 else {
-      stringBuffer[idx] = ASCII.n0.codePoint
-      idx &+= 1
-      return idx
+    var count: UInt8 = 0
+    for nibbleIdx in 1..<(B.bitWidth / 4) {
+      let digit = number &>> (B.bitWidth - (nibbleIdx * 4))
+      if count != 0 || digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.lowercaseHexDigit(of: UInt8(truncatingIfNeeded: digit)).codePoint,
+          toByteOffset: Int(count),
+          as: UInt8.self
+        )
+        count += 1
+      }
     }
-    var number = number
-    let pieceStart = idx
-    while number != 0 {
-      let digit: B
-      (number, digit) = number.quotientAndRemainder(dividingBy: 16)
-      stringBuffer[idx] = ASCII.getHexDigit_lower(UInt8(truncatingIfNeeded: digit)).codePoint
-      idx &+= 1
-    }
-    stringBuffer[Range(uncheckedBounds: (pieceStart, idx))].reverse()
-    return idx
+    stringBuffer.storeBytes(
+      of: ASCII.lowercaseHexDigit(of: UInt8(truncatingIfNeeded: number)).codePoint,
+      toByteOffset: Int(count),
+      as: UInt8.self
+    )
+    count += 1
+    return count
   }
 }
 
+
+// --------------------------------------------
+// MARK: - Misc
+// --------------------------------------------
+
+
 extension ASCII {
-  var lowercased: ASCII {
+
+  @inlinable
+  internal var lowercased: ASCII {
     guard ASCII.ranges.uppercaseAlpha.contains(self) else { return self }
-    return ASCII(_unchecked: ASCII.a.codePoint + (self.codePoint - ASCII.A.codePoint))
+    return ASCII(_unchecked: codePoint | 0b00100000)
+  }
+
+  internal static var allCharacters: AnySequence<ASCII> {
+    AnySequence(
+      sequence(first: ASCII(_unchecked: 0x00)) { character in
+        ASCII(character.codePoint + 1)
+      }
+    )
   }
 }

@@ -12,6 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+// --------------------------------------------
+// MARK: - Unaligned loads
+// --------------------------------------------
+
+
+extension UnsafeRawPointer {
+
+  /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
+  ///
+  /// The memory at this pointer plus offset must be initialized to `T` or another type that is layout compatible with `T`.
+  /// It does not need to be aligned for access to `T`.
+  ///
+  @inlinable @inline(__always)
+  internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
+    var val: T = 0
+    withUnsafeMutableBytes(of: &val) {
+      $0.copyMemory(from: UnsafeRawBufferPointer(start: self + offset, count: MemoryLayout<T>.stride))
+    }
+    return val
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Pointers to tuple elements
+// --------------------------------------------
+
+
 extension UnsafeRawBufferPointer {
 
   /// Returns a typed pointer to the memory referenced by this buffer, assuming that the memory is already bound to the specified type.

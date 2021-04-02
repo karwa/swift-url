@@ -203,8 +203,8 @@ enum PercentEncodedByte: RandomAccessCollection {
     case .percentEncodedByte(let byte):
       switch position {
       case 0: return ASCII.percentSign.codePoint
-      case 1: return ASCII.getHexDigit_upper(byte &>> 4).codePoint
-      case 2: return ASCII.getHexDigit_upper(byte).codePoint
+      case 1: return ASCII.uppercaseHexDigit(of: byte &>> 4).codePoint
+      case 2: return ASCII.uppercaseHexDigit(of: byte).codePoint
       default: fatalError("Invalid index")
       }
     }
@@ -353,10 +353,8 @@ extension LazilyPercentDecoded {
         return
       }
       var tail = source.suffix(from: byte1Index)
-      guard let byte1 = tail.popFirst(),
-        let decodedByte1 = ASCII(byte1).map(ASCII.parseHexDigit(ascii:)), decodedByte1 != ASCII.parse_NotFound,
-        let byte2 = tail.popFirst(),
-        let decodedByte2 = ASCII(byte2).map(ASCII.parseHexDigit(ascii:)), decodedByte2 != ASCII.parse_NotFound
+      guard let decodedByte1 = ASCII(flatMap: tail.popFirst())?.hexNumberValue,
+        let decodedByte2 = ASCII(flatMap: tail.popFirst())?.hexNumberValue
       else {
         self.decodedValue = EncodeSet.unsubstitute(character: .percentSign)?.codePoint ?? ASCII.percentSign.codePoint
         self.range = Range(uncheckedBounds: (i, byte1Index))

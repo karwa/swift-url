@@ -181,7 +181,7 @@ extension WebURL.JSModel {
     }
     set {
       let filtered = ASCII.NewlineAndTabFiltered(newValue.utf8)
-      let portString = filtered.prefix(while: { ASCII($0)?.isA(\.digits) ?? false })
+      let portString = filtered.prefix { ASCII($0)?.isDigit == true }
 
       var newPort: UInt16? = nil
       if portString.isEmpty {

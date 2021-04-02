@@ -59,7 +59,7 @@ func _urlFromBytes_impl<Bytes, Callback>(
   // Trim leading/trailing C0 control characters and spaces.
   let trimmedInput = inputString.trim {
     switch ASCII($0) {
-    case ASCII.ranges.controlCharacters?, .space?: return true
+    case ASCII.ranges.c0Control?, .space?: return true
     default: return false
     }
   }
@@ -543,7 +543,7 @@ extension URLScanner {
   ///   - callback: An object to notify about any validation errors which are encountered.
   /// - returns:    A mapping of detected URL components, or `nil` if the string could not be parsed.
   ///
-  static func scanURLString(
+  internal static func scanURLString(
     _ input: InputString,
     baseURL: WebURL?,
     callback: inout Callback
@@ -551,29 +551,27 @@ extension URLScanner {
 
     var scanResults = ScannedRangesAndFlags<InputString>()
 
-    if let schemeEndIndex = findScheme(input),
-      schemeEndIndex != input.endIndex,
-      input[schemeEndIndex] == ASCII.colon.codePoint
-    {
-      let schemeName = input.prefix(upTo: schemeEndIndex)
-      let schemeKind = WebURL.SchemeKind(parsing: schemeName)
+    if let (schemeEndIndex, schemeKind) = parseScheme(input), schemeEndIndex != input.endIndex {
       scanResults.schemeKind = schemeKind
-      scanResults.schemeRange = Range(uncheckedBounds: (input.startIndex, schemeName.endIndex))
+      scanResults.schemeRange = Range(uncheckedBounds: (input.startIndex, schemeEndIndex))
 
-      let tail = input.suffix(from: input.index(after: schemeEndIndex))
       return scanURLWithScheme(
-        tail, scheme: schemeKind, baseURL: baseURL,
-        &scanResults, callback: &callback
+        input.suffix(from: input.index(after: schemeEndIndex)),
+        scheme: schemeKind,
+        baseURL: baseURL,
+        &scanResults,
+        callback: &callback
       ) ? scanResults : nil
     }
 
-    // If we don't have a scheme, we'll need to copy from the baseURL.
+    // state: "no scheme"
+
     guard let base = baseURL else {
       callback.validationError(.missingSchemeNonRelativeURL)
       return nil
     }
-    // If base `cannotBeABaseURL`, the only thing we can do is set the fragment.
-    guard base._cannotBeABaseURL == false else {
+
+    if base._cannotBeABaseURL {
       guard ASCII(flatMap: input.first) == .numberSign else {
         callback.validationError(.missingSchemeNonRelativeURL)
         return nil
@@ -583,25 +581,33 @@ extension URLScanner {
       _ = scanFragment(input.dropFirst(), &scanResults, callback: &callback)
       return scanResults
     }
-    // (No scheme + valid base URL) = relative URL.
-    if base._schemeKind == .file {
+
+    if case .file = base._schemeKind {
       scanResults.componentsToCopyFromBase = [.scheme]
       return scanAllFileURLComponents(
-        input[...], baseURL: baseURL, &scanResults, callback: &callback
+        input[...],
+        baseURL: baseURL,
+        &scanResults,
+        callback: &callback
       ) ? scanResults : nil
     }
+
     return scanAllRelativeURLComponents(
-      input[...], baseScheme: base._schemeKind, &scanResults, callback: &callback
+      input[...],
+      baseScheme: base._schemeKind,
+      &scanResults,
+      callback: &callback
     ) ? scanResults : nil
   }
 
   /// Scans all components of the input string `input`, and builds up a map based on the URL's `scheme`.
   ///
-  static func scanURLWithScheme(
+  internal static func scanURLWithScheme(
     _ input: InputSlice, scheme: SchemeKind, baseURL: WebURL?,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> Bool {
 
+    // state: "scheme", after a valid scheme has been parsed.
     switch scheme {
     case .file:
       if !hasDoubleSolidusPrefix(input) {
@@ -610,7 +616,7 @@ extension URLScanner {
       return scanAllFileURLComponents(input, baseURL: baseURL, &mapping, callback: &callback)
 
     case .other:
-      var authority = input[...]
+      var authority = input
       guard ASCII(flatMap: authority.popFirst()) == .forwardSlash else {
         mapping.cannotBeABaseURL = true
         return scanAllCannotBeABaseURLComponents(input, scheme: scheme, &mapping, callback: &callback)
@@ -623,12 +629,12 @@ extension URLScanner {
 
     default:
       // state: "special relative or authority"
-      var authority = input[...]
+      var authority = input
       if hasDoubleSolidusPrefix(input) {
         // state: "special authority slashes"
         authority = authority.dropFirst(2)
       } else {
-        // Note: since `scheme` is special, comparing the kind is sufficient.
+        // Since `scheme` is special, comparing the kind is sufficient.
         if scheme == baseURL?._schemeKind {
           callback.validationError(.relativeURLMissingBeginningSolidus)
           return scanAllRelativeURLComponents(input, baseScheme: scheme, &mapping, callback: &callback)
@@ -1362,31 +1368,38 @@ extension ScannedRangesAndFlags where InputString: BidirectionalCollection, Inpu
 // MARK: - Helper functions.
 
 
-/// Returns the endIndex of the scheme name if one can be parsed from `input`.
+/// Parses a scheme from the given string of UTF8 bytes.
 ///
-func findScheme<Input>(_ input: Input) -> Input.Index? where Input: Collection, Input.Element == UInt8 {
+/// If the string contains a scheme terminator ("`:`"), the returned tuple's `terminator` element will be equal to its index.
+/// Otherwise, the entire string will be considered the scheme name, and `terminator` will be equal to the input string's `endIndex`.
+///
+@inlinable
+func parseScheme<UTF8Bytes>(
+  _ input: UTF8Bytes
+) -> (terminator: UTF8Bytes.Index, kind: WebURL.SchemeKind)? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-  guard input.isEmpty == false else { return nil }
-  var slice = input[...]
+  let terminatorIdx = input.firstIndex { $0 == ASCII.colon.codePoint } ?? input.endIndex
+  let schemeName = input[Range(uncheckedBounds: (input.startIndex, terminatorIdx))]
+  let kind = WebURL.SchemeKind(parsing: schemeName)
 
-  // schemeStart: must begin with an ASCII alpha.
-  guard ASCII(flatMap: slice.popFirst())?.isAlpha == true else { return nil }
-
-  // scheme: allow all ASCII { alphaNumeric, +, -, . } characters.
-  let _schemeEnd = slice.firstIndex { byte in
-    let c = ASCII(byte)
-    switch c {
-    case _ where c?.isAlphaNumeric == true, .plus?, .minus?, .period?:
-      return false
-    default:
-      assert(c != .horizontalTab && c != .lineFeed)
-      return true
+  switch kind {
+  case .other:
+    // Note: this ensures empty strings are rejected.
+    guard ASCII(flatMap: schemeName.first)?.isAlpha == true else { return nil }
+    let isValidSchemeName = schemeName.allSatisfy { byte in
+      // https://bugs.swift.org/browse/SR-14438
+      // swift-format-ignore
+      switch ASCII(byte) {
+      case .some(let char) where char.isAlphaNumeric: fallthrough
+      case .plus?, .minus?, .period?: return true
+      default: return false
+      }
     }
+    return isValidSchemeName ? (terminatorIdx, kind) : nil
+  default:
+    _onFastPath()
+    return (terminatorIdx, kind)
   }
-  if let schemeEnd = _schemeEnd {
-    return input[schemeEnd] == ASCII.colon.codePoint ? schemeEnd : nil
-  }
-  return input.endIndex
 }
 
 /// Given a string, like "example.com:99/some/path?hello=world", returns the endIndex of the hostname component.
