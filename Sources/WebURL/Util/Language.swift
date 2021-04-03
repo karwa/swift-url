@@ -14,41 +14,51 @@
 
 /// Accesses a scoped optional resource from an optional root object.
 ///
-/// Consider the following example type:
+/// Consider the common pattern of accessing a resource whose lifetime is bound to a scope.
+/// Note that the resource presented to the `body` closure is an optional type:
+///
 /// ```
 /// struct MyObject {
-///   func withOptionalResource<Result>(_ perform: (Resource?) -> Result) -> Result
+///   func withOptionalResource<Result>(_ body: (Resource?) -> Result) -> Result
 /// }
 /// ```
-/// Notice that the `perform` closure accepts an optional argument. It can be useful when presented with a `MyObject?` to handle
-/// nil objects and nil resources in the same way. One way to do this would be through an optional chaining and an optional result type:
+///
+/// It can be useful, when presented with an optional `MyObject?` value, to treat `nil` objects and `nil` resources as equivalent for the purposes of
+/// `body`. One way to achieve this would be to use optional chaining, and for `body` to return an optional `Result` type which propagates whether or
+/// not the resource was present:
+///
 /// ```
 /// let maybeObject: MyObject? = ...
 /// let result: MyResult? = maybeObject?.withOptionalResource { maybeResource -> MyResult? in
-///   guard let resource = maybeResource else { return nil }
+///   // maybeObject is not nil.
+///   guard let resource = maybeResource else { return nil } // propagate resource being nil.
 ///   return MyResult()
 /// }
+///
 /// if let resourceResult = result {
 ///   // Either maybeObject or maybeResource were nil
 /// } else {
 ///   // Neither were nil.
 /// }
 /// ```
-/// But this is cumbersome when our nil case involves an early return, and when the `withOptionalResource` call contains a large amount
-/// of code. Instead, we can write:
+///
+/// This is rather a lot of code, and can be quite cumbersome when `body` is large. Instead, we can use `accessOptionalResource`:
+///
 /// ```
 /// let maybeObject: MyObject? = ...
-/// accessOptionalResource(from: maybeObject, using: { $0.withOptionalResource($1) }) { maybeResource in
+/// accessOptionalResource(from: maybeObject, using: { body in $0.withOptionalResource(body) }) { maybeResource in
 ///   guard let resource = maybeResource else {
 ///     // Either maybeObject or maybeResource were nil
 ///   }
 ///   // Neither were nil.
 /// }
 /// ```
-/// Essentially, it makes optional chaining flow in the opposite direction, making a `nil` root object result in a `nil` _parameter_ to
-/// the `withOptionalResource` closure, rather a `nil` result.
 ///
-func accessOptionalResource<Root, Argument, Result>(
+/// Essentially, it is analogous to optional chaining, but flowing in the opposite direction; making a `nil` root object result in a `nil` _parameter_ to
+/// `body`, collapsing the levels of `Optional`.
+///
+@inlinable
+internal func accessOptionalResource<Root, Argument, Result>(
   from root: Root?, using accessor: (Root, (Argument?) -> Result) -> Result, _ handler: (Argument?) -> Result
 ) -> Result {
   guard let root = root else {

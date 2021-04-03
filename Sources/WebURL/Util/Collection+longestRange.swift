@@ -25,7 +25,7 @@ extension Collection {
   ///                   as well as how many elements are contained within that range.
   ///
   @inlinable
-  public func longestSubrange(satisfying predicate: (Element) throws -> Bool) rethrows
+  internal func longestSubrange(satisfying predicate: (Element) throws -> Bool) rethrows
     -> (subrange: Range<Index>, length: Int)
   {
     var idx = startIndex
@@ -48,6 +48,8 @@ extension Collection {
     return longest
   }
 }
+
+// Note: This has to be 'public' for WebURLTestSupport :(
 
 extension Collection where Element: Equatable {
 
