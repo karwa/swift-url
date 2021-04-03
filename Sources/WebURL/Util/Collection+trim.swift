@@ -23,7 +23,7 @@ extension BidirectionalCollection {
   ///    - predicate:  A closure which determines if the element should be omitted from the resulting slice.
   ///
   @inlinable
-  public func trim(where predicate: (Element) throws -> Bool) rethrows -> SubSequence {
+  internal func trim(where predicate: (Element) throws -> Bool) rethrows -> SubSequence {
     var sliceStart = startIndex
     var sliceEnd = endIndex
     // Consume elements from the front.

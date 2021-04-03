@@ -12,17 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+// --------------------------------------------
 // This file contains a generic implementation of 'replaceSubrange' for contiguous buffers,
 // including those only accessible indirectly such as `ManagedBuffer` subclasses.
 //
-// It includes optimisations for in-place replacement as well as consuming the original storage when additional
+// It includes optimizations for in-place replacement as well as consuming the original storage when additional
 // capacity is required. The implementation is adapted from the standard library's source code, where it forms
 // the basis of Array's implementation of replaceSubrange.
+//
+// I've tried to split the functionality in to small, well-defined functions. Unfortunately, the main entrypoint
+// is still a big function with lots of parameters which I've found difficult to clean up by defining appropriate
+// abstractions. It looks uglier than it is.
+// --------------------------------------------
+
 
 /// An object which contains a unique, mutable buffer.
 /// This protocol is a required level of indirection so that `replaceElements` can allocate, fill, and return objects which provide their buffers indirectly.
 ///
-protocol BufferContainer {
+@usableFromInline
+internal protocol BufferContainer {
   associatedtype Element
   func withUnsafeMutablePointerToElements<R>(_ body: (UnsafeMutablePointer<Element>) throws -> R) rethrows -> R
 }
@@ -76,7 +85,8 @@ protocol BufferContainer {
 ///   - newStorage:           The new storage object, if one had to be allocated.
 ///   - newStorageCount: The number of contiguous elements which are initialized in `newStorage`.
 ///
-func replaceElements<C, T: BufferContainer>(
+@inlinable
+internal func replaceElements<C, T: BufferContainer>(
   in buffer: UnsafeMutableBufferPointer<C.Element>,
   initializedCount: Int,
   subrange: Range<Int>,
@@ -85,7 +95,7 @@ func replaceElements<C, T: BufferContainer>(
   storageConstructor: (_ minimumCapacity: Int) -> T
 ) -> (bufferCount: Int, insertedCount: Int, newStorage: T?, newStorageCount: Int)
 where C: Collection, T.Element == C.Element {
-  return replaceElements(
+  replaceElements(
     in: buffer,
     initializedCount: initializedCount,
     isUnique: isUnique,
@@ -96,7 +106,8 @@ where C: Collection, T.Element == C.Element {
   )
 }
 
-func replaceElements<T: BufferContainer>(
+@inlinable
+internal func replaceElements<T: BufferContainer>(
   in buffer: UnsafeMutableBufferPointer<T.Element>,
   initializedCount: Int,
   isUnique: Bool,
@@ -105,6 +116,7 @@ func replaceElements<T: BufferContainer>(
   initializedWith initializer: (inout UnsafeMutableBufferPointer<T.Element>) -> Int,
   storageConstructor: (_ minimumCapacity: Int) -> T
 ) -> (bufferCount: Int, insertedCount: Int, newStorage: T?, newStorageCount: Int) {
+
   precondition(subrange.lowerBound >= 0, "subrange start is negative")
   precondition(subrange.upperBound <= initializedCount, "subrange extends past the end")
 
@@ -154,7 +166,8 @@ func replaceElements<T: BufferContainer>(
 ///
 /// - returns: The buffer's new `count`.
 ///
-func replaceSubrange_inplace<Element>(
+@inlinable
+internal func replaceSubrange_inplace<Element>(
   buffer: UnsafeMutableBufferPointer<Element>,
   initializedCount: Int,
   subrange: Range<Int>,
@@ -192,7 +205,11 @@ func replaceSubrange_inplace<Element>(
   return finalCount
 }
 
-// Out-of-place updates.
+
+// --------------------------------------------
+// MARK: - Out-of-place replacements
+// --------------------------------------------
+
 
 extension UnsafeMutableBufferPointer {
 
@@ -207,7 +224,8 @@ extension UnsafeMutableBufferPointer {
   ///
   /// - returns: The total number of elements that were initialized.
   ///
-  func moveInitialize(
+  @inlinable
+  internal func moveInitialize(
     from oldContents: UnsafeMutableBufferPointer<Element>,
     replacingSubrange subrange: Range<Int>,
     withElements newCount: Int,  // Number of new elements to insert
@@ -247,7 +265,8 @@ extension UnsafeMutableBufferPointer {
   ///
   /// - returns: The total number of elements that were initialized.
   ///
-  func initialize(
+  @inlinable
+  internal func initialize(
     from oldContents: UnsafeBufferPointer<Element>,
     replacingSubrange subrange: Range<Int>,
     withElements newCount: Int,  // Number of new elements to insert
