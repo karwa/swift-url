@@ -134,75 +134,114 @@ extension ASCII.NewlineAndTabFiltered: BidirectionalCollection where Base: Bidir
 
 extension ASCII {
 
-  /// A collection of UTF8-encoded bytes with ASCII alpha characters (A-Z) lazily replaced with their lowercase counterparts.
-  /// Other bytes are left unchanged.
+  /// A collection of UTF8-encoded bytes with ASCII uppercase alpha characters (A-Z) lazily replaced with their lowercase counterparts.
+  /// Other characters are left unchanged.
   ///
-  struct Lowercased<Base> where Base: Sequence, Base.Element == UInt8 {
-    private var base: Base
+  @usableFromInline
+  internal struct Lowercased<Base> where Base: Sequence, Base.Element == UInt8 {
 
-    init(_ base: Base) {
+    @usableFromInline
+    internal var base: Base
+
+    @inlinable
+    internal init(_ base: Base) {
       self.base = base
     }
   }
 }
 
 extension ASCII.Lowercased: Sequence {
-  typealias Element = UInt8
 
-  struct Iterator: IteratorProtocol {
-    var baseIterator: Base.Iterator
+  @usableFromInline typealias Element = UInt8
 
-    mutating func next() -> UInt8? {
-      let byte = baseIterator.next()
-      return ASCII(flatMap: byte)?.lowercased.codePoint ?? byte
+  @usableFromInline
+  internal struct Iterator: IteratorProtocol {
+
+    @usableFromInline
+    internal var baseIterator: Base.Iterator
+
+    @inlinable
+    internal init(baseIterator: Base.Iterator) {
+      self.baseIterator = baseIterator
+    }
+
+    @inlinable
+    internal mutating func next() -> UInt8? {
+      baseIterator.next().flatMap { ASCII($0)?.lowercased.codePoint ?? $0 }
     }
   }
 
-  func makeIterator() -> Iterator {
-    return Iterator(baseIterator: base.makeIterator())
+  @inlinable
+  internal func makeIterator() -> Iterator {
+    Iterator(baseIterator: base.makeIterator())
   }
 }
 
 extension ASCII.Lowercased: Collection where Base: Collection {
-  typealias Index = Base.Index
 
-  var startIndex: Index {
-    return base.startIndex
+  @usableFromInline typealias Index = Base.Index
+
+  @inlinable
+  internal var startIndex: Index {
+    base.startIndex
   }
-  var endIndex: Index {
-    return base.endIndex
+
+  @inlinable
+  internal var endIndex: Index {
+    base.endIndex
   }
-  subscript(position: Index) -> UInt8 {
+
+  @inlinable
+  internal subscript(position: Index) -> UInt8 {
     let byte = base[position]
     return ASCII(byte)?.lowercased.codePoint ?? byte
   }
-  func index(after i: Index) -> Index {
-    return base.index(after: i)
+
+  @inlinable
+  internal func index(after i: Index) -> Index {
+    base.index(after: i)
   }
-  func formIndex(after i: inout Index) {
+
+  @inlinable
+  internal func formIndex(after i: inout Index) {
     base.formIndex(after: &i)
   }
-  // Since we don't alter the 'count', these may be cheaper than Collection's default implementations.
-  var count: Int {
-    return base.count
+
+  @inlinable
+  internal func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
+    base.index(i, offsetBy: distance, limitedBy: limit)
   }
-  var isEmpty: Bool {
-    return base.isEmpty
+
+  @inlinable
+  internal func formIndex(_ i: inout Index, offsetBy distance: Int, limitedBy limit: Index) -> Bool {
+    base.formIndex(&i, offsetBy: distance, limitedBy: limit)
   }
-  func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
-    return base.index(i, offsetBy: distance, limitedBy: limit)
+
+  @inlinable
+  internal var count: Int {
+    base.count
   }
-  func distance(from start: Index, to end: Index) -> Int {
-    return base.distance(from: start, to: end)
+
+  @inlinable
+  internal var isEmpty: Bool {
+    base.isEmpty
+  }
+
+  @inlinable
+  internal func distance(from start: Index, to end: Index) -> Int {
+    base.distance(from: start, to: end)
   }
 }
 
 extension ASCII.Lowercased: BidirectionalCollection where Base: BidirectionalCollection {
 
-  func index(before i: Index) -> Index {
-    return base.index(before: i)
+  @inlinable
+  internal func index(before i: Index) -> Index {
+    base.index(before: i)
   }
-  func formIndex(before i: inout Index) {
+
+  @inlinable
+  internal func formIndex(before i: inout Index) {
     base.formIndex(before: &i)
   }
 }
