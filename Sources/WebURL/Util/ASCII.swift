@@ -433,12 +433,16 @@ extension ASCII {
 
 extension ASCII {
 
+  /// If this is an uppercase alpha character, returns its lowercase counterpart. Otherwise, returns `self`.
+  ///
   @inlinable
   internal var lowercased: ASCII {
     guard ASCII.ranges.uppercaseAlpha.contains(self) else { return self }
     return ASCII(_unchecked: codePoint | 0b00100000)
   }
 
+  /// A sequence of all possible ASCII characters.
+  ///
   internal static var allCharacters: AnySequence<ASCII> {
     AnySequence(
       sequence(first: ASCII(_unchecked: 0x00)) { character in

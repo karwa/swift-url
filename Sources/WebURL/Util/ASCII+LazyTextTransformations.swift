@@ -13,168 +13,235 @@
 // limitations under the License.
 
 
-// MARK: - ASCII.NewlineAndTabFiltered
+// --------------------------------------------
+// MARK: - Newline and tab filtering
+// --------------------------------------------
 
 
 extension ASCII {
 
+  /// Returns a collection which has the same contents as the given collection, but without any newline characters or horizontal tabs.
+  ///
+  /// If the only newline or tab characters are at the ends of the given collection, this method returns a trimmed `SubSequence` of the original data in order to
+  /// maintain the collection's performance characteristics. If the collection contains additional newlines or tabs, a lazily-filtering wrapper is returned instead.
+  ///
+  @inlinable
+  internal static func filterNewlinesAndTabs<UTF8Bytes>(
+    from utf8: UTF8Bytes
+  ) -> Either<ASCII.NewlineAndTabFiltered<UTF8Bytes>, UTF8Bytes.SubSequence>
+  where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
+
+    let trimmedSlice = utf8.trim { isNewlineOrTab($0) }
+    if trimmedSlice.isEmpty == false, trimmedSlice.contains(where: { isNewlineOrTab($0) }) {
+      return .left(ASCII.NewlineAndTabFiltered(unchecked: trimmedSlice))
+    }
+    return .right(trimmedSlice)
+  }
+
+  /// If `true`, this character is a newline or tab (`0x0A` carriage return, `0x0D` line feed, or `0x09` horizontal tab).
+  ///
+  @inlinable
+  internal static func isNewlineOrTab(_ codeUnit: UInt8) -> Bool {
+    (codeUnit & 0b1111_1011 == 0b0000_1001)  // horizontal tab (0x09) and carriage return (0x0D)
+      || codeUnit == ASCII.lineFeed.codePoint
+  }
+
   /// A collection of UTF8-encoded bytes with ASCII newline and tab characters lazily removed.
   ///
-  struct NewlineAndTabFiltered<Base> where Base: Collection, Base.Element == UInt8 {
-    private let base: Base.SubSequence
+  @usableFromInline
+  internal struct NewlineAndTabFiltered<Base> where Base: Collection, Base.Element == UInt8 {
 
-    /// Creates a `NewlineAndTabFiltered` view over the given collection.
-    ///
-    init(_ base: Base) {
-      // We only need to trim one side. This is a subtle difference from 'filterIfNeeded', but it shouldn't
-      // result in any visible behaviour differences:
-      // - endIndex is still "past the end". It is no longer "1 past the end", but that isn't important,
-      //   since 'index(after:)' snaps to endIndex whenever there are no more valid indexes,
-      //   whatever the precise value of 'endIndex' happens to be. It does not require any more steps.
-      // - If we trim everything, base.startIndex == base.endIndex, so 'isEmpty' still works.
-      self.base = base.drop(while: { Self.isAllowedByte($0) == false })
-    }
+    @usableFromInline
+    internal let base: Base.SubSequence
 
-    /// Creates a `NewlineAndTabFiltered` over a slice whose start has already been trimmed of filtered characters.
+    /// Creates a view over a slice whose start has already been trimmed of tabs and newlines.
     ///
-    private init(unchecked_slice base: Base.SubSequence) {
-      assert(base.first.map { Self.isAllowedByte($0) } ?? true, "slice has not been trimmed")
+    @inlinable
+    internal init(unchecked base: Base.SubSequence) {
+      assert(base.first.map { !ASCII.isNewlineOrTab($0) } ?? true, "slice has not been trimmed")
       self.base = base
     }
 
-    internal static func isAllowedByte(_ byte: UInt8) -> Bool {
-      return byte != ASCII.horizontalTab.codePoint && byte != ASCII.carriageReturn.codePoint
-        && byte != ASCII.lineFeed.codePoint
+    /// Creates a view over a collection which may start with a tab or newline.
+    ///
+    @inlinable
+    internal init(_ base: Base) {
+      self.init(unchecked: base.drop(while: ASCII.isNewlineOrTab))
     }
   }
 }
 
 extension ASCII.NewlineAndTabFiltered: Collection {
-  typealias Index = Base.Index
-  typealias Element = Base.Element
 
-  var startIndex: Index {
-    return base.startIndex
+  @usableFromInline typealias Index = Base.Index
+  @usableFromInline typealias Element = Base.Element
+
+  @inlinable
+  internal var startIndex: Index {
+    base.startIndex
   }
-  var endIndex: Index {
-    return base.endIndex
+
+  @inlinable
+  internal var endIndex: Index {
+    base.endIndex
   }
-  subscript(position: Index) -> UInt8 {
-    return base[position]
+
+  @inlinable
+  internal subscript(position: Index) -> UInt8 {
+    base[position]
   }
-  subscript(bounds: Range<Index>) -> Self {
-    return Self(unchecked_slice: base[bounds])
+
+  @inlinable
+  internal subscript(bounds: Range<Index>) -> Self {
+    Self(unchecked: base[bounds])
   }
-  func index(after i: Index) -> Index {
+
+  @inlinable
+  internal func index(after i: Index) -> Index {
     let next = base.index(after: i)
-    return base[Range(uncheckedBounds: (next, endIndex))].firstIndex(where: Self.isAllowedByte) ?? endIndex
+    return base[Range(uncheckedBounds: (next, endIndex))].firstIndex { !ASCII.isNewlineOrTab($0) } ?? endIndex
   }
-  func formIndex(after i: inout Index) {
+
+  @inlinable
+  internal func formIndex(after i: inout Index) {
     base.formIndex(after: &i)
-    i = base[Range(uncheckedBounds: (i, endIndex))].firstIndex(where: Self.isAllowedByte) ?? endIndex
+    i = base[Range(uncheckedBounds: (i, endIndex))].firstIndex { !ASCII.isNewlineOrTab($0) } ?? endIndex
   }
 }
 
 extension ASCII.NewlineAndTabFiltered: BidirectionalCollection where Base: BidirectionalCollection {
 
-  /// Trims ASCII newline and tab characters from the given collection. If the resulting slice still contains characters that require filtering,
-  /// this method returns a `NewlineAndTabFiltered` view over that slice (`.left`).
-  /// If the trimmed slice does not contain any more ASCII newlines or tabs, and so does not require further filtering,
-  /// this method returns that slice without wrapping (`.right`).
-  ///
-  static func filterIfNeeded(_ base: Base) -> Either<Self, Base.SubSequence> {
-    let trimmedSlice = base.trim(where: { isAllowedByte($0) == false })
-    if trimmedSlice.isEmpty == false, trimmedSlice.contains(where: { isAllowedByte($0) == false }) {
-      return .left(Self(unchecked_slice: trimmedSlice))
-    }
-    return .right(trimmedSlice)
+  @inlinable
+  internal func index(before i: Index) -> Index {
+    // Note that decrementing startIndex does not trap (BidirectionalCollection does not require it);
+    // it just keeps returning startIndex.
+    return base[Range(uncheckedBounds: (startIndex, i))].lastIndex { !ASCII.isNewlineOrTab($0) } ?? startIndex
   }
 
-  func index(before i: Index) -> Index {
-    precondition(i != startIndex)
-    return base[Range(uncheckedBounds: (startIndex, i))].lastIndex(where: Self.isAllowedByte) ?? startIndex
-  }
-  func formIndex(before i: inout Index) {
-    precondition(i != startIndex)
-    i = base[Range(uncheckedBounds: (startIndex, i))].lastIndex(where: Self.isAllowedByte) ?? startIndex
+  @inlinable
+  internal func formIndex(before i: inout Index) {
+    // Note that decrementing startIndex does not trap (BidirectionalCollection does not require it);
+    // it just keeps returning startIndex.
+    i = base[Range(uncheckedBounds: (startIndex, i))].lastIndex { !ASCII.isNewlineOrTab($0) } ?? startIndex
   }
 }
 
 
-// MARK: - ASCII.Lowercased
+// --------------------------------------------
+// MARK: - Lowercasing
+// --------------------------------------------
 
 
 extension ASCII {
 
-  /// A collection of UTF8-encoded bytes with ASCII alpha characters (A-Z) lazily replaced with their lowercase counterparts.
-  /// Other bytes are left unchanged.
+  /// A collection of UTF8-encoded bytes with ASCII uppercase alpha characters (A-Z) lazily replaced with their lowercase counterparts.
+  /// Other characters are left unchanged.
   ///
-  struct Lowercased<Base> where Base: Sequence, Base.Element == UInt8 {
-    private var base: Base
+  @usableFromInline
+  internal struct Lowercased<Base> where Base: Sequence, Base.Element == UInt8 {
 
-    init(_ base: Base) {
+    @usableFromInline
+    internal var base: Base
+
+    @inlinable
+    internal init(_ base: Base) {
       self.base = base
     }
   }
 }
 
 extension ASCII.Lowercased: Sequence {
-  typealias Element = UInt8
 
-  struct Iterator: IteratorProtocol {
-    var baseIterator: Base.Iterator
+  @usableFromInline typealias Element = UInt8
 
-    mutating func next() -> UInt8? {
-      let byte = baseIterator.next()
-      return ASCII(flatMap: byte)?.lowercased.codePoint ?? byte
+  @usableFromInline
+  internal struct Iterator: IteratorProtocol {
+
+    @usableFromInline
+    internal var baseIterator: Base.Iterator
+
+    @inlinable
+    internal init(baseIterator: Base.Iterator) {
+      self.baseIterator = baseIterator
+    }
+
+    @inlinable
+    internal mutating func next() -> UInt8? {
+      baseIterator.next().flatMap { ASCII($0)?.lowercased.codePoint ?? $0 }
     }
   }
 
-  func makeIterator() -> Iterator {
-    return Iterator(baseIterator: base.makeIterator())
+  @inlinable
+  internal func makeIterator() -> Iterator {
+    Iterator(baseIterator: base.makeIterator())
   }
 }
 
 extension ASCII.Lowercased: Collection where Base: Collection {
-  typealias Index = Base.Index
 
-  var startIndex: Index {
-    return base.startIndex
+  @usableFromInline typealias Index = Base.Index
+
+  @inlinable
+  internal var startIndex: Index {
+    base.startIndex
   }
-  var endIndex: Index {
-    return base.endIndex
+
+  @inlinable
+  internal var endIndex: Index {
+    base.endIndex
   }
-  subscript(position: Index) -> UInt8 {
+
+  @inlinable
+  internal subscript(position: Index) -> UInt8 {
     let byte = base[position]
     return ASCII(byte)?.lowercased.codePoint ?? byte
   }
-  func index(after i: Index) -> Index {
-    return base.index(after: i)
+
+  @inlinable
+  internal func index(after i: Index) -> Index {
+    base.index(after: i)
   }
-  func formIndex(after i: inout Index) {
+
+  @inlinable
+  internal func formIndex(after i: inout Index) {
     base.formIndex(after: &i)
   }
-  // Since we don't alter the 'count', these may be cheaper than Collection's default implementations.
-  var count: Int {
-    return base.count
+
+  @inlinable
+  internal func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
+    base.index(i, offsetBy: distance, limitedBy: limit)
   }
-  var isEmpty: Bool {
-    return base.isEmpty
+
+  @inlinable
+  internal func formIndex(_ i: inout Index, offsetBy distance: Int, limitedBy limit: Index) -> Bool {
+    base.formIndex(&i, offsetBy: distance, limitedBy: limit)
   }
-  func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
-    return base.index(i, offsetBy: distance, limitedBy: limit)
+
+  @inlinable
+  internal var count: Int {
+    base.count
   }
-  func distance(from start: Index, to end: Index) -> Int {
-    return base.distance(from: start, to: end)
+
+  @inlinable
+  internal var isEmpty: Bool {
+    base.isEmpty
+  }
+
+  @inlinable
+  internal func distance(from start: Index, to end: Index) -> Int {
+    base.distance(from: start, to: end)
   }
 }
 
 extension ASCII.Lowercased: BidirectionalCollection where Base: BidirectionalCollection {
 
-  func index(before i: Index) -> Index {
-    return base.index(before: i)
+  @inlinable
+  internal func index(before i: Index) -> Index {
+    base.index(before: i)
   }
-  func formIndex(before i: inout Index) {
+
+  @inlinable
+  internal func formIndex(before i: inout Index) {
     base.formIndex(before: &i)
   }
 }

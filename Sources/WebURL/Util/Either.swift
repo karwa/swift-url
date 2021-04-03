@@ -14,7 +14,8 @@
 
 /// A container holding a value which may be of 2 possible types.
 ///
-enum Either<Left, Right> {
+@usableFromInline
+internal enum Either<Left, Right> {
   case left(Left)
   case right(Right)
 }
