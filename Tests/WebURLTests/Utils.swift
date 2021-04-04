@@ -71,7 +71,7 @@ func XCTAssertURLIsIdempotent(_ url: WebURL) {
     return
   }
   // Check that the URLStructure (i.e. code-unit offsets, flags, etc) are the same.
-  XCTAssertEqual(url.storage.structure, reparsed.storage.structure)
+  XCTAssertTrue(url.storage.structure.describesSameStructure(as: reparsed.storage.structure))
   // Check that the code-units are the same.
   url.storage.withEntireString { original in
     reparsed.storage.withEntireString { reparsed in
