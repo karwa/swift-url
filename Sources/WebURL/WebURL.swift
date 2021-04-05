@@ -308,9 +308,21 @@ extension WebURL {
 // MARK: - Setters
 
 
+/// The URL `a:` - essentially the smallest valid URL string. This is used to temporarily occupy WebURL's storage property,
+/// so that its actual storage can be moved to a uniquely-referenced local variable. It should not be possible to observe a URL whose storage is set to this object.
+///
 internal let _tempStorage = AnyURLStorage(
   URLStorage<GenericURLHeader<UInt8>>(
-    count: 0, structure: .init(), initializingCodeUnitsWith: { _ in return 0 }
+    count: 2,
+    structure: URLStructure(
+      schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
+      portLength: 0, pathLength: 0, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 0,
+      sigil: nil, schemeKind: .other, cannotBeABaseURL: true, queryIsKnownFormEncoded: true),
+    initializingCodeUnitsWith: { buffer in
+      buffer[0] = ASCII.a.codePoint
+      buffer[1] = ASCII.colon.codePoint
+      return 2
+    }
   )!
 )
 

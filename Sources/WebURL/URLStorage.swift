@@ -133,19 +133,19 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
 
   @inlinable
   internal init(
-    schemeLength: SizeType = 0,
-    usernameLength: SizeType = 0,
-    passwordLength: SizeType = 0,
-    hostnameLength: SizeType = 0,
-    portLength: SizeType = 0,
-    pathLength: SizeType = 0,
-    queryLength: SizeType = 0,
-    fragmentLength: SizeType = 0,
-    firstPathComponentLength: SizeType = 0,
-    sigil: Sigil? = nil,
-    schemeKind: WebURL.SchemeKind = .other,
-    cannotBeABaseURL: Bool = false,
-    queryIsKnownFormEncoded: Bool = false
+    schemeLength: SizeType,
+    usernameLength: SizeType,
+    passwordLength: SizeType,
+    hostnameLength: SizeType,
+    portLength: SizeType,
+    pathLength: SizeType,
+    queryLength: SizeType,
+    fragmentLength: SizeType,
+    firstPathComponentLength: SizeType,
+    sigil: Sigil?,
+    schemeKind: WebURL.SchemeKind,
+    cannotBeABaseURL: Bool,
+    queryIsKnownFormEncoded: Bool
   ) {
     self.schemeLength = schemeLength
     self.usernameLength = usernameLength
@@ -160,34 +160,6 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     self.schemeKind = schemeKind
     self.cannotBeABaseURL = cannotBeABaseURL
     self.queryIsKnownFormEncoded = queryIsKnownFormEncoded
-  }
-
-  /// Creates a new URL structure with the same information as `other`, but whose values are stored using a different integer type.
-  /// This initializer will trigger a runtime error if the new size is not capable of exactly representing `other`'s values.
-  ///
-  @inlinable
-  internal init<OtherSize: FixedWidthInteger>(copying other: URLStructure<OtherSize>) {
-    if let sameTypeOtherStructure = other as? Self {
-      self = sameTypeOtherStructure
-      return
-    }
-    self = .init(
-      schemeLength: SizeType(other.schemeLength),
-      usernameLength: SizeType(other.usernameLength),
-      passwordLength: SizeType(other.passwordLength),
-      hostnameLength: SizeType(other.hostnameLength),
-      portLength: SizeType(other.portLength),
-      pathLength: SizeType(other.pathLength),
-      queryLength: SizeType(other.queryLength),
-      fragmentLength: SizeType(other.fragmentLength),
-      firstPathComponentLength: SizeType(other.firstPathComponentLength),
-      sigil: other.sigil,
-      schemeKind: other.schemeKind,
-      cannotBeABaseURL: other.cannotBeABaseURL,
-      queryIsKnownFormEncoded: other.queryIsKnownFormEncoded
-    )
-    // Cannot check invariants here because of the 'tempStorage' hack we use to implement COW.
-    // checkInvariants()
   }
 }
 
@@ -348,7 +320,6 @@ extension URLStructure {
   ///
   @inlinable
   internal func range(of component: WebURL.Component) -> Range<SizeType>? {
-    checkInvariants()
     let range = rangeForReplacingCodeUnits(of: component)
     switch component {
     case .scheme:
@@ -426,6 +397,60 @@ extension URLStructure {
 
 extension URLStructure {
 
+  /// Creates a new URL structure with the same information as `other`, but whose values are stored using this structure's integer type.
+  /// This initializer will trigger a runtime error if this structure's integer type is not capable of exactly representing the structure described by `other`.
+  ///
+  @inlinable
+  internal init<OtherSize: FixedWidthInteger>(copying other: URLStructure<OtherSize>) {
+    if let sameTypeOtherStructure = other as? Self {
+      self = sameTypeOtherStructure
+      return
+    }
+    self.init(
+      schemeLength: SizeType(other.schemeLength),
+      usernameLength: SizeType(other.usernameLength),
+      passwordLength: SizeType(other.passwordLength),
+      hostnameLength: SizeType(other.hostnameLength),
+      portLength: SizeType(other.portLength),
+      pathLength: SizeType(other.pathLength),
+      queryLength: SizeType(other.queryLength),
+      fragmentLength: SizeType(other.fragmentLength),
+      firstPathComponentLength: SizeType(other.firstPathComponentLength),
+      sigil: other.sigil,
+      schemeKind: other.schemeKind,
+      cannotBeABaseURL: other.cannotBeABaseURL,
+      queryIsKnownFormEncoded: other.queryIsKnownFormEncoded
+    )
+    checkInvariants()
+  }
+
+  /// An `URLStructure` whose component lengths are all 0 and flags are bogus values.
+  /// Since the scheme length is 0, this structure **does not describe a valid URL string**.
+  ///
+  /// This should only be used by the `StructureAndMetricsCollector`.
+  ///
+  @inlinable
+  internal static func invalidEmptyStructure() -> URLStructure {
+    return URLStructure(
+      schemeLength: 0,
+      usernameLength: 0,
+      passwordLength: 0,
+      hostnameLength: 0,
+      portLength: 0,
+      pathLength: 0,
+      queryLength: 0,
+      fragmentLength: 0,
+      firstPathComponentLength: 0,
+      sigil: nil,
+      schemeKind: .other,
+      cannotBeABaseURL: false,
+      queryIsKnownFormEncoded: false
+    )
+  }
+}
+
+extension URLStructure {
+
   @usableFromInline
   internal func describesSameStructure(as other: Self) -> Bool {
     schemeLength == other.schemeLength && usernameLength == other.usernameLength
@@ -441,65 +466,70 @@ extension URLStructure {
   /// This method does not check the _contents_ of the URL string (e.g. it does not check that `schemeKind` matches the code-units of the scheme, that the sigil
   /// or any other expected separators are actually present, etc).
   ///
-  @usableFromInline
-  internal func checkInvariants() {
+  #if DEBUG
+    @usableFromInline
+    internal func checkInvariants() {
 
-    // No values may be negative.
-    assert(schemeLength >= 0, "Scheme has negative length")
-    assert(usernameLength >= 0, "Username has negative length")
-    assert(passwordLength >= 0, "Password has negative length")
-    assert(hostnameLength >= 0, "Hostname has negative length")
-    assert(portLength >= 0, "Port has negative length")
-    assert(pathLength >= 0, "Path has negative length")
-    assert(queryLength >= 0, "Query has negative length")
-    assert(fragmentLength >= 0, "Fragment has negative length")
-    assert(firstPathComponentLength >= 0, "First Path Component has negative length")
+      // No values may be negative.
+      assert(schemeLength >= 0, "Scheme has negative length")
+      assert(usernameLength >= 0, "Username has negative length")
+      assert(passwordLength >= 0, "Password has negative length")
+      assert(hostnameLength >= 0, "Hostname has negative length")
+      assert(portLength >= 0, "Port has negative length")
+      assert(pathLength >= 0, "Path has negative length")
+      assert(queryLength >= 0, "Query has negative length")
+      assert(fragmentLength >= 0, "Fragment has negative length")
+      assert(firstPathComponentLength >= 0, "First Path Component has negative length")
 
-    assert(schemeLength > 1, "Scheme must be present, cannot be empty")
-    assert(passwordLength != 1, "Password is an orphaned separator, which is invalid")
-    assert(portLength != 1, "Port is an orphaned separator, which is invalid")
+      assert(schemeLength > 1, "Scheme must be present, cannot be empty")
+      assert(passwordLength != 1, "Password is an orphaned separator, which is invalid")
+      assert(portLength != 1, "Port is an orphaned separator, which is invalid")
 
-    switch sigil {
-    case .authority:
-      break
-    case .path:
-      assert(pathLength >= 2, "Path sigil present, but path is too short to need one")
-      fallthrough
-    default:
-      assert(usernameLength == 0, "A URL without authority cannot have a username")
-      assert(passwordLength == 0, "A URL without authority cannot have a password")
-      assert(hostnameLength == 0, "A URL without authority cannot have a hostname")
-      assert(portLength == 0, "A URL without authority cannot have a port")
-    }
+      switch sigil {
+      case .authority:
+        break
+      case .path:
+        assert(pathLength >= 2, "Path sigil present, but path is too short to need one")
+        fallthrough
+      default:
+        assert(usernameLength == 0, "A URL without authority cannot have a username")
+        assert(passwordLength == 0, "A URL without authority cannot have a password")
+        assert(hostnameLength == 0, "A URL without authority cannot have a hostname")
+        assert(portLength == 0, "A URL without authority cannot have a port")
+      }
 
-    if cannotBeABaseURL {
-      assert(sigil == nil, "cannot-be-a-base URLs cannot have an authority or path sigil")
-    }
-    if schemeKind.isSpecial {
-      assert(sigil == .authority, "URLs with special schemes must have an authority")
-      assert(pathLength != 0, "URLs with special schemes must have a path")
-      assert(!cannotBeABaseURL, "URLs with special schemes are never cannot-be-a-base")
-    }
+      if cannotBeABaseURL {
+        assert(sigil == nil, "cannot-be-a-base URLs cannot have an authority or path sigil")
+      }
+      if schemeKind.isSpecial {
+        assert(sigil == .authority, "URLs with special schemes must have an authority")
+        assert(pathLength != 0, "URLs with special schemes must have a path")
+        assert(!cannotBeABaseURL, "URLs with special schemes are never cannot-be-a-base")
+      }
 
-    if cannotHaveCredentialsOrPort {
-      assert(usernameLength == 0, "URL cannot have credentials or port, but has a username")
-      assert(passwordLength == 0, "URL cannot have credentials or port, but has a password")
-      assert(portLength == 0, "URL cannot have credentials or port, but has a port")
-    }
+      if cannotHaveCredentialsOrPort {
+        assert(usernameLength == 0, "URL cannot have credentials or port, but has a username")
+        assert(passwordLength == 0, "URL cannot have credentials or port, but has a password")
+        assert(portLength == 0, "URL cannot have credentials or port, but has a port")
+      }
 
-    if queryLength == 0 || queryLength == 1 {
-      assert(queryIsKnownFormEncoded, "Empty and nil queries must always be flagged as being form-encoded")
-    }
+      if queryLength == 0 || queryLength == 1 {
+        assert(queryIsKnownFormEncoded, "Empty and nil queries must always be flagged as being form-encoded")
+      }
 
-    if cannotBeABaseURL {
-      assert(firstPathComponentLength == 0, "cannot-be-a-base URLs do not have path components")
-    } else {
-      assert(firstPathComponentLength <= pathLength, "First path component is longer than the entire path")
-      if pathLength != 0 {
-        assert(firstPathComponentLength != 0, "First path component length not set")
+      if cannotBeABaseURL {
+        assert(firstPathComponentLength == 0, "cannot-be-a-base URLs do not have path components")
+      } else {
+        assert(firstPathComponentLength <= pathLength, "First path component is longer than the entire path")
+        if pathLength != 0 {
+          assert(firstPathComponentLength != 0, "First path component length not set")
+        }
       }
     }
-  }
+  #else
+    @inlinable @inline(__always)
+    func checkInvariants() {}
+  #endif
 }
 
 extension Sigil {
