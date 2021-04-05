@@ -91,7 +91,7 @@ extension WebURL {
 extension WebURL.QueryParameters {
 
   internal func withQueryUTF8<ResultType>(_ body: (UnsafeBufferPointer<UInt8>) -> ResultType) -> ResultType {
-    return url.storage.withComponentBytes(.query) { maybeBytes in
+    return url.storage.withUTF8(of: .query) { maybeBytes in
       guard let bytes = maybeBytes, bytes.count > 1 else {
         return body(UnsafeBufferPointer(start: nil, count: 0))
       }
@@ -593,30 +593,31 @@ extension URLStorage {
     var newStructure = header.structure
     newStructure.queryLength -= totalRemovedBytes
 
-    if let encodedValue = encodedValue {
-      let firstValueAbsoluteOffset = oldQueryRange.lowerBound + firstOccurence.value.lowerBound
-      newStructure.queryLength +=
-        codeUnits.replaceSubrange(
-          firstValueAbsoluteOffset..<firstValueAbsoluteOffset + firstOccurence.value.count,
-          with: encodedValue
-        ).count - firstOccurence.value.count
-
-    } else if newStructure.queryLength == 1 {
-      // If the query is just a lone "?", set it to nil instead.
-      assert(codeUnits[newStructure.queryStart] == ASCII.questionMark.codePoint)
-      codeUnits.replaceSubrange(newStructure.queryStart..<newStructure.queryStart + 1, with: EmptyCollection())
-      newStructure.queryLength = 0
-    }
-
-    let didUpdateStructure = header.copyStructure(from: newStructure)
-    precondition(didUpdateStructure, "Header did not accept new structure")
-
-    if !AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: codeUnits.count, structure: header.structure) {
-      return AnyURLStorage(optimalStorageForCapacity: codeUnits.count, structure: header.structure) { buffer in
-        buffer.initialize(from: codeUnits).1
+    guard let encodedValue = encodedValue else {
+      if newStructure.queryLength == 1 {
+        // If the query is just a lone "?", set it to nil instead.
+        assert(codeUnits[newStructure.queryStart] == ASCII.questionMark.codePoint)
+        codeUnits.replaceSubrange(newStructure.queryStart..<newStructure.queryStart + 1, with: EmptyCollection())
+        newStructure.queryLength = 0
       }
+      // Since we are only removing, the header will definitely support its new, smaller count.
+      header.copyStructure(from: newStructure)
+      if !AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: codeUnits.count, structure: newStructure) {
+        return AnyURLStorage(optimalStorageForCapacity: codeUnits.count, structure: newStructure) { buffer in
+          buffer.initialize(from: codeUnits).1
+        }
+      }
+      return AnyURLStorage(self)
     }
-    return AnyURLStorage(self)
+
+    let firstValueCodeUnitOffset = oldQueryRange.lowerBound + firstOccurence.value.lowerBound
+    newStructure.queryLength += (encodedValue.count - firstOccurence.value.count)
+    return replaceSubrange(
+      firstValueCodeUnitOffset..<firstValueCodeUnitOffset + firstOccurence.value.count,
+      withUninitializedSpace: encodedValue.count,
+      newStructure: newStructure,
+      initializer: { buffer in buffer.initialize(from: encodedValue).1 }
+    ).newStorage
   }
 }
 

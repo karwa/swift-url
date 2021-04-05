@@ -116,8 +116,8 @@ extension WebURL {
 extension WebURL: Equatable, Hashable, Comparable {
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.storage.withEntireString { lhsBuffer in
-      rhs.storage.withEntireString { rhsBuffer in
+    lhs.storage.withUTF8 { lhsBuffer in
+      rhs.storage.withUTF8 { rhsBuffer in
         (lhsBuffer.baseAddress == rhsBuffer.baseAddress && lhsBuffer.count == rhsBuffer.count)
           || lhsBuffer.elementsEqual(rhsBuffer)
       }
@@ -125,14 +125,14 @@ extension WebURL: Equatable, Hashable, Comparable {
   }
 
   public func hash(into hasher: inout Hasher) {
-    storage.withEntireString { buffer in
+    storage.withUTF8 { buffer in
       hasher.combine(bytes: UnsafeRawBufferPointer(buffer))
     }
   }
 
   public static func < (lhs: Self, rhs: Self) -> Bool {
-    lhs.storage.withEntireString { lhsBuffer in
-      rhs.storage.withEntireString { rhsBuffer in
+    lhs.storage.withUTF8 { lhsBuffer in
+      rhs.storage.withUTF8 { rhsBuffer in
         return lhsBuffer.lexicographicallyPrecedes(rhsBuffer)
       }
     }
@@ -171,7 +171,7 @@ extension WebURL {
   /// The string representation of this URL.
   ///
   public var serialized: String {
-    storage.entireString
+    storage.withUTF8 { String(decoding: $0, as: UTF8.self) }
   }
 
   /// The scheme of this URL, for example `https` or `file`.
@@ -182,9 +182,9 @@ extension WebURL {
   ///
   public var scheme: String {
     get {
-      storage.withComponentBytes(.scheme) { maybeBytes in
-        guard let bytes = maybeBytes, bytes.count > 1 else { preconditionFailure("Invalid scheme") }
-        return String(decoding: bytes.dropLast(), as: UTF8.self)
+      storage.withUTF8(of: .scheme) { componentOrNil in
+        guard let component = componentOrNil, component.count > 1 else { preconditionFailure("Invalid scheme") }
+        return String(decoding: component.dropLast(), as: UTF8.self)
       }
     }
     set {
@@ -199,7 +199,11 @@ extension WebURL {
   /// However, the operation may still fail if the URL does not support the new value for other reasons.
   ///
   public var username: String? {
-    get { storage.stringForComponent(.username) }
+    get {
+      storage.withUTF8(of: .username) { componentOrNil in
+        componentOrNil.map { String(decoding: $0, as: UTF8.self) }
+      }
+    }
     set { try? setUsername(to: newValue) }
   }
 
@@ -211,9 +215,9 @@ extension WebURL {
   ///
   public var password: String? {
     get {
-      storage.withComponentBytes(.password) { maybeBytes in
-        guard let bytes = maybeBytes, bytes.count > 1 else { return nil }
-        return String(decoding: bytes.dropFirst(), as: UTF8.self)
+      storage.withUTF8(of: .password) { componentOrNil in
+        guard let component = componentOrNil, component.count > 1 else { return nil }
+        return String(decoding: component.dropFirst(), as: UTF8.self)
       }
     }
     set {
@@ -228,7 +232,11 @@ extension WebURL {
   /// When setting this property, disallowed characters will **not** be percent-encoded, and will cause the operation to fail.
   ///
   public var hostname: String? {
-    get { storage.stringForComponent(.hostname) }
+    get {
+      storage.withUTF8(of: .hostname) { componentOrNil in
+        componentOrNil.map { String(decoding: $0, as: UTF8.self) }
+      }
+    }
     set { try? setHostname(to: newValue) }
   }
 
@@ -238,9 +246,9 @@ extension WebURL {
   ///
   public var port: Int? {
     get {
-      storage.withComponentBytes(.port) { maybeBytes in
-        guard let bytes = maybeBytes, bytes.count > 1 else { return nil }
-        return Int(String(decoding: bytes.dropFirst(), as: UTF8.self), radix: 10)!
+      storage.withUTF8(of: .port) { componentOrNil in
+        guard let component = componentOrNil, component.count > 1 else { return nil }
+        return Int(String(decoding: component.dropFirst(), as: UTF8.self), radix: 10)!
       }
     }
     set {
@@ -256,7 +264,11 @@ extension WebURL {
   /// However, the operation may still fail if the URL does not support the new value for other reasons.
   ///
   public var path: String {
-    get { return storage.stringForComponent(.path) ?? "" }
+    get {
+      storage.withUTF8(of: .path) { componentOrNil in
+        componentOrNil.map { String(decoding: $0, as: UTF8.self) }
+      } ?? ""
+    }
     set { try? setPath(to: newValue) }
   }
 
@@ -267,13 +279,13 @@ extension WebURL {
   ///
   public var query: String? {
     get {
-      storage.withComponentBytes(.query) { maybeBytes in
-        guard let bytes = maybeBytes else { return nil }
-        guard bytes.count != 1 else {
-          assert(bytes.first == ASCII.questionMark.codePoint)
+      storage.withUTF8(of: .query) { componentOrNil in
+        guard let component = componentOrNil else { return nil }
+        guard component.count != 1 else {
+          assert(component.first == ASCII.questionMark.codePoint)
           return ""
         }
-        return String(decoding: bytes.dropFirst(), as: UTF8.self)
+        return String(decoding: component.dropFirst(), as: UTF8.self)
       }
     }
     set {
@@ -289,13 +301,13 @@ extension WebURL {
   ///
   public var fragment: String? {
     get {
-      storage.withComponentBytes(.fragment) { maybeBytes in
-        guard let bytes = maybeBytes else { return nil }
-        guard bytes.count != 1 else {
-          assert(bytes.first == ASCII.numberSign.codePoint)
+      storage.withUTF8(of: .fragment) { componentOrNil in
+        guard let component = componentOrNil else { return nil }
+        guard component.count != 1 else {
+          assert(component.first == ASCII.numberSign.codePoint)
           return ""
         }
-        return String(decoding: bytes.dropFirst(), as: UTF8.self)
+        return String(decoding: component.dropFirst(), as: UTF8.self)
       }
     }
     set {
@@ -312,7 +324,7 @@ extension WebURL {
 /// so that its actual storage can be moved to a uniquely-referenced local variable. It should not be possible to observe a URL whose storage is set to this object.
 ///
 internal let _tempStorage = AnyURLStorage(
-  URLStorage<GenericURLHeader<UInt8>>(
+  URLStorage<BasicURLHeader<UInt8>>(
     count: 2,
     structure: URLStructure(
       schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
@@ -323,21 +335,21 @@ internal let _tempStorage = AnyURLStorage(
       buffer[1] = ASCII.colon.codePoint
       return 2
     }
-  )!
+  )
 )
 
 extension WebURL {
 
   internal mutating func withMutableStorage(
-    _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> (AnyURLStorage),
-    _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> (AnyURLStorage)
+    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage),
+    _ generic: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage)
   ) {
     try! withMutableStorage({ (small(&$0), nil) }, { (generic(&$0), nil) })
   }
 
   internal mutating func withMutableStorage(
-    _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
-    _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> (AnyURLStorage, URLSetterError?)
+    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
+    _ generic: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage, URLSetterError?)
   ) throws {
 
     var error: URLSetterError?

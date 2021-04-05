@@ -21,7 +21,7 @@
 // - AnyURLStorage: A wrapper around URLStorage which erases its header type so you can use the URL without
 //                  caring about that detail.
 //
-// - GenericURLHeader<SizeType>: A basic URLHeader which stores a URLStructure in its entirety.
+// - BasicURLHeader<SizeType>: A basic URLHeader which stores a URLStructure in its entirety.
 // --------------------------------------------
 
 
@@ -250,7 +250,8 @@ extension URLStructure {
     queryStart &+ queryLength
   }
 
-  /// The range of code-units covering all authority components, if an authority is present.
+  /// If an authority is present, returns the range of code-units starting at the first component of the authority
+  /// and ending at the start of the first non-authority component. Otherwise, returns `nil`.
   ///
   @inlinable
   internal var rangeOfAuthorityString: Range<SizeType>? {
@@ -560,132 +561,116 @@ extension Sigil {
 }
 
 
-// MARK: - URLStorage.
+// --------------------------------------------
+// MARK: - URLStorage
+// --------------------------------------------
 
 
-/// A `ManagedBufferHeader` which stores information about a URL string.
+/// A `ManagedBufferHeader` which stores a URL's structure.
 ///
-/// URLs are stored in `URLStorage` objects, which are managed buffers containing the string's contiguous code-units, prefixed by
-/// a header conforming to `URLHeader`. The `AnyURLStorage` wrapper allows this header type to be erased, so that the
-/// optimal header can be chosen for a given URL string.
+/// When a URL is constructed or mutated, the parser or setter function first calculates the structure and required capacity of the resulting normalized URL string.
 ///
-/// For example, small URL strings might wish to store their header information in a smaller integer type than `Int64` on 64-bit platforms.
-/// Similarly, some common URL patterns might warrant their own headers: with the URL's structure essentially being encoded in the header type.
+/// For mutations, `AnyURLStorage.isOptimalStorageType(_:requiredCapacity:structure:)` is consulted to check if the existing
+/// header type is appropriate for the resulting string. If it is, the existing capacity is sufficient, and the storage is uniquely referenced, the modification occurs in-place.
+/// Otherwise, `AnyURLStorage(optimalStorageForCapacity:structure:initializingCodeUnitsWith:)` is used to create storage with
+/// the appropriate header type.
 ///
-/// When a URL String is parsed, or when a mutation on an already-parsed URL is planned, the parser or setter function first calculates
-/// a _required capacity_, and a `URLStructure<Int>` describing the new URL string.
-///
-/// - For mutations, `AnyURLStorage.isOptimalStorageType(_:requiredCapacity:structure:)` is consulted to check if the existing
-///   header type is also the desired header for the result. If it is, the capacity is sufficient, and the storage reference is unique, the modification happens in-place.
-/// - Otherwise, if the storage types do not match, or there is no existing storage to mutate (in the case of the parser),
-///   `AnyURLStorage(optimalStorageForCapacity:structure:initializingCodeUnitsWith:)` is used to create storage with a compatible
-///   header type.
-///
-protocol URLHeader: ManagedBufferHeader {
+@usableFromInline
+internal protocol URLHeader: ManagedBufferHeader {
 
-  /// Returns a `AnyURLStorage` which erases this header type from the given `URLStorage` instance.
+  /// Returns an `AnyURLStorage` which wraps the given storage object.
   ///
-  /// - Note: This means the only types that may conform to this protocol are those supported by `AnyURLStorage`.
+  /// - Important: This means the only types that may conform to `URLHeader` are those supported by `AnyURLStorage`.
   ///
   static func eraseToAnyURLStorage(_ storage: URLStorage<Self>) -> AnyURLStorage
 
-  /// Creates a new header with the given count and structure. The header does not assume any available capacity beyond `count`.
+  /// Creates a new header with the given structure. The header's `capacity` and `count` are not specified, and through the `ManagedBufferHeader`
+  /// interface when the header is attached to storage and that storage populated with code-units.
   ///
-  /// This initializer must return `nil` if it is unable to store the given count and structure.
+  /// The header must be capable of exactly reproducing the given structure. Otherwise, this initializer must trigger a runtime error.
   ///
-  init?(count: Int, structure: URLStructure<Int>)
+  init(structure: URLStructure<Int>)
 
-  /// Updates the header's structure and metrics to reflect some prior change to the associated code-units.
+  /// Updates the URL structure stored by this header to reflect some prior change to the associated code-units.
   ///
-  /// This method only updates metadata about the represented URL structure; it **does not** update the header's `count` or `capacity`,
-  /// which the code modifying the code-units is expected to maintain as it goes. If the header is unable to store the new structure without loss
-  /// (because it models a limits subset of URL strings), this method returns `false` and does not update the URL structure data.
+  /// This method only updates the description of the URL's structure; it **does not** alter the header's `count` or `capacity`,
+  /// which the operations modifying the code-units are expected to keep accurate.
   ///
-  mutating func copyStructure(from newStructure: URLStructure<Int>) -> Bool
+  /// The header must be capable of exactly reproducing the given structure. Otherwise, this initializer must trigger a runtime error.
+  ///
+  mutating func copyStructure(from newStructure: URLStructure<Int>)
 
-  /// The structure of the URL string contained in this header's associated buffer.
+  /// The structure of the URL string stored in the code-units associated with this header.
   ///
   var structure: URLStructure<Int> { get }
 }
 
 /// The primary type responsible for URL storage.
 ///
-/// URLs are stored in `URLStorage` objects, which are managed buffers containing the string's contiguous code-units, prefixed by
-/// a header conforming to `URLHeader`. The `AnyURLStorage` wrapper allows this header type to be erased, so that the
-/// optimal header can be chosen for a given URL string.
+/// An `URLStorage` object wraps a `ManagedArrayBuffer`, containing the normalized URL string's contiguous code-units, together
+/// with a header describing the structure of the URL components within those code-units. Headers may store that description in different ways,
+/// and may not support all possible URL strings; mutating functions must make sure to allocate storage with an appropriate header type for the
+/// resulting URL string. The `AnyURLStorage` type is able to advise, create, and abstract over variations in header type.
 ///
-/// `URLStorage` has value semantics via `ManagedArrayBuffer`, with attempted mutations happening in-place where possible
-/// and copying to new storage only when the buffer is shared or if the existing header does not support the new structure.
+/// `URLStorage` has value semantics via `ManagedArrayBuffer`, with modifications to multiply-referenced storage copying on write.
 ///
-/// Mutating functions must take care to observe the following:
-///
-/// - The header type may not be able to support arbitrary URLs. Setters should calculate the `URLStructure`
-///   of the final URL string and call `AnyURLStorage.isOptimalStorageType(_:for:)` before making any changes.
-/// - Should a change of header be required, `AnyURLStorage(creatingOptimalStorageFor:initializingCodeUnitsWith:)`
-///   should be used to create and initialize the new storage.
-/// - Given the possibility of changing storage type, functions must _return_ an `AnyURLStorage` wrapping the result (either `self` or the new storage
-///   that was created).
-///
-struct URLStorage<Header: URLHeader> {
+@usableFromInline
+internal struct URLStorage<Header: URLHeader> {
 
-  var codeUnits: ManagedArrayBuffer<Header, UInt8>
+  @usableFromInline
+  internal var codeUnits: ManagedArrayBuffer<Header, UInt8>
 
-  var header: Header {
+  @inlinable
+  internal var header: Header {
     get { return codeUnits.header }
     _modify { yield &codeUnits.header }
-    set { codeUnits.header = newValue }
   }
 
-  /// Allocates new storage, with the capacity sufficient for storing `count` code-units, and initializes the header using the given `structure`.
+  /// Allocates new storage with sufficient capacity to store `count` code-units, and a header describing the given `structure`.
   /// The `initializer` closure is invoked to write the code-units, and must return the number of code-units initialized.
   ///
-  /// This initializer fails if the header cannot be constructed from the given `count` and `structure`.
+  /// If the header cannot exactly reproduce the given `structure`, a runtime error is triggered.
+  /// Use `AnyURLStorage` to allocate storage with the appropriate header for a given structure.
   ///
-  init?(
+  /// - parameters:
+  ///   - count:       The number of UTF8 code-units contained in the normalized URL string that `initializer` will write to the new storage.
+  ///   - structure:   The structure of the normalized URL string that `initializer` will write to the new storage.
+  ///   - initializer: A closure which must initialize exactly `count` code-units in the buffer pointer it is given, matching the normalized URL string
+  ///                  described by `structure`. The closure returns the number of bytes actually written to storage, which should be
+  ///                  calculated by the closure independently as it writes the contents, which serves as a safety check to avoid exposing uninitialized storage.
+  ///
+  @inlinable
+  internal init(
     count: Int,
     structure: URLStructure<Int>,
     initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
-    guard let header = Header(count: count, structure: structure) else {
-      return nil
-    }
-    self.codeUnits = ManagedArrayBuffer(minimumCapacity: count, initialHeader: header)
+    self.codeUnits = ManagedArrayBuffer(minimumCapacity: count, initialHeader: Header(structure: structure))
     assert(self.codeUnits.count == 0)
     assert(self.codeUnits.header.capacity >= count)
-    self.codeUnits.unsafeAppend(uninitializedCapacity: count) { buffer in
-      var buffer = buffer
-      return initializer(&buffer)
-    }
+    self.codeUnits.unsafeAppend(uninitializedCapacity: count) { buffer in initializer(&buffer) }
+    assert(self.codeUnits.header.count == count)
   }
 }
 
-
-// MARK: - Getters.
-
-
 extension URLStorage {
 
-  func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
-    return try codeUnits.withUnsafeBufferPointer(block)
+  @inlinable
+  internal func withUTF8<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
+    try codeUnits.withUnsafeBufferPointer(body)
   }
 
-  var entireString: String {
-    return withEntireString { String(decoding: $0, as: UTF8.self) }
+  @inlinable
+  internal func withUTF8<R>(
+    of component: WebURL.Component, _ body: (UnsafeBufferPointer<UInt8>?) throws -> R
+  ) rethrows -> R {
+    guard let range = header.structure.range(of: component) else { return try body(nil) }
+    return try codeUnits.withUnsafeBufferPointer(range: range, body)
   }
 
-  func withComponentBytes<T>(_ component: WebURL.Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
-    guard let range = header.structure.range(of: component) else { return block(nil) }
-    return codeUnits.withUnsafeBufferPointer(range: range, block)
-  }
-
-  func stringForComponent(_ component: WebURL.Component) -> String? {
-    return withComponentBytes(component) { maybeBuffer in
-      return maybeBuffer.map { buffer in String(decoding: buffer, as: UTF8.self) }
-    }
-  }
-
-  func withAllAuthorityComponentBytes<T>(
-    _ block: (
+  @inlinable
+  internal func withUTF8OfAllAuthorityComponents<T>(
+    _ body: (
       _ authorityString: UnsafeBufferPointer<UInt8>?,
       _ usernameLength: Int,
       _ passwordLength: Int,
@@ -693,468 +678,213 @@ extension URLStorage {
       _ portLength: Int
     ) -> T
   ) -> T {
-    let urlStructure = header.structure
-    guard let range = urlStructure.rangeOfAuthorityString else { return block(nil, 0, 0, 0, 0) }
+    let structure = header.structure
+    guard let range = structure.rangeOfAuthorityString else { return body(nil, 0, 0, 0, 0) }
     return codeUnits.withUnsafeBufferPointer(range: Range(uncheckedBounds: (range.lowerBound, range.upperBound))) {
       buffer in
-      block(
-        buffer,
-        urlStructure.usernameLength,
-        urlStructure.passwordLength,
-        urlStructure.hostnameLength,
-        urlStructure.portLength
-      )
+      body(buffer, structure.usernameLength, structure.passwordLength, structure.hostnameLength, structure.portLength)
     }
   }
 }
 
 
-// MARK: - Setter Utilities.
-
-
-/// A command object which represents a replacement operation on some URL code-units.
-///
-struct ReplaceSubrangeOperation {
-  var subrange: Range<Int>
-  var insertedCount: Int
-  var writer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
-
-  /// - seealso: `URLStorage.replaceSubrange`
-  static func replace(
-    subrange: Range<Int>, withCount: Int, writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
-  ) -> Self {
-    return .init(subrange: subrange, insertedCount: withCount, writer: writer)
-  }
-
-  /// - seealso: `URLStorage.removeSubrange`
-  static func remove(subrange: Range<Int>) -> Self {
-    return .replace(subrange: subrange, withCount: 0, writer: { _ in return 0 })
-  }
-}
-
-extension URLStorage {
-
-  /// Replaces the given range of code-units with an uninitialized space, which is then initialized by the given closure.
-  /// The URL's structure is also replaced with the given new structure. If the existing storage is not optimal for the new structure,
-  /// the storage will be replaced with the optimal kind.
-  ///
-  /// This method fails at runtime if the `initializer` closure does not initialize exactly `insertCount` code-units.
-  /// `initializer`'s return value should be calculated independently as it writes to the buffer, to ensure that it does not leave uninitialized gaps.
-  ///
-  /// - parameters:
-  ///   - subrangeToReplace:  The range of code-units to replace
-  ///   - insertCount:        The size of the uninitialized space to replace the subrange with. If 0, the subrange's contents are removed.
-  ///   - newStructure:       The new structure of the URL after replacement.
-  ///   - initializer:        A closure which initializes the new content of the given subrange and returns the number of elements initialized.
-  ///                         The initializer **must** initialize exactly `insertCount` elements, or this method will trap.
-  ///
-  /// - returns: An `AnyURLStorage` with the given range of code-units replaced and with the new structure. If the existing storage was already optimal
-  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
-  ///
-  mutating func replaceSubrange(
-    _ subrangeToReplace: Range<Int>,
-    withUninitializedSpace insertCount: Int,
-    newStructure: URLStructure<Int>,
-    initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
-  ) -> (newStorage: AnyURLStorage, newSubrange: Range<Int>) {
-
-    newStructure.checkInvariants()
-    let newCount = codeUnits.count - subrangeToReplace.count + insertCount
-
-    if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
-      let newSubrange = codeUnits.unsafeReplaceSubrange(
-        subrangeToReplace, withUninitializedCapacity: insertCount, initializingWith: initializer
-      )
-      guard header.copyStructure(from: newStructure) else {
-        preconditionFailure("Header didn't accept the new structure")
-      }
-      return (AnyURLStorage(self), newSubrange)
-    }
-    let newSubrange = subrangeToReplace.lowerBound..<(subrangeToReplace.lowerBound + insertCount)
-    let newStorage = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
-      return codeUnits.withUnsafeBufferPointer { src in
-        dest.initialize(from: src, replacingSubrange: subrangeToReplace, withElements: insertCount) { rgnStart, count in
-          var rgnPtr = UnsafeMutableBufferPointer(start: rgnStart, count: count)
-          let written = initializer(&rgnPtr)
-          precondition(written == count, "Subrange initializer did not initialize the expected number of code-units")
-        }
-      }
-    }
-    return (newStorage, newSubrange)
-  }
-
-  /// Removes the given range of code-units.
-  /// The URL's structure is also replaced with the given new structure. If the existing storage is not optimal for the new structure,
-  /// the storage will be replaced with the optimal kind.
-  ///
-  /// - parameters:
-  ///   - subrangeToRemove:  The range of code-units to remove
-  ///   - newStructure:      The new structure of the URL after removing the given code-units.
-  ///
-  /// - returns: An `AnyURLStorage` with the given range of code-units removed and with the new structure. If the existing storage was already optimal
-  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
-  ///
-  mutating func removeSubrange(
-    _ subrangeToRemove: Range<Int>, newStructure: URLStructure<Int>
-  ) -> (newStorage: AnyURLStorage, newSubrange: Range<Int>) {
-    return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
-  }
-
-  /// Performs the given list of code-unit replacement operations while updating the URL's header to reflect the given structure.
-  /// If the current storage type supports the new structure, the operations will be performed in-place.
-  /// Otherwise, appropriate storage will be allocated and initialized with the result of applying the given operations to this storage's code-units.
-  ///
-  /// - parameters:
-  ///   - commands:      The list of code-unit replacement operations to perform.
-  ///                    This list must be sorted by the operations' subrange, and operations may not work on overlapping subranges.
-  ///   - newStructure:  The new structure of the URL after all replacement operations have been performed.
-  ///
-  /// - returns: An `AnyURLStorage` with the new code-units and structure. If the existing storage was already optimal
-  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
-  ///
-  mutating func multiReplaceSubrange(
-    commands: [ReplaceSubrangeOperation],
-    newStructure: URLStructure<Int>
-  ) -> AnyURLStorage {
-
-    newStructure.checkInvariants()
-    let newCount = commands.reduce(into: codeUnits.count) { c, op in
-      c += (op.insertedCount - op.subrange.count)
-    }
-
-    if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
-      // Perform the operations in reverse order to avoid clobbering.
-      for command in commands.reversed() {
-        codeUnits.unsafeReplaceSubrange(
-          command.subrange,
-          withUninitializedCapacity: command.insertedCount,
-          initializingWith: command.writer
-        )
-      }
-      guard header.copyStructure(from: newStructure) else {
-        preconditionFailure("Header didn't accept new structure")
-      }
-      return AnyURLStorage(self)
-    }
-    let newStorage = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
-      return codeUnits.withUnsafeBufferPointer { src in
-        let srcBase = src.baseAddress.unsafelyUnwrapped
-        var destHead = dest.baseAddress.unsafelyUnwrapped
-        var srcIdx = 0
-        for command in commands {
-          // Copy from src until command range.
-          let bytesToCopyFromSrc = command.subrange.lowerBound - srcIdx
-          destHead.initialize(from: srcBase + srcIdx, count: bytesToCopyFromSrc)
-          destHead += bytesToCopyFromSrc
-          srcIdx += bytesToCopyFromSrc
-          assert(srcIdx == command.subrange.lowerBound)
-          // Execute command.
-          var buffer = UnsafeMutableBufferPointer(start: destHead, count: command.insertedCount)
-          let actualBytesWritten = command.writer(&buffer)
-          precondition(
-            actualBytesWritten == command.insertedCount,
-            "Subrange initializer did not initialize the expected number of code-units")
-          destHead += actualBytesWritten
-          // Advance srcIdx to command end.
-          srcIdx = command.subrange.upperBound
-        }
-        // Copy from end of last command until end of src.
-        let bytesToCopyFromSrc = src.endIndex - srcIdx
-        destHead.initialize(from: srcBase + srcIdx, count: bytesToCopyFromSrc)
-        destHead += bytesToCopyFromSrc
-        return dest.baseAddress.unsafelyUnwrapped.distance(to: destHead)
-      }
-    }
-    return newStorage
-  }
-
-  /// A generic setter which works for _some_ URL components.
-  ///
-  /// This is sufficient for components which do not change other components when they are modified.
-  /// For example, the query, fragment and port components may be changed without modifying any other parts of the URL.
-  /// However, components such as scheme, hostname, username and password require more complex logic
-  /// (e.g. when changing the scheme, the port component may also need to be modified; the hostname setter needs to deal with the "//" authority sigil,
-  /// and credentials have additional logic for separators). This setter is sufficient for the former kind of components, but **does not include component-specific
-  /// logic for the latter kind**.
-  ///
-  /// If the new value is `nil`, the component is removed (code-units deleted and `URLStructure`'s length-key set to 0).
-  /// Otherwise, the component is replaced by `[prefix][encoded-content]`, where `prefix` is a single ASCII character and
-  /// `encoded-content` is the accumulated result of transforming the new value by the `encoder` closure.
-  /// The `URLStructure`'s length-key is updated to reflect the total length of the new component, including the single-character prefix.
-  ///
-  ///
-  /// - parameters:
-  ///   - component: The component to modify.
-  ///   - newValue:  The new value of the component.
-  ///   - prefix:    A single ASCII character to write before the new value. If `newValue` is not `nil`, this is _always_ written.
-  ///   - lengthKey: The `URLStructure` field to update with the component's new length. Said length will include the single-character prefix.
-  ///   - encodeSet: The `PercentEncodeSet` which should be used to encode the new value.
-  ///   - adjustStructure: A closure which allows setting additional properties of the structure to be tweaked before writing.
-  ///                      This closure is invoked after the structure's `lengthKey` has been updated with the component's new length.
-  ///
-  mutating func setSimpleComponent<Input, EncodeSet>(
-    _ component: WebURL.Component,
-    to newValue: Input?,
-    prefix: ASCII,
-    lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
-    encodeSet: EncodeSet.Type,
-    adjustStructure: (inout URLStructure<Int>) -> Void = { _ in }
-  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8, EncodeSet: PercentEncodeSet {
-
-    let oldStructure = header.structure
-
-    guard let newBytes = newValue else {
-      guard let existingFragment = oldStructure.range(of: component) else {
-        return AnyURLStorage(self)
-      }
-      var newStructure = oldStructure
-      newStructure[keyPath: lengthKey] = 0
-      adjustStructure(&newStructure)
-      return removeSubrange(existingFragment, newStructure: newStructure).newStorage
-    }
-
-    var bytesToWrite = 1  // leading separator.
-    let needsEncoding = newBytes.lazy.percentEncoded(using: EncodeSet.self).write { bytesToWrite += $0.count }
-    let subrangeToReplace = oldStructure.rangeForReplacingCodeUnits(of: component)
-    var newStructure = oldStructure
-    newStructure[keyPath: lengthKey] = bytesToWrite
-    adjustStructure(&newStructure)
-
-    return replaceSubrange(
-      subrangeToReplace,
-      withUninitializedSpace: bytesToWrite,
-      newStructure: newStructure
-    ) { dest in
-      guard var ptr = dest.baseAddress else { return 0 }
-      ptr.pointee = prefix.codePoint
-      ptr += 1
-      if needsEncoding {
-        _ = newBytes.lazy.percentEncoded(using: EncodeSet.self).write { group in
-          switch group {
-          case .percentEncodedByte:
-            ptr[0] = group[0]
-            ptr[1] = group[1]
-            ptr[2] = group[2]
-            ptr += 3
-          case .sourceByte, .substitutedByte:
-            ptr[0] = group[0]
-            ptr += 1
-          }
-        }
-      } else {
-        let n = UnsafeMutableBufferPointer(start: ptr, count: bytesToWrite - 1).initialize(from: newBytes).1
-        ptr += n
-      }
-      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
-    }.newStorage
-  }
-}
-
-
+// --------------------------------------------
 // MARK: - AnyURLStorage
+// --------------------------------------------
 
 
-/// This enum serves like an existential for a `URLStorage` whose header is one a few known types.
-/// It also decides the optimal header type for a URL string with a given structure.
+/// This enum serves like an existential for `URLStorage` with a limited set of supported header types.
+/// It is also able to determine the optimal header type for a `URLStructure`.
 ///
-/// So why have this type instead of a real existential?
-///
-/// 1. Existentials don't support generic types. A `URLStorage<?>` is not expressible in Swift (we'd need to duplicate the interface as a protocol).
-/// 2. `ManagedArrayBuffer` is a non-trivial struct (it wraps a `ManagedBuffer`), so our protocol couldn't use a `: class` constraint
-///   for a more efficient existential.
-///
-/// And we might as well use the fact that we know the exact header types.
-/// It even gets encoded it in the spare bits of the ManagedBuffer pointer (so `MemoryLayout<AnyURLStorage>.stride == 8` on 64-bit),
-/// which is pretty cool and reduces our footprint.
-///
-enum AnyURLStorage {
-  case small(URLStorage<GenericURLHeader<UInt8>>)
-  case generic(URLStorage<GenericURLHeader<Int>>)
-}
+@usableFromInline
+internal enum AnyURLStorage {
+  case small(URLStorage<BasicURLHeader<UInt8>>)
+  case generic(URLStorage<BasicURLHeader<Int>>)
 
-// Allocation/Optimal storage types.
-
-extension AnyURLStorage {
-
-  /// Creates a new URL storage object, with the header best suited for a string with the given size and structure.
-  ///
-  /// The initializer closure must initialize exactly `count` code-units.
-  ///
-  init(
-    optimalStorageForCapacity count: Int,
-    structure: URLStructure<Int>,
-    initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
-  ) {
-
-    if count <= UInt8.max {
-      let newStorage = URLStorage<GenericURLHeader<UInt8>>(
-        count: count, structure: structure, initializingCodeUnitsWith: initializer
-      )
-      guard let _newStorage = newStorage else {
-        preconditionFailure("AnyURLStorage created incorrect header")
-      }
-      self = .small(_newStorage)
-      return
-    }
-    let genericStorage = URLStorage<GenericURLHeader<Int>>(
-      count: count, structure: structure, initializingCodeUnitsWith: initializer
-    )
-    guard let _genericStorage = genericStorage else {
-      preconditionFailure("Failed to create generic URL header")
-    }
-    self = .generic(_genericStorage)
-  }
-
-  static func isOptimalStorageType<T>(
-    _ type: URLStorage<T>.Type, requiredCapacity: Int, structure: URLStructure<Int>
-  ) -> Bool {
-    if requiredCapacity <= UInt8.max {
-      return type == URLStorage<GenericURLHeader<UInt8>>.self
-    }
-    return type == URLStorage<GenericURLHeader<Int>>.self
-  }
-}
-
-// Erasure.
-
-extension AnyURLStorage {
-
-  init<T>(_ storage: URLStorage<T>) {
+  @inlinable
+  internal init<T>(_ storage: URLStorage<T>) {
     self = T.eraseToAnyURLStorage(storage)
   }
 }
 
-// Forwarding.
+extension AnyURLStorage {
+
+  /// Allocates a new storage object, with the header type best-suited for a normalized URL string with the given size and structure.
+  /// The `initializer` closure is invoked to write the code-units, and must return the number of code-units initialized.
+  ///
+  /// - parameters:
+  ///   - count:       The number of UTF8 code-units contained in the normalized URL string that `initializer` will write to the new storage.
+  ///   - structure:   The structure of the normalized URL string that `initializer` will write to the new storage.
+  ///   - initializer: A closure which must initialize exactly `count` code-units in the buffer pointer it is given, matching the normalized URL string
+  ///                  described by `structure`. The closure returns the number of bytes actually written to storage, which should be
+  ///                  calculated by the closure independently as it writes the contents, which serves as a safety check to avoid exposing uninitialized storage.
+  ///
+  @inlinable
+  internal init(
+    optimalStorageForCapacity count: Int,
+    structure: URLStructure<Int>,
+    initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+  ) {
+    if count <= UInt8.max {
+      self = .small(
+        URLStorage<BasicURLHeader<UInt8>>(count: count, structure: structure, initializingCodeUnitsWith: initializer)
+      )
+    } else {
+      self = .generic(
+        URLStorage<BasicURLHeader<Int>>(count: count, structure: structure, initializingCodeUnitsWith: initializer)
+      )
+    }
+  }
+
+  /// Whether or not `type` is the optimal storage type for a normalized URL string of the given size and structure.
+  /// It should be assumed that types which return `false` cannot store a URL with the given structure at all,
+  /// and that attempting to do so will trigger a runtime error.
+  ///
+  @inlinable
+  internal static func isOptimalStorageType<T>(
+    _ type: URLStorage<T>.Type, requiredCapacity: Int, structure: URLStructure<Int>
+  ) -> Bool {
+    if requiredCapacity <= UInt8.max {
+      return type == URLStorage<BasicURLHeader<UInt8>>.self
+    }
+    return type == URLStorage<BasicURLHeader<Int>>.self
+  }
+}
 
 extension AnyURLStorage {
 
-  var structure: URLStructure<Int> {
+  @inlinable
+  internal var structure: URLStructure<Int> {
     switch self {
     case .small(let storage): return storage.header.structure
     case .generic(let storage): return storage.header.structure
     }
   }
 
-  var schemeKind: WebURL.SchemeKind {
-    return structure.schemeKind
+  @inlinable
+  internal var schemeKind: WebURL.SchemeKind {
+    structure.schemeKind
   }
 
-  var cannotBeABaseURL: Bool {
-    return structure.cannotBeABaseURL
+  @inlinable
+  internal var cannotBeABaseURL: Bool {
+    structure.cannotBeABaseURL
   }
 
-  var pathIncludesDiscriminator: Bool {
-    return structure.hasPathSigil
-  }
-
-  var entireString: String {
+  @inlinable
+  internal func withUTF8<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
     switch self {
-    case .small(let storage): return storage.entireString
-    case .generic(let storage): return storage.entireString
+    case .small(let storage): return try storage.withUTF8(body)
+    case .generic(let storage): return try storage.withUTF8(body)
     }
   }
 
-  func withEntireString<T>(_ block: (UnsafeBufferPointer<UInt8>) throws -> T) rethrows -> T {
+  @inlinable
+  internal func withUTF8<R>(
+    of component: WebURL.Component, _ body: (UnsafeBufferPointer<UInt8>?) throws -> R
+  ) rethrows -> R {
     switch self {
-    case .small(let storage): return try storage.withEntireString(block)
-    case .generic(let storage): return try storage.withEntireString(block)
+    case .small(let storage): return try storage.withUTF8(of: component, body)
+    case .generic(let storage): return try storage.withUTF8(of: component, body)
     }
   }
 
-  func withComponentBytes<T>(_ component: WebURL.Component, _ block: (UnsafeBufferPointer<UInt8>?) -> T) -> T {
-    switch self {
-    case .small(let storage): return storage.withComponentBytes(component, block)
-    case .generic(let storage): return storage.withComponentBytes(component, block)
-    }
-  }
-
-  func stringForComponent(_ component: WebURL.Component) -> String? {
-    switch self {
-    case .small(let storage): return storage.stringForComponent(component)
-    case .generic(let storage): return storage.stringForComponent(component)
-    }
-  }
-
-  func withAllAuthorityComponentBytes<T>(
-    _ block: (
+  @inlinable
+  internal func withUTF8OfAllAuthorityComponents<R>(
+    _ body: (
       _ authorityString: UnsafeBufferPointer<UInt8>?,
       _ usernameLength: Int,
       _ passwordLength: Int,
       _ hostnameLength: Int,
       _ portLength: Int
-    ) -> T
-  ) -> T {
+    ) -> R
+  ) -> R {
     switch self {
-    case .small(let storage): return storage.withAllAuthorityComponentBytes(block)
-    case .generic(let storage): return storage.withAllAuthorityComponentBytes(block)
+    case .small(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
+    case .generic(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
     }
   }
 }
 
 
-// MARK: - GenericURLHeader
+// --------------------------------------------
+// MARK: - BasicURLHeader
+// --------------------------------------------
 
 
-/// A marker protocol for integer types supported by `AnyURLStorage` when wrapping a `URLStorage<GenericURLHeader<T>>`.
+/// A marker protocol for integer types supported by `AnyURLStorage` when wrapping a `URLStorage<BasicURLHeader<T>>`.
 ///
-protocol AnyURLStorageErasableGenericHeaderSize: FixedWidthInteger {
+@usableFromInline
+internal protocol AnyURLStorageSupportedBasicHeaderSize: FixedWidthInteger {
 
   /// Wraps the given `storage` in the appropriate `AnyURLStorage`.
   ///
-  static func _eraseToAnyURLStorage(_ storage: URLStorage<GenericURLHeader<Self>>) -> AnyURLStorage
+  static func _eraseToAnyURLStorage(_ storage: URLStorage<BasicURLHeader<Self>>) -> AnyURLStorage
 }
 
-extension Int: AnyURLStorageErasableGenericHeaderSize {
-  static func _eraseToAnyURLStorage(_ storage: URLStorage<GenericURLHeader<Int>>) -> AnyURLStorage {
+extension Int: AnyURLStorageSupportedBasicHeaderSize {
+
+  @inlinable
+  internal static func _eraseToAnyURLStorage(_ storage: URLStorage<BasicURLHeader<Int>>) -> AnyURLStorage {
     return .generic(storage)
   }
 }
 
-extension UInt8: AnyURLStorageErasableGenericHeaderSize {
-  static func _eraseToAnyURLStorage(_ storage: URLStorage<GenericURLHeader<UInt8>>) -> AnyURLStorage {
+extension UInt8: AnyURLStorageSupportedBasicHeaderSize {
+
+  @inlinable
+  internal static func _eraseToAnyURLStorage(_ storage: URLStorage<BasicURLHeader<UInt8>>) -> AnyURLStorage {
     return .small(storage)
   }
 }
 
 /// A `ManagedBufferHeader` containing a complete `URLStructure` and size-appropriate `count` and `capacity` fields.
 ///
-struct GenericURLHeader<SizeType: FixedWidthInteger> {
-  private var _count: SizeType
-  private var _capacity: SizeType
-  private var _structure: URLStructure<SizeType>
+@usableFromInline
+internal struct BasicURLHeader<SizeType: FixedWidthInteger> {
 
-  init(_count: SizeType, _capacity: SizeType, structure: URLStructure<SizeType>) {
+  @usableFromInline
+  internal var _count: SizeType
+
+  @usableFromInline
+  internal var _capacity: SizeType
+
+  @usableFromInline
+  internal var _structure: URLStructure<SizeType>
+
+  @inlinable
+  internal init(_count: SizeType, _capacity: SizeType, structure: URLStructure<SizeType>) {
     self._count = _count
     self._capacity = _capacity
     self._structure = structure
   }
 
-  private static func closestAddressableCapacity(to idealCapacity: Int) -> SizeType {
+  @inlinable
+  internal static func _closestAddressableCapacity(to idealCapacity: Int) -> SizeType {
     if idealCapacity <= Int(SizeType.max) {
       return SizeType(idealCapacity)
     } else {
       return SizeType.max
     }
   }
-
-  private static func supports(count: Int) -> Bool {
-    return Int(Self.closestAddressableCapacity(to: count)) >= count
-  }
 }
 
-extension GenericURLHeader: ManagedBufferHeader {
+extension BasicURLHeader: ManagedBufferHeader {
 
-  var count: Int {
+  @inlinable
+  internal var count: Int {
     get { return Int(_count) }
     set { _count = SizeType(newValue) }
   }
 
-  var capacity: Int {
+  @inlinable
+  internal var capacity: Int {
     return Int(_capacity)
   }
 
-  func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self? {
-    let newCapacity = Self.closestAddressableCapacity(to: maximumCapacity)
+  @inlinable
+  internal func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self? {
+    let newCapacity = Self._closestAddressableCapacity(to: maximumCapacity)
     guard newCapacity >= minimumCapacity else {
       return nil
     }
@@ -1162,29 +892,25 @@ extension GenericURLHeader: ManagedBufferHeader {
   }
 }
 
-extension GenericURLHeader: URLHeader where SizeType: AnyURLStorageErasableGenericHeaderSize {
+extension BasicURLHeader: URLHeader where SizeType: AnyURLStorageSupportedBasicHeaderSize {
 
-  static func eraseToAnyURLStorage(_ storage: URLStorage<Self>) -> AnyURLStorage {
+  @inlinable
+  internal static func eraseToAnyURLStorage(_ storage: URLStorage<Self>) -> AnyURLStorage {
     return SizeType._eraseToAnyURLStorage(storage)
   }
 
-  init?(count: Int, structure: URLStructure<Int>) {
-    guard Self.supports(count: count) else { return nil }
-    let sz_count = SizeType(truncatingIfNeeded: count)
-    self = .init(
-      _count: sz_count,
-      _capacity: sz_count,
-      structure: URLStructure<SizeType>(copying: structure)
-    )
+  @inlinable
+  internal init(structure: URLStructure<Int>) {
+    self = .init(_count: 0, _capacity: 0, structure: URLStructure<SizeType>(copying: structure))
   }
 
-  mutating func copyStructure(from newStructure: URLStructure<Int>) -> Bool {
-    newStructure.checkInvariants()
-    self._structure = .init(copying: newStructure)
-    return true
+  @inlinable
+  internal mutating func copyStructure(from newStructure: URLStructure<Int>) {
+    self._structure = URLStructure(copying: newStructure)
   }
 
-  var structure: URLStructure<Int> {
+  @inlinable
+  internal var structure: URLStructure<Int> {
     return URLStructure(copying: _structure)
   }
 }

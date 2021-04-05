@@ -114,7 +114,7 @@ private struct PathState {
 extension WebURL {
 
   fileprivate func withNormalizedWindowsDriveLetter<T>(_ block: (Slice<UnsafeBufferPointer<UInt8>>?) -> T) -> T {
-    return self.storage.withComponentBytes(.path) {
+    return self.storage.withUTF8(of: .path) {
       // dropFirst() due to the leading slash.
       if let path = $0?.dropFirst(), PathComponentParser.isNormalizedWindowsDriveLetter(path.prefix(2)) {
         return block(path.prefix(2))
@@ -446,7 +446,7 @@ extension PathParser {
       deferredComponent != nil || state.didYieldComponent,
       "Since the input path was not empty, we must have either deferred or yielded something from it.")
 
-    accessOptionalResource(from: baseURL, using: { $0.storage.withComponentBytes(.path, $1) }) {
+    accessOptionalResource(from: baseURL, using: { $0.storage.withUTF8(of: .path, $1) }) {
 
       let baseHasWindowsDrive = (baseURL?.hasNormalizedWindowsDriveLetter ?? false)
 

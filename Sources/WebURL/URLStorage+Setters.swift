@@ -62,7 +62,7 @@ extension URLStorage {
       }
     ]
     // If the current port is the default for the new scheme, it must be removed.
-    withComponentBytes(.port) {
+    withUTF8(of: .port) {
       guard let portBytes = $0 else { return }
       assert(portBytes.count > 1, "invalid URLStructure: port must either be nil or >1 character")
       if newStructure.schemeKind.isDefaultPortString(portBytes.dropFirst()) {
@@ -275,7 +275,7 @@ extension URLStorage {
 
         // hostname -> 'nil': Remove authority sigil, replacing it with a path sigil if required.
         if newValue == nil {
-          let needsPathSigil = withComponentBytes(.path) { pathBytes -> Bool in
+          let needsPathSigil = withUTF8(of: .path) { pathBytes -> Bool in
             return pathBytes.map { PathComponentParser.doesNormalizedPathRequirePathSigil($0) } ?? false
           }
           commands.append(
@@ -639,5 +639,245 @@ extension URLSetterError: CustomStringConvertible {
         Examples include: 'mailto:somebody@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
         """#
     }
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Utilities
+// --------------------------------------------
+
+
+/// A command object which represents a replacement operation on some URL code-units.
+///
+struct ReplaceSubrangeOperation {
+  var subrange: Range<Int>
+  var insertedCount: Int
+  var writer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+
+  /// - seealso: `URLStorage.replaceSubrange`
+  static func replace(
+    subrange: Range<Int>, withCount: Int, writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+  ) -> Self {
+    return .init(subrange: subrange, insertedCount: withCount, writer: writer)
+  }
+
+  /// - seealso: `URLStorage.removeSubrange`
+  static func remove(subrange: Range<Int>) -> Self {
+    return .replace(subrange: subrange, withCount: 0, writer: { _ in return 0 })
+  }
+}
+
+extension URLStorage {
+
+  /// Replaces the given range of code-units with an uninitialized space, which is then initialized by the given closure.
+  /// The URL's structure is also replaced with the given new structure. If the existing storage is not optimal for the new structure,
+  /// the storage will be replaced with the optimal kind.
+  ///
+  /// This method fails at runtime if the `initializer` closure does not initialize exactly `insertCount` code-units.
+  /// `initializer`'s return value should be calculated independently as it writes to the buffer, to ensure that it does not leave uninitialized gaps.
+  ///
+  /// - parameters:
+  ///   - subrangeToReplace:  The range of code-units to replace
+  ///   - insertCount:        The size of the uninitialized space to replace the subrange with. If 0, the subrange's contents are removed.
+  ///   - newStructure:       The new structure of the URL after replacement.
+  ///   - initializer:        A closure which initializes the new content of the given subrange and returns the number of elements initialized.
+  ///                         The initializer **must** initialize exactly `insertCount` elements, or this method will trap.
+  ///
+  /// - returns: An `AnyURLStorage` with the given range of code-units replaced and with the new structure. If the existing storage was already optimal
+  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
+  ///
+  mutating func replaceSubrange(
+    _ subrangeToReplace: Range<Int>,
+    withUninitializedSpace insertCount: Int,
+    newStructure: URLStructure<Int>,
+    initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+  ) -> (newStorage: AnyURLStorage, newSubrange: Range<Int>) {
+
+    newStructure.checkInvariants()
+    let newCount = codeUnits.count - subrangeToReplace.count + insertCount
+
+    if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
+      let newSubrange = codeUnits.unsafeReplaceSubrange(
+        subrangeToReplace, withUninitializedCapacity: insertCount, initializingWith: initializer
+      )
+      header.copyStructure(from: newStructure)
+      return (AnyURLStorage(self), newSubrange)
+    }
+    let newSubrange = subrangeToReplace.lowerBound..<(subrangeToReplace.lowerBound + insertCount)
+    let newStorage = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
+      return codeUnits.withUnsafeBufferPointer { src in
+        dest.initialize(from: src, replacingSubrange: subrangeToReplace, withElements: insertCount) { rgnStart, count in
+          var rgnPtr = UnsafeMutableBufferPointer(start: rgnStart, count: count)
+          let written = initializer(&rgnPtr)
+          precondition(written == count, "Subrange initializer did not initialize the expected number of code-units")
+        }
+      }
+    }
+    return (newStorage, newSubrange)
+  }
+
+  /// Removes the given range of code-units.
+  /// The URL's structure is also replaced with the given new structure. If the existing storage is not optimal for the new structure,
+  /// the storage will be replaced with the optimal kind.
+  ///
+  /// - parameters:
+  ///   - subrangeToRemove:  The range of code-units to remove
+  ///   - newStructure:      The new structure of the URL after removing the given code-units.
+  ///
+  /// - returns: An `AnyURLStorage` with the given range of code-units removed and with the new structure. If the existing storage was already optimal
+  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
+  ///
+  mutating func removeSubrange(
+    _ subrangeToRemove: Range<Int>, newStructure: URLStructure<Int>
+  ) -> (newStorage: AnyURLStorage, newSubrange: Range<Int>) {
+    return replaceSubrange(subrangeToRemove, withUninitializedSpace: 0, newStructure: newStructure) { _ in 0 }
+  }
+
+  /// Performs the given list of code-unit replacement operations while updating the URL's header to reflect the given structure.
+  /// If the current storage type supports the new structure, the operations will be performed in-place.
+  /// Otherwise, appropriate storage will be allocated and initialized with the result of applying the given operations to this storage's code-units.
+  ///
+  /// - parameters:
+  ///   - commands:      The list of code-unit replacement operations to perform.
+  ///                    This list must be sorted by the operations' subrange, and operations may not work on overlapping subranges.
+  ///   - newStructure:  The new structure of the URL after all replacement operations have been performed.
+  ///
+  /// - returns: An `AnyURLStorage` with the new code-units and structure. If the existing storage was already optimal
+  ///            for the new structure and the mutation occurred in-place, this will wrap `self`. Otherwise, it will wrap a new storage object.
+  ///
+  mutating func multiReplaceSubrange(
+    commands: [ReplaceSubrangeOperation],
+    newStructure: URLStructure<Int>
+  ) -> AnyURLStorage {
+
+    newStructure.checkInvariants()
+    let newCount = commands.reduce(into: codeUnits.count) { c, op in
+      c += (op.insertedCount - op.subrange.count)
+    }
+
+    if AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: newCount, structure: newStructure) {
+      // Perform the operations in reverse order to avoid clobbering.
+      for command in commands.reversed() {
+        codeUnits.unsafeReplaceSubrange(
+          command.subrange,
+          withUninitializedCapacity: command.insertedCount,
+          initializingWith: command.writer
+        )
+      }
+      header.copyStructure(from: newStructure)
+      return AnyURLStorage(self)
+    }
+    let newStorage = AnyURLStorage(optimalStorageForCapacity: newCount, structure: newStructure) { dest in
+      return codeUnits.withUnsafeBufferPointer { src in
+        let srcBase = src.baseAddress.unsafelyUnwrapped
+        var destHead = dest.baseAddress.unsafelyUnwrapped
+        var srcIdx = 0
+        for command in commands {
+          // Copy from src until command range.
+          let bytesToCopyFromSrc = command.subrange.lowerBound - srcIdx
+          destHead.initialize(from: srcBase + srcIdx, count: bytesToCopyFromSrc)
+          destHead += bytesToCopyFromSrc
+          srcIdx += bytesToCopyFromSrc
+          assert(srcIdx == command.subrange.lowerBound)
+          // Execute command.
+          var buffer = UnsafeMutableBufferPointer(start: destHead, count: command.insertedCount)
+          let actualBytesWritten = command.writer(&buffer)
+          precondition(
+            actualBytesWritten == command.insertedCount,
+            "Subrange initializer did not initialize the expected number of code-units")
+          destHead += actualBytesWritten
+          // Advance srcIdx to command end.
+          srcIdx = command.subrange.upperBound
+        }
+        // Copy from end of last command until end of src.
+        let bytesToCopyFromSrc = src.endIndex - srcIdx
+        destHead.initialize(from: srcBase + srcIdx, count: bytesToCopyFromSrc)
+        destHead += bytesToCopyFromSrc
+        return dest.baseAddress.unsafelyUnwrapped.distance(to: destHead)
+      }
+    }
+    return newStorage
+  }
+
+  /// A generic setter which works for _some_ URL components.
+  ///
+  /// This is sufficient for components which do not change other components when they are modified.
+  /// For example, the query, fragment and port components may be changed without modifying any other parts of the URL.
+  /// However, components such as scheme, hostname, username and password require more complex logic
+  /// (e.g. when changing the scheme, the port component may also need to be modified; the hostname setter needs to deal with the "//" authority sigil,
+  /// and credentials have additional logic for separators). This setter is sufficient for the former kind of components, but **does not include component-specific
+  /// logic for the latter kind**.
+  ///
+  /// If the new value is `nil`, the component is removed (code-units deleted and `URLStructure`'s length-key set to 0).
+  /// Otherwise, the component is replaced by `[prefix][encoded-content]`, where `prefix` is a single ASCII character and
+  /// `encoded-content` is the accumulated result of transforming the new value by the `encoder` closure.
+  /// The `URLStructure`'s length-key is updated to reflect the total length of the new component, including the single-character prefix.
+  ///
+  ///
+  /// - parameters:
+  ///   - component: The component to modify.
+  ///   - newValue:  The new value of the component.
+  ///   - prefix:    A single ASCII character to write before the new value. If `newValue` is not `nil`, this is _always_ written.
+  ///   - lengthKey: The `URLStructure` field to update with the component's new length. Said length will include the single-character prefix.
+  ///   - encodeSet: The `PercentEncodeSet` which should be used to encode the new value.
+  ///   - adjustStructure: A closure which allows setting additional properties of the structure to be tweaked before writing.
+  ///                      This closure is invoked after the structure's `lengthKey` has been updated with the component's new length.
+  ///
+  mutating func setSimpleComponent<Input, EncodeSet>(
+    _ component: WebURL.Component,
+    to newValue: Input?,
+    prefix: ASCII,
+    lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
+    encodeSet: EncodeSet.Type,
+    adjustStructure: (inout URLStructure<Int>) -> Void = { _ in }
+  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8, EncodeSet: PercentEncodeSet {
+
+    let oldStructure = header.structure
+
+    guard let newBytes = newValue else {
+      guard let existingFragment = oldStructure.range(of: component) else {
+        return AnyURLStorage(self)
+      }
+      var newStructure = oldStructure
+      newStructure[keyPath: lengthKey] = 0
+      adjustStructure(&newStructure)
+      return removeSubrange(existingFragment, newStructure: newStructure).newStorage
+    }
+
+    var bytesToWrite = 1  // leading separator.
+    let needsEncoding = newBytes.lazy.percentEncoded(using: EncodeSet.self).write { bytesToWrite += $0.count }
+    let subrangeToReplace = oldStructure.rangeForReplacingCodeUnits(of: component)
+    var newStructure = oldStructure
+    newStructure[keyPath: lengthKey] = bytesToWrite
+    adjustStructure(&newStructure)
+
+    return replaceSubrange(
+      subrangeToReplace,
+      withUninitializedSpace: bytesToWrite,
+      newStructure: newStructure
+    ) { dest in
+      guard var ptr = dest.baseAddress else { return 0 }
+      ptr.pointee = prefix.codePoint
+      ptr += 1
+      if needsEncoding {
+        _ = newBytes.lazy.percentEncoded(using: EncodeSet.self).write { group in
+          switch group {
+          case .percentEncodedByte:
+            ptr[0] = group[0]
+            ptr[1] = group[1]
+            ptr[2] = group[2]
+            ptr += 3
+          case .sourceByte, .substitutedByte:
+            ptr[0] = group[0]
+            ptr += 1
+          }
+        }
+      } else {
+        let n = UnsafeMutableBufferPointer(start: ptr, count: bytesToWrite - 1).initialize(from: newBytes).1
+        ptr += n
+      }
+      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
+    }.newStorage
   }
 }
