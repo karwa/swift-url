@@ -291,7 +291,7 @@ extension ParsedURLString.ProcessedMapping {
         preconditionFailure("Cannot construct a URL without a scheme")
       }
       assert(schemeKind == baseURL._schemeKind)
-      baseURL.storage.withComponentBytes(.scheme) {
+      baseURL.storage.withUTF8(of: .scheme) {
         let bytes = $0!.dropLast()  // drop terminator.
         writer.writeSchemeContents(bytes)
       }
@@ -348,7 +348,7 @@ extension ParsedURLString.ProcessedMapping {
       guard let baseURL = baseURL else {
         preconditionFailure("A baseURL is required")
       }
-      baseURL.storage.withAllAuthorityComponentBytes {
+      baseURL.storage.withUTF8OfAllAuthorityComponents {
         if let baseAuth = $0 {
           writer.writeAuthoritySigil()
           writer.writeKnownAuthorityString(
@@ -411,7 +411,7 @@ extension ParsedURLString.ProcessedMapping {
 
     case .none where info.componentsToCopyFromBase.contains(.path):
       guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
-      baseURL.storage.withComponentBytes(.path) {
+      baseURL.storage.withUTF8(of: .path) {
         if let basePath = $0 {
           precondition(
             (hasAuthority == false) || info.componentsToCopyFromBase.contains(.authority),
@@ -457,7 +457,7 @@ extension ParsedURLString.ProcessedMapping {
       writer.writeHint(.query, needsEscaping: didEscape)
     } else if info.componentsToCopyFromBase.contains(.query) {
       guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
-      baseURL.storage.withComponentBytes(.query) {
+      baseURL.storage.withUTF8(of: .query) {
         if let baseQuery = $0?.dropFirst() {  // '?' separator.
           writer.writeQueryContents { writePiece in writePiece(baseQuery) }
         }
@@ -479,7 +479,7 @@ extension ParsedURLString.ProcessedMapping {
       writer.writeHint(.fragment, needsEscaping: didEscape)
     } else if info.componentsToCopyFromBase.contains(.fragment) {
       guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
-      baseURL.storage.withComponentBytes(.fragment) {
+      baseURL.storage.withUTF8(of: .fragment) {
         if let baseFragment = $0?.dropFirst() {  // '#' separator.
           writer.writeFragmentContents { writePiece in writePiece(baseFragment) }
         }

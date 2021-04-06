@@ -166,7 +166,7 @@ extension WebURL.PathComponents {
     component: Index, _ body: (UnsafeBufferPointer<UInt8>) throws -> Result
   ) rethrows -> Result {
 
-    try url.storage.withEntireString { string in
+    try url.storage.withUTF8 { string in
       let pathRange = url.storage.structure.rangeForReplacingCodeUnits(of: .path)
       precondition(
         component.range.lowerBound >= pathRange.lowerBound && component.range.upperBound <= pathRange.upperBound,
@@ -196,7 +196,7 @@ extension WebURL.PathComponents: BidirectionalCollection {
     guard start <= end else {
       return -1 * distance(from: end, to: start)
     }
-    return url.storage.withEntireString { string in
+    return url.storage.withUTF8 { string in
       var count = 0
       for char in string[start.range.lowerBound..<end.range.lowerBound] {
         if char == ASCII.forwardSlash.codePoint {
@@ -665,7 +665,7 @@ extension URLStorage {
   }
 
   internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int {
-    withEntireString { utf8 in
+    withUTF8 { utf8 in
       let pathRange = header.structure.rangeForReplacingCodeUnits(of: .path)
       guard !pathRange.isEmpty else { return componentStartOffset }
       if componentStartOffset == pathRange.upperBound { return componentStartOffset }
@@ -677,7 +677,7 @@ extension URLStorage {
   }
 
   internal func startOfPathComponent(endingAt componentEndOffset: Int) -> Int? {
-    withEntireString { utf8 in
+    withUTF8 { utf8 in
       let pathRange = header.structure.rangeForReplacingCodeUnits(of: .path)
       guard !pathRange.isEmpty else { return componentEndOffset }
       if componentEndOffset == pathRange.lowerBound { return nil }
@@ -706,7 +706,7 @@ extension URLStorage {
     let oldStructure = header.structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
     if oldStructure.cannotBeABaseURL {
-      return (AnyURLStorage(self), .right(.error(.cannotSetPathOnCannotBeABaseURL)))
+      return (AnyURLStorage(self), .right(.cannotSetPathOnCannotBeABaseURL))
     }
 
     let components = components.lazy.filter { utf8 in
@@ -757,7 +757,7 @@ extension URLStorage {
                 return 1
               })
           )
-          replaced = multiReplaceSubrange(commands: commands, newStructure: newStructure)
+          replaced = multiReplaceSubrange(commands, newStructure: newStructure)
         }
         let newPathStart = replaced.structure.pathStart
         let newPathEnd = replaced.structure.pathStart &+ replaced.structure.pathLength
@@ -851,7 +851,7 @@ extension URLStorage {
         })
     )
 
-    var replaced = multiReplaceSubrange(commands: commands, newStructure: newStructure)
+    var replaced = multiReplaceSubrange(commands, newStructure: newStructure)
 
     // Normalize Windows drive letters.
     // It is much simpler to fix this up after the replacement, as the first component could come from either
@@ -890,7 +890,7 @@ extension URLStorage {
 
   private var pathEndsWithTrailingSlash: Bool {
     let pathRange = header.structure.rangeForReplacingCodeUnits(of: .path)
-    return pathRange.count >= 1 && withEntireString { $0[pathRange.upperBound - 1] == ASCII.forwardSlash.codePoint }
+    return pathRange.count >= 1 && withUTF8 { $0[pathRange.upperBound - 1] == ASCII.forwardSlash.codePoint }
   }
 
   private mutating func normalizeWindowsDriveLetterIfPresent() {

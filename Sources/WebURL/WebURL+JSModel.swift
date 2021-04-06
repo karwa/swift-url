@@ -56,8 +56,8 @@ extension WebURL {
 extension WebURL.JSModel {
 
   private mutating func withMutableStorage(
-    _ small: (inout URLStorage<GenericURLHeader<UInt8>>) -> AnyURLStorage,
-    _ generic: (inout URLStorage<GenericURLHeader<Int>>) -> AnyURLStorage
+    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> AnyURLStorage,
+    _ generic: (inout URLStorage<BasicURLHeader<Int>>) -> AnyURLStorage
   ) {
     // We need to go through a bit of a dance in order to get a unique reference to the storage.
     // It's like if you have tape stuck to one hand and try to remove it with the other hand.
@@ -272,7 +272,7 @@ extension WebURL.JSModel {
 extension WebURL.JSModel: CustomStringConvertible, TextOutputStreamable {
 
   public var description: String {
-    return storage.entireString
+    return swiftModel.serialized
   }
 
   public func write<Target>(to target: inout Target) where Target: TextOutputStream {
@@ -302,17 +302,10 @@ extension WebURL.JSModel: CustomStringConvertible, TextOutputStreamable {
 extension WebURL.JSModel: Equatable, Hashable {
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.storage.withEntireString { lhsBuffer in
-      rhs.storage.withEntireString { rhsBuffer in
-        return (lhsBuffer.baseAddress == rhsBuffer.baseAddress && lhsBuffer.count == rhsBuffer.count)
-          || lhsBuffer.elementsEqual(rhsBuffer)
-      }
-    }
+    lhs.swiftModel == rhs.swiftModel
   }
 
   public func hash(into hasher: inout Hasher) {
-    storage.withEntireString { buffer in
-      hasher.combine(bytes: UnsafeRawBufferPointer(buffer))
-    }
+    swiftModel.hash(into: &hasher)
   }
 }

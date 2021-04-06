@@ -14,7 +14,8 @@
 
 /// A set of characters which should be transformed or substituted in order to percent-encode (or percent-escape) an ASCII string.
 ///
-protocol PercentEncodeSet {
+@usableFromInline
+internal protocol PercentEncodeSet {
 
   /// Whether or not the given ASCII `character` should be percent-encoded.
   ///

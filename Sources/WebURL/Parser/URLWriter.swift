@@ -184,7 +184,7 @@ struct URLMetrics {
 struct StructureAndMetricsCollector: URLWriter {
   private var requiredCapacity: Int = 0
   private var metrics = URLMetrics()
-  private var structure = URLStructure<Int>()
+  private var structure = URLStructure<Int>.invalidEmptyStructure()
 
   private init() {}
 
@@ -324,6 +324,7 @@ struct StructureAndMetricsCollector: URLWriter {
   mutating func finalize() {
     // Empty and nil queries are considered form-encoded (i.e. they do not need to be re-encoded).
     structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
+    structure.checkInvariants()
   }
 }
 

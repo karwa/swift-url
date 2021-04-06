@@ -14,27 +14,32 @@
 
 extension WebURL {
 
+  // swift-format-ignore
   /// A value representing a component in a URL.
   ///
   /// Each component has a unique `rawValue` suitable for bitmasks.
   ///
   /// - seealso: `WebURL.ComponentSet`.
   ///
-  struct Component: Equatable {
-    let rawValue: UInt8
+  @usableFromInline
+  internal struct Component: Equatable {
 
-    private init(_unchecked rawValue: UInt8) {
+    @usableFromInline
+    internal let rawValue: UInt8
+
+    @inlinable
+    internal init(_unchecked rawValue: UInt8) {
       self.rawValue = rawValue
     }
 
-    static var scheme: Self { Self(_unchecked: 1 << 0) }
-    static var username: Self { Self(_unchecked: 1 << 1) }
-    static var password: Self { Self(_unchecked: 1 << 2) }
-    static var hostname: Self { Self(_unchecked: 1 << 3) }
-    static var port: Self { Self(_unchecked: 1 << 4) }
-    static var path: Self { Self(_unchecked: 1 << 5) }
-    static var query: Self { Self(_unchecked: 1 << 6) }
-    static var fragment: Self { Self(_unchecked: 1 << 7) }
+    @inlinable internal static var scheme:   Self { Self(_unchecked: 1 << 0) }
+    @inlinable internal static var username: Self { Self(_unchecked: 1 << 1) }
+    @inlinable internal static var password: Self { Self(_unchecked: 1 << 2) }
+    @inlinable internal static var hostname: Self { Self(_unchecked: 1 << 3) }
+    @inlinable internal static var port:     Self { Self(_unchecked: 1 << 4) }
+    @inlinable internal static var path:     Self { Self(_unchecked: 1 << 5) }
+    @inlinable internal static var query:    Self { Self(_unchecked: 1 << 6) }
+    @inlinable internal static var fragment: Self { Self(_unchecked: 1 << 7) }
   }
 }
 
