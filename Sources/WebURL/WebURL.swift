@@ -490,7 +490,7 @@ extension WebURL {
       return
     }
     guard let uint16Port = UInt16(exactly: newPort) else {
-      throw URLSetterError.error(.portValueOutOfBounds)
+      throw URLSetterError.portValueOutOfBounds
     }
     try withMutableStorage(
       { small in small.setPort(to: uint16Port) },

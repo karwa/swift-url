@@ -31,7 +31,7 @@ extension URLStorage {
     guard let (idx, newSchemeKind) = parseScheme(newValue),
       idx == newValue.endIndex || newValue.index(after: idx) == newValue.endIndex
     else {
-      return (AnyURLStorage(self), .error(.invalidScheme))
+      return (AnyURLStorage(self), .invalidScheme)
     }
 
     // Check that the operation is semantically valid for the existing structure.
@@ -39,13 +39,13 @@ extension URLStorage {
     let oldStructure = header.structure
 
     if newSchemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
-      return (AnyURLStorage(self), .error(.changeOfSchemeSpecialness))
+      return (AnyURLStorage(self), .changeOfSchemeSpecialness)
     }
     if newSchemeKind == .file, oldStructure.hasCredentialSeparator || oldStructure.portLength != 0 {
-      return (AnyURLStorage(self), .error(.newSchemeCannotHaveCredentialsOrPort))
+      return (AnyURLStorage(self), .newSchemeCannotHaveCredentialsOrPort)
     }
     if oldStructure.schemeKind == .file, oldStructure.hostnameLength == 0 {
-      return (AnyURLStorage(self), newSchemeKind == .file ? nil : .error(.newSchemeCannotHaveEmptyHostname))
+      return (AnyURLStorage(self), newSchemeKind == .file ? nil : .newSchemeCannotHaveEmptyHostname)
     }
 
     // The operation is valid. Calculate the new structure and replace the code-units.
@@ -94,7 +94,7 @@ extension URLStorage {
     let oldStructure = header.structure
 
     if oldStructure.cannotHaveCredentialsOrPort {
-      return (AnyURLStorage(self), .error(.cannotHaveCredentialsOrPort))
+      return (AnyURLStorage(self), .cannotHaveCredentialsOrPort)
     }
 
     // The operation is valid. Calculate the new structure and replace the code-units.
@@ -154,7 +154,7 @@ extension URLStorage {
     let oldStructure = header.structure
 
     if oldStructure.cannotHaveCredentialsOrPort {
-      return (AnyURLStorage(self), .error(.cannotHaveCredentialsOrPort))
+      return (AnyURLStorage(self), .cannotHaveCredentialsOrPort)
     }
 
     // The operation is valid. Calculate the new structure and replace the code-units.
@@ -229,22 +229,22 @@ extension URLStorage {
 
     // Check that the operation is semantically valid for the existing structure.
     if oldStructure.cannotBeABaseURL {
-      return (AnyURLStorage(self), .error(.cannotSetHostOnCannotBeABaseURL))
+      return (AnyURLStorage(self), .cannotSetHostOnCannotBeABaseURL)
     }
 
     guard let newHostnameBytes = newValue, newHostnameBytes.isEmpty == false else {
 
       if oldStructure.schemeKind.isSpecial, oldStructure.schemeKind != .file {
-        return (AnyURLStorage(self), .error(.schemeDoesNotSupportNilOrEmptyHostnames))
+        return (AnyURLStorage(self), .schemeDoesNotSupportNilOrEmptyHostnames)
       }
       if oldStructure.schemeKind == .file, newValue == nil {
-        return (AnyURLStorage(self), .error(.schemeDoesNotSupportNilOrEmptyHostnames))
+        return (AnyURLStorage(self), .schemeDoesNotSupportNilOrEmptyHostnames)
       }
       if oldStructure.hasCredentialsOrPort {
-        return (AnyURLStorage(self), .error(.cannotSetEmptyHostnameWithCredentialsOrPort))
+        return (AnyURLStorage(self), .cannotSetEmptyHostnameWithCredentialsOrPort)
       }
       if oldStructure.pathLength == 0, newValue == nil {
-        return (AnyURLStorage(self), .error(.cannotRemoveHostnameWithoutPath))
+        return (AnyURLStorage(self), .cannotRemoveHostnameWithoutPath)
       }
 
       // The operation is valid. Calculate the new structure and replace the code-units.
@@ -295,7 +295,7 @@ extension URLStorage {
     // Check that the new value is a valid hostname.
     var callback = IgnoreValidationErrors()
     guard let newHost = ParsedHost(newHostnameBytes, schemeKind: oldStructure.schemeKind, callback: &callback) else {
-      return (AnyURLStorage(self), .error(.invalidHostname))
+      return (AnyURLStorage(self), .invalidHostname)
     }
 
     // The operation is valid. Calculate the new structure and replace the code-units.
@@ -346,7 +346,7 @@ extension URLStorage {
 
     let oldStructure = header.structure
     guard oldStructure.cannotHaveCredentialsOrPort == false else {
-      return (AnyURLStorage(self), .error(.cannotHaveCredentialsOrPort))
+      return (AnyURLStorage(self), .cannotHaveCredentialsOrPort)
     }
 
     var newValue = newValue
@@ -396,7 +396,7 @@ extension URLStorage {
 
     let oldStructure = header.structure
     guard oldStructure.cannotBeABaseURL == false else {
-      return (AnyURLStorage(self), .error(.cannotSetPathOnCannotBeABaseURL))
+      return (AnyURLStorage(self), .cannotSetPathOnCannotBeABaseURL)
     }
 
     // Note: absolutePathsCopyWindowsDriveFromBase models a quirk from the URL Standard's "file slash" state,
@@ -527,37 +527,32 @@ extension URLStorage {
 
 /// An error which may be returned when a `URLStorage` setter operation fails.
 ///
-struct URLSetterError: Error, Equatable {
+@usableFromInline
+internal enum URLSetterError: Error, Equatable {
 
-  enum Value: Equatable {
-    // scheme.
-    case invalidScheme
-    case changeOfSchemeSpecialness
-    case newSchemeCannotHaveCredentialsOrPort
-    case newSchemeCannotHaveEmptyHostname
-    // credentials and port.
-    case cannotHaveCredentialsOrPort
-    case portValueOutOfBounds
-    // hostname.
-    case cannotSetHostOnCannotBeABaseURL
-    case schemeDoesNotSupportNilOrEmptyHostnames
-    case cannotSetEmptyHostnameWithCredentialsOrPort
-    case invalidHostname
-    case cannotRemoveHostnameWithoutPath
-    // path.
-    case cannotSetPathOnCannotBeABaseURL
-  }
-  private var _value: Value
-
-  static func error(_ v: Value) -> Self {
-    return .init(_value: v)
-  }
+  // scheme.
+  case invalidScheme
+  case changeOfSchemeSpecialness
+  case newSchemeCannotHaveCredentialsOrPort
+  case newSchemeCannotHaveEmptyHostname
+  // credentials and port.
+  case cannotHaveCredentialsOrPort
+  case portValueOutOfBounds
+  // hostname.
+  case cannotSetHostOnCannotBeABaseURL
+  case schemeDoesNotSupportNilOrEmptyHostnames
+  case cannotSetEmptyHostnameWithCredentialsOrPort
+  case invalidHostname
+  case cannotRemoveHostnameWithoutPath
+  // path.
+  case cannotSetPathOnCannotBeABaseURL
 }
 
 extension URLSetterError: CustomStringConvertible {
 
-  public var description: String {
-    switch _value {
+  @usableFromInline
+  internal var description: String {
+    switch self {
     case .invalidScheme:
       return #"""
         The new scheme is not valid. Valid schemes consist of ASCII alphanumerics, '+', '-' and '.', and the

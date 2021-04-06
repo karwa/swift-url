@@ -706,7 +706,7 @@ extension URLStorage {
     let oldStructure = header.structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
     if oldStructure.cannotBeABaseURL {
-      return (AnyURLStorage(self), .right(.error(.cannotSetPathOnCannotBeABaseURL)))
+      return (AnyURLStorage(self), .right(.cannotSetPathOnCannotBeABaseURL))
     }
 
     let components = components.lazy.filter { utf8 in
