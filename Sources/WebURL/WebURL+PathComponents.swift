@@ -625,29 +625,29 @@ extension AnyURLStorage {
 
   internal var pathComponentsStartIndex: WebURL.PathComponents.Index {
     switch self {
-    case .small(let small): return small.pathComponentsStartIndex
-    case .generic(let generic): return generic.pathComponentsStartIndex
+    case .small(let storage): return storage.pathComponentsStartIndex
+    case .large(let storage): return storage.pathComponentsStartIndex
     }
   }
 
   internal var pathComponentsEndIndex: WebURL.PathComponents.Index {
     switch self {
-    case .small(let small): return small.pathComponentsEndIndex
-    case .generic(let generic): return generic.pathComponentsEndIndex
+    case .small(let storage): return storage.pathComponentsEndIndex
+    case .large(let storage): return storage.pathComponentsEndIndex
     }
   }
 
   internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int {
     switch self {
-    case .small(let small): return small.endOfPathComponent(startingAt: componentStartOffset)
-    case .generic(let generic): return generic.endOfPathComponent(startingAt: componentStartOffset)
+    case .small(let storage): return storage.endOfPathComponent(startingAt: componentStartOffset)
+    case .large(let storage): return storage.endOfPathComponent(startingAt: componentStartOffset)
     }
   }
 
   internal func startOfPathComponent(endingAt componentEndOffset: Int) -> Int? {
     switch self {
-    case .small(let small): return small.startOfPathComponent(endingAt: componentEndOffset)
-    case .generic(let generic): return generic.startOfPathComponent(endingAt: componentEndOffset)
+    case .small(let storage): return storage.startOfPathComponent(endingAt: componentEndOffset)
+    case .large(let storage): return storage.startOfPathComponent(endingAt: componentEndOffset)
     }
   }
 }
@@ -863,7 +863,7 @@ extension URLStorage {
         replaced = _tempStorage
         small.normalizeWindowsDriveLetterIfPresent()
         replaced = AnyURLStorage(small)
-      case .generic(var generic):
+      case .large(var generic):
         replaced = _tempStorage
         generic.normalizeWindowsDriveLetterIfPresent()
         replaced = AnyURLStorage(generic)

@@ -59,7 +59,7 @@ extension WebURL {
           let src = src.isEmpty ? nil : src
           withMutableStorage(
             { small in small.setQuery(toKnownFormEncoded: src) },
-            { generic in generic.setQuery(toKnownFormEncoded: src) }
+            { large in large.setQuery(toKnownFormEncoded: src) }
           )
         }
         return
@@ -67,7 +67,7 @@ extension WebURL {
       let formEncoded = newValue.formEncodedQueryBytes
       withMutableStorage(
         { small in small.setQuery(toKnownFormEncoded: formEncoded) },
-        { generic in generic.setQuery(toKnownFormEncoded: formEncoded) }
+        { large in large.setQuery(toKnownFormEncoded: formEncoded) }
       )
     }
   }
@@ -125,7 +125,7 @@ extension WebURL.QueryParameters {
     let reencodedQuery = formEncodedQueryBytes
     url.withMutableStorage(
       { small in small.setQuery(toKnownFormEncoded: reencodedQuery) },
-      { generic in generic.setQuery(toKnownFormEncoded: reencodedQuery) }
+      { large in large.setQuery(toKnownFormEncoded: reencodedQuery) }
     )
     assert(url.storage.structure.queryIsKnownFormEncoded)
   }
@@ -342,7 +342,7 @@ extension WebURL.QueryParameters {
     let encodedNewValue = newValue?.urlFormEncoded
     url.withMutableStorage(
       { small in small.setQueryPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) },
-      { generic in generic.setQueryPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) }
+      { large in large.setQueryPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) }
     )
   }
 }
@@ -363,7 +363,7 @@ extension WebURL.QueryParameters {
     reencodeQueryIfNeeded()
     url.withMutableStorage(
       { small in small.appendPairsToQuery(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) },
-      { generic in generic.appendPairsToQuery(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) }
+      { large in large.appendPairsToQuery(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) }
     )
   }
 

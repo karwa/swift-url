@@ -73,7 +73,7 @@ extension WebURL.JSModel {
     var localRef = self.storage
     self.storage = _tempStorage
     switch localRef {
-    case .generic(var extracted_storage):
+    case .large(var extracted_storage):
       localRef = _tempStorage
       self.storage = generic(&extracted_storage)
     case .small(var extracted_storage):

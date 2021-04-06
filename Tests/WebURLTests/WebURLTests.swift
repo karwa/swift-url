@@ -735,7 +735,7 @@ extension WebURLTests {
         "ws://hostnamewhichtakesustotheedge:443?hellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellop"
       )!.jsModel
       switch url.storage {
-      case .generic(_): break
+      case .large(_): break
       default: XCTFail("Unexpected storage type")
       }
       url.scheme = "wss"
