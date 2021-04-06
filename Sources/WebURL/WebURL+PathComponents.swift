@@ -757,7 +757,7 @@ extension URLStorage {
                 return 1
               })
           )
-          replaced = multiReplaceSubrange(commands: commands, newStructure: newStructure)
+          replaced = multiReplaceSubrange(commands, newStructure: newStructure)
         }
         let newPathStart = replaced.structure.pathStart
         let newPathEnd = replaced.structure.pathStart &+ replaced.structure.pathLength
@@ -851,7 +851,7 @@ extension URLStorage {
         })
     )
 
-    var replaced = multiReplaceSubrange(commands: commands, newStructure: newStructure)
+    var replaced = multiReplaceSubrange(commands, newStructure: newStructure)
 
     // Normalize Windows drive letters.
     // It is much simpler to fix this up after the replacement, as the first component could come from either
