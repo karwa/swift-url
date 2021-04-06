@@ -571,7 +571,7 @@ extension URLScanner {
       return nil
     }
 
-    if base._cannotBeABaseURL {
+    if base.cannotBeABase {
       guard ASCII(flatMap: input.first) == .numberSign else {
         callback.validationError(.missingSchemeNonRelativeURL)
         return nil

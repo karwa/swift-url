@@ -82,11 +82,11 @@ extension WebURL {
   ///
   public var pathComponents: PathComponents? {
     get {
-      guard self._cannotBeABaseURL == false else { return nil }
+      guard self.cannotBeABase == false else { return nil }
       return PathComponents(url: self)
     }
     _modify {
-      guard self._cannotBeABaseURL == false else {
+      guard self.cannotBeABase == false else {
         var value: PathComponents? = nil
         yield &value
         precondition(value == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
@@ -103,7 +103,7 @@ extension WebURL {
       yield &components
     }
     set {
-      guard self._cannotBeABaseURL == false else {
+      guard self.cannotBeABase == false else {
         precondition(newValue == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
         return
       }

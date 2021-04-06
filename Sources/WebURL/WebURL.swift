@@ -103,10 +103,6 @@ extension WebURL {
   internal var _schemeKind: WebURL.SchemeKind {
     storage.schemeKind
   }
-
-  internal var _cannotBeABaseURL: Bool {
-    storage.cannotBeABaseURL
-  }
 }
 
 
@@ -313,6 +309,21 @@ extension WebURL {
     set {
       setFragment(to: newValue)
     }
+  }
+
+  /// Whether this URL cannot be a base.
+  ///
+  /// URLs marked as 'cannot be a base' do not have special schemes (such as http or file), authority components or hierarchical paths.
+  /// When parsing a relative URL string against such a URL, only strings which set the fragment are allowed, and any modifications which would change
+  /// a URL's structure to be a valid base URL (or vice versa) are not allowed.
+  /// Examples of URLs which cannot be a base are:
+  ///
+  /// - `mailto:bob@example.com`
+  /// - `javascript:alert("hello");`
+  /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
+  ///
+  public var cannotBeABase: Bool {
+    storage.cannotBeABaseURL
   }
 }
 
