@@ -14,46 +14,99 @@
 
 /// A set of characters which should be transformed or substituted in order to percent-encode (or percent-escape) an ASCII string.
 ///
-@usableFromInline
-internal protocol PercentEncodeSet {
+public protocol PercentEncodeSet {
 
-  /// Whether or not the given ASCII `character` should be percent-encoded.
+  /// Whether or not the given ASCII `codePoint` should be percent-encoded.
   ///
-  static func shouldEscape(character: ASCII) -> Bool
+  static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool
 
-  /// An optional function which allows the encode-set to replace a non-percent-encoded character with another character.
+  /// An optional function which allows the encode-set to replace a non-percent-encoded source codepoint with another codepoint.
   ///
-  /// For example, the `application/x-www-form-urlencoded` encoding does not escape the space character, and instead replaces it with a "+".
-  /// Conforming types must also implement the reverse substitution function, `unsubstitute(character:)`.
+  /// For example, the `application/x-www-form-urlencoded` encoding does not percent-encode ASCII spaces (`0x20`) as "%20",
+  /// instead replacing them with a "+" (`0x2B`). An implementation of this encoding would look like this:
+  ///
+  /// ```swift
+  /// struct FormEncodeSet: PercentEncodeSet {
+  ///
+  ///   static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+  ///     if codePoint == 0x20 { return false } // do not percent-encode spaces, substitute instead.
+  ///     if codePoint == 0x2B { return true } // percent-encode "+"s in the source.
+  ///     // other codepoints...
+  ///   }
+  ///
+  ///   static func substitute(ascii codePoint: UInt8) -> UInt8? {
+  ///     if codePoint == 0x20 { return 0x2B } // Substitute spaces with "+".
+  ///     return nil
+  ///   }
+  ///
+  ///   static func unsubstitute(ascii codePoint: UInt8) -> UInt8? {
+  ///     if codePoint == 0x2B { return 0x20 } // Unsubstitute "+" to space.
+  ///     return nil
+  ///   }
+  /// }
+  /// ```
+  ///
+  /// The ASCII percent sign (`0x25`) and upper- and lowercase alpha characters (`0x41...0x5A` and `0x61...0x7A`) must not be substituted.
+  /// Conforming types must also implement the reverse substitution function, `unsubstitute(ascii:)`, and should ensure that any codepoints emitted
+  /// as substitutes are percent-encoded by `shouldPercentEncode`.
   ///
   /// - parameters:
-  ///   - character: The source character.
-  /// - returns:     The substitute character, or `nil` if the character should not be substituted.
+  ///   - codePoint: The ASCII codepoint from the source. Always in the range `0...127`.
+  /// - returns: The codepoint to emit instead of `codePoint`, or `nil` if the codepoint should not be substituted.
+  ///            If not `nil`, must always be in the range `0...127`
   ///
-  static func substitute(for character: ASCII) -> ASCII?
+  static func substitute(ascii codePoint: UInt8) -> UInt8?
 
-  /// An optional function which recovers a character from its substituted value.
+  /// An optional function which recovers a non-percent-decoded codepoint from its substituted value.
   ///
-  /// For example, the `application/x-www-form-urlencoded` encoding does not escape the space character, and instead replaces it with a "+".
-  /// This function would thus return a space in place of a "+", so the original character can be recovered.
-  /// Conforming types must also implement the substitution function, `substitute(for:)`.
+  /// For example, the `application/x-www-form-urlencoded` encoding does not percent-encode ASCII spaces (`0x20`) as "%20",
+  /// instead replacing them with a "+" (`0x2B`). An implementation of this encoding would look like this:
+  ///
+  /// ```swift
+  /// struct FormEncodeSet: PercentEncodeSet {
+  ///
+  ///   static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+  ///     if codePoint == 0x20 { return false } // do not percent-encode spaces, substitute instead.
+  ///     if codePoint == 0x2B { return true } // percent-encode "+"s in the source.
+  ///     // other codepoints...
+  ///   }
+  ///
+  ///   static func substitute(ascii codePoint: UInt8) -> UInt8? {
+  ///     if codePoint == 0x20 { return 0x2B } // Substitute spaces with "+".
+  ///     return nil
+  ///   }
+  ///
+  ///   static func unsubstitute(ascii codePoint: UInt8) -> UInt8? {
+  ///     if codePoint == 0x2B { return 0x20 } // Unsubstitute "+" to space.
+  ///     return nil
+  ///   }
+  /// }
+  /// ```
+  ///
+  /// The ASCII percent sign (`0x25`) and upper- and lowercase alpha characters (`0x41...0x5A` and `0x61...0x7A`) must not be substituted.
+  /// Conforming types must also implement the substitution function, `substitute(ascii:)`, and should ensure that any codepoints emitted
+  /// as substitutes are percent-encoded by `shouldPercentEncode`.
+  ///
+  /// Codepoints emitted by this function are not recognised as being part of a percent-encoded byte sequence, and values decoded from percent-encoded
+  /// byte sequences are assumed not to have been substituted.
   ///
   /// - parameters:
-  ///   - character: The character from the encoded string.
-  /// - returns:     The recovered original character, or `nil` if the character was not produced by this encode-set's substitution function.
+  ///   - codePoint: The possibly-substituted ASCII codepoint from an encoded string. Always in the range `0...127`.
+  /// - returns: The codepoint to emit instead of `codePoint`, or `nil` if the codepoint was not substituted by this encode-set.
+  ///            If not `nil`, must always be in the range `0...127`
   ///
-  static func unsubstitute(character: ASCII) -> ASCII?
+  static func unsubstitute(ascii codePoint: UInt8) -> UInt8?
 }
 
 extension PercentEncodeSet {
 
-  @inline(__always)
-  static func substitute(for character: ASCII) -> ASCII? {
+  @inlinable @inline(__always)
+  public static func substitute(ascii codePoint: UInt8) -> UInt8? {
     return nil
   }
 
-  @inline(__always)
-  static func unsubstitute(character: ASCII) -> ASCII? {
+  @inlinable @inline(__always)
+  public static func unsubstitute(ascii codePoint: UInt8) -> UInt8? {
     return nil
   }
 }
@@ -156,8 +209,12 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
 
   subscript(position: Index) -> PercentEncodedByte {
     let sourceByte = source[position]
-    if let asciiChar = ASCII(sourceByte), EncodeSet.shouldEscape(character: asciiChar) == false {
-      return EncodeSet.substitute(for: asciiChar).map { .substitutedByte($0.codePoint) } ?? .sourceByte(sourceByte)
+    if let asciiChar = ASCII(sourceByte), EncodeSet.shouldPercentEncode(ascii: asciiChar.codePoint) == false {
+      if let substitute = EncodeSet.substitute(ascii: asciiChar.codePoint) {
+        return .substitutedByte(substitute)
+      } else {
+        return .sourceByte(sourceByte)
+      }
     }
     return .percentEncodedByte(sourceByte)
   }
@@ -348,20 +405,20 @@ extension LazilyPercentDecoded {
       }
       let byte0 = source[i]
       let byte1Index = source.index(after: i)
-      guard _slowPath(byte0 == ASCII.percentSign.codePoint) else {
-        self.decodedValue = ASCII(byte0).flatMap { EncodeSet.unsubstitute(character: $0)?.codePoint } ?? byte0
+      guard byte0 == ASCII.percentSign.codePoint else {
         self.range = Range(uncheckedBounds: (i, byte1Index))
+        self.decodedValue = ASCII(byte0).flatMap { EncodeSet.unsubstitute(ascii: $0.codePoint) } ?? byte0
         return
       }
       var tail = source.suffix(from: byte1Index)
-      guard let decodedByte1 = ASCII(flatMap: tail.popFirst())?.hexNumberValue,
+      guard
+        let decodedByte1 = ASCII(flatMap: tail.popFirst())?.hexNumberValue,
         let decodedByte2 = ASCII(flatMap: tail.popFirst())?.hexNumberValue
       else {
-        self.decodedValue = EncodeSet.unsubstitute(character: .percentSign)?.codePoint ?? ASCII.percentSign.codePoint
         self.range = Range(uncheckedBounds: (i, byte1Index))
+        self.decodedValue = ASCII.percentSign.codePoint  // Percent-sign should never be substituted.
         return
       }
-      // decodedByte{1/2} are parsed from hex digits (i.e. in the range 0...15), so this will never overflow.
       self.decodedValue = (decodedByte1 &* 16) &+ (decodedByte2)
       self.range = Range(uncheckedBounds: (i, tail.startIndex))
     }
@@ -387,7 +444,7 @@ extension LazilyPercentDecoded {
 ///
 struct PassthroughEncodeSet: PercentEncodeSet {
   @inline(__always)
-  static func shouldEscape(character: ASCII) -> Bool {
+  static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
     return false
   }
 }
@@ -404,9 +461,10 @@ struct PassthroughEncodeSet: PercentEncodeSet {
 ///
 struct PathComponentEncodeSet: PercentEncodeSet {
   @inline(__always)
-  static func shouldEscape(character: ASCII) -> Bool {
-    URLEncodeSet.Path.shouldEscape(character: character) || character == ASCII.forwardSlash
-      || character == ASCII.backslash
+  static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    URLEncodeSet.Path.shouldPercentEncode(ascii: codePoint)
+      || codePoint == ASCII.forwardSlash.codePoint
+      || codePoint == ASCII.backslash.codePoint
   }
 }
 
@@ -414,17 +472,17 @@ struct PathComponentEncodeSet: PercentEncodeSet {
 // The lookup table seems to be about 8-12% better than bitshifting on x86, but can be 90% slower on ARM.
 
 protocol DualImplementedPercentEncodeSet: PercentEncodeSet {
-  static func shouldEscape_binary(character: ASCII) -> Bool
-  static func shouldEscape_table(character: ASCII) -> Bool
+  static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool
+  static func shouldEscape_table(ascii codePoint: UInt8) -> Bool
 }
 
 extension DualImplementedPercentEncodeSet {
   @inline(__always)
-  static func shouldEscape(character: ASCII) -> Bool {
+  static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
     #if arch(x86_64)
-      return shouldEscape_table(character: character)
+      return shouldEscape_table(ascii: codePoint)
     #else
-      return shouldEscape_binary(character: character)
+      return shouldEscape_binary(ascii: codePoint)
     #endif
   }
 }
@@ -433,109 +491,114 @@ enum URLEncodeSet {
 
   struct C0: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape_binary(character: ASCII) -> Bool {
+    static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
+      // TODO: [performance]: Benchmark alternative:
+      // `codePoint & 0b11100000 == 0 || codePoint == 0x7F`
+      // C0 percent-encoding is used for cannot-be-a-base URL paths and opaque host names,
+      // which currently are not benchmarked.
+
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b00000000_00000000_00000000_00000000_11111111_11111111_11111111_11111111
       let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
+      if codePoint < 64 {
+        return lo & (1 &<< codePoint) != 0
       } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
+        return hi & (1 &<< ((codePoint &- 64) & 0x7F)) != 0
       }
     }
     @inline(__always)
-    static func shouldEscape_table(character: ASCII) -> Bool {
-      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.c0)
+    static func shouldEscape_table(ascii codePoint: UInt8) -> Bool {
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.c0)
     }
   }
 
   struct Fragment: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape_binary(character: ASCII) -> Bool {
+    static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b01010000_00000000_00000000_00000101_11111111_11111111_11111111_11111111
       let hi: UInt64 = 0b10000000_00000000_00000000_00000001_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
+      if codePoint < 64 {
+        return lo & (1 &<< codePoint) != 0
       } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
+        return hi & (1 &<< ((codePoint &- 64) & 0x7F)) != 0
       }
     }
     @inline(__always)
-    static func shouldEscape_table(character: ASCII) -> Bool {
-      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.fragment)
+    static func shouldEscape_table(ascii codePoint: UInt8) -> Bool {
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.fragment)
     }
   }
 
   struct Query_NotSpecial: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape_binary(character: ASCII) -> Bool {
+    static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b01010000_00000000_00000000_00001101_11111111_11111111_11111111_11111111
       let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
+      if codePoint < 64 {
+        return lo & (1 &<< codePoint) != 0
       } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
+        return hi & (1 &<< ((codePoint &- 64) & 0x7F)) != 0
       }
     }
     @inline(__always)
-    static func shouldEscape_table(character: ASCII) -> Bool {
-      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.query)
+    static func shouldEscape_table(ascii codePoint: UInt8) -> Bool {
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.query)
     }
   }
 
   struct Query_Special: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape_binary(character: ASCII) -> Bool {
+    static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b01010000_00000000_00000000_10001101_11111111_11111111_11111111_11111111
       let hi: UInt64 = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
+      if codePoint < 64 {
+        return lo & (1 &<< codePoint) != 0
       } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
+        return hi & (1 &<< ((codePoint &- 64) & 0x7F)) != 0
       }
     }
     @inline(__always)
-    static func shouldEscape_table(character: ASCII) -> Bool {
-      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.specialQuery)
+    static func shouldEscape_table(ascii codePoint: UInt8) -> Bool {
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.specialQuery)
     }
   }
 
   struct Path: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape_binary(character: ASCII) -> Bool {
+    static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b11010000_00000000_00000000_00001101_11111111_11111111_11111111_11111111
       let hi: UInt64 = 0b10101000_00000000_00000000_00000001_00000000_00000000_00000000_00000000
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
+      if codePoint < 64 {
+        return lo & (1 &<< codePoint) != 0
       } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
+        return hi & (1 &<< ((codePoint &- 64) & 0x7F)) != 0
       }
     }
     @inline(__always)
-    static func shouldEscape_table(character: ASCII) -> Bool {
-      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.path)
+    static func shouldEscape_table(ascii codePoint: UInt8) -> Bool {
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.path)
     }
   }
 
   struct UserInfo: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape_binary(character: ASCII) -> Bool {
+    static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b11111100_00000000_10000000_00001101_11111111_11111111_11111111_11111111
       let hi: UInt64 = 0b10111000_00000000_00000000_00000001_01111000_00000000_00000000_00000001
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
+      if codePoint < 64 {
+        return lo & (1 &<< codePoint) != 0
       } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
+        return hi & (1 &<< ((codePoint &- 64) & 0x7F)) != 0
       }
     }
     @inline(__always)
-    static func shouldEscape_table(character: ASCII) -> Bool {
-      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.userInfo)
+    static func shouldEscape_table(ascii codePoint: UInt8) -> Bool {
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.userInfo)
     }
   }
 
@@ -544,45 +607,45 @@ enum URLEncodeSet {
   ///
   struct Component: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape_binary(character: ASCII) -> Bool {
+    static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b11111100_00000000_10011000_01111101_11111111_11111111_11111111_11111111
       let hi: UInt64 = 0b10111000_00000000_00000000_00000001_01111000_00000000_00000000_00000001
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
+      if codePoint < 64 {
+        return lo & (1 &<< codePoint) != 0
       } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
+        return hi & (1 &<< ((codePoint &- 64) & 0x7F)) != 0
       }
     }
     @inline(__always)
-    static func shouldEscape_table(character: ASCII) -> Bool {
-      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.component)
+    static func shouldEscape_table(ascii codePoint: UInt8) -> Bool {
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.component)
     }
   }
 
   struct FormEncoded: DualImplementedPercentEncodeSet {
     @inline(__always)
-    static func shouldEscape_binary(character: ASCII) -> Bool {
+    static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
       let lo: UInt64 = 0b11111100_00000000_10011011_11111110_11111111_11111111_11111111_11111111
       let hi: UInt64 = 0b11111000_00000000_00000000_00000001_01111000_00000000_00000000_00000001
-      if character.codePoint < 64 {
-        return lo & (1 &<< character.codePoint) != 0
+      if codePoint < 64 {
+        return lo & (1 &<< codePoint) != 0
       } else {
-        return hi & (1 &<< (character.codePoint &- 64)) != 0
+        return hi & (1 &<< ((codePoint &- 64) & 0x7F)) != 0
       }
     }
     @inline(__always)
-    static func shouldEscape_table(character: ASCII) -> Bool {
-      percent_encoding_table.withUnsafeBufferPointer { $0[Int(character.codePoint)] }.contains(.form)
+    static func shouldEscape_table(ascii codePoint: UInt8) -> Bool {
+      percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.form)
     }
     @inline(__always)
-    static func substitute(for character: ASCII) -> ASCII? {
-      return character == .space ? .plus : nil
+    static func substitute(ascii codePoint: UInt8) -> UInt8? {
+      return codePoint == ASCII.space.codePoint ? ASCII.plus.codePoint : nil
     }
     @inline(__always)
-    static func unsubstitute(character: ASCII) -> ASCII? {
-      return character == .plus ? .space : nil
+    static func unsubstitute(ascii codePoint: UInt8) -> UInt8? {
+      return codePoint == ASCII.plus.codePoint ? ASCII.space.codePoint : nil
     }
   }
 }

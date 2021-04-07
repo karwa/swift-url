@@ -31,19 +31,19 @@ extension PercentEncodingTests {
     ]
     for input in testData {
       let encodedUTF8 = encoder(input)
-      for byte in encodedUTF8 {
-        guard let ascii = ASCII(byte) else {
+      for codeUnit in encodedUTF8 {
+        guard let ascii = ASCII(codeUnit) else {
           XCTFail("Found non-ASCII byte in percent-encoded string")
           continue
         }
         // The 'component' encode set is a superset of the following sets.
-        XCTAssertFalse(URLEncodeSet.C0.shouldEscape(character: ascii))
-        XCTAssertFalse(URLEncodeSet.Path.shouldEscape(character: ascii))
-        XCTAssertFalse(URLEncodeSet.Query_NotSpecial.shouldEscape(character: ascii))
-        XCTAssertFalse(URLEncodeSet.Fragment.shouldEscape(character: ascii))
-        XCTAssertFalse(URLEncodeSet.UserInfo.shouldEscape(character: ascii))
+        XCTAssertFalse(URLEncodeSet.C0.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(URLEncodeSet.Path.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(URLEncodeSet.Query_NotSpecial.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(URLEncodeSet.Fragment.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(URLEncodeSet.UserInfo.shouldPercentEncode(ascii: codeUnit))
         // The only set it does not contain is the special-query set, which includes the extra U+0027.
-        if URLEncodeSet.Query_Special.shouldEscape(character: ascii) {
+        if URLEncodeSet.Query_Special.shouldPercentEncode(ascii: codeUnit) {
           XCTAssertEqual(ascii, .apostrophe)
         }
         // Strings encoded by the 'component' set should not contain forbidden host code-points (other than '%').
@@ -58,7 +58,7 @@ extension PercentEncodingTests {
     }
 
     // An important feature of the component encode-set is that it includes the % sign itself (U+0025).
-    XCTAssertTrue(URLEncodeSet.Component.shouldEscape(character: .percentSign))
+    XCTAssertTrue(URLEncodeSet.Component.shouldPercentEncode(ascii: ASCII.percentSign.codePoint))
   }
 
   func testEncodeSet_Component() {
@@ -75,8 +75,8 @@ extension PercentEncodingTests {
     func testEncodeSet<EncodeSet: DualImplementedPercentEncodeSet>(_: EncodeSet.Type) {
       for char in ASCII.allCharacters {
         XCTAssertEqual(
-          EncodeSet.shouldEscape_binary(character: char),
-          EncodeSet.shouldEscape_table(character: char),
+          EncodeSet.shouldEscape_binary(ascii: char.codePoint),
+          EncodeSet.shouldEscape_table(ascii: char.codePoint),
           "Mismatch for character \"\(char)\" (#\(char.codePoint)) in encode set #\(EncodeSet.self)"
         )
       }

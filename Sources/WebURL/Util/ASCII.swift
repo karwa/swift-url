@@ -28,19 +28,19 @@ extension ASCII {
 
   @inlinable @inline(__always)
   internal init(_unchecked v: UInt8) {
-    assert(v & 0x80 == 0, "Not an ASCII code point")
+    assert(v & 0x7F == v, "Not an ASCII code point")
     self.codePoint = v
   }
 
   @inlinable @inline(__always)
   internal init?(_ v: UInt8) {
-    guard v & 0x80 == 0 else { return nil }
+    guard v & 0x7F == v else { return nil }
     self.init(_unchecked: v)
   }
 
   @inlinable @inline(__always)
   internal init?(flatMap v: UInt8?) {
-    guard let byte = v, byte & 0x80 == 0 else { return nil }
+    guard let byte = v, byte & 0x7F == byte else { return nil }
     self.init(_unchecked: byte)
   }
 }
