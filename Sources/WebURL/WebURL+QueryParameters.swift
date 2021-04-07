@@ -105,12 +105,12 @@ extension WebURL.QueryParameters {
       result.reserveCapacity(queryBytes.count + 1)
       for kvp in RawKeyValuePairs(utf8: queryBytes) {
         result.append(
-          contentsOf: queryBytes[kvp.key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-            .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
+          contentsOf: queryBytes[kvp.key].lazy
+            .percentDecoded(using: URLEncodeSet.FormEncoded.self).percentEncodedUTF8(URLEncodeSet.FormEncoded.self))
         result.append(ASCII.equalSign.codePoint)
         result.append(
-          contentsOf: queryBytes[kvp.value].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-            .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
+          contentsOf: queryBytes[kvp.value].lazy
+            .percentDecoded(using: URLEncodeSet.FormEncoded.self).percentEncodedUTF8(URLEncodeSet.FormEncoded.self))
         result.append(ASCII.ampersand.codePoint)
       }
       _ = result.popLast()
@@ -449,16 +449,16 @@ extension URLStorage {
     let combinedLength: Int
     let needsEscaping: Bool
     (combinedLength, needsEscaping) = keyValuePairs.reduce(into: (0, false)) { info, kvp in
-      let encodeKey = kvp.0.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).write { info.0 += $0.count }
-      let encodeVal = kvp.1.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).write { info.0 += $0.count }
+      let encodeKey = kvp.0.lazy.percentEncodedGroups(URLEncodeSet.FormEncoded.self).write { info.0 += $0.count }
+      let encodeVal = kvp.1.lazy.percentEncodedGroups(URLEncodeSet.FormEncoded.self).write { info.0 += $0.count }
       info.1 = info.1 || encodeKey || encodeVal
     }
     if needsEscaping {
       return appendPairsToQuery(
         fromEncoded: keyValuePairs.lazy.map {
           (
-            $0.0.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
-            $0.1.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).joined()
+            $0.0.lazy.percentEncodedUTF8(URLEncodeSet.FormEncoded.self),
+            $0.1.lazy.percentEncodedUTF8(URLEncodeSet.FormEncoded.self)
           )
         },
         knownLength: combinedLength

@@ -63,7 +63,7 @@ extension PercentEncodingTests {
 
   func testEncodeSet_Component() {
     do_testEncodeSet_Component(encodingWith: {
-      $0.utf8.lazy.percentEncoded(using: URLEncodeSet.Component.self).joined()
+      $0.utf8.lazy.percentEncodedUTF8(URLEncodeSet.Component.self)
     })
   }
 
@@ -94,12 +94,19 @@ extension PercentEncodingTests {
 
 extension PercentEncodingTests {
 
-  func testURLEncoded() {
-    XCTAssertEqual("hello, world!".urlEncoded, "hello%2C%20world!")
-    XCTAssertEqual("/usr/bin/swift".urlEncoded, "%2Fusr%2Fbin%2Fswift")
-    XCTAssertEqual("😎".urlEncoded, "%F0%9F%98%8E")
-    // The .urlEncoded property should use the component encode set.
-    do_testEncodeSet_Component(encodingWith: { $0.urlEncoded.utf8 })
+  func testPercentEncoded() {
+    XCTAssertEqualElements("hello, world!".percentEncoded(URLEncodeSet.UserInfo.self), "hello,%20world!")
+    XCTAssertEqualElements("/usr/bin/swift".percentEncoded(URLEncodeSet.Component.self), "%2Fusr%2Fbin%2Fswift")
+    XCTAssertEqualElements("got en%63oders?".percentEncoded(URLEncodeSet.UserInfo.self), "got%20en%63oders%3F")
+    XCTAssertEqualElements("king of the 🦆s".percentEncoded(URLEncodeSet.FormEncoded.self), "king+of+the+%F0%9F%A6%86s")
+  }
+
+  func testURLComponentEncoded() {
+    XCTAssertEqual("hello, world!".urlComponentEncoded, "hello%2C%20world!")
+    XCTAssertEqual("/usr/bin/swift".urlComponentEncoded, "%2Fusr%2Fbin%2Fswift")
+    XCTAssertEqual("😎".urlComponentEncoded, "%F0%9F%98%8E")
+    // The .urlComponentEncoded property should use the component encode set.
+    do_testEncodeSet_Component(encodingWith: { $0.urlComponentEncoded.utf8 })
   }
 
   func testURLFormEncoded() {

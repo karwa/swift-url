@@ -109,35 +109,24 @@ extension URLStorage {
       return (removeSubrange(toRemove, newStructure: newStructure).newStorage, nil)
     }
 
-    let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write {
+    let needsEncoding = newValue.lazy.percentEncodedGroups(URLEncodeSet.UserInfo.self).write {
       newStructure.usernameLength += $0.count
     }
     let shouldAddSeparator = (oldStructure.hasCredentialSeparator == false)
     let bytesToWrite = newStructure.usernameLength + (shouldAddSeparator ? 1 : 0)
     let toReplace = oldStructure.rangeForReplacingCodeUnits(of: .username)
     let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
-      guard var ptr = dest.baseAddress else { return 0 }
+      var bytesWritten = 0
       if needsEncoding {
-        _ = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write { group in
-          switch group {
-          case .percentEncodedByte:
-            ptr[0] = group[0]
-            ptr[1] = group[1]
-            ptr[2] = group[2]
-            ptr += 3
-          case .sourceByte, .substitutedByte:
-            ptr[0] = group[0]
-            ptr += 1
-          }
-        }
+        bytesWritten += dest.initialize(from: newValue.lazy.percentEncodedUTF8(URLEncodeSet.UserInfo.self)).1
       } else {
-        ptr += UnsafeMutableBufferPointer(start: ptr, count: newStructure.usernameLength).initialize(from: newValue).1
+        bytesWritten += dest.initialize(from: newValue).1
       }
       if shouldAddSeparator {
-        ptr.pointee = ASCII.commercialAt.codePoint
-        ptr += 1
+        dest[bytesWritten] = ASCII.commercialAt.codePoint
+        bytesWritten += 1
       }
-      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
+      return bytesWritten
     }
     return (result.newStorage, nil)
   }
@@ -170,7 +159,7 @@ extension URLStorage {
     }
 
     newStructure.passwordLength = 1  // leading ":"
-    let needsEncoding = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write {
+    let needsEncoding = newValue.lazy.percentEncodedGroups(URLEncodeSet.UserInfo.self).write {
       newStructure.passwordLength += $0.count
     }
     let bytesToWrite = newStructure.passwordLength + 1  // Always write the trailing "@".
@@ -178,30 +167,20 @@ extension URLStorage {
     toReplace = toReplace.lowerBound..<toReplace.upperBound + (oldStructure.hasCredentialSeparator ? 1 : 0)
 
     let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
-      guard var ptr = dest.baseAddress else { return 0 }
-      ptr.pointee = ASCII.colon.codePoint
-      ptr += 1
+      dest[0] = ASCII.colon.codePoint
+      var bytesWritten = 1
       if needsEncoding {
-        _ = newValue.lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write { group in
-          switch group {
-          case .percentEncodedByte:
-            ptr[0] = group[0]
-            ptr[1] = group[1]
-            ptr[2] = group[2]
-            ptr += 3
-          case .sourceByte, .substitutedByte:
-            ptr[0] = group[0]
-            ptr += 1
-          }
-        }
+        bytesWritten +=
+          UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
+          .initialize(from: newValue.lazy.percentEncodedUTF8(URLEncodeSet.UserInfo.self)).1
       } else {
-        // swift-format-ignore
-        ptr += UnsafeMutableBufferPointer(start: ptr, count: newStructure.passwordLength - 1)
-          .initialize(from: newValue).1
+        bytesWritten +=
+          UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
+          .initialize(from: newValue.lazy.percentEncodedUTF8(URLEncodeSet.UserInfo.self)).1
       }
-      ptr.pointee = ASCII.commercialAt.codePoint
-      ptr += 1
-      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
+      dest[bytesWritten] = ASCII.commercialAt.codePoint
+      bytesWritten += 1
+      return bytesWritten
     }
     return (result.newStorage, nil)
   }
@@ -875,7 +854,7 @@ extension URLStorage {
     }
 
     var bytesToWrite = 1  // for prefix.
-    let needsEncoding = newBytes.lazy.percentEncoded(using: EncodeSet.self).write { bytesToWrite += $0.count }
+    let needsEncoding = newBytes.lazy.percentEncodedGroups(EncodeSet.self).write { bytesToWrite += $0.count }
     let subrangeToReplace = oldStructure.rangeForReplacingCodeUnits(of: component)
     var newStructure = oldStructure
     newStructure[keyPath: lengthKey] = bytesToWrite
@@ -886,27 +865,18 @@ extension URLStorage {
       withUninitializedSpace: bytesToWrite,
       newStructure: newStructure
     ) { dest in
-      guard var ptr = dest.baseAddress else { return 0 }
-      ptr.pointee = prefix.codePoint
-      ptr += 1
+      dest[0] = prefix.codePoint
+      var bytesWritten = 1
       if needsEncoding {
-        _ = newBytes.lazy.percentEncoded(using: EncodeSet.self).write { group in
-          switch group {
-          case .percentEncodedByte:
-            ptr[0] = group[0]
-            ptr[1] = group[1]
-            ptr[2] = group[2]
-            ptr += 3
-          case .sourceByte, .substitutedByte:
-            ptr[0] = group[0]
-            ptr += 1
-          }
-        }
+        bytesWritten +=
+          UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
+          .initialize(from: newBytes.lazy.percentEncodedUTF8(EncodeSet.self)).1
       } else {
-        let n = UnsafeMutableBufferPointer(start: ptr, count: bytesToWrite - 1).initialize(from: newBytes).1
-        ptr += n
+        bytesWritten +=
+          UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
+          .initialize(from: newBytes.lazy.percentEncodedUTF8(EncodeSet.self)).1
       }
-      return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
+      return bytesWritten
     }
   }
 }
