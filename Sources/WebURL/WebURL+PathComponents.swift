@@ -189,7 +189,7 @@ extension WebURL.PathComponents: BidirectionalCollection {
   }
 
   public subscript(position: Index) -> String {
-    withUTF8(component: position) { $0.urlDecodedString }
+    withUTF8(component: position) { $0.percentDecodedString }
   }
 
   public func distance(from start: Index, to end: Index) -> Int {

@@ -102,12 +102,12 @@ extension PercentEncodeSet {
 
   @inlinable @inline(__always)
   public static func substitute(ascii codePoint: UInt8) -> UInt8? {
-    return nil
+    nil
   }
 
   @inlinable @inline(__always)
   public static func unsubstitute(ascii codePoint: UInt8) -> UInt8? {
-    return nil
+    nil
   }
 }
 
@@ -123,16 +123,16 @@ extension LazyCollectionProtocol where Element == UInt8 {
   /// the source contents with `EncodeSet`.
   ///
   @inlinable
-  public func percentEncodedUTF8<EncodeSet>(_: EncodeSet.Type) -> LazilyPercentEncodedUTF8<Self, EncodeSet> {
-    return LazilyPercentEncodedGroups(source: self, encodeSet: EncodeSet.self).joined()
+  public func percentEncodedUTF8<EncodeSet>(_: EncodeSet.Type) -> LazilyPercentEncodedUTF8<Elements, EncodeSet> {
+    LazilyPercentEncodedGroups(source: elements, encodeSet: EncodeSet.self).joined()
   }
 
   /// Interprets this collection's elements as UTF8 code-units, and returns a collection of groups of ASCII codepoints, where each group is formed by lazily encoding
   /// the source contents with `EncodeSet`.
   ///
   @inlinable
-  internal func percentEncodedGroups<EncodeSet>(_: EncodeSet.Type) -> LazilyPercentEncodedGroups<Self, EncodeSet> {
-    return LazilyPercentEncodedGroups(source: self, encodeSet: EncodeSet.self)
+  internal func percentEncodedGroups<EncodeSet>(_: EncodeSet.Type) -> LazilyPercentEncodedGroups<Elements, EncodeSet> {
+    LazilyPercentEncodedGroups(source: elements, encodeSet: EncodeSet.self)
   }
 }
 
@@ -440,103 +440,138 @@ extension StringProtocol {
   }
 }
 
-// MARK: - Decoding.
+
+// --------------------------------------------
+// MARK: - Decoding
+// --------------------------------------------
 
 
 extension LazyCollectionProtocol where Element == UInt8 {
 
-  typealias LazilyPercentDecodedWithoutSubstitutions = LazilyPercentDecoded<Elements, PassthroughEncodeSet>
-
-  /// Returns a view of this collection with percent-encoded byte sequences ("%ZZ") replaced by the byte 0xZZ.
+  /// Interprets this collection's elements as UTF8 code-units, and returns a collection of UTF8 code-units whose elements are formed lazily,
+  /// by decoding all percent-encoded code-unit sequences, and using `EncodeSet` to restore other code-units which may have been substituted.
+  /// If no code-points were substituted when this collection's contents were encoded, `PassthroughEncodeSet` may be used to remove percent-encoding only.
   ///
-  /// This view does not account for substitutions in the source collection's encode-set.
-  /// If it is necessary to decode such substitutions, use `percentDecoded(using:)` instead and provide the encode-set to reverse.
+  /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+  ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+  ///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+  ///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
   ///
-  /// - seealso: `LazilyPercentDecoded`
-  ///
-  var percentDecoded: LazilyPercentDecodedWithoutSubstitutions {
-    return LazilyPercentDecoded(source: elements)
+  @inlinable
+  public func percentDecodedUTF8<EncodeSet>(_: EncodeSet.Type) -> LazilyPercentDecodedUTF8<Elements, EncodeSet> {
+    LazilyPercentDecodedUTF8(source: elements)
   }
 
-  /// Returns a view of this collection with percent-encoded byte sequences ("%ZZ") replaced by the byte 0xZZ.
+  /// Interprets this collection's elements as UTF8 code-units, and returns a collection of UTF8 code-units whose elements are formed lazily,
+  /// by decoding all percent-encoded code-unit sequences.
   ///
-  /// This view will reverse substitutions that were made by the given encode-set when encoding the source collection.
+  /// If this collection's contents were encoded with substitutions (e.g. `application/x-www-form-urlencoded`),
+  /// use `percentDecodedUTF8(_: EncodeSet.Type)` instead, and provide an encode-set which is able to reverse those substitutions.
   ///
-  /// - seealso: `LazilyPercentDecoded`
+  /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+  ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+  ///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+  ///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
   ///
-  func percentDecoded<EncodeSet>(using encodeSet: EncodeSet.Type) -> LazilyPercentDecoded<Elements, EncodeSet> {
-    return LazilyPercentDecoded(source: elements)
+  @inlinable
+  public var percentDecodedUTF8: LazilyPercentDecodedUTF8WithoutSubstitutions<Elements> {
+    LazilyPercentDecodedUTF8(source: elements)
   }
 }
 
-/// A collection which provides a view of its source collection with percent-encoded byte sequences ("%ZZ") replaced by the byte 0xZZ.
+/// A `Collection` which lazily replaces all percent-encoded UTF8 code-units from a `Source` collection with their decoded code-units.
+/// It does not reverse any substitutions that may be a part of how `Source` is encoded.
 ///
-/// Some encode-sets perform substitutions as well as percent-encoding - e.g. URL form-encoding percent-encodes "+" characters but not " " (space) from the
-/// source; spaces are then substituted with "+" characters so we know that every non-percent-encoded "+" represents a space. The `EncodeSet` generic
-/// parameter is only used to reverse these substitutions; if such substitutions are not relevant to decoding,`PassthroughEncodeSet` may be given instead
-/// of specifying a particular encode-set.
+/// Percent decoding transforms certain ASCII sequences to arbitrary byte values ("%AB" to the byte value 0xAB).
 ///
-struct LazilyPercentDecoded<Source, EncodeSet>: Collection, LazyCollectionProtocol
+/// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
+///
+public typealias LazilyPercentDecodedUTF8WithoutSubstitutions<Source> =
+  LazilyPercentDecodedUTF8<Source, PassthroughEncodeSet> where Source: Collection, Source.Element == UInt8
+
+/// A `Collection` which lazily replaces all percent-encoded encoded UTF8 code-units from a `Source` collection with their decoded code-units,
+/// and reverses substitutions of other code-units performed by `EncodeSet`.
+///
+/// If the encode-set does not perform substitutions, the `PassthroughEncodeSet` can be used to remove percent-encoding only.
+///
+/// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
+///
+public struct LazilyPercentDecodedUTF8<Source, EncodeSet>: Collection, LazyCollectionProtocol
 where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
-  typealias Element = UInt8
 
-  let source: Source
-  let startIndex: Index
+  @usableFromInline
+  internal let source: Source
 
-  fileprivate init(source: Source) {
+  public let startIndex: Index
+
+  @inlinable
+  internal init(source: Source) {
     self.source = source
     self.startIndex = Index(at: source.startIndex, in: source)
   }
 
-  var endIndex: Index {
-    return Index(endIndexOf: source)
+  public typealias Element = UInt8
+
+  @inlinable
+  public var endIndex: Index {
+    Index(endIndexOf: source)
   }
 
-  func index(after i: Index) -> Index {
+  @inlinable
+  public func index(after i: Index) -> Index {
     assert(i != endIndex, "Attempt to advance endIndex")
+    // Does not trap in release mode - just keeps returning 'endIndex'.
     return Index(at: i.range.upperBound, in: source)
   }
 
-  func formIndex(after i: inout Index) {
+  @inlinable
+  public func formIndex(after i: inout Index) {
     assert(i != endIndex, "Attempt to advance endIndex")
+    // Does not trap in release mode - just keeps returning 'endIndex'.
     i = Index(at: i.range.upperBound, in: source)
   }
 
-  subscript(position: Index) -> Element {
+  @inlinable
+  public subscript(position: Index) -> Element {
     assert(position != endIndex, "Attempt to read element at endIndex")
     return position.decodedValue
   }
-}
 
-extension LazilyPercentDecoded {
+  public struct Index: Comparable {
 
-  /// A value which represents the location of a percent-encoded byte sequence in a source collection.
-  ///
-  /// The start index is given by `.init(at: source.startIndex, in: source)`.
-  /// Each successive index is calculated by creating a new index at the previous index's `range.upperBound`, until an index is created whose
-  /// `range.lowerBound` is the `endIndex` of the source collection.
-  ///
-  /// An index's `range` always starts at a byte which is not part of a percent-encode sequence, a percent sign, or `endIndex`, and each index
-  /// represents a single decoded byte. This decoded value is stored in the index as `decodedValue`.
-  ///
-  struct Index: Comparable {
-    let range: Range<Source.Index>
-    let decodedValue: UInt8
+    /// Always either 0, 1, or 3 bytes from the source:
+    /// - 0 bytes: `endIndex` only.
+    /// - 1 byte: non-encoded or substituted byte.
+    /// - 3 bytes: percent-encoded byte.
+    ///
+    @usableFromInline
+    internal let range: Range<Source.Index>
+
+    @usableFromInline
+    internal let decodedValue: UInt8
 
     /// Creates an index referencing the given source collection's `endIndex`.
-    /// This index's `decodedValue` is meaningless.
+    /// This index's `decodedValue` is always 0. It is meaningless and should not be read.
     ///
-    init(endIndexOf source: Source) {
+    @inlinable
+    internal init(endIndexOf source: Source) {
       self.range = Range(uncheckedBounds: (source.endIndex, source.endIndex))
       self.decodedValue = 0
     }
 
-    /// Creates an index referencing the decoded byte starting at the given source index.
+    /// Decodes the UTF8 code-unit starting at the given index in the given `source` collection.
+    /// This index's successor may be obtained by creating another index starting at the index's `range.upperBound`.
     ///
-    /// The newly-created index's successor may be obtained by creating another index starting at `range.upperBound`.
-    /// The index which starts at `source.endIndex` is given by `.init(endIndexOf:)`.
+    /// The index which starts at `source.endIndex` is also given by `Index(endIndexOf:)`.
     ///
-    init(at i: Source.Index, in source: Source) {
+    @inlinable
+    internal init(at i: Source.Index, in source: Source) {
       guard i != source.endIndex else {
         self = .init(endIndexOf: source)
         return
@@ -561,16 +596,137 @@ extension LazilyPercentDecoded {
       self.range = Range(uncheckedBounds: (i, tail.startIndex))
     }
 
-    static func == (lhs: Self, rhs: Self) -> Bool {
+    @inlinable
+    public static func == (lhs: Self, rhs: Self) -> Bool {
       return lhs.range.lowerBound == rhs.range.lowerBound
     }
 
-    static func < (lhs: Self, rhs: Self) -> Bool {
+    @inlinable
+    public static func < (lhs: Self, rhs: Self) -> Bool {
       return lhs.range.lowerBound < rhs.range.lowerBound
     }
   }
 }
 
+// Eager decoding to String.
+
+extension Collection where Element == UInt8 {
+
+  /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences, and
+  /// using `EncodeSet` to restore other code-units which may have been substituted. If no code-points were substituted when this collection's contents were
+  /// encoded, `PassthroughEncodeSet` may be used to remove percent-encoding only.
+  ///
+  /// - seealso: `StringProtocol.percentDecoded(_:)`
+  /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+  ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+  ///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+  ///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
+  ///
+  @inlinable
+  public func percentDecodedString<EncodeSet>(_: EncodeSet.Type) -> String where EncodeSet: PercentEncodeSet {
+    withContiguousStorageIfAvailable {
+      String(decoding: $0.lazy.percentDecodedUTF8(EncodeSet.self), as: UTF8.self)
+    } ?? String(decoding: self.lazy.percentDecodedUTF8(EncodeSet.self), as: UTF8.self)
+  }
+
+  /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences.
+  ///
+  /// If this collection's contents were encoded with substitutions (e.g. `application/x-www-form-urlencoded`),
+  /// use `percentDecodedString(_: EncodeSet.Type)` instead, and provide an encode-set which is able to reverse those substitutions.
+  ///
+  /// - seealso: `StringProtocol.percentDecoded`
+  /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+  ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+  ///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+  ///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
+  ///
+  @inlinable
+  public var percentDecodedString: String {
+    percentDecodedString(PassthroughEncodeSet.self)
+  }
+
+  /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences, and
+  /// reversing substitutions made by the `application/x-www-form-urlencoded` encode-set.
+  ///
+  /// - seealso: `StringProtocol.urlFormDecoded`
+  /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+  ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+  ///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+  ///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
+  ///
+  @inlinable
+  public var urlFormDecodedString: String {
+    percentDecodedString(URLEncodeSet.FormEncoded.self)
+  }
+}
+
+extension StringProtocol {
+
+  /// Returns a string formed by decoding all percent-encoded code-units in this string's contents, and using `EncodeSet` to restore other code-units
+  /// which may have been substituted. If no code-points were substituted when this string was encoded, `PassthroughEncodeSet` may be used to
+  /// remove percent-encoding only.
+  ///
+  /// ```swift
+  /// "hello,%20world!".percentDecoded(PassthroughEncodeSet.self) // "hello, world!"
+  /// "%2Fusr%2Fbin%2Fswift".percentDecoded(PassthroughEncodeSet.self) // "/usr/bin/swift"
+  /// "king+of+the+%F0%9F%A6%86s".percentDecoded(URLEncodeSet.FormEncoded.self) // "king of the 🦆s"
+  /// ```
+  ///
+  /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+  ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+  ///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+  ///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
+  ///
+  @inlinable
+  public func percentDecoded<EncodeSet>(_: EncodeSet.Type) -> String where EncodeSet: PercentEncodeSet {
+    utf8.percentDecodedString(EncodeSet.self)
+  }
+
+  /// Returns a string formed by decoding all percent-encoded code-units in the contents of this string.
+  /// Equivalent to JavaScript's `decodeURIComponent()` function.
+  ///
+  /// ```swift
+  /// "hello%2C%20world!".percentDecoded // hello, world!
+  /// "%2Fusr%2Fbin%2Fswift".percentDecoded // /usr/bin/swift
+  /// "%F0%9F%98%8E".percentDecoded // 😎
+  /// ```
+  ///
+  /// If this collection's contents were encoded with substitutions (e.g. `application/x-www-form-urlencoded`),
+  /// use `percentDecoded(_: EncodeSet.Type)` instead, and provide an encode-set which is able to reverse those substitutions.
+  ///
+  /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+  ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+  ///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+  ///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
+  ///
+  @inlinable
+  public var percentDecoded: String {
+    utf8.percentDecodedString
+  }
+
+  /// Returns a string formed by decoding all percent-encoded code-units in this string's contents, and reversing substitutions made by
+  /// the `application/x-www-form-urlencoded` encode-set.
+  ///
+  /// The following example decodes a form-encoded URL query by splitting a string in to key-value pairs at the "&" character, splitting the key from the value
+  /// at the "=" character, and decoding each key and value from its encoded representation:
+  ///
+  /// ```swift
+  /// let form = "favourite+pet=%F0%9F%A6%86%2C+of+course&favourite+foods=%F0%9F%8D%8E+%26+%F0%9F%8D%A6"
+  /// let decoded = form.split(separator: "&").map { joined_kvp in joined_kvp.split(separator: "=") }
+  ///                   .map { kvp in (kvp[0].urlFormDecoded, kvp[1].urlFormDecoded) }
+  /// print(decoded) // [("favourite pet", "🦆, of course"), ("favourite foods", "🍎 & 🍦")]
+  /// ```
+  ///
+  /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
+  ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
+  ///              sometimes under multiple layers of encoding. Users to be careful not to over-decode their strings, and every time a string
+  ///              is percent-decoded, the result must be considered to be **entirely unvalidated**, even if the source contents were previously validated.
+  ///
+  @inlinable
+  public var urlFormDecoded: String {
+    utf8.urlFormDecodedString
+  }
+}
 
 // MARK: - URL encode sets.
 
@@ -580,9 +736,10 @@ extension LazilyPercentDecoded {
 /// This is useful for decoding percent-encoded strings when we don't expect any characters to have been substituted, or when
 /// the `PercentEncodeSet` used to encode the string is not known.
 ///
-struct PassthroughEncodeSet: PercentEncodeSet {
-  @inline(__always)
-  static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+public struct PassthroughEncodeSet: PercentEncodeSet {
+
+  @inlinable @inline(__always)
+  public static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
     return false
   }
 }

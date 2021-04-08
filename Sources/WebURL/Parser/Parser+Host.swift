@@ -59,7 +59,7 @@ extension ParsedHost {
       return
     }
 
-    let domain = hostname.lazy.percentDecoded
+    let domain = hostname.lazy.percentDecodedUTF8
     // TODO: [idna]
     //
     // 6. Let asciiDomain be the result of running domain to ASCII on domain.
@@ -136,7 +136,7 @@ extension ParsedHost {
     case .domain:
       // This is our cheap substitute for IDNA. Only valid for ASCII domains.
       assert(bytes.isEmpty == false)
-      let transformed = ASCII.Lowercased(bytes.lazy.percentDecoded)
+      let transformed = ASCII.Lowercased(bytes.lazy.percentDecodedUTF8)
       writer.writeHostname { $0(transformed) }
 
     case .opaque:

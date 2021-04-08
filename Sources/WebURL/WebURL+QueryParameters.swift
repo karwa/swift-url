@@ -106,11 +106,11 @@ extension WebURL.QueryParameters {
       for kvp in RawKeyValuePairs(utf8: queryBytes) {
         result.append(
           contentsOf: queryBytes[kvp.key].lazy
-            .percentDecoded(using: URLEncodeSet.FormEncoded.self).percentEncodedUTF8(URLEncodeSet.FormEncoded.self))
+            .percentDecodedUTF8(URLEncodeSet.FormEncoded.self).percentEncodedUTF8(URLEncodeSet.FormEncoded.self))
         result.append(ASCII.equalSign.codePoint)
         result.append(
           contentsOf: queryBytes[kvp.value].lazy
-            .percentDecoded(using: URLEncodeSet.FormEncoded.self).percentEncodedUTF8(URLEncodeSet.FormEncoded.self))
+            .percentDecodedUTF8(URLEncodeSet.FormEncoded.self).percentEncodedUTF8(URLEncodeSet.FormEncoded.self))
         result.append(ASCII.ampersand.codePoint)
       }
       _ = result.popLast()
@@ -251,7 +251,7 @@ extension WebURL.QueryParameters {
       _ keyToFind: StringType
     ) -> LazyFilterSequence<Self> where StringType: StringProtocol {
       self.lazy.filter { (_, key, _) in
-        utf8[key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self).elementsEqual(keyToFind.utf8)
+        utf8[key].lazy.percentDecodedUTF8(URLEncodeSet.FormEncoded.self).elementsEqual(keyToFind.utf8)
       }
     }
   }

@@ -54,7 +54,7 @@ extension PercentEncodingTests {
       }
       // The 'component' encode set should always preserve its contents, even if it contains
       // things that look like percent-encode sequences (maybe someone really meant to write "%20").
-      XCTAssertEqualElements(encodedUTF8.lazy.percentDecoded, input.utf8)
+      XCTAssertEqualElements(encodedUTF8.lazy.percentDecodedUTF8, input.utf8)
     }
 
     // An important feature of the component encode-set is that it includes the % sign itself (U+0025).
@@ -116,10 +116,19 @@ extension PercentEncodingTests {
     XCTAssertEqual(form, "favourite+pet=%F0%9F%A6%86%2C+of+course&favourite+foods=%F0%9F%8D%8E+%26+%F0%9F%8D%A6")
   }
 
-  func testURLDecoded() {
-    XCTAssertEqual("hello%2C%20world!".urlDecoded, "hello, world!")
-    XCTAssertEqual("%2Fusr%2Fbin%2Fswift".urlDecoded, "/usr/bin/swift")
-    XCTAssertEqual("%F0%9F%98%8E".urlDecoded, "😎")
+  func testPercentDecodedWithEncodeSet() {
+    XCTAssertEqual("hello,%20world!".percentDecoded(PassthroughEncodeSet.self), "hello, world!")
+    XCTAssertEqual("%2Fusr%2Fbin%2Fswift".percentDecoded(PassthroughEncodeSet.self), "/usr/bin/swift")
+    XCTAssertEqual("king+of+the+%F0%9F%A6%86s".percentDecoded(URLEncodeSet.FormEncoded.self), "king of the 🦆s")
+  }
+
+  func testPercentDecoded() {
+    XCTAssertEqual("hello%2C%20world!".percentDecoded, "hello, world!")
+    XCTAssertEqual("%2Fusr%2Fbin%2Fswift".percentDecoded, "/usr/bin/swift")
+    XCTAssertEqual("%F0%9F%98%8E".percentDecoded, "😎")
+
+    // Check that we only do percent-decoding, not form-decoding.
+    XCTAssertEqual("king+of+the+%F0%9F%A6%86s".percentDecoded, "king+of+the+🦆s")
   }
 
   func testURLFormDecoded() {
