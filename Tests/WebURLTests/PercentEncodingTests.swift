@@ -139,14 +139,4 @@ extension PercentEncodingTests {
     XCTAssertTrue(decoded[0] == ("favourite pet", "🦆, of course"))
     XCTAssertTrue(decoded[1] == ("favourite foods", "🍎 & 🍦"))
   }
-
-  func testLazyURLDecoded() {
-    XCTAssertEqual(
-      Array("hello%2C%20world! 😎✈️".lazy.urlDecodedScalars),
-      ["h", "e", "l", "l", "o", ",", " ", "w", "o", "r", "l", "d", "!", " ", "\u{0001F60E}", "\u{2708}", "\u{FE0F}"]
-    )
-    XCTAssertEqualElements("hello%2C%20world!".lazy.urlDecodedScalars, "hello, world!".unicodeScalars)
-    XCTAssertEqualElements("%2Fusr%2Fbin%2Fswift".lazy.urlDecodedScalars, "/usr/bin/swift".unicodeScalars)
-    XCTAssertEqualElements("%F0%9F%98%8E".lazy.urlDecodedScalars, CollectionOfOne("\u{0001F60E}"))
-  }
 }
