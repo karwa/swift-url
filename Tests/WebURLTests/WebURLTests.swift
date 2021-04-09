@@ -460,7 +460,7 @@ extension WebURLTests {
     // [Throw] Cannot set hostname on cannot-be-a-base URLs.
     url = WebURL("mailto:bob")!
     XCTAssertNil(url.hostname)
-    XCTAssertTrue(url._cannotBeABaseURL)
+    XCTAssertTrue(url.cannotBeABase)
     XCTAssertEqual(url.serialized, "mailto:bob")
     XCTAssertThrowsSpecific(URLSetterError.cannotSetHostOnCannotBeABaseURL) {
       try url.setHostname(to: "somehost")
@@ -560,7 +560,7 @@ extension WebURLTests {
     // [Throw] Cannot set path on cannot-be-a-base URLs.
     var url = WebURL("mailto:bob")!
     XCTAssertEqual(url.path, "bob")
-    XCTAssertTrue(url._cannotBeABaseURL)
+    XCTAssertTrue(url.cannotBeABase)
     XCTAssertThrowsSpecific(URLSetterError.cannotSetPathOnCannotBeABaseURL) { try url.setPath(to: "frank") }
     XCTAssertEqual(url.serialized, "mailto:bob")
     XCTAssertURLIsIdempotent(url)
@@ -688,21 +688,21 @@ extension WebURLTests {
     XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
     XCTAssertEqual(url.path, "/hello/world")
     XCTAssertNil(url.hostname)
-    XCTAssertFalse(url._cannotBeABaseURL)
+    XCTAssertFalse(url.cannotBeABase)
 
     url.path = ""
     XCTAssertEqual(url.serialized, "foo:?someQuery")
     XCTAssertEqual(url.path, "")
     XCTAssertNil(url.hostname)
-    XCTAssertFalse(url._cannotBeABaseURL)
-    XCTAssertTrue(WebURL(url.serialized)!._cannotBeABaseURL)
+    XCTAssertFalse(url.cannotBeABase)
+    XCTAssertTrue(WebURL(url.serialized)!.cannotBeABase)
     // XCTAssertURLIsIdempotent(url) - see comment above.
 
     url.path = "test"
     XCTAssertEqual(url.serialized, "foo:/test?someQuery")
     XCTAssertEqual(url.path, "/test")
     XCTAssertNil(url.hostname)
-    XCTAssertFalse(url._cannotBeABaseURL)
+    XCTAssertFalse(url.cannotBeABase)
     XCTAssertURLIsIdempotent(url)
   }
 
@@ -735,7 +735,7 @@ extension WebURLTests {
         "ws://hostnamewhichtakesustotheedge:443?hellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellop"
       )!.jsModel
       switch url.storage {
-      case .generic(_): break
+      case .large(_): break
       default: XCTFail("Unexpected storage type")
       }
       url.scheme = "wss"
@@ -809,7 +809,7 @@ extension WebURLTests {
     let url7 = WebURL("foo:/path/only")!
     if case .none = url7.host {
       XCTAssertEqual(url7.host?.serialized, url7.hostname)
-      XCTAssertFalse(url7._cannotBeABaseURL)
+      XCTAssertFalse(url7.cannotBeABase)
     } else {
       XCTFail("Unexpected host: \(String(describing: url7.host))")
     }
@@ -817,7 +817,7 @@ extension WebURLTests {
     let url8 = WebURL("foo:some non-path")!
     if case .none = url8.host {
       XCTAssertEqual(url8.host?.serialized, url8.hostname)
-      XCTAssertTrue(url8._cannotBeABaseURL)
+      XCTAssertTrue(url8.cannotBeABase)
     } else {
       XCTFail("Unexpected host: \(String(describing: url8.host))")
     }

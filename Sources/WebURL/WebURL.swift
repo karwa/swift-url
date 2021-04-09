@@ -103,10 +103,6 @@ extension WebURL {
   internal var _schemeKind: WebURL.SchemeKind {
     storage.schemeKind
   }
-
-  internal var _cannotBeABaseURL: Bool {
-    storage.cannotBeABaseURL
-  }
 }
 
 
@@ -314,6 +310,21 @@ extension WebURL {
       setFragment(to: newValue)
     }
   }
+
+  /// Whether this URL cannot be a base.
+  ///
+  /// URLs marked as 'cannot be a base' do not have special schemes (such as http or file), authority components or hierarchical paths.
+  /// When parsing a relative URL string against such a URL, only strings which set the fragment are allowed, and any modifications which would change
+  /// a URL's structure to be a valid base URL (or vice versa) are not allowed.
+  /// Examples of URLs which cannot be a base are:
+  ///
+  /// - `mailto:bob@example.com`
+  /// - `javascript:alert("hello");`
+  /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
+  ///
+  public var cannotBeABase: Bool {
+    storage.cannotBeABaseURL
+  }
 }
 
 
@@ -368,7 +379,7 @@ extension WebURL {
     var localRef = self.storage
     self.storage = _tempStorage
     switch localRef {
-    case .generic(var extracted_storage):
+    case .large(var extracted_storage):
       localRef = _tempStorage
       (self.storage, error) = generic(&extracted_storage)
     case .small(var extracted_storage):
@@ -388,49 +399,49 @@ extension WebURL {
   mutating func setScheme<C>(utf8 newScheme: C) throws where C: Collection, C.Element == UInt8 {
     try withMutableStorage(
       { small in small.setScheme(to: newScheme) },
-      { generic in generic.setScheme(to: newScheme) }
+      { large in large.setScheme(to: newScheme) }
     )
   }
 
   mutating func setUsername<C>(utf8 newUsername: C?) throws where C: Collection, C.Element == UInt8 {
     try withMutableStorage(
       { small in small.setUsername(to: newUsername) },
-      { generic in generic.setUsername(to: newUsername) }
+      { large in large.setUsername(to: newUsername) }
     )
   }
 
   mutating func setPassword<C>(utf8 newPassword: C?) throws where C: Collection, C.Element == UInt8 {
     try withMutableStorage(
       { small in small.setPassword(to: newPassword) },
-      { generic in generic.setPassword(to: newPassword) }
+      { large in large.setPassword(to: newPassword) }
     )
   }
 
   mutating func setHostname<C>(utf8 newHostname: C?) throws where C: BidirectionalCollection, C.Element == UInt8 {
     try withMutableStorage(
       { small in small.setHostname(to: newHostname) },
-      { generic in generic.setHostname(to: newHostname) }
+      { large in large.setHostname(to: newHostname) }
     )
   }
 
   mutating func setPath<C>(utf8 newPath: C) throws where C: BidirectionalCollection, C.Element == UInt8 {
     try withMutableStorage(
       { small in small.setPath(to: newPath) },
-      { generic in generic.setPath(to: newPath) }
+      { large in large.setPath(to: newPath) }
     )
   }
 
   mutating func setQuery<C>(utf8 newQuery: C?) where C: Collection, C.Element == UInt8 {
     withMutableStorage(
       { small in small.setQuery(to: newQuery) },
-      { generic in generic.setQuery(to: newQuery) }
+      { large in large.setQuery(to: newQuery) }
     )
   }
 
   mutating func setFragment<C>(utf8 newFragment: C?) where C: Collection, C.Element == UInt8 {
     withMutableStorage(
       { small in small.setFragment(to: newFragment) },
-      { generic in generic.setFragment(to: newFragment) }
+      { large in large.setFragment(to: newFragment) }
     )
   }
 
@@ -485,7 +496,7 @@ extension WebURL {
     guard let newPort = newPort else {
       try withMutableStorage(
         { small in small.setPort(to: nil) },
-        { generic in generic.setPort(to: nil) }
+        { large in large.setPort(to: nil) }
       )
       return
     }
@@ -494,7 +505,7 @@ extension WebURL {
     }
     try withMutableStorage(
       { small in small.setPort(to: uint16Port) },
-      { generic in generic.setPort(to: uint16Port) }
+      { large in large.setPort(to: uint16Port) }
     )
   }
 

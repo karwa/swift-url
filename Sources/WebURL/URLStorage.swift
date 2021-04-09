@@ -699,7 +699,7 @@ extension URLStorage {
 @usableFromInline
 internal enum AnyURLStorage {
   case small(URLStorage<BasicURLHeader<UInt8>>)
-  case generic(URLStorage<BasicURLHeader<Int>>)
+  case large(URLStorage<BasicURLHeader<Int>>)
 
   @inlinable
   internal init<T>(_ storage: URLStorage<T>) {
@@ -730,7 +730,7 @@ extension AnyURLStorage {
         URLStorage<BasicURLHeader<UInt8>>(count: count, structure: structure, initializingCodeUnitsWith: initializer)
       )
     } else {
-      self = .generic(
+      self = .large(
         URLStorage<BasicURLHeader<Int>>(count: count, structure: structure, initializingCodeUnitsWith: initializer)
       )
     }
@@ -757,7 +757,7 @@ extension AnyURLStorage {
   internal var structure: URLStructure<Int> {
     switch self {
     case .small(let storage): return storage.header.structure
-    case .generic(let storage): return storage.header.structure
+    case .large(let storage): return storage.header.structure
     }
   }
 
@@ -775,7 +775,7 @@ extension AnyURLStorage {
   internal func withUTF8<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
     switch self {
     case .small(let storage): return try storage.withUTF8(body)
-    case .generic(let storage): return try storage.withUTF8(body)
+    case .large(let storage): return try storage.withUTF8(body)
     }
   }
 
@@ -785,7 +785,7 @@ extension AnyURLStorage {
   ) rethrows -> R {
     switch self {
     case .small(let storage): return try storage.withUTF8(of: component, body)
-    case .generic(let storage): return try storage.withUTF8(of: component, body)
+    case .large(let storage): return try storage.withUTF8(of: component, body)
     }
   }
 
@@ -801,7 +801,7 @@ extension AnyURLStorage {
   ) -> R {
     switch self {
     case .small(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
-    case .generic(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
+    case .large(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
     }
   }
 }
@@ -826,7 +826,7 @@ extension Int: AnyURLStorageSupportedBasicHeaderSize {
 
   @inlinable
   internal static func _eraseToAnyURLStorage(_ storage: URLStorage<BasicURLHeader<Int>>) -> AnyURLStorage {
-    return .generic(storage)
+    return .large(storage)
   }
 }
 

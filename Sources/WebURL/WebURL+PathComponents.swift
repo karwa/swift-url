@@ -82,11 +82,11 @@ extension WebURL {
   ///
   public var pathComponents: PathComponents? {
     get {
-      guard self._cannotBeABaseURL == false else { return nil }
+      guard self.cannotBeABase == false else { return nil }
       return PathComponents(url: self)
     }
     _modify {
-      guard self._cannotBeABaseURL == false else {
+      guard self.cannotBeABase == false else {
         var value: PathComponents? = nil
         yield &value
         precondition(value == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
@@ -103,7 +103,7 @@ extension WebURL {
       yield &components
     }
     set {
-      guard self._cannotBeABaseURL == false else {
+      guard self.cannotBeABase == false else {
         precondition(newValue == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
         return
       }
@@ -189,7 +189,7 @@ extension WebURL.PathComponents: BidirectionalCollection {
   }
 
   public subscript(position: Index) -> String {
-    withUTF8(component: position) { $0.urlDecodedString }
+    withUTF8(component: position) { $0.percentDecodedString }
   }
 
   public func distance(from start: Index, to end: Index) -> Int {
@@ -625,29 +625,29 @@ extension AnyURLStorage {
 
   internal var pathComponentsStartIndex: WebURL.PathComponents.Index {
     switch self {
-    case .small(let small): return small.pathComponentsStartIndex
-    case .generic(let generic): return generic.pathComponentsStartIndex
+    case .small(let storage): return storage.pathComponentsStartIndex
+    case .large(let storage): return storage.pathComponentsStartIndex
     }
   }
 
   internal var pathComponentsEndIndex: WebURL.PathComponents.Index {
     switch self {
-    case .small(let small): return small.pathComponentsEndIndex
-    case .generic(let generic): return generic.pathComponentsEndIndex
+    case .small(let storage): return storage.pathComponentsEndIndex
+    case .large(let storage): return storage.pathComponentsEndIndex
     }
   }
 
   internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int {
     switch self {
-    case .small(let small): return small.endOfPathComponent(startingAt: componentStartOffset)
-    case .generic(let generic): return generic.endOfPathComponent(startingAt: componentStartOffset)
+    case .small(let storage): return storage.endOfPathComponent(startingAt: componentStartOffset)
+    case .large(let storage): return storage.endOfPathComponent(startingAt: componentStartOffset)
     }
   }
 
   internal func startOfPathComponent(endingAt componentEndOffset: Int) -> Int? {
     switch self {
-    case .small(let small): return small.startOfPathComponent(endingAt: componentEndOffset)
-    case .generic(let generic): return generic.startOfPathComponent(endingAt: componentEndOffset)
+    case .small(let storage): return storage.startOfPathComponent(endingAt: componentEndOffset)
+    case .large(let storage): return storage.startOfPathComponent(endingAt: componentEndOffset)
     }
   }
 }
@@ -714,7 +714,7 @@ extension URLStorage {
     }
     // This value being nil is taken as meaning the components are empty.
     let firstNewComponentLength = components.first.map {
-      1 + $0.lazy.percentEncoded(using: PathComponentEncodeSet.self).joined().count
+      1 + $0.lazy.percentEncoded(as: \.pathComponent).count
     }
 
     // If inserting elements at the end of a path which ends in a trailing slash,
@@ -772,7 +772,7 @@ extension URLStorage {
     var pathStartOffset = 0
 
     let insertedPathLength = components.dropFirst().reduce(into: firstNewComponentLength ?? 0) { counter, component in
-      counter += 1 + component.lazy.percentEncoded(using: PathComponentEncodeSet.self).joined().count
+      counter += 1 + component.lazy.percentEncoded(as: \.pathComponent).count
     }
 
     // Calculate what the new first component will be, and whether the URL might require a path sigil.
@@ -845,7 +845,7 @@ extension URLStorage {
             bytesWritten &+= 1
             bytesWritten &+=
               UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...])
-              .initialize(from: component.lazy.percentEncoded(using: PathComponentEncodeSet.self).joined()).1
+              .initialize(from: component.lazy.percentEncoded(as: \.pathComponent)).1
           }
           return bytesWritten
         })
@@ -863,7 +863,7 @@ extension URLStorage {
         replaced = _tempStorage
         small.normalizeWindowsDriveLetterIfPresent()
         replaced = AnyURLStorage(small)
-      case .generic(var generic):
+      case .large(var generic):
         replaced = _tempStorage
         generic.normalizeWindowsDriveLetterIfPresent()
         replaced = AnyURLStorage(generic)

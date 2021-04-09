@@ -59,7 +59,7 @@ extension WebURL {
           let src = src.isEmpty ? nil : src
           withMutableStorage(
             { small in small.setQuery(toKnownFormEncoded: src) },
-            { generic in generic.setQuery(toKnownFormEncoded: src) }
+            { large in large.setQuery(toKnownFormEncoded: src) }
           )
         }
         return
@@ -67,7 +67,7 @@ extension WebURL {
       let formEncoded = newValue.formEncodedQueryBytes
       withMutableStorage(
         { small in small.setQuery(toKnownFormEncoded: formEncoded) },
-        { generic in generic.setQuery(toKnownFormEncoded: formEncoded) }
+        { large in large.setQuery(toKnownFormEncoded: formEncoded) }
       )
     }
   }
@@ -101,22 +101,18 @@ extension WebURL.QueryParameters {
 
   internal var formEncodedQueryBytes: [UInt8]? {
     withQueryUTF8 { queryBytes in
-      var result = [UInt8]()
-      result.reserveCapacity(queryBytes.count + 1)
+      var rslt = [UInt8]()
+      rslt.reserveCapacity(queryBytes.count + 1)
       for kvp in RawKeyValuePairs(utf8: queryBytes) {
-        result.append(
-          contentsOf: queryBytes[kvp.key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-            .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
-        result.append(ASCII.equalSign.codePoint)
-        result.append(
-          contentsOf: queryBytes[kvp.value].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self)
-            .percentEncoded(using: URLEncodeSet.FormEncoded.self).joined())
-        result.append(ASCII.ampersand.codePoint)
+        rslt.append(contentsOf: queryBytes[kvp.key].lazy.percentDecodedUTF8(from: \.form).percentEncoded(as: \.form))
+        rslt.append(ASCII.equalSign.codePoint)
+        rslt.append(contentsOf: queryBytes[kvp.value].lazy.percentDecodedUTF8(from: \.form).percentEncoded(as: \.form))
+        rslt.append(ASCII.ampersand.codePoint)
       }
-      _ = result.popLast()
+      _ = rslt.popLast()
       // Non-empty queries may become empty once form-encoded (e.g. "&&&&").
       // These should result in 'nil' queries.
-      return result.isEmpty ? nil : result
+      return rslt.isEmpty ? nil : rslt
     }
   }
 
@@ -125,7 +121,7 @@ extension WebURL.QueryParameters {
     let reencodedQuery = formEncodedQueryBytes
     url.withMutableStorage(
       { small in small.setQuery(toKnownFormEncoded: reencodedQuery) },
-      { generic in generic.setQuery(toKnownFormEncoded: reencodedQuery) }
+      { large in large.setQuery(toKnownFormEncoded: reencodedQuery) }
     )
     assert(url.storage.structure.queryIsKnownFormEncoded)
   }
@@ -251,7 +247,7 @@ extension WebURL.QueryParameters {
       _ keyToFind: StringType
     ) -> LazyFilterSequence<Self> where StringType: StringProtocol {
       self.lazy.filter { (_, key, _) in
-        utf8[key].lazy.percentDecoded(using: URLEncodeSet.FormEncoded.self).elementsEqual(keyToFind.utf8)
+        utf8[key].lazy.percentDecodedUTF8(from: \.form).elementsEqual(keyToFind.utf8)
       }
     }
   }
@@ -342,7 +338,7 @@ extension WebURL.QueryParameters {
     let encodedNewValue = newValue?.urlFormEncoded
     url.withMutableStorage(
       { small in small.setQueryPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) },
-      { generic in generic.setQueryPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) }
+      { large in large.setQueryPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) }
     )
   }
 }
@@ -363,7 +359,7 @@ extension WebURL.QueryParameters {
     reencodeQueryIfNeeded()
     url.withMutableStorage(
       { small in small.appendPairsToQuery(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) },
-      { generic in generic.appendPairsToQuery(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) }
+      { large in large.appendPairsToQuery(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) }
     )
   }
 
@@ -449,17 +445,14 @@ extension URLStorage {
     let combinedLength: Int
     let needsEscaping: Bool
     (combinedLength, needsEscaping) = keyValuePairs.reduce(into: (0, false)) { info, kvp in
-      let encodeKey = kvp.0.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).write { info.0 += $0.count }
-      let encodeVal = kvp.1.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).write { info.0 += $0.count }
+      let encodeKey = kvp.0.lazy.percentEncodedGroups(as: \.form).write { info.0 += $0.count }
+      let encodeVal = kvp.1.lazy.percentEncodedGroups(as: \.form).write { info.0 += $0.count }
       info.1 = info.1 || encodeKey || encodeVal
     }
     if needsEscaping {
       return appendPairsToQuery(
         fromEncoded: keyValuePairs.lazy.map {
-          (
-            $0.0.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).joined(),
-            $0.1.lazy.percentEncoded(using: URLEncodeSet.FormEncoded.self).joined()
-          )
+          ($0.0.lazy.percentEncoded(as: \.form), $0.1.lazy.percentEncoded(as: \.form))
         },
         knownLength: combinedLength
       )

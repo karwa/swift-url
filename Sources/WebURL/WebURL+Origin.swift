@@ -57,7 +57,7 @@ extension WebURL {
     case .other where scheme == "blob":
       // Only cannot-be-a-base URLs might have a non-opaque URL as their first path component.
       // Short-circuiting prevents recursion for "blob:blob:blob:blob...".
-      guard self._cannotBeABaseURL else { return Origin(kind: .opaque) }
+      guard self.cannotBeABase else { return Origin(kind: .opaque) }
       // Also, the paths of cannot-be-a-base URLs are never broken in to components by the standard's parser,
       // so the entire path is the first component.
       return WebURL(path)?.origin ?? Origin(kind: .opaque)

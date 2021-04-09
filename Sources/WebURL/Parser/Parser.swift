@@ -312,7 +312,7 @@ extension ParsedURLString.ProcessedMapping {
           }
         } else {
           writer.writeUsernameContents { writer in
-            didEscape = inputString[username].lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write(to: writer)
+            didEscape = inputString[username].lazy.percentEncodedGroups(as: \.userInfo).write(to: writer)
           }
         }
         writer.writeHint(.username, needsEscaping: didEscape)
@@ -326,7 +326,7 @@ extension ParsedURLString.ProcessedMapping {
           }
         } else {
           writer.writePasswordContents { writer in
-            didEscape = inputString[password].lazy.percentEncoded(using: URLEncodeSet.UserInfo.self).write(to: writer)
+            didEscape = inputString[password].lazy.percentEncodedGroups(as: \.userInfo).write(to: writer)
           }
         }
         writer.writeHint(.password, needsEscaping: didEscape)
@@ -375,7 +375,7 @@ extension ParsedURLString.ProcessedMapping {
         writer.writePath(firstComponentLength: 0) { $0(inputString[path]) }
       } else {
         writer.writePath(firstComponentLength: 0) { writer in
-          didEscape = inputString[path].lazy.percentEncoded(using: URLEncodeSet.C0.self).write(to: writer)
+          didEscape = inputString[path].lazy.percentEncodedGroups(as: \.c0Control).write(to: writer)
         }
       }
       writer.writeHint(.path, needsEscaping: didEscape)
@@ -444,13 +444,11 @@ extension ParsedURLString.ProcessedMapping {
           writerPiece(inputString[query])
         }
       } else {
-        writer.writeQueryContents { (writer: (PercentEncodedByte) -> Void) in
+        writer.writeQueryContents { (writer: (_PercentEncodedByte) -> Void) in
           if schemeKind.isSpecial {
-            didEscape = inputString[query].lazy.percentEncoded(using: URLEncodeSet.Query_Special.self)
-              .write(to: writer)
+            didEscape = inputString[query].lazy.percentEncodedGroups(as: \.query_special).write(to: writer)
           } else {
-            didEscape = inputString[query].lazy.percentEncoded(using: URLEncodeSet.Query_NotSpecial.self)
-              .write(to: writer)
+            didEscape = inputString[query].lazy.percentEncodedGroups(as: \.query_notSpecial).write(to: writer)
           }
         }
       }
@@ -473,7 +471,7 @@ extension ParsedURLString.ProcessedMapping {
         }
       } else {
         writer.writeFragmentContents { writer in
-          didEscape = inputString[fragment].lazy.percentEncoded(using: URLEncodeSet.Fragment.self).write(to: writer)
+          didEscape = inputString[fragment].lazy.percentEncodedGroups(as: \.fragment).write(to: writer)
         }
       }
       writer.writeHint(.fragment, needsEscaping: didEscape)
@@ -571,7 +569,7 @@ extension URLScanner {
       return nil
     }
 
-    if base._cannotBeABaseURL {
+    if base.cannotBeABase {
       guard ASCII(flatMap: input.first) == .numberSign else {
         callback.validationError(.missingSchemeNonRelativeURL)
         return nil
