@@ -523,7 +523,7 @@ public typealias LazilyPercentDecodedUTF8WithoutSubstitutions<Source> =
 /// A `Collection` which lazily replaces all percent-encoded encoded UTF8 code-units from a `Source` collection with their decoded code-units,
 /// and reverses substitutions of other code-units performed by `EncodeSet`.
 ///
-/// If the encode-set does not perform substitutions, the `PassthroughEncodeSet` can be used to remove percent-encoding only.
+/// If the encode-set does not perform substitutions, `PercentEncodeSet._Passthrough` can be used to remove percent-encoding only.
 ///
 /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
 ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
@@ -1051,12 +1051,12 @@ extension PercentEncodeSet {
       percent_encoding_table.withUnsafeBufferPointer { $0[Int(codePoint & 0x7F)] }.contains(.form)
     }
 
-    @inline(__always)
+    @inlinable @inline(__always)
     public static func substitute(ascii codePoint: UInt8) -> UInt8? {
       codePoint == ASCII.space.codePoint ? ASCII.plus.codePoint : nil
     }
 
-    @inline(__always)
+    @inlinable @inline(__always)
     public static func unsubstitute(ascii codePoint: UInt8) -> UInt8? {
       codePoint == ASCII.plus.codePoint ? ASCII.space.codePoint : nil
     }
