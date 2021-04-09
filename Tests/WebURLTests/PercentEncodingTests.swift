@@ -37,13 +37,13 @@ extension PercentEncodingTests {
           continue
         }
         // The 'component' encode set is a superset of the following sets.
-        XCTAssertFalse(URLEncodeSet.C0.shouldPercentEncode(ascii: codeUnit))
-        XCTAssertFalse(URLEncodeSet.Path.shouldPercentEncode(ascii: codeUnit))
-        XCTAssertFalse(URLEncodeSet.Query_NotSpecial.shouldPercentEncode(ascii: codeUnit))
-        XCTAssertFalse(URLEncodeSet.Fragment.shouldPercentEncode(ascii: codeUnit))
-        XCTAssertFalse(URLEncodeSet.UserInfo.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(PercentEncodeSet.C0Control.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(PercentEncodeSet.Path.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(PercentEncodeSet.Query_NotSpecial.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(PercentEncodeSet.Fragment.shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(PercentEncodeSet.UserInfo.shouldPercentEncode(ascii: codeUnit))
         // The only set it does not contain is the special-query set, which includes the extra U+0027.
-        if URLEncodeSet.Query_Special.shouldPercentEncode(ascii: codeUnit) {
+        if PercentEncodeSet.Query_Special.shouldPercentEncode(ascii: codeUnit) {
           XCTAssertEqual(ascii, .apostrophe)
         }
         // Strings encoded by the 'component' set should not contain forbidden host code-points (other than '%').
@@ -58,12 +58,12 @@ extension PercentEncodingTests {
     }
 
     // An important feature of the component encode-set is that it includes the % sign itself (U+0025).
-    XCTAssertTrue(URLEncodeSet.Component.shouldPercentEncode(ascii: ASCII.percentSign.codePoint))
+    XCTAssertTrue(PercentEncodeSet.Component.shouldPercentEncode(ascii: ASCII.percentSign.codePoint))
   }
 
   func testEncodeSet_Component() {
     do_testEncodeSet_Component(encodingWith: {
-      $0.utf8.lazy.percentEncodedUTF8(URLEncodeSet.Component.self)
+      $0.utf8.lazy.percentEncoded(as: \.component)
     })
   }
 
@@ -81,24 +81,24 @@ extension PercentEncodingTests {
         )
       }
     }
-    testEncodeSet(URLEncodeSet.C0.self)
-    testEncodeSet(URLEncodeSet.Fragment.self)
-    testEncodeSet(URLEncodeSet.Query_NotSpecial.self)
-    testEncodeSet(URLEncodeSet.Query_Special.self)
-    testEncodeSet(URLEncodeSet.Path.self)
-    testEncodeSet(URLEncodeSet.UserInfo.self)
-    testEncodeSet(URLEncodeSet.Component.self)
-    testEncodeSet(URLEncodeSet.FormEncoded.self)
+    testEncodeSet(PercentEncodeSet.C0Control.self)
+    testEncodeSet(PercentEncodeSet.Fragment.self)
+    testEncodeSet(PercentEncodeSet.Query_NotSpecial.self)
+    testEncodeSet(PercentEncodeSet.Query_Special.self)
+    testEncodeSet(PercentEncodeSet.Path.self)
+    testEncodeSet(PercentEncodeSet.UserInfo.self)
+    testEncodeSet(PercentEncodeSet.Component.self)
+    testEncodeSet(PercentEncodeSet.FormEncoded.self)
   }
 }
 
 extension PercentEncodingTests {
 
   func testPercentEncoded() {
-    XCTAssertEqualElements("hello, world!".percentEncoded(URLEncodeSet.UserInfo.self), "hello,%20world!")
-    XCTAssertEqualElements("/usr/bin/swift".percentEncoded(URLEncodeSet.Component.self), "%2Fusr%2Fbin%2Fswift")
-    XCTAssertEqualElements("got en%63oders?".percentEncoded(URLEncodeSet.UserInfo.self), "got%20en%63oders%3F")
-    XCTAssertEqualElements("king of the 🦆s".percentEncoded(URLEncodeSet.FormEncoded.self), "king+of+the+%F0%9F%A6%86s")
+    XCTAssertEqualElements("hello, world!".percentEncoded(as: \.userInfo), "hello,%20world!")
+    XCTAssertEqualElements("/usr/bin/swift".percentEncoded(as: \.component), "%2Fusr%2Fbin%2Fswift")
+    XCTAssertEqualElements("got en%63oders?".percentEncoded(as: \.userInfo), "got%20en%63oders%3F")
+    XCTAssertEqualElements("king of the 🦆s".percentEncoded(as: \.form), "king+of+the+%F0%9F%A6%86s")
   }
 
   func testURLComponentEncoded() {
@@ -117,9 +117,9 @@ extension PercentEncodingTests {
   }
 
   func testPercentDecodedWithEncodeSet() {
-    XCTAssertEqual("hello,%20world!".percentDecoded(PassthroughEncodeSet.self), "hello, world!")
-    XCTAssertEqual("%2Fusr%2Fbin%2Fswift".percentDecoded(PassthroughEncodeSet.self), "/usr/bin/swift")
-    XCTAssertEqual("king+of+the+%F0%9F%A6%86s".percentDecoded(URLEncodeSet.FormEncoded.self), "king of the 🦆s")
+    XCTAssertEqual("hello,%20world!".percentDecoded(from: \.percentEncodedOnly), "hello, world!")
+    XCTAssertEqual("%2Fusr%2Fbin%2Fswift".percentDecoded(from: \.percentEncodedOnly), "/usr/bin/swift")
+    XCTAssertEqual("king+of+the+%F0%9F%A6%86s".percentDecoded(from: \.form), "king of the 🦆s")
   }
 
   func testPercentDecoded() {

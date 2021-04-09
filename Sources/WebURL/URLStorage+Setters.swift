@@ -109,7 +109,7 @@ extension URLStorage {
       return (removeSubrange(toRemove, newStructure: newStructure).newStorage, nil)
     }
 
-    let needsEncoding = newValue.lazy.percentEncodedGroups(URLEncodeSet.UserInfo.self).write {
+    let needsEncoding = newValue.lazy.percentEncodedGroups(as: \.userInfo).write {
       newStructure.usernameLength += $0.count
     }
     let shouldAddSeparator = (oldStructure.hasCredentialSeparator == false)
@@ -118,7 +118,7 @@ extension URLStorage {
     let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       var bytesWritten = 0
       if needsEncoding {
-        bytesWritten += dest.initialize(from: newValue.lazy.percentEncodedUTF8(URLEncodeSet.UserInfo.self)).1
+        bytesWritten += dest.initialize(from: newValue.lazy.percentEncoded(as: \.userInfo)).1
       } else {
         bytesWritten += dest.initialize(from: newValue).1
       }
@@ -159,7 +159,7 @@ extension URLStorage {
     }
 
     newStructure.passwordLength = 1  // leading ":"
-    let needsEncoding = newValue.lazy.percentEncodedGroups(URLEncodeSet.UserInfo.self).write {
+    let needsEncoding = newValue.lazy.percentEncodedGroups(as: \.userInfo).write {
       newStructure.passwordLength += $0.count
     }
     let bytesToWrite = newStructure.passwordLength + 1  // Always write the trailing "@".
@@ -172,11 +172,11 @@ extension URLStorage {
       if needsEncoding {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .initialize(from: newValue.lazy.percentEncodedUTF8(URLEncodeSet.UserInfo.self)).1
+          .initialize(from: newValue.lazy.percentEncoded(as: \.userInfo)).1
       } else {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .initialize(from: newValue.lazy.percentEncodedUTF8(URLEncodeSet.UserInfo.self)).1
+          .initialize(from: newValue.lazy.percentEncoded(as: \.userInfo)).1
       }
       dest[bytesWritten] = ASCII.commercialAt.codePoint
       bytesWritten += 1
@@ -339,7 +339,7 @@ extension URLStorage {
         to: UnsafeBufferPointer?.none,
         prefix: .colon,
         lengthKey: \.portLength,
-        encodeSet: PassthroughEncodeSet.self
+        encodeSet: \.alreadyEncoded
       ).newStorage
       return (result, nil)
     }
@@ -352,7 +352,7 @@ extension URLStorage {
         to: ptr,
         prefix: .colon,
         lengthKey: \.portLength,
-        encodeSet: PassthroughEncodeSet.self
+        encodeSet: \.alreadyEncoded
       ).newStorage
     }
     return (result, nil)
@@ -442,7 +442,7 @@ extension URLStorage {
         to: newValue,
         prefix: .questionMark,
         lengthKey: \.queryLength,
-        encodeSet: URLEncodeSet.Query_Special.self,
+        encodeSet: \.query_special,
         adjustStructure: { structure in
           // Empty and nil queries are considered form-encoded (i.e. they do not need to be re-encoded).
           structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
@@ -454,7 +454,7 @@ extension URLStorage {
         to: newValue,
         prefix: .questionMark,
         lengthKey: \.queryLength,
-        encodeSet: URLEncodeSet.Query_NotSpecial.self,
+        encodeSet: \.query_notSpecial,
         adjustStructure: { structure in
           structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
         }
@@ -473,7 +473,7 @@ extension URLStorage {
       to: newValue,
       prefix: .questionMark,
       lengthKey: \.queryLength,
-      encodeSet: PassthroughEncodeSet.self,
+      encodeSet: \.alreadyEncoded,
       adjustStructure: { structure in
         structure.queryIsKnownFormEncoded = true
       }
@@ -493,7 +493,7 @@ extension URLStorage {
       to: newValue,
       prefix: .numberSign,
       lengthKey: \.fragmentLength,
-      encodeSet: URLEncodeSet.Fragment.self
+      encodeSet: \.fragment
     ).newStorage
   }
 }
@@ -836,10 +836,10 @@ extension URLStorage {
     to newValue: UTF8Bytes?,
     prefix: ASCII,
     lengthKey: WritableKeyPath<URLStructure<Int>, Int>,
-    encodeSet: EncodeSet.Type,
+    encodeSet: KeyPath<PercentEncodeSet, EncodeSet.Type>,
     adjustStructure: (inout URLStructure<Int>) -> Void = { _ in }
   ) -> (newStorage: AnyURLStorage, newSubrange: Range<Int>)
-  where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, EncodeSet: PercentEncodeSet {
+  where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, EncodeSet: PercentEncodeSetProtocol {
 
     let oldStructure = header.structure
 
@@ -854,7 +854,7 @@ extension URLStorage {
     }
 
     var bytesToWrite = 1  // for prefix.
-    let needsEncoding = newBytes.lazy.percentEncodedGroups(EncodeSet.self).write { bytesToWrite += $0.count }
+    let needsEncoding = newBytes.lazy.percentEncodedGroups(as: encodeSet).write { bytesToWrite += $0.count }
     let subrangeToReplace = oldStructure.rangeForReplacingCodeUnits(of: component)
     var newStructure = oldStructure
     newStructure[keyPath: lengthKey] = bytesToWrite
@@ -870,11 +870,11 @@ extension URLStorage {
       if needsEncoding {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .initialize(from: newBytes.lazy.percentEncodedUTF8(EncodeSet.self)).1
+          .initialize(from: newBytes.lazy.percentEncoded(as: encodeSet)).1
       } else {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .initialize(from: newBytes.lazy.percentEncodedUTF8(EncodeSet.self)).1
+          .initialize(from: newBytes.lazy.percentEncoded(as: encodeSet)).1
       }
       return bytesWritten
     }

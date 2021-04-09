@@ -576,7 +576,7 @@ extension PathMetrics {
       metrics.numberOfComponents += 1
       metrics.firstComponentLength = 1  // "/"
       metrics.needsEscaping =
-        pathComponent.lazy.percentEncodedGroups(URLEncodeSet.Path.self).write { byteGroup in
+        pathComponent.lazy.percentEncodedGroups(as: \.path).write { byteGroup in
           metrics.firstComponentLength += byteGroup.count
         } || metrics.needsEscaping
       metrics.requiredCapacity += metrics.firstComponentLength
@@ -678,7 +678,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         return
       }
       if needsEscaping {
-        for byteGroup in pathComponent.reversed().lazy.percentEncodedGroups(URLEncodeSet.Path.self) {
+        for byteGroup in pathComponent.reversed().lazy.percentEncodedGroups(as: \.path) {
           switch byteGroup.encoding {
           case .percentEncoded:
             (buffer.baseAddress.unsafelyUnwrapped + front - 3).initialize(to: byteGroup[0])
