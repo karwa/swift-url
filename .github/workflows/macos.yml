@@ -17,6 +17,10 @@ jobs:
       run: swift build -v
     - name: Run tests
       run: SWIFT_URL_REPORT_PATH=/private/var/tmp/swift-url-report/ swift test -v
+    - name: Build benchmarks
+      run: |
+        cd Benchmarks
+        swift build -v
     - name: Upload report files
       uses: actions/upload-artifact@v2
       if: always()

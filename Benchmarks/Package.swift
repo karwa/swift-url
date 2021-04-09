@@ -24,7 +24,7 @@ let package = Package(
     ],
     dependencies: [
       .package(name: "Benchmark", url: "https://github.com/google/swift-benchmark", from: "0.1.0"),
-      .package(path: ".."),
+      .package(name: "swift-url", path: ".."),
     ],
     targets: [
       .target(
