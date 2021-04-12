@@ -782,7 +782,8 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
 
 /// A namespace for functions relating to parsing of path components.
 ///
-enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
+@usableFromInline
+internal enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
 
   /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
   ///
@@ -861,7 +862,8 @@ enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
 
   /// Returns `true` if the given normalized path requires a path sigil when written to a URL that does not have an authority sigil.
   ///
-  static func doesNormalizedPathRequirePathSigil(_ path: T) -> Bool {
+  @inlinable
+  internal static func doesNormalizedPathRequirePathSigil(_ path: T) -> Bool {
     var iter = path.makeIterator()
     guard iter.next() == ASCII.forwardSlash.codePoint, iter.next() == ASCII.forwardSlash.codePoint else {
       return false

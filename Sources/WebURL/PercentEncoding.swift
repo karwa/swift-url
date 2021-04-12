@@ -369,7 +369,7 @@ extension LazilyPercentEncodedGroups {
   ///
   @inlinable @inline(__always)
   internal var encodedLength: (count: Int, needsEncoding: Bool) {
-		var count = 0
+    var count = 0
     let needsEncoding = write { count += $0.count }
     return (count, needsEncoding)
   }

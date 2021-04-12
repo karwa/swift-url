@@ -16,7 +16,8 @@
 ///
 /// - seealso: `ParsedURLString`
 ///
-enum ParsedHost: Equatable {
+@usableFromInline
+internal enum ParsedHost: Equatable {
   case domain
   case ipv4Address(IPv4Address)
   case ipv6Address(IPv6Address)
@@ -31,9 +32,10 @@ extension ParsedHost {
   /// Parses the given hostname to determine what kind of host it is, and whether or not it is valid.
   /// The created `ParsedHost` object may then be used to write a normalized/encoded version of the hostname.
   ///
-  init?<Bytes, Callback>(
-    _ hostname: Bytes, schemeKind: WebURL.SchemeKind, callback: inout Callback
-  ) where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Callback: URLParserCallback {
+  @usableFromInline  // TODO: [inlinable]: Make inlinable for specialization
+  internal init?<UTF8Bytes, Callback>(
+    _ hostname: UTF8Bytes, schemeKind: WebURL.SchemeKind, callback: inout Callback
+  ) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
     guard hostname.isEmpty == false else {
       self = .empty
@@ -125,9 +127,10 @@ extension ParsedHost {
   /// Writes a normalized hostname using the given `Writer` instance.
   /// `bytes` must be the same collection this `ParsedHost` was created for.
   ///
-  func write<Bytes, Writer>(
-    bytes: Bytes, using writer: inout Writer
-  ) where Bytes: BidirectionalCollection, Bytes.Element == UInt8, Writer: HostnameWriter {
+  @inlinable
+  internal func write<UTF8Bytes, Writer>(
+    bytes: UTF8Bytes, using writer: inout Writer
+  ) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Writer: HostnameWriter {
 
     switch self {
     case .empty:

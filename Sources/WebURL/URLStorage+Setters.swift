@@ -206,9 +206,10 @@ extension URLStorage {
   /// An empty hostname preserves the `//` separator after the scheme, but the authority component will be empty (e.g. `unix://oldhost/some/path` -> `unix:///some/path`).
   /// A `nil` hostname removes the `//` separator after the scheme, resulting in a so-called "path-only" URL (e.g. `unix://oldhost/some/path` -> `unix:/some/path`).
   ///
-  mutating func setHostname<Input>(
-    to newValue: Input?
-  ) -> (AnyURLStorage, URLSetterError?) where Input: BidirectionalCollection, Input.Element == UInt8 {
+  @inlinable
+  internal mutating func setHostname<UTF8Bytes>(
+    to newValue: UTF8Bytes?
+  ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
     let oldStructure = header.structure
 
@@ -238,14 +239,14 @@ extension URLStorage {
 
       switch oldStructure.range(of: .hostname) {
       case .none:
-        // 'nil' -> 'nil'.
+        assert(oldStructure.sigil != .authority, "URL has authority, but told us it had a nil hostname?!")
+
+        // nil -> nil.
         guard newValue != nil else {
           return (AnyURLStorage(self), nil)
         }
-        // 'nil' -> empty host: Insert authority sigil, overwriting path sigil if present.
-        assert(oldStructure.sigil != .authority, "A URL without a hostname cannot have an authority sigil")
+        // nil -> empty string: Insert authority sigil, overwriting path sigil if present.
         newStructure.sigil = .authority
-
         let result = replaceSubrange(
           oldStructure.rangeForReplacingSigil,
           withUninitializedSpace: Sigil.authority.length,
@@ -255,24 +256,24 @@ extension URLStorage {
         return (result.newStorage, nil)
 
       case .some(let hostnameRange):
-        assert(oldStructure.sigil == .authority, "A URL with a hostname must have an authority sigil")
-        var commands: [ReplaceSubrangeOperation] = []
+        assert(oldStructure.sigil == .authority, "URL has a hostname, but apparently no authority?!")
 
-        // hostname -> 'nil': Remove authority sigil, replacing it with a path sigil if required.
-        if newValue == nil {
-          let needsPathSigil = withUTF8(of: .path) { pathBytes -> Bool in
-            return pathBytes.map { PathComponentParser.doesNormalizedPathRequirePathSigil($0) } ?? false
-          }
-          commands.append(
-            .replace(
-              subrange: oldStructure.rangeForReplacingSigil,
-              withCount: needsPathSigil ? Sigil.path.length : 0,
-              writer: needsPathSigil ? Sigil.path.unsafeWrite : { _ in 0 })
-          )
-          newStructure.sigil = needsPathSigil ? .path : .none
+        // hostname -> empty string: Preserve existing sigil, only remove the hostname contents.
+        guard newValue == nil else {
+          return (removeSubrange(hostnameRange, newStructure: newStructure).newStorage, nil)
         }
-        // hostname -> empty host: Preserve existing sigil, only remove the hostname contents.
-        commands.append(.remove(subrange: hostnameRange))
+        // hostname -> nil: Remove authority sigil, replacing it with a path sigil if required.
+        let needsPathSigil = withUTF8(of: .path) { pathBytes in
+          pathBytes.map { PathComponentParser.doesNormalizedPathRequirePathSigil($0) } ?? false
+        }
+        newStructure.sigil = needsPathSigil ? .path : .none
+        let commands: [ReplaceSubrangeOperation] = [
+          .replace(
+            subrange: oldStructure.rangeForReplacingSigil,
+            withCount: needsPathSigil ? Sigil.path.length : 0,
+            writer: needsPathSigil ? Sigil.path.unsafeWrite : { _ in 0 }),
+          .remove(subrange: hostnameRange),
+        ]
         return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
       }
     }
@@ -284,13 +285,14 @@ extension URLStorage {
     }
 
     // The operation is valid. Calculate the new structure and replace the code-units.
-    // nil/empty/hostname -> hostname: Always write authority sigil, overwriting path sigil if present.
     var newStructure = oldStructure
-    newStructure.sigil = .authority
 
-    var counter = HostnameLengthCounter()
-    newHost.write(bytes: newHostnameBytes, using: &counter)
-    newStructure.hostnameLength = counter.length
+    var newLengthCounter = HostnameLengthCounter()
+    newHost.write(bytes: newHostnameBytes, using: &newLengthCounter)
+    newStructure.hostnameLength = newLengthCounter.length
+
+    // Always insert/overwrite the existing sigil.
+    newStructure.sigil = .authority
 
     let commands: [ReplaceSubrangeOperation] = [
       .replace(
@@ -301,16 +303,11 @@ extension URLStorage {
         subrange: oldStructure.rangeForReplacingCodeUnits(of: .hostname),
         withCount: newStructure.hostnameLength
       ) { dest in
-        guard var ptr = dest.baseAddress else { return 0 }
-        var writer = UnsafeBufferHostnameWriter(
-          buffer: UnsafeMutableBufferPointer(start: ptr, count: counter.length)
-        )
+        var writer = UnsafeBufferHostnameWriter(buffer: dest)
         newHost.write(bytes: newHostnameBytes, using: &writer)
-        ptr = writer.buffer.baseAddress.unsafelyUnwrapped
-        return dest.baseAddress.unsafelyUnwrapped.distance(to: ptr)
+        return dest.baseAddress?.distance(to: writer.buffer.baseAddress!) ?? 0
       },
     ]
-
     return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
   }
 }
