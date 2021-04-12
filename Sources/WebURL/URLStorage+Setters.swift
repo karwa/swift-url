@@ -379,27 +379,37 @@ extension URLStorage {
 
   /// Attempts to set the path component to the given UTF8-encoded string.
   ///
-  mutating func setPath<Input>(
-    to newPath: Input
-  ) -> (AnyURLStorage, URLSetterError?) where Input: BidirectionalCollection, Input.Element == UInt8 {
+  @inlinable
+  internal mutating func setPath<UTF8Bytes>(
+    to newPath: UTF8Bytes
+  ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
     let oldStructure = header.structure
+
+    // Check that the operation is semantically valid for the existing structure.
     guard oldStructure.cannotBeABaseURL == false else {
       return (AnyURLStorage(self), .cannotSetPathOnCannotBeABaseURL)
     }
 
+    // The operation is valid. Calculate the new structure and replace the code-units.
+
     // Note: absolutePathsCopyWindowsDriveFromBase models a quirk from the URL Standard's "file slash" state,
-    //       and the setter goes through the "path start" state, which never reaches "file slash",
-    //       so the setter doesn't expose the quirk and APCWDFB should be 'false'.
+    //       whereby parsing a "relative URL string" which turns out to be an absolute path copies the Windows drive
+    //       from its base URL (so parsing "/usr/bin" against "file:///C:/Windows" returns "file:///C:/usr/bin",
+    //       not "file:///usr/bin", even though "/usr/bin" is absolute).
+    //
+    //       The 'pathname' setter defined in the standard always goes through the "path start" state,
+    //       which never reaches "file slash" and does not include this quirk. Therefore APCWDFB should be 'false'.
     let pathInfo = PathMetrics(
       parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil,
       absolutePathsCopyWindowsDriveFromBase: false)
+
     var newStructure = oldStructure
     newStructure.pathLength = pathInfo.requiredCapacity
     newStructure.firstPathComponentLength = pathInfo.firstComponentLength
 
     var commands: [ReplaceSubrangeOperation] = []
-    switch (oldStructure.sigil, pathInfo.requiresSigil) {
+    switch (oldStructure.sigil, pathInfo.requiresPathSigil) {
     case (.authority, _), (.path, true), (.none, false):
       break
     case (.path, false):
@@ -419,13 +429,14 @@ extension URLStorage {
         subrange: oldStructure.rangeForReplacingCodeUnits(of: .path),
         withCount: pathInfo.requiredCapacity,
         writer: { dest in
-          return dest.writeNormalizedPath(
+          dest.writeNormalizedPath(
             parsing: newPath, schemeKind: newStructure.schemeKind,
             baseURL: nil,
             absolutePathsCopyWindowsDriveFromBase: false,
-            needsEscaping: pathInfo.needsEscaping
+            needsPercentEncoding: pathInfo.needsPercentEncoding
           )
-        }))
+        })
+    )
     return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
   }
 }

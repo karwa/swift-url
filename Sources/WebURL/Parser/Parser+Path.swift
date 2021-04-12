@@ -14,21 +14,22 @@
 
 /// An object which parses a path string.
 ///
-/// This protocol is an implementation detail. It defines a group of callbacks which are invoked by the `walkPathComponents` method.
-/// Conforming types should implement these callbacks, as well as another method/initializer which invokes the `walkPathComponents` method to
-/// compute the result. Since the group of callbacks are defined as a type, the entire parsing/processing operation may be specialized.
+/// This protocol is an implementation detail. It defines a group of callbacks which are invoked by the `walkPathComponents` method
+/// and should not be called directly. Conforming types implement these callbacks, as well as another method/initializer which invokes `walkPathComponents` to
+/// compute any information the type requires about the path.
 ///
 /// Conforming types should be aware that components are visited in reverse order. Given a path "a/b/c", the components visited would be "c", "b", and finally "a".
 /// All of the visited path components are present in the simplified path string, with all pushing/popping handled internally by the `walkPathComponents` method.
 ///
-/// Path components originate from 2 sources:
+/// Visited path components may originate from 2 sources:
 ///
-/// - They may be slices of some unvalidated, non-normalised string given as an input. In order to be written as a normalized path string, they must
+/// - They may be slices of some string given as an input. In order to be written as a normalized path string, they must
 ///   be percent-encoded and adjustments must be made to Windows drive letters.
-/// - They may be slices of an existing path string, coming from a URL object given as the "base URL". In this case, things are a bit easier -
-///   the component will already be properly encoded and normalised, and we know that it exists in contiguous storage.
+/// - They may be slices of an existing, normalized path string, coming from a URL object given as the "base URL". In this case, things are a bit easier -
+///   These components require no further processing before they are incorporated in to a normalized path string, and are known to exist in contiguous storage.
 ///
-private protocol PathParser {
+@usableFromInline
+internal protocol _PathParser {
   associatedtype InputString: BidirectionalCollection where InputString.Element == UInt8
 
   /// A callback which is invoked when the parser yields a path component originating from the input string.
@@ -67,18 +68,20 @@ private protocol PathParser {
   mutating func visitValidationError(_ error: ValidationError)
 }
 
-extension PathParser {
+extension _PathParser {
 
   /// A callback which is invoked when the parser yields an empty path component.
   /// Note that this does not imply that path components yielded via other callbacks are non-empty.
   ///
   /// This method exists as an optimisation, since empty components have no content to percent-encode/transform.
   ///
-  mutating func visitEmptyPathComponent() {
+  @inlinable
+  internal mutating func visitEmptyPathComponent() {
     visitEmptyPathComponents(1)
   }
 
-  mutating func visitValidationError(_ error: ValidationError) {
+  @inlinable
+  internal mutating func visitValidationError(_ error: ValidationError) {
     // No required action.
   }
 }
@@ -115,9 +118,11 @@ extension WebURL {
 
   fileprivate func withNormalizedWindowsDriveLetter<T>(_ block: (Slice<UnsafeBufferPointer<UInt8>>?) -> T) -> T {
     return self.storage.withUTF8(of: .path) {
-      // dropFirst() due to the leading slash.
-      if let path = $0?.dropFirst(), PathComponentParser.isNormalizedWindowsDriveLetter(path.prefix(2)) {
-        return block(path.prefix(2))
+      if self.storage.structure.firstPathComponentLength == 3,
+        let firstComponent = $0?.dropFirst().prefix(2),  // dropFirst() due to the leading slash.
+        PathComponentParser.isNormalizedWindowsDriveLetter(firstComponent)
+      {
+        return block(firstComponent)
       } else {
         return block(nil)
       }
@@ -129,7 +134,7 @@ extension WebURL {
   }
 }
 
-extension PathParser {
+extension _PathParser {
 
   // FIXME: [swift]
   // Some/all of these should be local functions inside 'walkPathComponents', but writing it
@@ -226,7 +231,7 @@ extension PathParser {
   }
 
   /// Parses the given path string, optionally applied relative to the path of a base URL object, and yields the simplified list of path components.
-  /// These components are iterated in *reverse order*, and processed via the callback methods in `PathParser`.
+  /// These components are iterated in *reverse order*, and processed via the callback methods in `_PathParser`.
   ///
   /// To construct the simplified path string, start with an empty string. For each path component yielded by the parser,
   /// prepend `"/"` (ASCII forward slash) followed by the path component's contents, to that string. Note that path components from the input string may require
@@ -253,7 +258,8 @@ extension PathParser {
   ///                                           URL "file:///hello" results in "file:///hello" when parsed against the same base URL.
   ///                                           In both cases the path parser only sees the string "/hello" as its input.
   ///
-  fileprivate mutating func walkPathComponents(
+  @usableFromInline
+  internal mutating func walkPathComponents(
     pathString input: InputString,
     schemeKind: WebURL.SchemeKind,
     baseURL: WebURL?,
@@ -521,22 +527,31 @@ extension PathParser {
 
 // MARK: - PathMetrics.
 
-struct PathMetrics {
 
-  /// The precise length of the simplified, escaped path string, in bytes.
-  private(set) var requiredCapacity: Int
+/// A summary of statistics about a of the lexically-normalized, percent-encoded path string.
+///
+@usableFromInline
+internal struct PathMetrics {
+
+  /// The precise length of the path string, in bytes.
+  @usableFromInline
+  internal private(set) var requiredCapacity: Int
 
   /// The length of the first path component, in bytes, including its leading "/".
-  private(set) var firstComponentLength: Int
+  @usableFromInline
+  internal private(set) var firstComponentLength: Int
 
-  /// The number of components in the simplified path.
-  private(set) var numberOfComponents: Int
+  /// The number of components in the path.
+  @usableFromInline
+  internal private(set) var numberOfComponents: Int
 
-  /// Whether or not the simplified path must be prefixed with a path sigil if it is written to a URL without an authority sigil.
-  private(set) var requiresSigil: Bool
+  /// Whether or not the path must be prefixed with a path sigil when it is written to a URL which does not have an authority sigil.
+  @usableFromInline
+  internal private(set) var requiresPathSigil: Bool
 
-  /// Whether any components in the simplified path need percent-encoding.
-  private(set) var needsEscaping: Bool
+  /// Whether there is at least one component in the path which needs percent-encoding.
+  @usableFromInline
+  internal private(set) var needsPercentEncoding: Bool
 }
 
 extension PathMetrics {
@@ -545,54 +560,68 @@ extension PathMetrics {
   ///
   /// The metrics may also contain information about simplification/normalization steps which can be skipped when writing the path-string.
   ///
-  init<InputString>(
-    parsing input: InputString,
+  @inlinable
+  internal init<UTF8Bytes>(
+    parsing utf8: UTF8Bytes,
     schemeKind: WebURL.SchemeKind,
     baseURL: WebURL?,
     absolutePathsCopyWindowsDriveFromBase: Bool
-  ) where InputString: BidirectionalCollection, InputString.Element == UInt8 {
-    var parser = Parser<InputString>()
-    parser.walkPathComponents(
-      pathString: input, schemeKind: schemeKind, baseURL: baseURL,
-      absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase)
-    self = parser.metrics
-  }
+  ) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
-  private init() {
     self.requiredCapacity = 0
     self.firstComponentLength = 0
     self.numberOfComponents = 0
-    self.needsEscaping = false
-    self.requiresSigil = false
+    self.needsPercentEncoding = false
+    self.requiresPathSigil = false
+
+    var parser = _Parser<UTF8Bytes>(_emptyMetrics: self)
+    parser.walkPathComponents(
+      pathString: utf8, schemeKind: schemeKind, baseURL: baseURL,
+      absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase)
+
+    self = parser.metrics
   }
 
-  private struct Parser<InputString>: PathParser
-  where InputString: BidirectionalCollection, InputString.Element == UInt8 {
-    var metrics = PathMetrics()
+  @usableFromInline
+  internal struct _Parser<UTF8Bytes>: _PathParser
+  where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
-    mutating func visitInputPathComponent(
-      _ pathComponent: InputString.SubSequence, isWindowsDriveLetter: Bool
+    @usableFromInline
+    internal var metrics: PathMetrics
+
+    @inlinable
+    internal init(_emptyMetrics: PathMetrics) {
+      self.metrics = _emptyMetrics
+    }
+
+    @usableFromInline
+    internal typealias InputString = UTF8Bytes
+
+    @inlinable
+    internal mutating func visitInputPathComponent(
+      _ pathComponent: UTF8Bytes.SubSequence, isWindowsDriveLetter: Bool
     ) {
       metrics.numberOfComponents += 1
-      metrics.firstComponentLength = 1  // "/"
-      metrics.needsEscaping =
-        pathComponent.lazy.percentEncodedGroups(as: \.path).write { byteGroup in
-          metrics.firstComponentLength += byteGroup.count
-        } || metrics.needsEscaping
+      let (encodedLength, needsEncoding) = pathComponent.lazy.percentEncodedGroups(as: \.path).encodedLength
+      metrics.needsPercentEncoding = metrics.needsPercentEncoding || needsEncoding
+      metrics.firstComponentLength = 1 /* "/" */ + encodedLength
       metrics.requiredCapacity += metrics.firstComponentLength
     }
 
-    mutating func visitEmptyPathComponents(_ n: Int) {
+    @inlinable
+    internal mutating func visitEmptyPathComponents(_ n: Int) {
       metrics.numberOfComponents += n
       metrics.requiredCapacity += n
       metrics.firstComponentLength = 1
     }
 
-    mutating func visitPathSigil() {
-      metrics.requiresSigil = true
+    @inlinable
+    internal mutating func visitPathSigil() {
+      metrics.requiresPathSigil = true
     }
 
-    mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+    @inlinable
+    internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
       metrics.numberOfComponents += 1
       metrics.firstComponentLength = 1 /* "/" */ + pathComponent.count
       metrics.requiredCapacity += metrics.firstComponentLength
@@ -606,64 +635,87 @@ extension PathMetrics {
 
 extension UnsafeMutableBufferPointer where Element == UInt8 {
 
-  /// Initializes this buffer to the simplified, normalized path parsed from `input`.
+  /// Initializes this buffer to the simplified, normalized path parsed from `utf8`.
   ///
   /// Returns the number of bytes written. Use `PathMetrics` to calculate the required size.
   /// Currently, this method fails at runtime if the buffer is not precisely sized to fit the resulting path-string, so the returned value is always equal to `self.count`.
   ///
-  func writeNormalizedPath<InputString>(
-    parsing input: InputString,
+  @inlinable
+  internal func writeNormalizedPath<UTF8Bytes>(
+    parsing utf8: UTF8Bytes,
     schemeKind: WebURL.SchemeKind,
     baseURL: WebURL?,
     absolutePathsCopyWindowsDriveFromBase: Bool,
-    needsEscaping: Bool = true
-  ) -> Int where InputString: BidirectionalCollection, InputString.Element == UInt8 {
-    return PathWriter.writePath(
-      to: self, pathString: input, schemeKind: schemeKind, baseURL: baseURL,
-      ignoreWindowsDriveLetterFromInputString: absolutePathsCopyWindowsDriveFromBase,
-      needsEscaping: needsEscaping
+    needsPercentEncoding: Bool = true
+  ) -> Int where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
+    return _PathWriter.writePath(
+      to: self, pathString: utf8, schemeKind: schemeKind, baseURL: baseURL,
+      absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase,
+      needsPercentEncoding: needsPercentEncoding
     )
   }
 
-  /// A `PathParser` which writes a properly percent-encoded, normalised URL path string
+  /// A path parser which writes a properly percent-encoded, normalised URL path string
   /// in to a correctly-sized, uninitialized buffer. Use `PathMetrics` to calculate the buffer's required size.
   ///
-  private struct PathWriter<InputString>: PathParser
-  where InputString: BidirectionalCollection, InputString.Element == UInt8 {
-    private let buffer: UnsafeMutableBufferPointer<UInt8>
-    private var front: Int
-    private let needsEscaping: Bool
+  @usableFromInline
+  internal struct _PathWriter<UTF8Bytes>: _PathParser
+  where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
-    static func writePath(
+    @usableFromInline
+    internal let buffer: UnsafeMutableBufferPointer<UInt8>
+
+    @usableFromInline
+    internal private(set) var front: Int
+
+    @usableFromInline
+    internal let needsEscaping: Bool
+
+    @inlinable
+    internal static func writePath(
       to buffer: UnsafeMutableBufferPointer<UInt8>,
-      pathString input: InputString,
+      pathString input: UTF8Bytes,
       schemeKind: WebURL.SchemeKind,
       baseURL: WebURL?,
-      ignoreWindowsDriveLetterFromInputString: Bool,
-      needsEscaping: Bool = true
+      absolutePathsCopyWindowsDriveFromBase: Bool,
+      needsPercentEncoding: Bool = true
     ) -> Int {
-      // Checking this now allows the implementation to use `.baseAddress.unsafelyUnwrapped`.
+      // Checking this now allows the implementation to safely use `.baseAddress.unsafelyUnwrapped`.
       precondition(buffer.baseAddress != nil)
-      var visitor = PathWriter(buffer: buffer, front: buffer.endIndex, needsEscaping: needsEscaping)
-      visitor.walkPathComponents(
+      var writer = _PathWriter(_doNotUse: buffer, front: buffer.endIndex, needsPercentEncoding: needsPercentEncoding)
+      writer.walkPathComponents(
         pathString: input,
         schemeKind: schemeKind,
         baseURL: baseURL,
-        absolutePathsCopyWindowsDriveFromBase: ignoreWindowsDriveLetterFromInputString
+        absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase
       )
       // Checking this now allows the implementation to be safe when omitting bounds checks.
-      precondition(visitor.front == 0, "Buffer was incorrectly sized")
-      return buffer.count - visitor.front
+      precondition(writer.front == 0, "Buffer was incorrectly sized")
+      return buffer.count - writer.front
     }
 
-    private mutating func prependSlash(_ n: Int = 1) {
-      front = buffer.index(front, offsetBy: -1 * n)
+    /// **Do not use**. Use the `_PathWriter.writePath(...)` static method instead.
+    ///
+    @inlinable
+    internal init(_doNotUse buffer: UnsafeMutableBufferPointer<UInt8>, front: Int, needsPercentEncoding: Bool) {
+      self.buffer = buffer
+      self.front = front
+      self.needsEscaping = needsPercentEncoding
+    }
+
+    @usableFromInline
+    internal typealias InputString = UTF8Bytes
+
+    @inlinable
+    internal mutating func prependSlash(_ n: Int = 1) {
+      front -= n
       buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
         .initialize(repeating: ASCII.forwardSlash.codePoint, count: n)
     }
 
-    fileprivate mutating func visitInputPathComponent(
-      _ pathComponent: InputString.SubSequence, isWindowsDriveLetter: Bool
+    @inlinable
+    internal mutating func visitInputPathComponent(
+      _ pathComponent: UTF8Bytes.SubSequence, isWindowsDriveLetter: Bool
     ) {
       guard pathComponent.isEmpty == false else {
         prependSlash()
@@ -671,7 +723,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       }
       guard isWindowsDriveLetter == false else {
         assert(pathComponent.count == 2)
-        front = buffer.index(front, offsetBy: -2)
+        front -= 2
         buffer.baseAddress.unsafelyUnwrapped.advanced(by: front).initialize(to: pathComponent[pathComponent.startIndex])
         buffer.baseAddress.unsafelyUnwrapped.advanced(by: front &+ 1).initialize(to: ASCII.colon.codePoint)
         prependSlash()
@@ -692,7 +744,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         }
       } else {
         let count = pathComponent.count
-        let newFront = buffer.index(front, offsetBy: -1 * count)
+        let newFront = front - count
         _ = UnsafeMutableBufferPointer(
           start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
           count: count
@@ -702,16 +754,19 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       prependSlash()
     }
 
-    fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
+    @inlinable
+    internal mutating func visitEmptyPathComponents(_ n: Int) {
       prependSlash(n)
     }
 
-    fileprivate func visitPathSigil() {
+    @inlinable
+    internal func visitPathSigil() {
       // URLWriter is reponsible for writing its own path sigil.
     }
 
-    fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
-      front = buffer.index(front, offsetBy: -1 * pathComponent.count)
+    @inlinable
+    internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+      front -= pathComponent.count
       buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
         .initialize(from: pathComponent.baseAddress!, count: pathComponent.count)
       prependSlash()
@@ -732,7 +787,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 ///
 /// This type cannot be initialized directly. To validate a path string, use the static `.validate` method.
 ///
-struct PathStringValidator<InputString, Callback>: PathParser
+struct PathStringValidator<InputString, Callback>: _PathParser
 where InputString: BidirectionalCollection, InputString.Element == UInt8, Callback: URLParserCallback {
   private var callback: Callback
   private let path: InputString
@@ -753,25 +808,25 @@ where InputString: BidirectionalCollection, InputString.Element == UInt8, Callba
       absolutePathsCopyWindowsDriveFromBase: false)
   }
 
-  fileprivate mutating func visitInputPathComponent(
+  mutating func visitInputPathComponent(
     _ pathComponent: InputString.SubSequence, isWindowsDriveLetter: Bool
   ) {
     validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
   }
 
-  fileprivate mutating func visitEmptyPathComponents(_ n: Int) {
+  mutating func visitEmptyPathComponents(_ n: Int) {
     // Nothing to do.
   }
 
-  fileprivate func visitPathSigil() {
+  func visitPathSigil() {
     // Nothing to do.
   }
 
-  fileprivate mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
     assertionFailure("Should never be invoked without a base URL")
   }
 
-  fileprivate mutating func visitValidationError(_ error: ValidationError) {
+  mutating func visitValidationError(_ error: ValidationError) {
     callback.validationError(error)
   }
 }

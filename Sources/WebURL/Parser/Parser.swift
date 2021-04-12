@@ -391,9 +391,9 @@ extension ParsedURLString.ProcessedMapping {
         )
       assert(pathMetrics.requiredCapacity > 0)
       writer.writePathMetricsHint(pathMetrics)
-      writer.writeHint(.path, needsEscaping: pathMetrics.needsEscaping)
+      writer.writeHint(.path, needsEscaping: pathMetrics.needsPercentEncoding)
 
-      if pathMetrics.requiresSigil && (hasAuthority == false) {
+      if pathMetrics.requiresPathSigil && (hasAuthority == false) {
         writer.writePathSigil()
       }
       writer.writeUnsafePath(
@@ -405,7 +405,7 @@ extension ParsedURLString.ProcessedMapping {
           schemeKind: schemeKind,
           baseURL: info.componentsToCopyFromBase.contains(.path) ? baseURL! : nil,
           absolutePathsCopyWindowsDriveFromBase: info.absolutePathsCopyWindowsDriveFromBase,
-          needsEscaping: pathMetrics.needsEscaping
+          needsPercentEncoding: pathMetrics.needsPercentEncoding
         )
       }
 
