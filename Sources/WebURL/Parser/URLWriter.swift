@@ -459,7 +459,8 @@ struct UnsafePresizedBufferWriter: URLWriter {
 
 /// An interface through which `ParsedHost` writes its contents.
 ///
-protocol HostnameWriter {
+@usableFromInline
+internal protocol HostnameWriter {
 
   /// Writes the bytes provided by `writerFunc`.
   /// The bytes will already be percent-encoded/IDNA-transformed and not include any separators.
@@ -490,18 +491,38 @@ extension URLWriter {
   }
 }
 
-struct HostnameLengthCounter: HostnameWriter {
-  var length: Int = 0
-  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+@usableFromInline
+internal struct HostnameLengthCounter: HostnameWriter {
+
+  @usableFromInline
+  internal private(set) var length: Int = 0
+
+  @inlinable
+  internal init() {
+    self.length = 0
+  }
+
+  @inlinable
+  internal mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
     writerFunc { piece in
       length += piece.count
     }
   }
 }
 
-struct UnsafeBufferHostnameWriter: HostnameWriter {
-  var buffer: UnsafeMutableBufferPointer<UInt8>
-  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+@usableFromInline
+internal struct UnsafeBufferHostnameWriter: HostnameWriter {
+
+  @usableFromInline
+  internal private(set) var buffer: UnsafeMutableBufferPointer<UInt8>
+
+  @inlinable
+  internal init(buffer: UnsafeMutableBufferPointer<UInt8>) {
+    self.buffer = buffer
+  }
+
+  @inlinable
+  internal mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
     writerFunc { piece in
       let n = buffer.initialize(from: piece).1
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: n))

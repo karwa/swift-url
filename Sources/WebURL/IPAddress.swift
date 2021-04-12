@@ -443,7 +443,8 @@ extension IPv6Address {
     }
   }
 
-  var serializedDirect: (buffer: (UInt64, UInt64, UInt64, UInt64, UInt64), count: UInt8) {
+  @usableFromInline
+  internal var serializedDirect: (buffer: (UInt64, UInt64, UInt64, UInt64, UInt64), count: UInt8) {
 
     // Maximum length of an IPv6 address = 39 bytes.
     // Note that this differs from libc's INET6_ADDRSTRLEN which is 46 because inet_ntop writes
@@ -972,7 +973,8 @@ extension IPv4Address {
     }
   }
 
-  var serializedDirect: (buffer: (UInt64, UInt64), count: UInt8) {
+  @usableFromInline
+  internal var serializedDirect: (buffer: (UInt64, UInt64), count: UInt8) {
 
     // The maximum length of an IPv4 address in decimal notation ("XXX.XXX.XXX.XXX") is 15 bytes.
     // We write one-too-many separators and chop it off at the end, so 16 bytes are needed.

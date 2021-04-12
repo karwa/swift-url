@@ -363,6 +363,16 @@ extension LazilyPercentEncodedGroups {
     }
     return didEncode
   }
+
+  /// Returns the total length of the encoded UTF-8 bytes,
+  /// and whether or not any code-units were altered by the `EncodeSet`.
+  ///
+  @inlinable @inline(__always)
+  internal var encodedLength: (count: Int, needsEncoding: Bool) {
+    var count = 0
+    let needsEncoding = write { count += $0.count }
+    return (count, needsEncoding)
+  }
 }
 
 // Eager encoding to String.
