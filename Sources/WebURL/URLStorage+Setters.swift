@@ -877,18 +877,16 @@ extension URLStorage {
       return removeSubrange(existingFragment, newStructure: newStructure)
     }
 
-    var bytesToWrite = 1  // for prefix.
-    let needsEncoding = newBytes.lazy.percentEncodedGroups(as: encodeSet).write { bytesToWrite += $0.count }
-    let subrangeToReplace = oldStructure.rangeForReplacingCodeUnits(of: component)
+    let (newLength, needsEncoding) = newBytes.lazy.percentEncodedGroups(as: encodeSet).encodedLength
+
+    let bytesToWrite = 1 /* prefix char */ + newLength
+    let oldRange = oldStructure.rangeForReplacingCodeUnits(of: component)
+
     var newStructure = oldStructure
     newStructure[keyPath: lengthKey] = bytesToWrite
     adjustStructure(&newStructure)
 
-    return replaceSubrange(
-      subrangeToReplace,
-      withUninitializedSpace: bytesToWrite,
-      newStructure: newStructure
-    ) { dest in
+    return replaceSubrange(oldRange, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       dest[0] = prefix.codePoint
       var bytesWritten = 1
       if needsEncoding {
