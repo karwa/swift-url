@@ -45,7 +45,7 @@ extension WebURL.SchemeKind {
   ///     - schemeContent: The scheme content, as a sequence of UTF8-encoded bytes.
   ///
   @inlinable
-  internal init<Bytes>(parsing schemeContent: Bytes) where Bytes: Sequence, Bytes.Element == UInt8 {
+  internal init<UTF8Bytes>(parsing schemeContent: UTF8Bytes) where UTF8Bytes: Sequence, UTF8Bytes.Element == UInt8 {
 
     if let contiguouslyParsed = schemeContent.withContiguousStorageIfAvailable({ buffer -> Self in
       guard buffer.count != 0 else { return .other }
@@ -157,7 +157,8 @@ extension WebURL.SchemeKind {
   ///
   /// URLs with special schemes may have additional constraints or normalisation rules.
   ///
-  var isSpecial: Bool {
+  @inlinable
+  internal var isSpecial: Bool {
     if case .other = self { return false }
     return true
   }
@@ -166,7 +167,8 @@ extension WebURL.SchemeKind {
   ///
   /// Only some special schemes have known default port numbers.
   ///
-  var defaultPort: UInt16? {
+  @inlinable
+  internal var defaultPort: UInt16? {
     switch self {
     case .http, .ws: return 80
     case .https, .wss: return 443
@@ -175,20 +177,36 @@ extension WebURL.SchemeKind {
     }
   }
 
-  /// Returns whether or not the given sequence of bytes are a UTF8-encoded string representation
-  /// of this scheme's default port number. If this scheme does not have a default port number, this method returns `false`.
+  /// Returns whether or not the given sequence of bytes are a UTF8-encoded string representation of this scheme's default port number.
+  /// If this scheme does not have a default port number, this method returns `false`.
   ///
   /// Note that the port string's leading ":" separator must not be included.
   ///
-  func isDefaultPortString<Bytes>(_ bytes: Bytes) -> Bool where Bytes: Sequence, Bytes.Element == UInt8 {
-    var iter = bytes.lazy.map { ASCII($0) ?? .null }.makeIterator()
+  @inlinable
+  internal func isDefaultPort<UTF8Bytes>(
+    utf8: UTF8Bytes
+  ) -> Bool where UTF8Bytes: Sequence, UTF8Bytes.Element == UInt8 {
+
+    var buffer: UInt32 = 0
+
+    var bytesConsumed = 0 as UInt8
+    var iter = utf8.makeIterator()
+    while let nextByte = iter.next(), bytesConsumed < 4 {
+      buffer &<<= 8
+      buffer |= UInt32(nextByte)
+      bytesConsumed &+= 1
+    }
+    guard iter.next() == nil else {
+      return false
+    }
+
     switch self {
     case .http, .ws:
-      return iter.next() == .n8 && iter.next() == .n0 && iter.next() == nil
+      return buffer == UInt32(ASCII.n8.codePoint) << 8 | UInt32(ASCII.n0.codePoint)
     case .https, .wss:
-      return iter.next() == .n4 && iter.next() == .n4 && iter.next() == .n3 && iter.next() == nil
+      return buffer == UInt32(ASCII.n4.codePoint) << 16 | UInt32(ASCII.n4.codePoint) << 8 | UInt32(ASCII.n3.codePoint)
     case .ftp:
-      return iter.next() == .n2 && iter.next() == .n1 && iter.next() == nil
+      return buffer == UInt32(ASCII.n2.codePoint) << 8 | UInt32(ASCII.n1.codePoint)
     default:
       return false
     }

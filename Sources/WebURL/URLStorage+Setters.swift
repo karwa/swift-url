@@ -23,9 +23,10 @@ extension URLStorage {
   /// Attempts to set the scheme component to the given UTF8-encoded string.
   /// The new value may contain a trailing colon (e.g. `http`, `http:`). Colons are only allowed as the last character of the string.
   ///
-  mutating func setScheme<Input>(
-    to newValue: Input
-  ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
+  @inlinable
+  internal mutating func setScheme<UTF8Bytes>(
+    to newValue: UTF8Bytes
+  ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     // Check that the new value is a valid scheme.
     guard let (idx, newSchemeKind) = parseScheme(newValue),
@@ -65,7 +66,7 @@ extension URLStorage {
     withUTF8(of: .port) {
       guard let portBytes = $0 else { return }
       assert(portBytes.count > 1, "invalid URLStructure: port must either be nil or >1 character")
-      if newStructure.schemeKind.isDefaultPortString(portBytes.dropFirst()) {
+      if newStructure.schemeKind.isDefaultPort(utf8: portBytes.dropFirst()) {
         newStructure.portLength = 0
         commands.append(.remove(subrange: oldStructure.rangeForReplacingCodeUnits(of: .port)))
       }

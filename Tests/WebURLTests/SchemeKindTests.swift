@@ -63,21 +63,22 @@ final class SchemeKindTests: XCTestCase {
       if let defaultPort = expectedDefaultPort {
         // isDefaultPortString should only return 'true' for the literal port number as an ASCII string.
         let serialized = String(defaultPort)
-        XCTAssertTrue(schemeKind.isDefaultPortString(serialized.utf8))
-        XCTAssertFalse(schemeKind.isDefaultPortString((":" + serialized).utf8))
-        XCTAssertFalse(schemeKind.isDefaultPortString((serialized + "\n").utf8))
-        XCTAssertFalse(schemeKind.isDefaultPortString((serialized + "🦩").utf8))
+        XCTAssertTrue(schemeKind.isDefaultPort(utf8: serialized.utf8))
+        XCTAssertFalse(schemeKind.isDefaultPort(utf8: (":" + serialized).utf8))
+        XCTAssertFalse(schemeKind.isDefaultPort(utf8: (serialized + "0").utf8))
+        XCTAssertFalse(schemeKind.isDefaultPort(utf8: (serialized + "\n").utf8))
+        XCTAssertFalse(schemeKind.isDefaultPort(utf8: (serialized + "🦩").utf8))
         // Schemes with default ports are special.
         XCTAssertTrue(schemeKind.isSpecial)
       } else {
         // If there is no default port, everything should return 'false'.
-        XCTAssertFalse(schemeKind.isDefaultPortString("80".utf8))
-        XCTAssertFalse(schemeKind.isDefaultPortString(":80".utf8))
-        XCTAssertFalse(schemeKind.isDefaultPortString(":80\n".utf8))
-        XCTAssertFalse(schemeKind.isDefaultPortString("🦩".utf8))
+        XCTAssertFalse(schemeKind.isDefaultPort(utf8: "80".utf8))
+        XCTAssertFalse(schemeKind.isDefaultPort(utf8: ":80".utf8))
+        XCTAssertFalse(schemeKind.isDefaultPort(utf8: ":80\n".utf8))
+        XCTAssertFalse(schemeKind.isDefaultPort(utf8: "🦩".utf8))
       }
-      XCTAssertFalse(schemeKind.isDefaultPortString("".utf8))
-      XCTAssertFalse(schemeKind.isDefaultPortString("\n".utf8))
+      XCTAssertFalse(schemeKind.isDefaultPort(utf8: "".utf8))
+      XCTAssertFalse(schemeKind.isDefaultPort(utf8: "\n".utf8))
     }
   }
 }
