@@ -45,7 +45,8 @@ extension ParsedHost {
         callback.validationError(.unclosedIPv6Address)
         return nil
       }
-      guard let result = IPv6Address.parse(utf8: ipv6Slice, callback: &callback) else {
+      guard let result = IPv6Address(utf8: ipv6Slice) else {
+        callback.validationError(.invalidIPv6Address)
         return nil
       }
       self = .ipv6Address(result)
@@ -82,13 +83,12 @@ extension ParsedHost {
     }
     let asciiDomain = domain
 
-    var ipv4Error = LastValidationError()
-    switch IPv4Address.parse(utf8: asciiDomain, callback: &ipv4Error) {
+    switch IPv4Address.parse(utf8: asciiDomain) {
     case .success(let address):
       self = .ipv4Address(address)
       return
     case .failure:
-      callback.validationError(ipv4Error.error!)
+      callback.validationError(.invalidIPv4Address)
       return nil
     case .notAnIPAddress:
       break
