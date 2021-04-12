@@ -88,12 +88,14 @@ extension URLStorage {
   /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
   ///
-  mutating func setUsername<Input>(
-    to newValue: Input?
-  ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
+  @inlinable
+  internal mutating func setUsername<UTF8Bytes>(
+    to newValue: UTF8Bytes?
+  ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     let oldStructure = header.structure
 
+    // Check that the operation is semantically valid for the existing structure.
     if oldStructure.cannotHaveCredentialsOrPort {
       return (AnyURLStorage(self), .cannotHaveCredentialsOrPort)
     }
@@ -110,20 +112,21 @@ extension URLStorage {
       return (removeSubrange(toRemove, newStructure: newStructure).newStorage, nil)
     }
 
-    let needsEncoding = newValue.lazy.percentEncodedGroups(as: \.userInfo).write {
-      newStructure.usernameLength += $0.count
-    }
-    let shouldAddSeparator = (oldStructure.hasCredentialSeparator == false)
-    let bytesToWrite = newStructure.usernameLength + (shouldAddSeparator ? 1 : 0)
-    let toReplace = oldStructure.rangeForReplacingCodeUnits(of: .username)
-    let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
+    let (newLength, needsEncoding) = newValue.lazy.percentEncodedGroups(as: \.userInfo).encodedLength
+    newStructure.usernameLength = newLength
+
+    let oldRange = oldStructure.rangeForReplacingCodeUnits(of: .username)
+    let addSeparator = (oldStructure.hasCredentialSeparator == false)
+    let bytesToWrite = newLength + (addSeparator ? 1 : 0)
+
+    let result = replaceSubrange(oldRange, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       var bytesWritten = 0
       if needsEncoding {
         bytesWritten += dest.initialize(from: newValue.lazy.percentEncoded(as: \.userInfo)).1
       } else {
         bytesWritten += dest.initialize(from: newValue).1
       }
-      if shouldAddSeparator {
+      if addSeparator {
         dest[bytesWritten] = ASCII.commercialAt.codePoint
         bytesWritten += 1
       }
@@ -137,12 +140,14 @@ extension URLStorage {
   /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
   ///
-  mutating func setPassword<Input>(
-    to newValue: Input?
-  ) -> (AnyURLStorage, URLSetterError?) where Input: Collection, Input.Element == UInt8 {
+  @inlinable
+  internal mutating func setPassword<UTF8Bytes>(
+    to newValue: UTF8Bytes?
+  ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     let oldStructure = header.structure
 
+    // Check that the operation is semantically valid for the existing structure.
     if oldStructure.cannotHaveCredentialsOrPort {
       return (AnyURLStorage(self), .cannotHaveCredentialsOrPort)
     }
@@ -159,15 +164,15 @@ extension URLStorage {
       return (removeSubrange(toRemove, newStructure: newStructure).newStorage, nil)
     }
 
-    newStructure.passwordLength = 1  // leading ":"
-    let needsEncoding = newValue.lazy.percentEncodedGroups(as: \.userInfo).write {
-      newStructure.passwordLength += $0.count
-    }
-    let bytesToWrite = newStructure.passwordLength + 1  // Always write the trailing "@".
-    var toReplace = oldStructure.rangeForReplacingCodeUnits(of: .password)
-    toReplace = toReplace.lowerBound..<toReplace.upperBound + (oldStructure.hasCredentialSeparator ? 1 : 0)
+    let (newLength, needsEncoding) = newValue.lazy.percentEncodedGroups(as: \.userInfo).encodedLength
+    newStructure.passwordLength = 1 /* : */ + newLength
 
-    let result = replaceSubrange(toReplace, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
+    // Always write the trailing '@'.
+    var oldRange = oldStructure.rangeForReplacingCodeUnits(of: .password)
+    oldRange = oldRange.lowerBound..<oldRange.upperBound + (oldStructure.hasCredentialSeparator ? 1 : 0)
+    let bytesToWrite = newStructure.passwordLength + 1 /* @ */
+
+    let result = replaceSubrange(oldRange, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       dest[0] = ASCII.colon.codePoint
       var bytesWritten = 1
       if needsEncoding {
@@ -831,7 +836,7 @@ extension URLStorage {
   ///   - adjustStructure: A closure which allows setting additional properties of the structure to be tweaked before writing.
   ///                      This closure is invoked after the structure's `lengthKey` has been updated with the component's new length.
   ///
-  @usableFromInline  // TODO: [inlinable]: Make inlinable once PercentEncodeSet is public.
+  @inlinable
   internal mutating func setSimpleComponent<UTF8Bytes, EncodeSet>(
     _ component: WebURL.Component,
     to newValue: UTF8Bytes?,
