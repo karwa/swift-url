@@ -48,7 +48,8 @@ extension UnsafeRawBufferPointer {
   /// This is equivalent to calling `UnsafeRawPointer.assumingMemoryBound` on this buffer's base address, and dividing this buffer's
   /// `count` by the `stride` of the given type. Be sure to do lots of research on the above method before even thinking about using this.
   ///
-  fileprivate func assumingMemoryBound<T>(to: T.Type) -> UnsafeBufferPointer<T> {
+  @inlinable @inline(__always)
+  internal func _assumingMemoryBound<T>(to: T.Type) -> UnsafeBufferPointer<T> {
     guard let base = baseAddress else {
       return .init(start: nil, count: 0)
     }
@@ -78,7 +79,8 @@ extension UnsafeMutableRawBufferPointer {
   /// This is equivalent to calling `UnsafeMutableRawPointer.assumingMemoryBound` on this buffer's base address, and dividing this buffer's
   /// `count` by the `stride` of the given type. Be sure to do lots of research on the above method before even thinking about using this.
   ///
-  fileprivate func assumingMemoryBound<T>(to: T.Type) -> UnsafeMutableBufferPointer<T> {
+  @inlinable @inline(__always)
+  internal func _assumingMemoryBound<T>(to: T.Type) -> UnsafeMutableBufferPointer<T> {
     guard let base = baseAddress else {
       return .init(start: nil, count: 0)
     }
@@ -88,30 +90,33 @@ extension UnsafeMutableRawBufferPointer {
 
 // Arity 4:
 
-func withUnsafeMutableBufferPointerToElements<T, Result>(
+@inlinable @inline(__always)
+internal func withUnsafeMutableBufferPointerToElements<T, Result>(
   tuple: inout (T, T, T, T), _ body: (inout UnsafeMutableBufferPointer<T>) -> Result
 ) -> Result {
   return withUnsafeMutableBytes(of: &tuple) {
-    var ptr = $0.assumingMemoryBound(to: T.self)
+    var ptr = $0._assumingMemoryBound(to: T.self)
     return body(&ptr)
   }
 }
 
 // Arity 8:
 
-func withUnsafeBufferPointerToElements<T, Result>(
+@inlinable @inline(__always)
+internal func withUnsafeBufferPointerToElements<T, Result>(
   tuple: (T, T, T, T, T, T, T, T), _ body: (UnsafeBufferPointer<T>) -> Result
 ) -> Result {
   return withUnsafeBytes(of: tuple) {
-    return body($0.assumingMemoryBound(to: T.self))
+    return body($0._assumingMemoryBound(to: T.self))
   }
 }
 
-func withUnsafeMutableBufferPointerToElements<T, Result>(
+@inlinable @inline(__always)
+internal func withUnsafeMutableBufferPointerToElements<T, Result>(
   tuple: inout (T, T, T, T, T, T, T, T), _ body: (inout UnsafeMutableBufferPointer<T>) -> Result
 ) -> Result {
   return withUnsafeMutableBytes(of: &tuple) {
-    var ptr = $0.assumingMemoryBound(to: T.self)
+    var ptr = $0._assumingMemoryBound(to: T.self)
     return body(&ptr)
   }
 }

@@ -18,22 +18,8 @@
 /// validation error typically describes the issue which caused it to fail.
 ///
 @usableFromInline
-protocol URLParserCallback: IPv6AddressParserCallback, IPv4AddressParserCallback {
+protocol URLParserCallback {
   mutating func validationError(_ error: ValidationError)
-}
-
-extension URLParserCallback {
-
-  @inlinable @inline(__always)
-  mutating func validationError(ipv4 error: IPv4Address.ValidationError) {
-    let wrapped = ValidationError.AnyHostParserError.ipv4AddressError(error)
-    validationError(.hostParserError(wrapped))
-  }
-  @inlinable @inline(__always)
-  mutating func validationError(ipv6 error: IPv6Address.ValidationError) {
-    let wrapped = ValidationError.AnyHostParserError.ipv6AddressError(error)
-    validationError(.hostParserError(wrapped))
-  }
 }
 
 /// A `URLParserCallback` which simply ignores all validation errors.
@@ -69,22 +55,6 @@ struct CollectValidationErrors: URLParserCallback {
 @usableFromInline
 struct ValidationError: Equatable {
   private var code: UInt8
-  @usableFromInline private(set) var hostParserError: AnyHostParserError? = nil
-
-  @usableFromInline
-  enum AnyHostParserError: Equatable, CustomStringConvertible {
-    case ipv4AddressError(IPv4Address.ValidationError)
-    case ipv6AddressError(IPv6Address.ValidationError)
-
-    @usableFromInline var description: String {
-      switch self {
-      case .ipv4AddressError(let error):
-        return error.description
-      case .ipv6AddressError(let error):
-        return error.description
-      }
-    }
-  }
 }
 
 // Parser errors and descriptions.
@@ -115,19 +85,17 @@ extension ValidationError: CustomStringConvertible {
   internal static var unexpectedEmptyPath:                Self { Self(code: 19) }
   internal static var invalidURLCodePoint:                Self { Self(code: 20) }
   internal static var unescapedPercentSign:               Self { Self(code: 21) }
-  // FIXME: lacking description.
+  // FIXME: lacking descriptions.
   internal static var unclosedIPv6Address:                Self { Self(code: 22) }
   internal static var domainToASCIIFailure:               Self { Self(code: 23) }
   internal static var domainToASCIIEmptyDomainFailure:    Self { Self(code: 24) }
   internal static var hostForbiddenCodePoint:             Self { Self(code: 25) }
+  internal static var invalidIPv6Address:                 Self { Self(code: 26) }
+  internal static var invalidIPv4Address:                 Self { Self(code: 27) }
   // This one is not in the spec.
   internal static var _baseURLRequired:                   Self { Self(code: 99) }
   internal static var _invalidUTF8:                       Self { Self(code: 98) }
-  // Wrapped errors from the IPAddress parsers.
-  internal static var hostParserError_errorCode: UInt8 = 97
-  @usableFromInline static func hostParserError(_ err: AnyHostParserError) -> Self {
-      Self(code: hostParserError_errorCode, hostParserError: err)
-  }
+
 
   public var description: String {
     switch self {
@@ -280,8 +248,6 @@ extension ValidationError: CustomStringConvertible {
       return #"""
         A base URL is required.
         """#
-    case _ where self.code == Self.hostParserError_errorCode:
-      return self.hostParserError!.description
     default:
       return "??"
     }

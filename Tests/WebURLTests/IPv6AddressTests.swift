@@ -30,13 +30,6 @@ extension Array {
   }
 }
 
-extension ValidationError {
-  fileprivate var ipv6Error: IPv6Address.ValidationError? {
-    guard case .some(.ipv6AddressError(let error)) = self.hostParserError else { return nil }
-    return error
-  }
-}
-
 final class IPv6AddressTests: XCTestCase {
 
   func testBasic() {
@@ -144,7 +137,7 @@ final class IPv6AddressTests: XCTestCase {
 
   func testInvalid() {
 
-    let invalidAddresses: [(String, IPv6Address.ValidationError)] = [
+    let invalidAddresses: [(String, IPv6Address.ParserError)] = [
       // - Invalid piece.
       ("12345::", .unexpectedCharacter),
       ("FG::", .unexpectedCharacter),
@@ -156,33 +149,40 @@ final class IPv6AddressTests: XCTestCase {
       ("42:", .unexpectedTrailingColon),
 
       // - Invalid IPv4 piece.
-      ("::ffff:555.168.0.1", .invalidIPv4Address(.pieceOverflows)),
-      ("::ffff:192.168.0.1.8", .invalidIPv4Address(.tooManyPieces)),
-      // TODO: Is it worth having a separate "piece begins with invalid character" error?
-      ("::ffff:192.168.a.1", .invalidIPv4Address(.pieceBeginsWithInvalidCharacter)),
-      // TODO: Improve this. "unexpectedPeriod" should be more IPv4-related.
+
+      ("::ffff:555.168.0.1", .invalidIPv4Address),
+      ("::ffff:192.168.0.1.8", .invalidIPv4Address),
+      ("::ffff:192.168.a.1", .invalidIPv4Address),
+      ("::ffff:192.168.0.01", .invalidIPv4Address),
+      ("::ffff:192.168.0xf.1", .invalidIPv4Address),
+      ("::ffff:192.168.0.1.", .invalidIPv4Address),  // trailing dot
       ("::ffff:.168.0.1", .unexpectedPeriod),
-      ("::ffff:192.168.0.01", .invalidIPv4Address(.unsupportedRadix)),
-      ("::ffff:192.168.0xf.1", .invalidIPv4Address(.invalidCharacter)),
-      // TODO: (Maybe) Improve this.
-      ("::ffff:192.168.0.1.", .invalidIPv4Address(.tooManyPieces)),  // trailing dot
       // TODO: Improve this. Should be: "invalidPositionForIPv4Address"
-      ("0001:0002:0003:0004:192.168.0.1:0006:0007:0008", .invalidIPv4Address(.invalidCharacter)),
+      ("0001:0002:0003:0004:192.168.0.1:0006:0007:0008", .invalidIPv4Address),
 
       // - Invalid number of pieces.
       ("0001:0002:0003:0004:0005", .notEnoughPieces),
       ("0001:0002:0003:0004:0005:0006:0007:0008:0009", .tooManyPieces),
     ]
 
-    for (string, expectedError) in invalidAddresses {
-      do {
-        let addr = try IPv6Address(reportingErrors: string)
-        XCTFail("Invalid address '\(string)' was parsed as '\(addr)")
-      } catch let error as IPv6Address.ValidationError {
-        XCTAssertEqual(error, expectedError, "Unexpected error for invalid address '\(string)'")
-      } catch {
-        XCTFail("Unexpected error type: \(error)")
+    struct LastParserError: IPAddressParserCallback {
+      var error: IPv6Address.ParserError?
+      mutating func validationError(ipv6 error: IPv6Address.ParserError) {
+        self.error = error
       }
+      func validationError(ipv4 error: IPv4Address.ParserError) {
+        XCTFail("Unexpected IPv4 error: \(error)")
+      }
+    }
+
+    for (string, expectedError) in invalidAddresses {
+      var callback = LastParserError()
+      if let addr = IPv6Address.parse(utf8: string.utf8, callback: &callback) {
+        XCTFail("Invalid address '\(string)' was parsed as '\(addr)")
+      }
+      XCTAssertEqual(
+        callback.error?.errorCode, expectedError.errorCode, "Unexpected error for invalid address '\(string)'"
+      )
     }
   }
 }
