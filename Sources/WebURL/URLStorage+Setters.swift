@@ -322,21 +322,41 @@ extension URLStorage {
 
   /// Attempts to set the port component to the given value. A value of `nil` removes the port.
   ///
-  mutating func setPort(
+  @inlinable
+  internal mutating func setPort(
     to newValue: UInt16?
   ) -> (AnyURLStorage, URLSetterError?) {
 
+    var newValue = newValue
     let oldStructure = header.structure
+
+    // Check that the operation is semantically valid for the existing structure.
     guard oldStructure.cannotHaveCredentialsOrPort == false else {
       return (AnyURLStorage(self), .cannotHaveCredentialsOrPort)
     }
 
-    var newValue = newValue
+    // The operation is valid. Calculate the new structure and replace the code-units.
+    // This is a pretty straightforward code-unit replacement, so it can go through setSimpleComponent.
     if newValue == oldStructure.schemeKind.defaultPort {
       newValue = nil
     }
 
-    guard let newPort = newValue else {
+    if let newPort = newValue {
+      // TODO: [performance]: More efficient UInt16 serialisation.
+      var serialized = String(newPort)
+      let result = serialized.withUTF8 { ptr -> AnyURLStorage in
+        assert(ptr.isEmpty == false)
+        return setSimpleComponent(
+          .port,
+          to: ptr,
+          prefix: .colon,
+          lengthKey: \.portLength,
+          encodeSet: \.alreadyEncoded
+        ).newStorage
+      }
+      return (result, nil)
+
+    } else {
       let result = setSimpleComponent(
         .port,
         to: UnsafeBufferPointer?.none,
@@ -346,19 +366,6 @@ extension URLStorage {
       ).newStorage
       return (result, nil)
     }
-    // TODO: More efficient UInt16 serialisation.
-    var serialized = String(newPort)
-    let result = serialized.withUTF8 { ptr -> AnyURLStorage in
-      assert(ptr.isEmpty == false)
-      return setSimpleComponent(
-        .port,
-        to: ptr,
-        prefix: .colon,
-        lengthKey: \.portLength,
-        encodeSet: \.alreadyEncoded
-      ).newStorage
-    }
-    return (result, nil)
   }
 }
 
@@ -435,9 +442,10 @@ extension URLStorage {
   ///
   /// A value of `nil` removes the query.
   ///
-  mutating func setQuery<Input>(
-    to newValue: Input?
-  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
+  @inlinable
+  internal mutating func setQuery<UTF8Bytes>(
+    to newValue: UTF8Bytes?
+  ) -> AnyURLStorage where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     if self.header.structure.schemeKind.isSpecial {
       return setSimpleComponent(
@@ -447,7 +455,7 @@ extension URLStorage {
         lengthKey: \.queryLength,
         encodeSet: \.query_special,
         adjustStructure: { structure in
-          // Empty and nil queries are considered form-encoded (i.e. they do not need to be re-encoded).
+          // Empty and nil queries are considered form-encoded (in that they do not need to be re-encoded).
           structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
         }
       ).newStorage
@@ -467,9 +475,10 @@ extension URLStorage {
 
   /// Set the query component to the given UTF8-encoded string, assuming that the string is already `application/x-www-form-urlencoded`.
   ///
-  mutating func setQuery<Input>(
-    toKnownFormEncoded newValue: Input?
-  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
+  @inlinable
+  internal mutating func setQuery<UTF8Bytes>(
+    toKnownFormEncoded newValue: UTF8Bytes?
+  ) -> AnyURLStorage where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     return setSimpleComponent(
       .query,
@@ -487,9 +496,10 @@ extension URLStorage {
   ///
   /// A value of `nil` removes the query.
   ///
-  mutating func setFragment<Input>(
-    to newValue: Input?
-  ) -> AnyURLStorage where Input: Collection, Input.Element == UInt8 {
+  @inlinable
+  internal mutating func setFragment<UTF8Bytes>(
+    to newValue: UTF8Bytes?
+  ) -> AnyURLStorage where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     return setSimpleComponent(
       .fragment,
