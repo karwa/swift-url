@@ -608,7 +608,7 @@ extension URLScanner {
     // state: "scheme", after a valid scheme has been parsed.
     switch scheme {
     case .file:
-      if !hasDoubleSolidusPrefix(input) {
+      if !hasDoubleSolidusPrefix(utf8: input) {
         callback.validationError(.fileSchemeMissingFollowingSolidus)
       }
       return scanAllFileURLComponents(input, baseURL: baseURL, &mapping, callback: &callback)
@@ -628,7 +628,7 @@ extension URLScanner {
     default:
       // state: "special relative or authority"
       var authority = input
-      if hasDoubleSolidusPrefix(input) {
+      if hasDoubleSolidusPrefix(utf8: input) {
         // state: "special authority slashes"
         authority = authority.dropFirst(2)
       } else {
@@ -1450,7 +1450,7 @@ where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
     return
   }
 
-  if hasNonURLCodePoints(input, allowPercentSign: true) {
+  if hasNonURLCodePoints(utf8: input, allowPercentSign: true) {
     callback.validationError(.invalidURLCodePoint)
   }
 

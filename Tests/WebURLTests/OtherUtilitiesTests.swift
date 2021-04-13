@@ -27,11 +27,11 @@ extension OtherUtilitiesTests {
     //    U+002E (.), U+002F (/), U+003A (:), U+003B (;), U+003D (=), U+003F (?), U+0040 (@), U+005F (_),
     //    U+007E (~), and code points in the range U+00A0 to U+10FFFD, inclusive, excluding surrogates and noncharacters.
 
-    XCTAssertFalse(hasNonURLCodePoints("alpha123".utf8))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: "alpha123".utf8))
 
     // ASCII.
     for asciiCharacter in stringWithEveryASCIICharacter {
-      let isDisallowed = hasNonURLCodePoints("alpha\(asciiCharacter)123".utf8)
+      let isDisallowed = hasNonURLCodePoints(utf8: "alpha\(asciiCharacter)123".utf8)
       switch ASCII(asciiCharacter.utf8.first!)! {
       case ASCII.ranges.uppercaseAlpha, ASCII.ranges.lowercaseAlpha,
         ASCII.ranges.digits, .exclamationMark, .dollarSign, .ampersand, .apostrophe,
@@ -44,16 +44,16 @@ extension OtherUtilitiesTests {
       }
     }
     // Disallowed range up to U+00A0.
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0080}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0097}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{009F}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0080}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0097}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{009F}123".utf8))
     // A sample of allowed non-ASCII codepoints.
-    XCTAssertFalse(hasNonURLCodePoints("alpha\u{00A0}123".utf8))
-    XCTAssertFalse(hasNonURLCodePoints("alpha\u{00F0}123".utf8))
-    XCTAssertFalse(hasNonURLCodePoints("alpha\u{00B0D0}123".utf8))
-    XCTAssertFalse(hasNonURLCodePoints("alpha\u{01ABC0}123".utf8))
-    XCTAssertFalse(hasNonURLCodePoints("alpha\u{06DEF0}123".utf8))
-    XCTAssertFalse(hasNonURLCodePoints("alpha\u{10FFFD}123".utf8))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: "alpha\u{00A0}123".utf8))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: "alpha\u{00F0}123".utf8))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: "alpha\u{00B0D0}123".utf8))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: "alpha\u{01ABC0}123".utf8))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: "alpha\u{06DEF0}123".utf8))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: "alpha\u{10FFFD}123".utf8))
 
     // Disallowed non-characters.
     func codeUnitsWithScalar(_ scalar: Unicode.Scalar) -> [UInt8] {
@@ -64,51 +64,51 @@ extension OtherUtilitiesTests {
       return codeUnits
     }
     // String doesn't like it when we write some of these.
-    XCTAssertFalse(hasNonURLCodePoints(codeUnitsWithScalar(Unicode.Scalar(0xFDCF)!)))
-    XCTAssertTrue(hasNonURLCodePoints(codeUnitsWithScalar(Unicode.Scalar(0xFDD0)!)))
-    XCTAssertTrue(hasNonURLCodePoints(codeUnitsWithScalar(Unicode.Scalar(0xFDDF)!)))
-    XCTAssertTrue(hasNonURLCodePoints(codeUnitsWithScalar(Unicode.Scalar(0xFDEF)!)))
-    XCTAssertFalse(hasNonURLCodePoints(codeUnitsWithScalar(Unicode.Scalar(0xFDF0)!)))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: codeUnitsWithScalar(Unicode.Scalar(0xFDCF)!)))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: codeUnitsWithScalar(Unicode.Scalar(0xFDD0)!)))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: codeUnitsWithScalar(Unicode.Scalar(0xFDDF)!)))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: codeUnitsWithScalar(Unicode.Scalar(0xFDEF)!)))
+    XCTAssertFalse(hasNonURLCodePoints(utf8: codeUnitsWithScalar(Unicode.Scalar(0xFDF0)!)))
 
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{01FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{01FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{02FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{02FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{03FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{03FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{04FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{04FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{05FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{05FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{06FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{06FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{07FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{07FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{08FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{08FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{09FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{09FFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0AFFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0AFFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0BFFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0BFFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0CFFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0CFFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0DFFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0DFFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0EFFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0EFFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0FFFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{0FFFFF}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{10FFFE}123".utf8))
-    XCTAssertTrue(hasNonURLCodePoints("alpha\u{10FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{01FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{01FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{02FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{02FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{03FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{03FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{04FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{04FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{05FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{05FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{06FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{06FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{07FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{07FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{08FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{08FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{09FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{09FFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0AFFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0AFFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0BFFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0BFFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0CFFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0CFFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0DFFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0DFFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0EFFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0EFFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0FFFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{0FFFFF}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{10FFFE}123".utf8))
+    XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{10FFFF}123".utf8))
 
     // Surrogates.
-    XCTAssertTrue(hasNonURLCodePoints([0xED, 0xA0, 0x80]))  // D800
-    XCTAssertTrue(hasNonURLCodePoints([0xED, 0xAA, 0xBC]))  // DABC
-    XCTAssertTrue(hasNonURLCodePoints([0xED, 0xBF, 0xBF]))  // DFFF
+    XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xA0, 0x80]))  // D800
+    XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xAA, 0xBC]))  // DABC
+    XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xBF, 0xBF]))  // DFFF
   }
 
   func testForbiddenHostCodePoint() {

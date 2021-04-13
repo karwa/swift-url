@@ -17,7 +17,7 @@ extension WebURL {
   // swift-format-ignore
   /// A value representing a component in a URL.
   ///
-  /// Each component has a unique `rawValue` suitable for bitmasks.
+  /// Each component has a unique bit set on its `rawValue`, making it suitable for use in bit-sets.
   ///
   /// - seealso: `WebURL.ComponentSet`.
   ///
@@ -47,23 +47,29 @@ extension WebURL {
 
   /// An efficient set of `WebURL.Component` values.
   ///
-  struct ComponentSet: Equatable, ExpressibleByArrayLiteral {
-    private var rawValue: UInt8
+  @usableFromInline
+  internal struct ComponentSet: Equatable, ExpressibleByArrayLiteral {
 
-    init(arrayLiteral elements: Component...) {
-      self.rawValue = elements.reduce(into: 0) { $0 |= $1.rawValue }
+    @usableFromInline
+    internal var _rawValue: UInt8
+
+    @inlinable
+    internal init(arrayLiteral elements: Component...) {
+      self._rawValue = elements.reduce(into: 0) { $0 |= $1.rawValue }
     }
 
     /// Inserts a component in to the set.
     ///
-    mutating func insert(_ newMember: Component) {
-      self.rawValue |= newMember.rawValue
+    @inlinable
+    internal mutating func insert(_ newMember: Component) {
+      _rawValue |= newMember.rawValue
     }
 
     /// Whether or not the given component is a member of this set.
     ///
-    func contains(_ member: Component) -> Bool {
-      return (self.rawValue & member.rawValue) != 0
+    @inlinable
+    internal func contains(_ member: Component) -> Bool {
+      return (_rawValue & member.rawValue) != 0
     }
   }
 }
