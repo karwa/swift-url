@@ -27,8 +27,10 @@
 ///
 /// https://url.spec.whatwg.org/#url-code-points
 ///
-func hasNonURLCodePoints<CodeUnits>(_ input: CodeUnits, allowPercentSign: Bool = false) -> Bool
-where CodeUnits: Sequence, CodeUnits.Element == UInt8 {
+@inlinable @inline(never)
+internal func hasNonURLCodePoints<UTF8Bytes>(
+  utf8: UTF8Bytes, allowPercentSign: Bool = false
+) -> Bool where UTF8Bytes: Sequence, UTF8Bytes.Element == UInt8 {
 
   // Rather than using UTF8.decode to parse the actual 21-bit unicode codepoint, we can detect
   // the handful of disallowed codepoints while they're still in UTF-8 form.
@@ -36,7 +38,10 @@ where CodeUnits: Sequence, CodeUnits.Element == UInt8 {
   // (Note: "?" indicates a "don't care"/"match both" bit)
   //
   // - ASCII values need to be checked, but don't need any fancy decoding.
-  // - (0x80 ..< 0xA0) are the patterns 0xC28? and 0xC29? when encoded, so just 1.5 bytes to match.
+  // - (0x80 ..< 0xA0) are the patterns 0xC28? and 0xC29? when encoded, which is an easy range to detect
+  //   by just ignoring the last 4 bits of the 2nd encoded codepoint.
+  // - Surrogates (0xD800 ... 0xDFFF) run the range (0xD800 ... 0xDFFF) => (0xEDA080 ... 0xEDBFBF) when encoded,
+  //   so we can match them with the bit-pattern 11101101_101?????_10??????.
   // - Non-characters have a relatively simple pattern when encoded:
   //     > A noncharacter is a code point that is in the range U+FDD0 to U+FDEF, inclusive,
   //       or U+FFFE, U+FFFF, U+(0x01 ... 0x10)FFFE, U+(0x01 ... 0x10)FFFF.
@@ -49,15 +54,10 @@ where CodeUnits: Sequence, CodeUnits.Element == UInt8 {
   //    - 0xFFFE, 0xFFFF     => 0xEFBFB(E/F) in UTF8            (11101111_10111111_1011111?)
   //    - 0x??FFFE, 0x??FFFF => 0xF??FBFB(E/F) in UTF8 (11110???_10??1111_10111111_1011111?)
   //      (even though there are 2 "?" hex characters, we only have 5 "?" bits because the max codepoint is 10FFFF).
-  //
-  // - Surrogates (0xD800 ... 0xDFFF) are not valid in UTF8 anyway, but they're easy to check for, so why not?
-  //   Better than having them slip through, get percent-escaped or something and encoded in the resulting String.
-  //   They run the range (0xD800 ... 0xDFFF) => (0xEDA080 ... 0xEDBFBF) in UTF8,
-  //   so we can match them with the bit-pattern 11101101_101?????_10??????.
 
-  var input = input.makeIterator()
-  while let byte1 = input.next() {
-    switch (~byte1).leadingZeroBitCount {  // a.k.a leadingNonZeroBitCount.
+  var utf8 = utf8.makeIterator()
+  while let byte1 = utf8.next() {
+    switch (~byte1).leadingZeroBitCount {
     case 0:
       // ASCII.
       if byte1 == 0x25, allowPercentSign {
@@ -73,7 +73,7 @@ where CodeUnits: Sequence, CodeUnits.Element == UInt8 {
       }
     case 2:
       // 2-byte sequence.
-      guard let byte2 = input.next() else {
+      guard let byte2 = utf8.next() else {
         return true  // Invalid UTF8.
       }
       let encodedScalar = UInt32(byte1) << 8 | UInt32(byte2)
@@ -84,7 +84,7 @@ where CodeUnits: Sequence, CodeUnits.Element == UInt8 {
       }
     case 3:
       // 3-byte sequence.
-      guard let byte2 = input.next(), let byte3 = input.next() else {
+      guard let byte2 = utf8.next(), let byte3 = utf8.next() else {
         return true  // Invalid UTF8.
       }
       let encodedScalar = UInt32(byte1) << 16 | UInt32(byte2) << 8 | UInt32(byte3)
@@ -104,7 +104,7 @@ where CodeUnits: Sequence, CodeUnits.Element == UInt8 {
       }
     case 4:
       // 4-byte sequence.
-      guard let byte2 = input.next(), let byte3 = input.next(), let byte4 = input.next() else {
+      guard let byte2 = utf8.next(), let byte3 = utf8.next(), let byte4 = utf8.next() else {
         return true  // Invalid UTF8.
       }
       let encodedScalar = UInt32(byte1) << 24 | UInt32(byte2) << 16 | UInt32(byte3) << 8 | UInt32(byte4)
@@ -122,9 +122,22 @@ where CodeUnits: Sequence, CodeUnits.Element == UInt8 {
 /// Returns `true` if `bytes` begins with two U+002F (/) codepoints.
 /// Otherwise, `false`.
 ///
-func hasDoubleSolidusPrefix<T>(_ bytes: T) -> Bool where T: Collection, T.Element == UInt8 {
-  var it = bytes.makeIterator()
+@inlinable
+internal func hasDoubleSolidusPrefix<UTF8Bytes>(
+  utf8: UTF8Bytes
+) -> Bool where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  var it = utf8.makeIterator()
   return it.next() == ASCII.forwardSlash.codePoint && it.next() == ASCII.forwardSlash.codePoint
+}
+
+@inlinable
+internal var idnaPrefix: StaticString { "xn--" }
+
+@inlinable
+internal func hasIDNAPrefix<UTF8Bytes>(
+  utf8: UTF8Bytes
+) -> Bool where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  idnaPrefix.withUTF8Buffer { utf8.starts(with: $0) }
 }
 
 extension ASCII {
@@ -137,7 +150,8 @@ extension ASCII {
   ///
   /// https://url.spec.whatwg.org/#host-miscellaneous
   ///
-  var isForbiddenHostCodePoint: Bool {
+  @inlinable
+  internal var isForbiddenHostCodePoint: Bool {
     //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
     let lo: UInt64 = 0b11010100_00000000_10000000_00101001_00000000_00000000_00100110_00000001
     let hi: UInt64 = 0b00000000_00000000_00000000_00000000_01111000_00000000_00000000_00000001

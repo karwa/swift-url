@@ -12,92 +12,103 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+// --------------------------------------------
+// MARK: - Parser Callbacks
+// --------------------------------------------
+// Almost no users care about the specific errors that occur during parsing
+// - but there are use-cases, and it's helpful for testing.
+// It's important that regular, release builds of the URL parser
+// optimize out and around error reporting, so the callback needs to
+// be a protocol in order to take advantage of generic specialization.
+// --------------------------------------------
+
+
 /// An object which is informed by the URL parser if a validation error occurs.
 ///
 /// Most validation errors are non-fatal and parsing can continue regardless. If parsing fails, the last
 /// validation error typically describes the issue which caused it to fail.
 ///
 @usableFromInline
-protocol URLParserCallback {
+internal protocol URLParserCallback {
   mutating func validationError(_ error: ValidationError)
 }
 
-/// A `URLParserCallback` which simply ignores all validation errors.
+/// A `URLParserCallback` which ignores all validation errors.
 ///
 @usableFromInline
-struct IgnoreValidationErrors: URLParserCallback {
-  @inlinable @inline(__always) init() {}
-  @inlinable @inline(__always) mutating func validationError(_ error: ValidationError) {}
+internal struct IgnoreValidationErrors: URLParserCallback {
+
+  @inlinable @inline(__always)
+  internal init() {}
+
+  @inlinable @inline(__always)
+  internal mutating func validationError(_ error: ValidationError) {}
 }
 
-/// A `URLParserCallback` which stores the last reported validation error.
+
+// --------------------------------------------
+// MARK: - Validation Errors
+// --------------------------------------------
+
+
+/// A notification about a syntax oddity encountered by the URL parser.
+///
+/// Even valid URLs which can be successfully parsed may emit validation errors - for instance, the mere _presence_ of credentials (username or password)
+/// is considered grounds to report a `ValidationError`, even though such URLs can be parsed.
 ///
 @usableFromInline
-struct LastValidationError: URLParserCallback {
-  @usableFromInline var error: ValidationError?
-  @inlinable @inline(__always) init() {}
-  @inlinable @inline(__always) mutating func validationError(_ error: ValidationError) {
-    self.error = error
+internal struct ValidationError: Equatable {
+
+  @usableFromInline
+  internal var _code: UInt8
+
+  @inlinable
+  internal init(_code: UInt8) {
+    self._code = _code
   }
 }
 
-/// A `URLParserCallback` which stores all reported validation errors in an `Array`.
-///
-@usableFromInline
-struct CollectValidationErrors: URLParserCallback {
-  @usableFromInline var errors: [ValidationError] = []
-  @inlinable @inline(__always) init() { errors.reserveCapacity(8) }
-  @inlinable @inline(__always) mutating func validationError(_ error: ValidationError) {
-    errors.append(error)
-  }
-}
-
-@usableFromInline
-struct ValidationError: Equatable {
-  private var code: UInt8
-}
-
-// Parser errors and descriptions.
 // swift-format-ignore
+extension ValidationError {
+
+  // Named errors and their descriptions/examples from: https://github.com/whatwg/url/pull/502
+  @inlinable internal static var unexpectedC0ControlOrSpace:         Self { Self(_code: 0) }
+  @inlinable internal static var unexpectedASCIITabOrNewline:        Self { Self(_code: 1) }
+  @inlinable internal static var invalidSchemeStart:                 Self { Self(_code: 2) }
+  @inlinable internal static var fileSchemeMissingFollowingSolidus:  Self { Self(_code: 3) }
+  @inlinable internal static var invalidScheme:                      Self { Self(_code: 4) }
+  @inlinable internal static var missingSchemeNonRelativeURL:        Self { Self(_code: 5) }
+  @inlinable internal static var relativeURLMissingBeginningSolidus: Self { Self(_code: 6) }
+  @inlinable internal static var unexpectedReverseSolidus:           Self { Self(_code: 7) }
+  @inlinable internal static var missingSolidusBeforeAuthority:      Self { Self(_code: 8) }
+  @inlinable internal static var unexpectedCommercialAt:             Self { Self(_code: 9) }
+  @inlinable internal static var unexpectedCredentialsWithoutHost:   Self { Self(_code: 10) }
+  @inlinable internal static var unexpectedPortWithoutHost:          Self { Self(_code: 11) }
+  @inlinable internal static var emptyHostSpecialScheme:             Self { Self(_code: 12) }
+  @inlinable internal static var hostInvalid:                        Self { Self(_code: 13) }
+  @inlinable internal static var portOutOfRange:                     Self { Self(_code: 14) }
+  @inlinable internal static var portInvalid:                        Self { Self(_code: 15) }
+  @inlinable internal static var unexpectedWindowsDriveLetter:       Self { Self(_code: 16) }
+  @inlinable internal static var unexpectedWindowsDriveLetterHost:   Self { Self(_code: 17) }
+  @inlinable internal static var invalidURLCodePoint:                Self { Self(_code: 18) }
+  @inlinable internal static var unescapedPercentSign:               Self { Self(_code: 19) }
+  @inlinable internal static var unclosedIPv6Address:                Self { Self(_code: 20) }
+  @inlinable internal static var domainToASCIIFailure:               Self { Self(_code: 21) }
+  @inlinable internal static var domainToASCIIEmptyDomainFailure:    Self { Self(_code: 22) }
+  @inlinable internal static var hostForbiddenCodePoint:             Self { Self(_code: 23) }
+  @inlinable internal static var invalidIPv6Address:                 Self { Self(_code: 24) }
+  @inlinable internal static var invalidIPv4Address:                 Self { Self(_code: 25) }
+  // This one is not in the standard.
+  @inlinable internal static var _invalidUTF8:                       Self { Self(_code: 99) }
+}
+
+// swift-format-ignore
+#if DEBUG
 extension ValidationError: CustomStringConvertible {
 
-  // Named errors and their descriptions/examples taken from:
-  // https://github.com/whatwg/url/pull/502 on 15.06.2020
-  internal static var unexpectedC0ControlOrSpace:         Self { Self(code: 0) }
-  internal static var unexpectedASCIITabOrNewline:        Self { Self(code: 1) }
-  internal static var invalidSchemeStart:                 Self { Self(code: 2) }
-  internal static var fileSchemeMissingFollowingSolidus:  Self { Self(code: 3) }
-  internal static var invalidScheme:                      Self { Self(code: 4) }
-  internal static var missingSchemeNonRelativeURL:        Self { Self(code: 5) }
-  internal static var relativeURLMissingBeginningSolidus: Self { Self(code: 6) }
-  internal static var unexpectedReverseSolidus:           Self { Self(code: 7) }
-  internal static var missingSolidusBeforeAuthority:      Self { Self(code: 8) }
-  internal static var unexpectedCommercialAt:             Self { Self(code: 9) }
-  internal static var unexpectedCredentialsWithoutHost:   Self { Self(code: 10) }
-  internal static var unexpectedPortWithoutHost:          Self { Self(code: 11) }
-  internal static var emptyHostSpecialScheme:             Self { Self(code: 12) }
-  internal static var hostInvalid:                        Self { Self(code: 13) }
-  internal static var portOutOfRange:                     Self { Self(code: 14) }
-  internal static var portInvalid:                        Self { Self(code: 15) }
-  internal static var unexpectedWindowsDriveLetter:       Self { Self(code: 16) }
-  internal static var unexpectedWindowsDriveLetterHost:   Self { Self(code: 17) }
-  internal static var unexpectedHostFileScheme:           Self { Self(code: 18) }
-  internal static var unexpectedEmptyPath:                Self { Self(code: 19) }
-  internal static var invalidURLCodePoint:                Self { Self(code: 20) }
-  internal static var unescapedPercentSign:               Self { Self(code: 21) }
-  // FIXME: lacking descriptions.
-  internal static var unclosedIPv6Address:                Self { Self(code: 22) }
-  internal static var domainToASCIIFailure:               Self { Self(code: 23) }
-  internal static var domainToASCIIEmptyDomainFailure:    Self { Self(code: 24) }
-  internal static var hostForbiddenCodePoint:             Self { Self(code: 25) }
-  internal static var invalidIPv6Address:                 Self { Self(code: 26) }
-  internal static var invalidIPv4Address:                 Self { Self(code: 27) }
-  // This one is not in the spec.
-  internal static var _baseURLRequired:                   Self { Self(code: 99) }
-  internal static var _invalidUTF8:                       Self { Self(code: 98) }
-
-
-  public var description: String {
+	@usableFromInline
+  internal var description: String {
     switch self {
     case .unexpectedC0ControlOrSpace:
       return #"""
@@ -186,12 +197,13 @@ extension ValidationError: CustomStringConvertible {
 
         Example: "https://#fragment"
         """#
+  	// TODO: This description could be improved.
     case .hostInvalid:
       return #"""
         The host portion of the URL is an empty string when it includes credentials or a port and the basic URL parser’s state is overridden.
 
         Example:
-          var url = WebURL("https://example:9000")!.jsModel
+          var url = WebURL("https://example:9000")!
           url.hostname = ""
         """#
     case .portOutOfRange:
@@ -218,20 +230,6 @@ extension ValidationError: CustomStringConvertible {
 
         Example: "file://c:"
         """#
-    case .unexpectedHostFileScheme:
-      return #"""
-        The URL’s scheme is changed to "file" and the existing URL has a host.
-
-        Example:
-          var url = WebURL("https://example.org")!.jsModel
-          url.scheme = "file"
-        """#
-    case .unexpectedEmptyPath:
-      return #"""
-        The URL’s scheme is "file" and it contains an empty path segment.
-
-        Example: "file:///c:/path//to/file"
-        """#
     case .invalidURLCodePoint:
       return #"""
         A code point is found that is not a URL code point or U+0025 (%), in the URL’s path, query, or fragment.
@@ -244,12 +242,56 @@ extension ValidationError: CustomStringConvertible {
 
         Example: "https://example.org/%s"
         """#
-    case ._baseURLRequired:
+    case .unclosedIPv6Address:
       return #"""
-        A base URL is required.
+        An IPv6 address is missing the closing U+005D (]).
+
+        Example: "https://[::1"
         """#
+    case .domainToASCIIFailure:
+      return #"""
+        The URL's domain contains non-ASCII characters, and IDNA processing failed.
+
+        Note: For the time being, WebURL does not support non-ASCII domains.
+        """#
+    case .domainToASCIIEmptyDomainFailure:
+      return #"""
+        The URL's domain contains non-ASCII characters, and IDNA processing returned an empty string.
+
+        This can be caused by many things, such as the domain consisting only of ignorable code points,
+        or if the domain is the string "xn--".
+        """#
+    case .hostForbiddenCodePoint:
+      return #"""
+        The input’s host contains a forbidden host code point. Note that hosts are percent-decoded before
+        being processed when the URL's scheme is special, which would result in the following URL having a hostname
+        of "exa#mple.org" (which contains the forbidden host code point "#").
+
+        Example: "https://exa%23mple.org"
+        """#
+    case .invalidIPv6Address:
+      return #"""
+        The URL's domain an invalid IPv6 address.
+
+        Example: "https://[:::]/"
+        Example: "https://[::hello]/"
+        """#
+    case .invalidIPv4Address:
+      return #"""
+        The URL's domain an invalid IPv4 address.
+
+        Example: "https://999999999999999/"
+        Example: "https://300.300.300.300/"
+        """#
+    // non-spec.
+    case ._invalidUTF8:
+      return #"""
+        The given input is not a valid sequence of UTF-8 code-units.
+        """#
+		// fallback.
     default:
-      return "??"
+      return "Internal error: \(_code)"
     }
   }
 }
+#endif

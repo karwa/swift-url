@@ -57,10 +57,6 @@ extension WHATWGTests {
       370,  // domain2ascii: Hosts and percent-encoding.
       566,  // domain2ascii: IDNA ignored code points in file URLs hosts.
       567,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-
-      // FIXME: This one needs another look. We should not accept any IDNA-encoded domain names, even if they are _already_ encoded.
-
-      570,  // domain2ascii: Empty host after the domain to ASCII.
     ])
 
     harness.runTests(fileContents)

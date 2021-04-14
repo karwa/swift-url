@@ -12,15 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// An interface through which `ParsedURLString` constructs a new URL object.
+/// An interface through which `ParsedURLString` writes a normalized URL string.
 ///
-/// Conformers accept UTF8 bytes as given by the construction function, write them to storage, and mark
-/// relevant information in a header structure.
+/// `ParsedURLString` will call the `write...` functions implemented by conformers to this protocol, writing the UTF-8 code-units of each component,
+///  in the order in which they appear in the final string. Conformers are required to ensure that all code-units are written without loss.
 ///
-/// Conformers may be specialised to only accepting certain kinds of URLs - and they might, for example, omit or replace certain fields
-/// in their header structures for their use-case.
-///
-protocol URLWriter {
+protocol URLWriter: HostnameWriter {
 
   /// Notes the given information about the URL. This is always the first function to be called.
   ///
@@ -81,7 +78,9 @@ protocol URLWriter {
   /// The content must already be percent-encoded/IDNA-transformed and not include any separators.
   /// If called, this must always have been preceded by a call to `writeAuthoritySigil`.
   ///
-  mutating func writeHostname<T>(_ hostnameWriter: (WriterFunc<T>) -> Void) where T: Collection, T.Element == UInt8
+  mutating func writeHostname<T>(
+    lengthIfKnown: Int?, _ hostnameWriter: (WriterFunc<T>) -> Void
+  ) where T: Collection, T.Element == UInt8
 
   /// Appends the port separator character (`:`), followed by the textual representation of the given port number to storage.
   /// If called, this must always be the immediate successor to `writeHostname`.
@@ -241,7 +240,14 @@ struct StructureAndMetricsCollector: URLWriter {
     requiredCapacity += 1
   }
 
-  mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+  mutating func writeHostname<T>(
+    lengthIfKnown: Int?, _ hostnameWriter: ((T) -> Void) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    if let knownLength = lengthIfKnown {
+      structure.hostnameLength = knownLength
+      requiredCapacity += knownLength
+      return
+    }
     structure.hostnameLength = 0
     hostnameWriter {
       structure.hostnameLength += $0.count
@@ -399,7 +405,9 @@ struct UnsafePresizedBufferWriter: URLWriter {
     writeByte(ASCII.commercialAt.codePoint)
   }
 
-  mutating func writeHostname<T>(_ hostnameWriter: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+  mutating func writeHostname<T>(
+    lengthIfKnown: Int?, _ hostnameWriter: ((T) -> Void) -> Void
+  ) where T: Collection, T.Element == UInt8 {
     hostnameWriter { piece in
       writeBytes(piece)
     }
@@ -454,48 +462,31 @@ struct UnsafePresizedBufferWriter: URLWriter {
 }
 
 
-// MARK: - HostnameWriter.
+// --------------------------------------------
+// MARK: - HostnameWriter
+// --------------------------------------------
 
 
-/// An interface through which `ParsedHost` writes its contents.
+/// An interface through which a `ParsedHost` writes its contents.
 ///
 @usableFromInline
 internal protocol HostnameWriter {
 
-  /// Writes the bytes provided by `writerFunc`.
-  /// The bytes will already be percent-encoded/IDNA-transformed and not include any separators.
+  /// Writes the bytes given by `hostnameWriter`.
+  /// The content must already be percent-encoded/IDNA-transformed and not include any separators.
   ///
-  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8
+  mutating func writeHostname<T>(
+    lengthIfKnown: Int?, _ hostnameWriter: ((T) -> Void) -> Void
+  ) where T: Collection, T.Element == UInt8
 }
 
-/// An adapter which allows any `URLWriter` to provide a limited-scope conformance to `HostnameWriter`.
+/// A `HostnameWriter` which computes the length of the hostname, were it to be written.
 ///
-struct URLHostnameWriterAdapter<Base: URLWriter>: HostnameWriter {
-  fileprivate var base: UnsafeMutablePointer<Base>
-
-  mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
-    base.pointee.writeHostname(writerFunc)
-  }
-}
-
-extension URLWriter {
-
-  /// Provides a `HostnameWriter` instance with a limited lifetime, which may be used to write the URL's hostname.
-  /// If called, this must always have been preceded by a call to `writeAuthoritySigil`.
-  ///
-  mutating func withHostnameWriter(_ hostnameWriter: (inout URLHostnameWriterAdapter<Self>) -> Void) {
-    withUnsafeMutablePointer(to: &self) { ptr in
-      var adapter = URLHostnameWriterAdapter(base: ptr)
-      hostnameWriter(&adapter)
-    }
-  }
-}
-
 @usableFromInline
 internal struct HostnameLengthCounter: HostnameWriter {
 
   @usableFromInline
-  internal private(set) var length: Int = 0
+  internal private(set) var length: Int
 
   @inlinable
   internal init() {
@@ -503,13 +494,22 @@ internal struct HostnameLengthCounter: HostnameWriter {
   }
 
   @inlinable
-  internal mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+  internal mutating func writeHostname<T>(
+    lengthIfKnown: Int?, _ writerFunc: ((T) -> Void) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    if let knownLength = lengthIfKnown {
+      length = knownLength
+      return
+    }
     writerFunc { piece in
       length += piece.count
     }
   }
 }
 
+/// A `HostnameWriter` which writes a hostname to a given buffer.
+/// After writing, the buffer points to the space after written hostname.
+///
 @usableFromInline
 internal struct UnsafeBufferHostnameWriter: HostnameWriter {
 
@@ -522,7 +522,9 @@ internal struct UnsafeBufferHostnameWriter: HostnameWriter {
   }
 
   @inlinable
-  internal mutating func writeHostname<T>(_ writerFunc: ((T) -> Void) -> Void) where T: Collection, T.Element == UInt8 {
+  internal mutating func writeHostname<T>(
+    lengthIfKnown: Int?, _ writerFunc: ((T) -> Void) -> Void
+  ) where T: Collection, T.Element == UInt8 {
     writerFunc { piece in
       let n = buffer.initialize(from: piece).1
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: n))

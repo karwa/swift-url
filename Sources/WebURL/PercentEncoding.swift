@@ -592,6 +592,9 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
     internal let range: Range<Source.Index>
 
     @usableFromInline
+    internal let isDecoded: Bool
+
+    @usableFromInline
     internal let decodedValue: UInt8
 
     /// Creates an index referencing the given source collection's `endIndex`.
@@ -600,6 +603,7 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
     @inlinable
     internal init(endIndexOf source: Source) {
       self.range = Range(uncheckedBounds: (source.endIndex, source.endIndex))
+      self.isDecoded = false
       self.decodedValue = 0
     }
 
@@ -618,6 +622,7 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
       let byte1Index = source.index(after: i)
       guard byte0 == ASCII.percentSign.codePoint else {
         self.range = Range(uncheckedBounds: (i, byte1Index))
+        self.isDecoded = false
         self.decodedValue = ASCII(byte0).flatMap { EncodeSet.unsubstitute(ascii: $0.codePoint) } ?? byte0
         return
       }
@@ -627,10 +632,12 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
         let decodedByte2 = ASCII(flatMap: tail.popFirst())?.hexNumberValue
       else {
         self.range = Range(uncheckedBounds: (i, byte1Index))
+        self.isDecoded = false
         self.decodedValue = ASCII.percentSign.codePoint  // Percent-sign should never be substituted.
         return
       }
       self.decodedValue = (decodedByte1 &* 16) &+ (decodedByte2)
+      self.isDecoded = true
       self.range = Range(uncheckedBounds: (i, tail.startIndex))
     }
 

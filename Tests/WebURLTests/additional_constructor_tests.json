@@ -861,5 +861,16 @@
     "pathname": "/",
     "search": "",
     "hash": ""
+  },
+  "[HOST]: Domain is ASCII, but a component contains invalid IDNA",
+  {
+    "input": "http://a.b.c.xn--pokxncvks",
+    "base": "about:blank",
+    "failure": true
+  },
+  {
+    "input": "http://10.0.0.xn--pokxncvks",
+    "base": "about:blank",
+    "failure": true
   }
 ]

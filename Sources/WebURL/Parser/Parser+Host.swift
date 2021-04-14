@@ -17,22 +17,26 @@
 /// - seealso: `ParsedURLString`
 ///
 @usableFromInline
-internal enum ParsedHost: Equatable {
-  case domain
+internal enum ParsedHost {
+  case asciiDomain(_ASCIIDomainInfo)
   case ipv4Address(IPv4Address)
   case ipv6Address(IPv6Address)
-  case opaque
+  case opaque(_OpaqueHostnameInfo)
   case empty
 }
 
-// Parsing and serialization.
+
+// --------------------------------------------
+// MARK: - Parsing
+// --------------------------------------------
+
 
 extension ParsedHost {
 
   /// Parses the given hostname to determine what kind of host it is, and whether or not it is valid.
   /// The created `ParsedHost` object may then be used to write a normalized/encoded version of the hostname.
   ///
-  @usableFromInline  // TODO: [inlinable]: Make inlinable for specialization
+  @inlinable
   internal init?<UTF8Bytes, Callback>(
     _ hostname: UTF8Bytes, schemeKind: WebURL.SchemeKind, callback: inout Callback
   ) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
@@ -41,6 +45,7 @@ extension ParsedHost {
       self = .empty
       return
     }
+
     var ipv6Slice = hostname[...]
     if ipv6Slice.removeFirst() == ASCII.leftSquareBracket.codePoint {
       guard ipv6Slice.popLast() == ASCII.rightSquareBracket.codePoint else {
@@ -54,34 +59,33 @@ extension ParsedHost {
       self = .ipv6Address(result)
       return
     }
+
     guard schemeKind.isSpecial else {
-      guard Self.isValidOpaqueHostname(hostname, callback: &callback) else {
+      guard let hostnameInfo = ParsedHost._tryParseOpaqueHostname(hostname, callback: &callback) else {
         return nil
       }
-      self = .opaque
+      self = .opaque(hostnameInfo)
       return
     }
 
     let domain = hostname.lazy.percentDecodedUTF8
+
     // TODO: [idna]
     //
-    // 6. Let asciiDomain be the result of running domain to ASCII on domain.
+    // > 6. Let asciiDomain be the result of running domain to ASCII on domain.
+    // > 7. If asciiDomain is failure, validation error, return failure.
     //
-    // 7. If asciiDomain is failure, validation error, return failure.
+    // We don't have IDNA, so we need to reject:
+    // - domains with non-ASCII characters
+    // - domains which are ASCII but have IDNA-encoded "labels" (dot-separated components).
+    //   These require validation which we can't do yet.
     //
-    // Because we don't have IDNA transformations, reject all non-ASCII domain names and
-    // lazily lowercase them.
-    // Additionally, lowercasing is deferred until after IPv4 addresses are parsed, since it doesn't
-    // care about the case of alpha characters.
-    for byte in domain {
-      guard let ascii = ASCII(byte) else {
-        callback.validationError(.domainToASCIIFailure)
-        return nil
-      }
-      if ascii.isForbiddenHostCodePoint {
-        callback.validationError(.hostForbiddenCodePoint)
-        return nil
-      }
+    // Which should leave us with pure ASCII domains, which don't depend on Unicode at all.
+    // For these, IDNA normalization/encoding is just lowercasing. At least that's something we can do...
+
+    let (_, _asciiDomainInfo) = ParsedHost._tryParseASCIIDomain(domain, callback: &callback)
+    guard let asciiDomainInfo = _asciiDomainInfo else {
+      return nil
     }
     let asciiDomain = domain
 
@@ -100,29 +104,121 @@ extension ParsedHost {
       self = .empty
       return
     }
-    self = .domain
+    self = .asciiDomain(asciiDomainInfo)
   }
 
-  private static func isValidOpaqueHostname<Bytes, Callback>(
-    _ hostname: Bytes, callback: inout Callback
-  ) -> Bool where Bytes: Collection, Bytes.Element == UInt8, Callback: URLParserCallback {
+  /// Parses the given opaque hostname, returning an `_OpaqueHostnameInfo` if the hostname is valid.
+  ///
+  @inlinable
+  internal static func _tryParseOpaqueHostname<UTF8Bytes, Callback>(
+    _ hostname: UTF8Bytes, callback: inout Callback
+  ) -> _OpaqueHostnameInfo? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
     guard hostname.isEmpty == false else {
-      return false  // Opaque hosts are defined to be non-empty.
+      return nil
     }
+    var hostnameInfo = _OpaqueHostnameInfo(needsPercentEncoding: false, encodedCount: 0)
     for byte in hostname {
-      // Non-ASCII codepoints checked by 'validateURLCodePointsAndPercentEncoding'.
+      hostnameInfo.encodedCount += 1
       guard let asciiChar = ASCII(byte) else {
-        continue
+        hostnameInfo.needsPercentEncoding = true
+        hostnameInfo.encodedCount += 2
+        continue  // Non-ASCII codepoints checked by 'validateURLCodePointsAndPercentEncoding', are not fatal.
       }
       if asciiChar.isForbiddenHostCodePoint, asciiChar != .percentSign {
         callback.validationError(.hostForbiddenCodePoint)
-        return false
+        return nil
+      }
+      if PercentEncodeSet.C0Control.shouldPercentEncode(ascii: asciiChar.codePoint) {
+        hostnameInfo.needsPercentEncoding = true
+        hostnameInfo.encodedCount += 2
       }
     }
     validateURLCodePointsAndPercentEncoding(hostname, callback: &callback)
-    return true
+    return hostnameInfo
   }
+
+  /// Parses the given domain, returning an `_ASCIIDomainInfo` if the domain is a valid, ASCII domain.
+  ///
+  /// If the returned value's `domainInfo` is `nil`, parsing may have failed because the domain contained non-ASCII codepoints, or
+  /// some of its labels were IDNA-encoded. In this case, the returned value's `mayBeValidIDNA` flag will be set to `true`, and the host-parser
+  /// should try to parse the domain using IDNA.
+  ///
+  @inlinable
+  internal static func _tryParseASCIIDomain<UTF8Bytes, Callback>(
+    _ domain: LazilyPercentDecodedUTF8WithoutSubstitutions<UTF8Bytes>, callback: inout Callback
+  ) -> (mayBeValidIDNA: Bool, domainInfo: _ASCIIDomainInfo?)
+  where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
+
+    var domainInfo = _ASCIIDomainInfo(decodedCount: 0, needsDecodeOrLowercasing: false)
+
+    guard hasIDNAPrefix(utf8: domain) == false else {
+      callback.validationError(.domainToASCIIFailure)
+      return (true, nil)
+    }
+    var i = domain.startIndex
+    while i < domain.endIndex {
+      guard let char = ASCII(domain[i]) else {
+        callback.validationError(.domainToASCIIFailure)
+        return (true, nil)
+      }
+      if char.isForbiddenHostCodePoint {
+        callback.validationError(.hostForbiddenCodePoint)
+        return (false, nil)
+      }
+      domainInfo.needsDecodeOrLowercasing = domainInfo.needsDecodeOrLowercasing || i.isDecoded || char.isUppercaseAlpha
+      domainInfo.decodedCount &+= 1
+      domain.formIndex(after: &i)
+      if char == .period {
+        guard hasIDNAPrefix(utf8: domain[i...]) == false else {
+          callback.validationError(.domainToASCIIFailure)
+          return (true, nil)
+        }
+      }
+    }
+    return (false, domainInfo)
+  }
+}
+
+@usableFromInline
+internal struct _ASCIIDomainInfo {
+
+  @usableFromInline
+  internal var decodedCount: Int
+
+  @usableFromInline
+  internal var needsDecodeOrLowercasing: Bool
+
+  @inlinable
+  internal init(decodedCount: Int, needsDecodeOrLowercasing: Bool) {
+    self.decodedCount = decodedCount
+    self.needsDecodeOrLowercasing = needsDecodeOrLowercasing
+  }
+}
+
+@usableFromInline
+internal struct _OpaqueHostnameInfo {
+
+  @usableFromInline
+  internal var needsPercentEncoding: Bool
+
+  @usableFromInline
+  internal var encodedCount: Int
+
+  @inlinable
+  internal init(needsPercentEncoding: Bool, encodedCount: Int) {
+    self.needsPercentEncoding = needsPercentEncoding
+    self.encodedCount = encodedCount
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Writing
+// --------------------------------------------
+
+
+extension ParsedHost {
 
   /// Writes a normalized hostname using the given `Writer` instance.
   /// `bytes` must be the same collection this `ParsedHost` was created for.
@@ -134,42 +230,51 @@ extension ParsedHost {
 
     switch self {
     case .empty:
-      writer.writeHostname { $0(EmptyCollection()) }
+      writer.writeHostname(lengthIfKnown: 0) { $0(EmptyCollection()) }
 
-    case .domain:
-      // This is our cheap substitute for IDNA. Only valid for ASCII domains.
-      assert(bytes.isEmpty == false)
-      let transformed = ASCII.Lowercased(bytes.lazy.percentDecodedUTF8)
-      writer.writeHostname { $0(transformed) }
-
-    case .opaque:
-      assert(bytes.isEmpty == false)
-      writer.writeHostname { writePiece in
-        // TODO: [performance] - store whether %-encoding was required in URLMetrics.
-        _ = bytes.lazy.percentEncodedGroups(as: \.c0Control).write(to: writePiece)
+    case .asciiDomain(let domainInfo):
+      if domainInfo.needsDecodeOrLowercasing {
+        writer.writeHostname(lengthIfKnown: domainInfo.decodedCount) {
+          $0(ASCII.Lowercased(bytes.lazy.percentDecodedUTF8))
+        }
+      } else {
+        writer.writeHostname(lengthIfKnown: domainInfo.decodedCount) {
+          $0(bytes)
+        }
       }
 
+    case .opaque(let hostnameInfo):
+      if hostnameInfo.needsPercentEncoding {
+        writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount) { writePiece in
+          _ = bytes.lazy.percentEncodedGroups(as: \.c0Control).write(to: writePiece)
+        }
+      } else {
+        writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount) { writePiece in
+          writePiece(bytes)
+        }
+      }
+
+    // For IPv4/v6 addresses, it's actually faster not to use 'lengthIfKnown' because it means
+    // hoisting '.serializedDirect' outside of 'writeHostname', and for some reason that's a lot slower.
     case .ipv4Address(let addr):
-      writer.writeHostname { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
+      writer.writeHostname(lengthIfKnown: nil) { (writePiece: (UnsafeRawBufferPointer) -> Void) in
         var serialized = addr.serializedDirect
         withUnsafeBytes(of: &serialized.buffer) { bufferBytes in
-          let codeunits = bufferBytes.bindMemory(to: UInt8.self).prefix(Int(serialized.count))
-          writePiece(UnsafeBufferPointer(rebasing: codeunits))
+          writePiece(UnsafeRawBufferPointer(start: bufferBytes.baseAddress, count: Int(serialized.count)))
         }
       }
 
     case .ipv6Address(let addr):
-      writer.writeHostname { (writePiece: (UnsafeBufferPointer<UInt8>) -> Void) in
+      writer.writeHostname(lengthIfKnown: nil) { (writePiece: (UnsafeRawBufferPointer) -> Void) in
         var serialized = addr.serializedDirect
-        var bracket = ASCII.leftSquareBracket.codePoint
-        withUnsafeMutablePointer(to: &bracket) { bracketPtr in
-          writePiece(UnsafeBufferPointer(start: bracketPtr, count: 1))
-          withUnsafeBytes(of: &serialized.buffer) { bufferBytes in
-            let codeunits = bufferBytes.bindMemory(to: UInt8.self).prefix(Int(serialized.count))
-            writePiece(UnsafeBufferPointer(rebasing: codeunits))
+        withUnsafeBytes(of: &serialized.buffer) { bufferBytes in
+          var bracket = ASCII.leftSquareBracket.codePoint
+          withUnsafeMutableBytes(of: &bracket) { bracketPtr in
+            writePiece(UnsafeRawBufferPointer(bracketPtr))
+            writePiece(UnsafeRawBufferPointer(start: bufferBytes.baseAddress, count: Int(serialized.count)))
+            bracketPtr.storeBytes(of: ASCII.rightSquareBracket.codePoint, as: UInt8.self)
+            writePiece(UnsafeRawBufferPointer(bracketPtr))
           }
-          bracketPtr.pointee = ASCII.rightSquareBracket.codePoint
-          writePiece(UnsafeBufferPointer(start: bracketPtr, count: 1))
         }
       }
     }
