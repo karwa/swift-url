@@ -336,9 +336,7 @@ extension ParsedURLString.ProcessedMapping {
         writer.writeCredentialsTerminator()
       }
 
-      writer.withHostnameWriter { hostWriter in
-        parsedHost!.write(bytes: inputString[hostname], using: &hostWriter)
-      }
+      parsedHost!.write(bytes: inputString[hostname], using: &writer)
 
       if let port = port, port != schemeKind.defaultPort {
         writer.writePort(port)
@@ -1442,6 +1440,7 @@ func findEndOfHostnamePrefix<Input, Callback>(
 /// - Note: This method considers the percent sign ("%") to be a valid URL code-point.
 /// - Note: This method is a no-op if `callback` is an instance of `IgnoreValidationErrors`.
 ///
+@inlinable
 internal func validateURLCodePointsAndPercentEncoding<Input, Callback>(_ input: Input, callback: inout Callback)
 where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
 

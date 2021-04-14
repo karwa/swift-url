@@ -130,6 +130,16 @@ internal func hasDoubleSolidusPrefix<UTF8Bytes>(
   return it.next() == ASCII.forwardSlash.codePoint && it.next() == ASCII.forwardSlash.codePoint
 }
 
+@inlinable
+internal var idnaPrefix: StaticString { "xn--" }
+
+@inlinable
+internal func hasIDNAPrefix<UTF8Bytes>(
+  utf8: UTF8Bytes
+) -> Bool where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  idnaPrefix.withUTF8Buffer { utf8.starts(with: $0) }
+}
+
 extension ASCII {
 
   /// Returns `true` if this character is a forbidden host code point, otherwise `false`.

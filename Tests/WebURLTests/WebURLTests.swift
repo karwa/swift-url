@@ -30,12 +30,12 @@ extension WebURLTests {
       .appendingPathComponent("additional_constructor_tests.json")
     let fileContents = try JSONDecoder().decode([URLConstructorTest.FileEntry].self, from: try Data(contentsOf: url))
     assert(
-      fileContents.count == 79,
+      fileContents.count == 82,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
     var harness = URLConstructorTest.WebURLReportHarness()
     harness.runTests(fileContents)
-    XCTAssert(harness.entriesSeen == 79, "Unexpected number of tests executed.")
+    XCTAssert(harness.entriesSeen == 82, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     // Generate a report file because the XCTest ones really aren't that helpful.

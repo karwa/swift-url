@@ -244,12 +244,19 @@ extension ASCII {
     }
   }
 
+  /// Whether or not this is an uppercase alpha character (A-Z).
+  ///
+  @inlinable
+  internal var isUppercaseAlpha: Bool {
+    return ASCII.ranges.uppercaseAlpha.contains(self)
+  }
+
   /// Whether or not this is an alpha character (a-z, A-Z).
   ///
   @inlinable
   internal var isAlpha: Bool {
     let uppercased = ASCII(_unchecked: codePoint & 0b11011111)
-    return ASCII.ranges.uppercaseAlpha.contains(uppercased)
+    return uppercased.isUppercaseAlpha
   }
 
   /// Whether or not this is a decimal digit (0-9).

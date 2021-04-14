@@ -52,7 +52,7 @@ extension WebURL {
       return .ipv6Address(address)
     case .empty:
       return .empty
-    case .domain:
+    case .asciiDomain:
       return .domain(hostname)
     case .opaque:
       return .opaque(hostname)
