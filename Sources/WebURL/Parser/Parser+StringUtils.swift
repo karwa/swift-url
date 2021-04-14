@@ -15,9 +15,9 @@
 /// Detects non-URL code points in the given sequence. The sequence is assumed to contain valid UTF8 text.
 ///
 /// - parameters:
-///     - input:            A sequence of valid UTF8-encoded text.
+///     - utf8: A sequence of valid UTF8-encoded text.
 ///     - allowPercentSign: If `true`, the ASCII percent sign (U+0025) is considered an allowed code-point.
-/// - returns:      `true` if the sequence contains code-points which are not URL code-points, otherwise `false`.
+/// - returns: `true` if the sequence contains code-points which are not URL code-points, otherwise `false`.
 ///
 /// The URL code points are ASCII alphanumeric, U+0021 (!), U+0024 ($), U+0026 (&),
 /// U+0027 ('), U+0028 LEFT PARENTHESIS, U+0029 RIGHT PARENTHESIS, U+002A (*),
@@ -119,7 +119,7 @@ internal func hasNonURLCodePoints<UTF8Bytes>(
   return false
 }
 
-/// Returns `true` if `bytes` begins with two U+002F (/) codepoints.
+/// Returns `true` if `utf8` begins with two U+002F (/) codepoints.
 /// Otherwise, `false`.
 ///
 @inlinable
@@ -131,13 +131,16 @@ internal func hasDoubleSolidusPrefix<UTF8Bytes>(
 }
 
 @inlinable
-internal var idnaPrefix: StaticString { "xn--" }
+internal var _idnaPrefix: StaticString { "xn--" }
 
+/// Returns `true` if `utf8` begins with the ASCII string "xn--", indicating that a domain's label is encoded by IDNA.
+/// Otherwise, `false`.
+///
 @inlinable
 internal func hasIDNAPrefix<UTF8Bytes>(
   utf8: UTF8Bytes
 ) -> Bool where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
-  idnaPrefix.withUTF8Buffer { utf8.starts(with: $0) }
+  _idnaPrefix.withUTF8Buffer { utf8.starts(with: $0) }
 }
 
 extension ASCII {
