@@ -114,20 +114,21 @@ struct ParsedURLString<InputString> where InputString: BidirectionalCollection, 
   /// - Note: Providing a `URLMetrics` object for this `ParsedURLString` can significantly speed the process.
   ///         Obtain metrics by writing the string to a `StructureAndMetricsCollector`.
   ///
-  func write<WriterType: URLWriter>(to writer: inout WriterType, metrics: URLMetrics? = nil) {
-    mapping.write(inputString: inputString, baseURL: baseURL, to: &writer, metrics: metrics)
+  func write<WriterType: URLWriter>(to writer: inout WriterType) {
+    mapping.write(inputString: inputString, baseURL: baseURL, to: &writer)
   }
 
   /// Writes the URL to new `URLStorage`, appropriate for its size and structure, and returns it as a `WebURL` object.
   ///
   func constructURLObject() -> WebURL {
-    let (count, structure, metrics) = StructureAndMetricsCollector.collect { collector in write(to: &collector) }
-    let newStorage = AnyURLStorage(optimalStorageForCapacity: count, structure: structure) { codeUnits in
-      var writer = UnsafePresizedBufferWriter(buffer: codeUnits)
-      write(to: &writer, metrics: metrics)
+    var info = StructureAndMetricsCollector()
+    write(to: &info)
+    let storage = AnyURLStorage(optimalStorageForCapacity: info.requiredCapacity, structure: info.structure) { buffer in
+      var writer = UnsafePresizedBufferWriter(buffer: buffer, hints: info.hints)
+      write(to: &writer)
       return writer.bytesWritten
     }
-    return WebURL(storage: newStorage)
+    return WebURL(storage: storage)
   }
 }
 
@@ -273,8 +274,7 @@ extension ParsedURLString.ProcessedMapping {
   func write<WriterType: URLWriter>(
     inputString: InputString,
     baseURL: WebURL?,
-    to writer: inout WriterType,
-    metrics: URLMetrics? = nil
+    to writer: inout WriterType
   ) {
 
     let schemeKind = info.schemeKind!
@@ -306,7 +306,7 @@ extension ParsedURLString.ProcessedMapping {
       var hasCredentials = false
       if let username = info.usernameRange, username.isEmpty == false {
         var didEscape = false
-        if metrics?.componentsWhichMaySkipEscaping.contains(.username) == true {
+        if writer.getHint(maySkipPercentEncoding: .username) {
           writer.writeUsernameContents { writePiece in
             writePiece(inputString[username])
           }
@@ -315,12 +315,12 @@ extension ParsedURLString.ProcessedMapping {
             didEscape = inputString[username].lazy.percentEncodedGroups(as: \.userInfo).write(to: writer)
           }
         }
-        writer.writeHint(.username, needsEscaping: didEscape)
+        writer.writeHint(.username, maySkipPercentEncoding: !didEscape)
         hasCredentials = true
       }
       if let password = info.passwordRange, password.isEmpty == false {
         var didEscape = false
-        if metrics?.componentsWhichMaySkipEscaping.contains(.password) == true {
+        if writer.getHint(maySkipPercentEncoding: .password) {
           writer.writePasswordContents { writePiece in
             writePiece(inputString[password])
           }
@@ -329,7 +329,7 @@ extension ParsedURLString.ProcessedMapping {
             didEscape = inputString[password].lazy.percentEncodedGroups(as: \.userInfo).write(to: writer)
           }
         }
-        writer.writeHint(.password, needsEscaping: didEscape)
+        writer.writeHint(.password, maySkipPercentEncoding: !didEscape)
         hasCredentials = true
       }
       if hasCredentials {
@@ -369,18 +369,18 @@ extension ParsedURLString.ProcessedMapping {
     switch info.pathRange {
     case .some(let path) where info.cannotBeABaseURL:
       var didEscape = false
-      if metrics?.componentsWhichMaySkipEscaping.contains(.path) == true {
+      if writer.getHint(maySkipPercentEncoding: .path) {
         writer.writePath(firstComponentLength: 0) { $0(inputString[path]) }
       } else {
         writer.writePath(firstComponentLength: 0) { writer in
           didEscape = inputString[path].lazy.percentEncodedGroups(as: \.c0Control).write(to: writer)
         }
       }
-      writer.writeHint(.path, needsEscaping: didEscape)
+      writer.writeHint(.path, maySkipPercentEncoding: !didEscape)
 
     case .some(let path):
       let pathMetrics =
-        metrics?.pathMetrics
+        writer.getPathMetricsHint()
         ?? PathMetrics(
           parsing: inputString[path],
           schemeKind: schemeKind,
@@ -389,12 +389,12 @@ extension ParsedURLString.ProcessedMapping {
         )
       assert(pathMetrics.requiredCapacity > 0)
       writer.writePathMetricsHint(pathMetrics)
-      writer.writeHint(.path, needsEscaping: pathMetrics.needsPercentEncoding)
+      writer.writeHint(.path, maySkipPercentEncoding: !pathMetrics.needsPercentEncoding)
 
       if pathMetrics.requiresPathSigil && (hasAuthority == false) {
         writer.writePathSigil()
       }
-      writer.writeUnsafePath(
+      writer.writePresizedPathUnsafely(
         length: pathMetrics.requiredCapacity,
         firstComponentLength: pathMetrics.firstComponentLength
       ) { buffer in
@@ -437,7 +437,7 @@ extension ParsedURLString.ProcessedMapping {
     // 5: Write query.
     if let query = info.queryRange {
       var didEscape = false
-      if metrics?.componentsWhichMaySkipEscaping.contains(.query) == true {
+      if writer.getHint(maySkipPercentEncoding: .query) {
         writer.writeQueryContents { writerPiece in
           writerPiece(inputString[query])
         }
@@ -450,7 +450,7 @@ extension ParsedURLString.ProcessedMapping {
           }
         }
       }
-      writer.writeHint(.query, needsEscaping: didEscape)
+      writer.writeHint(.query, maySkipPercentEncoding: !didEscape)
     } else if info.componentsToCopyFromBase.contains(.query) {
       guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
       baseURL.storage.withUTF8(of: .query) {
@@ -463,7 +463,7 @@ extension ParsedURLString.ProcessedMapping {
     // 6: Write fragment.
     if let fragment = info.fragmentRange {
       var didEscape = false
-      if metrics?.componentsWhichMaySkipEscaping.contains(.fragment) == true {
+      if writer.getHint(maySkipPercentEncoding: .fragment) {
         writer.writeFragmentContents { writePiece in
           writePiece(inputString[fragment])
         }
@@ -472,7 +472,7 @@ extension ParsedURLString.ProcessedMapping {
           didEscape = inputString[fragment].lazy.percentEncodedGroups(as: \.fragment).write(to: writer)
         }
       }
-      writer.writeHint(.fragment, needsEscaping: didEscape)
+      writer.writeHint(.fragment, maySkipPercentEncoding: !didEscape)
     } else if info.componentsToCopyFromBase.contains(.fragment) {
       guard let baseURL = baseURL else { preconditionFailure("A baseURL is required") }
       baseURL.storage.withUTF8(of: .fragment) {

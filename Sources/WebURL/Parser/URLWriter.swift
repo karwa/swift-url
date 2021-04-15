@@ -17,77 +17,87 @@
 /// `ParsedURLString` will call the `write...` functions implemented by conformers to this protocol, writing the UTF-8 code-units of each component,
 ///  in the order in which they appear in the final string. Conformers are required to ensure that all code-units are written without loss.
 ///
-protocol URLWriter: HostnameWriter {
+@usableFromInline
+internal protocol URLWriter: HostnameWriter {
 
   /// Notes the given information about the URL. This is always the first function to be called.
   ///
   mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool)
 
-  /// A function which appends the given bytes to storage.
+  /// A function which writes a piece of a component.
   ///
   /// Functions using this pattern typically look like the following:
   /// ```swift
-  /// func writeUsername<T>(_ usernameWriter: (WriterFunc<T>)->Void)
+  /// func writeUsername<T>(_ usernameWriter: (PieceWriter<T>)->Void)
   /// ```
   ///
-  /// Callers typically use this as shown:
+  /// Callers invoke this function with a closure, which is passed a `PieceWriter` through which it can write its contents iteratively, incorporating its own
+  /// control-flow and using whichever `Collection` type is convenient.
   /// ```swift
-  /// writeUsername { writeBytes in
-  ///   newValue.lazy.percentEncoded(using: ...).write(to: writeBytes)
+  /// writeUsername { writePiece in
+  ///   for piece in ... {
+  ///     writePiece(piece)
+  ///   }
   /// }
   /// ```
-  /// in this example, `writePiece` is a `WriterFunc`, and its type is inferred as `(UnsafeBufferPointer<UInt8>)->Void`.
   ///
-  typealias WriterFunc<T> = (T) -> Void
+  typealias PieceWriter<T> = (T) -> Void
 
-  /// Appends the given bytes to storage, followed by the scheme separator character (`:`).
+  /// Appends the given UTF-8 code-units to the URL string, followed by the scheme separator character (`:`).
   /// This is always the first call to the writer after `writeFlags`.
   ///
   mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8
 
-  /// Appends the authority header (`//`) to storage.
+  /// Appends the authority header (`//`) to the URL string.
   /// If called, this must always be the immediate successor to `writeSchemeContents`.
   ///
   mutating func writeAuthoritySigil()
 
-  /// Appends the path sigil (`/.`) to storage.
+  /// Appends the path sigil (`/.`) to the URL string.
   /// If called, this must always be the immediate successor to `writeSchemeContents`.
   ///
   mutating func writePathSigil()
 
-  /// Appends the bytes provided by `usernameWriter`.
+  /// Appends the UTF-8 code-units provided by `usernameWriter` to the URL string.
   /// The content must already be percent-encoded and not include any separators.
   /// If called, this must always be the immediate successor to `writeAuthoritySigil`.
   ///
-  mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
-  where T: Collection, T.Element == UInt8
-
-  /// Appends the password separator character (`:`), followed by the bytes provided by `passwordWriter`.
-  /// The content must already be percent-encoded and not include any separators.
-  /// If called, this must always be the immediate successor to `writeUsernameContents`.
+  /// Note that `usernameWriter` is not guaranteed to be invoked.
   ///
-  mutating func writePasswordContents<T>(_ passwordWriter: (WriterFunc<T>) -> Void)
-  where T: Collection, T.Element == UInt8
+  mutating func writeUsernameContents<T>(
+    _ usernameWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8
 
-  /// Appends the credential terminator byte (`@`).
+  /// Appends the password separator character (`:`), followed by the UTF-8 code-units provided by `passwordWriter`, to the URL string.
+  /// The content must already be percent-encoded and not include any separators.
+  ///
+  /// Note that `passwordWriter` is not guaranteed to be invoked.
+  ///
+  mutating func writePasswordContents<T>(
+    _ passwordWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8
+
+  /// Appends the credential terminator byte (`@`) to the URL string.
   /// If called, this must always be the immediate successor to either `writeUsernameContents` or `writePasswordContents`.
   ///
   mutating func writeCredentialsTerminator()
 
-  /// Appends the bytes given by `hostnameWriter`.
+  /// Appends the UTF-8 code-units given by `hostnameWriter` to the URL string.
   /// The content must already be percent-encoded/IDNA-transformed and not include any separators.
   /// If called, this must always have been preceded by a call to `writeAuthoritySigil`.
   ///
+  /// Note that `hostnameWriter` is not guaranteed to be invoked.
+  ///
   mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ hostnameWriter: (WriterFunc<T>) -> Void
+    lengthIfKnown: Int?, _ hostnameWriter: (PieceWriter<T>) -> Void
   ) where T: Collection, T.Element == UInt8
 
-  /// Appends the port separator character (`:`), followed by the textual representation of the given port number to storage.
+  /// Appends the port separator character (`:`), followed by the textual representation of the given port number, to the URL string.
   /// If called, this must always be the immediate successor to `writeHostname`.
   ///
   mutating func writePort(_ port: UInt16)
 
-  /// Appends an entire authority string (username + password + hostname + port) to storage.
+  /// Appends an entire authority string (username + password + hostname + port) to the URL string.
   /// The content must already be percent-encoded/IDNA-transformed.
   /// If called, this must always be the immediate successor to `writeAuthoritySigil`.
   ///
@@ -98,180 +108,263 @@ protocol URLWriter: HostnameWriter {
     usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
   )
 
-  /// Appends the bytes given by `writer`.
+  /// Appends the UTF-8 code-units given by `writer` to the URL string.
   /// The content must already be percent-encoded. No separators are added before or after the content.
   ///
-  mutating func writePath<T>(firstComponentLength: Int, _ writer: (WriterFunc<T>) -> Void)
-  where T: Collection, T.Element == UInt8
-
-  /// Appends an uninitialized space of size `length` and calls the given closure to allow for the path content to be written out of order.
-  /// The `writer` closure must return the number of bytes written (`bytesWritten`), and all bytes from `0..<bytesWritten` must be initialized.
-  /// Content written in to the buffer must already be percent-encoded. No separators are added before or after the content.
+  /// Note that `writer` is not guaranteed to be invoked.
   ///
-  mutating func writeUnsafePath(
+  mutating func writePath<T>(
+    firstComponentLength: Int, _ writer: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8
+
+  /// Appends a path of size `length`, which may be initialized by `writer`, to the URL string.
+  /// The `writer` closure must initialize all bytes from `0..<length`, and should return an independently-calculated measure of the number of bytes it wrote.
+  /// The content must already be percent-encoded. No separators are added before or after the content.
+  ///
+  /// Note that `writer` is not guaranteed to be invoked.
+  ///
+  mutating func writePresizedPathUnsafely(
     length: Int, firstComponentLength: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
   )
 
-  /// Appends the query separator character (`?`), followed by the bytes provided by `queryWriter`.
+  /// Appends the query separator character (`?`), followed by the UTF-8 code-units provided by `queryWriter`, to the URL string.
   /// The content must already be percent-encoded.
   ///
-  mutating func writeQueryContents<T>(_ queryWriter: (WriterFunc<T>) -> Void)
-  where T: Collection, T.Element == UInt8
+  /// Note that `queryWriter` is not guaranteed to be invoked.
+  ///
+  mutating func writeQueryContents<T>(
+    _ queryWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8
 
-  /// Appends the fragment separator character (`#`), followed by the bytes provided by `fragmentWriter`
+  /// Appends the fragment separator character (`#`), followed by the UTF-8 code-units provided by `fragmentWriter`, to the URL string.
   /// The content must already be percent-encoded.
   ///
-  mutating func writeFragmentContents<T>(_ fragmentWriter: (WriterFunc<T>) -> Void)
-  where T: Collection, T.Element == UInt8
+  /// Note that `fragmentWriter` is not guaranteed to be invoked.
+  ///
+  mutating func writeFragmentContents<T>(
+    _ fragmentWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8
+
+  // Optional callbacks.
+
+  /// Optional function which informs the writer that the URL has completed writing. No more content or hints will be written after this function is called.
+  /// The default implementation does nothing.
+  ///
+  mutating func finalize()
 
   // Optional hints.
+
+  /// Optional function which asks the writer whether it happens to know that the given component may skip percent-encoding.
+  ///
+  /// The default implementation returns `false`.
+  ///
+  func getHint(maySkipPercentEncoding component: WebURL.Component) -> Bool
 
   /// Optional function which notes that the given component did not require percent-encoding when writing from the input-string.
   /// This doesn't mean that the component does not _contain_ any percent-encoded contents, only that we don't need to perform an
   /// additional level of encoding when writing.
   ///
-  /// Conformers may wish to note this information, in case they wish to write the same contents using another `URLWriter`.
+  /// Conformers may wish to store and share this information, in case they wish to write the same contents using another `URLWriter`.
   /// The default implementation does nothing.
   ///
-  mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool)
+  mutating func writeHint(_ component: WebURL.Component, maySkipPercentEncoding: Bool)
+
+  /// Optional function which asks the writer whether it happens to have `PathMetrics` for the URL which is being written.
+  ///
+  /// The default implementation returns `nil`.
+  ///
+  func getPathMetricsHint() -> PathMetrics?
 
   /// Optional function which takes note of metrics collected while writing the URL's path component.
-  /// Conformers may wish to note this information, in case they wish to write the same contents using another `URLWriter`.
+  ///
+  /// Conformers may wish to store and share this information, in case they wish to write the same contents using another `URLWriter`.
   /// The default implementation does nothing.
   ///
   mutating func writePathMetricsHint(_ pathMetrics: PathMetrics)
-
-  /// Optional function which informs the writer that the URL has completed writing. No more content or hints will be written after this function is called.
-  ///
-  mutating func finalize()
 }
 
 extension URLWriter {
 
-  mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
+  @inlinable
+  internal mutating func finalize() {
     // Not required.
   }
-  mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
+
+  @inlinable
+  internal func getHint(maySkipPercentEncoding component: WebURL.Component) -> Bool {
+    false
+  }
+
+  @inlinable
+  internal mutating func writeHint(_ component: WebURL.Component, maySkipPercentEncoding: Bool) {
     // Not required.
   }
-  mutating func finalize() {
+
+  @inlinable
+  internal func getPathMetricsHint() -> PathMetrics? {
+    nil
+  }
+
+  @inlinable
+  internal mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
     // Not required.
   }
 }
 
-// MARK: - URLWriters.
-
-/// Information which is used to determine how a URL should be stored or written.
+/// Stored hints about how to write a particular URL string.
 ///
-struct URLMetrics {
+@usableFromInline
+internal struct URLWriterHints {
 
   /// If set, contains information about the number of code-units in the path, number of path components, etc.
   /// If not set, users may make no assumptions about the path.
-  var pathMetrics: PathMetrics? = nil
+  ///
+  @usableFromInline
+  internal var pathMetrics: PathMetrics?
 
   /// Components which are known to not require percent-encoding.
   /// If a component is not in this set, users must assume that it requires percent-encoding.
-  var componentsWhichMaySkipEscaping: WebURL.ComponentSet = []
+  ///
+  @usableFromInline
+  internal var componentsWhichMaySkipPercentEncoding: WebURL.ComponentSet
+
+  @inlinable
+  internal init() {
+    self.pathMetrics = nil
+    self.componentsWhichMaySkipPercentEncoding = []
+  }
 }
 
-/// A `URLWriter` which does not actually write to any storage, and gathers information about
-/// what the result looks like (its `URLStructure` and `URLMetrics`).
+
+// --------------------------------------------
+// MARK: - Writers
+// --------------------------------------------
+
+
+/// A `URLWriter` which does not actually write to any storage, only gathering information about what the URL string looks like.
 ///
 /// This type cannot be instantiated directly. Use the `StructureAndMetricsCollector.collect { ... }` function
 /// to obtain an instance, write to it, and collect its results.
 ///
-struct StructureAndMetricsCollector: URLWriter {
-  private var requiredCapacity: Int = 0
-  private var metrics = URLMetrics()
-  private var structure = URLStructure<Int>.invalidEmptyStructure()
+@usableFromInline
+internal struct StructureAndMetricsCollector: URLWriter {
 
-  private init() {}
+  // Note: requiredCapacity must always use arithmetic which traps on overflow,
+  //       as 'UnsafePresizedBufferWriter' relies on this fact being verified for memory safety.
+  @usableFromInline
+  internal private(set) var requiredCapacity: Int
 
-  static func collect(
-    _ body: (inout StructureAndMetricsCollector) -> Void
-  ) -> (requiredCapacity: Int, structure: URLStructure<Int>, metrics: URLMetrics) {
-    var collector = StructureAndMetricsCollector()
-    body(&collector)
-    precondition(collector.requiredCapacity >= 0)
-    return (collector.requiredCapacity, collector.structure, collector.metrics)
+  @usableFromInline
+  internal private(set) var structure: URLStructure<Int>
+
+  @usableFromInline
+  internal private(set) var hints: URLWriterHints
+
+  /// Creates a new structure and metrics collector, initially representing an invalid, empty URL string.
+  ///
+  /// - important: Do not use the returned instance's data until an URL string has been written to it.
+  ///
+  @inlinable
+  internal init() {
+    self.requiredCapacity = 0
+    self.structure = .invalidEmptyStructure()
+    self.hints = URLWriterHints()
   }
 
-  mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
+  @inlinable
+  internal mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
     structure.schemeKind = schemeKind
     structure.cannotBeABaseURL = cannotBeABaseURL
   }
 
-  mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
-    structure.schemeLength = schemeBytes.count + 1
+  @inlinable
+  internal mutating func writeSchemeContents<T>(
+    _ schemeBytes: T
+  ) where T: Collection, T.Element == UInt8 {
+
+    assert(structure.schemeLength == 0)
+    structure.schemeLength = schemeBytes.count + 1 /* ":" */
     requiredCapacity = structure.schemeLength
   }
 
-  mutating func writeAuthoritySigil() {
-    precondition(structure.sigil == .none)
+  @inlinable
+  internal mutating func writeAuthoritySigil() {
+    assert(structure.sigil == .none)
     structure.sigil = .authority
     requiredCapacity += Sigil.authority.length
   }
 
-  mutating func writePathSigil() {
-    precondition(structure.sigil == .none)
+  @inlinable
+  internal mutating func writePathSigil() {
+    assert(structure.sigil == .none)
     structure.sigil = .path
     requiredCapacity += Sigil.path.length
   }
 
-  mutating func writeUsernameContents<T>(_ usernameWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    structure.usernameLength = 0
-    usernameWriter {
-      structure.usernameLength += $0.count
-    }
+  @inlinable
+  internal mutating func writeUsernameContents<T>(
+    _ usernameWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+
+    assert(structure.usernameLength == 0)
+    usernameWriter { structure.usernameLength += $0.count }
     requiredCapacity += structure.usernameLength
   }
 
-  mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
+  @inlinable
+  internal mutating func writePasswordContents<T>(
+    _ passwordWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+
+    assert(structure.passwordLength == 0)
     structure.passwordLength = 1
-    passwordWriter {
-      structure.passwordLength += $0.count
-    }
+    passwordWriter { structure.passwordLength += $0.count }
     requiredCapacity += structure.passwordLength
   }
 
-  mutating func writeCredentialsTerminator() {
+  @inlinable
+  internal mutating func writeCredentialsTerminator() {
     requiredCapacity += 1
   }
 
-  mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ hostnameWriter: ((T) -> Void) -> Void
+  @inlinable
+  internal mutating func writeHostname<T>(
+    lengthIfKnown: Int?, _ hostnameWriter: (PieceWriter<T>) -> Void
   ) where T: Collection, T.Element == UInt8 {
+
+    assert(structure.hostnameLength == 0)
     if let knownLength = lengthIfKnown {
       structure.hostnameLength = knownLength
-      requiredCapacity += knownLength
-      return
+      requiredCapacity += structure.hostnameLength
+    } else {
+      hostnameWriter { structure.hostnameLength += $0.count }
+      requiredCapacity += structure.hostnameLength
     }
-    structure.hostnameLength = 0
-    hostnameWriter {
-      structure.hostnameLength += $0.count
-    }
-    requiredCapacity += structure.hostnameLength
   }
 
-  mutating func writePort(_ port: UInt16) {
-    structure.portLength = 1
+  @inlinable
+  internal mutating func writePort(_ port: UInt16) {
+
+    assert(structure.portLength == 0)
+    structure.portLength = 1 /* ":" */
     switch port {
     case 10000...UInt16.max: structure.portLength += 5
     case 1000..<10000: structure.portLength += 4
     case 100..<1000: structure.portLength += 3
     case 10..<100: structure.portLength += 2
-    case 0..<10: structure.portLength += 1
-    default: preconditionFailure()
+    default /* 0..<10 */: structure.portLength += 1
     }
     requiredCapacity += structure.portLength
   }
 
-  mutating func writeKnownAuthorityString(
+  @inlinable
+  internal mutating func writeKnownAuthorityString(
     _ authority: UnsafeBufferPointer<UInt8>,
     usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
   ) {
+
+    assert(structure.usernameLength == 0 && structure.passwordLength == 0)
+    assert(structure.hostnameLength == 0 && structure.portLength == 0)
     structure.usernameLength = usernameLength
     structure.passwordLength = passwordLength
     structure.hostnameLength = hostnameLength
@@ -279,163 +372,200 @@ struct StructureAndMetricsCollector: URLWriter {
     requiredCapacity += authority.count
   }
 
-  mutating func writePath<T>(firstComponentLength: Int, _ writer: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
+  @inlinable
+  internal mutating func writePath<T>(
+    firstComponentLength: Int, _ writer: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+
+    assert(structure.firstPathComponentLength == 0)
+    assert(structure.pathLength == 0)
     structure.firstPathComponentLength = firstComponentLength
-    structure.pathLength = 0
-    writer {
-      structure.pathLength += $0.count
-    }
+    writer { structure.pathLength += $0.count }
     requiredCapacity += structure.pathLength
   }
 
-  mutating func writeUnsafePath(
+  @inlinable
+  internal mutating func writePresizedPathUnsafely(
     length: Int, firstComponentLength: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
+
+    assert(structure.firstPathComponentLength == 0)
+    assert(structure.pathLength == 0)
     structure.firstPathComponentLength = firstComponentLength
     structure.pathLength = length
     requiredCapacity += length
   }
 
-  mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    structure.queryLength = 1
-    queryWriter {
-      structure.queryLength += $0.count
-    }
+  @inlinable
+  internal mutating func writeQueryContents<T>(
+    _ queryWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+
+    assert(structure.queryLength == 0)
+    structure.queryLength = 1 /* "?" */
+    queryWriter { structure.queryLength += $0.count }
     requiredCapacity += structure.queryLength
   }
 
-  mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
+  @inlinable
+  internal mutating func writeFragmentContents<T>(
+    _ fragmentWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+
+    assert(structure.fragmentLength == 0)
     structure.fragmentLength = 1
-    fragmentWriter {
-      structure.fragmentLength += $0.count
-    }
+    fragmentWriter { structure.fragmentLength += $0.count }
     requiredCapacity += structure.fragmentLength
   }
 
-  // Hints.
-
-  mutating func writeHint(_ component: WebURL.Component, needsEscaping: Bool) {
-    if needsEscaping == false {
-      metrics.componentsWhichMaySkipEscaping.insert(component)
-    }
-  }
-
-  mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
-    metrics.pathMetrics = pathMetrics
-  }
-
-  mutating func finalize() {
+  @inlinable
+  internal mutating func finalize() {
+    precondition(requiredCapacity >= 0)
     // Empty and nil queries are considered form-encoded (i.e. they do not need to be re-encoded).
     structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
     structure.checkInvariants()
   }
+
+  // Hints.
+
+  @inlinable
+  internal mutating func writeHint(_ component: WebURL.Component, maySkipPercentEncoding: Bool) {
+    hints.componentsWhichMaySkipPercentEncoding[component] = maySkipPercentEncoding
+  }
+
+  @inlinable
+  internal mutating func writePathMetricsHint(_ pathMetrics: PathMetrics) {
+    hints.pathMetrics = pathMetrics
+  }
 }
 
-/// A `URLWriter` which writes to a pre-sized mutable buffer.
+/// A `URLWriter` which writes a URL string to a pre-sized mutable buffer.
 ///
-/// The buffer **must** have sufficient capacity to store the entire result,
-/// as this writer is free to omit bounds checking in release build configurations.
+/// The buffer must have precisely the correct capacity to store the URL string, or a runtime error will be triggered.  This implies that its address may not be `nil`.
+/// The fact that the exact capacity is known (and `URLWriterHints` available) is taken as proof that the number of bytes written will not overflow an `Int`.
 ///
-struct UnsafePresizedBufferWriter: URLWriter {
-  private(set) var bytesWritten: Int
-  let buffer: UnsafeMutableBufferPointer<UInt8>
+@usableFromInline
+internal struct UnsafePresizedBufferWriter: URLWriter {
 
-  init(buffer: UnsafeMutableBufferPointer<UInt8>) {
-    self.bytesWritten = 0
+  @usableFromInline
+  internal let buffer: UnsafeMutableBufferPointer<UInt8>
+
+  @usableFromInline
+  internal private(set) var bytesWritten: Int
+
+  @usableFromInline
+  internal let knownHints: URLWriterHints
+
+  @inlinable
+  internal init(buffer: UnsafeMutableBufferPointer<UInt8>, hints: URLWriterHints) {
     self.buffer = buffer
+    self.bytesWritten = 0
+    self.knownHints = hints
     precondition(buffer.baseAddress != nil, "Invalid buffer")
   }
 
-  // Underlying buffer-writing functions.
-
-  private mutating func writeByte(_ byte: UInt8) {
+  @inlinable
+  internal mutating func _writeByte(_ byte: UInt8) {
     assert(bytesWritten < buffer.count)
-    (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).pointee = byte
-    bytesWritten += 1
+    (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).initialize(to: byte)
+    bytesWritten &+= 1
   }
-  private mutating func writeByte(_ byte: UInt8, count: Int) {
+
+  @inlinable
+  internal mutating func _writeByte(_ byte: UInt8, count: Int) {
     assert(bytesWritten < buffer.count || count == 0)
     (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).initialize(repeating: byte, count: count)
-    bytesWritten += count
+    bytesWritten &+= count
   }
-  private mutating func writeBytes<T>(_ bytes: T) where T: Collection, T.Element == UInt8 {
+
+  @inlinable
+  internal mutating func _writeBytes<T>(_ bytes: T) where T: Collection, T.Element == UInt8 {
     assert(bytesWritten < buffer.count || bytes.isEmpty)
-    let count = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: bytesWritten)).initialize(from: bytes).1
-    bytesWritten += count
+    // FIXME: [performance]: UMBP.initialize(from:) is slow with slices. https://bugs.swift.org/browse/SR-14491
+    let count = UnsafeMutableBufferPointer(
+      start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten,
+      count: buffer.count &- bytesWritten
+    ).initialize(from: bytes).1
+    bytesWritten &+= count
   }
 
   // URLWriter.
 
-  mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
+  @inlinable
+  internal mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
+    // This writer does not calculate a URLStructure.
   }
 
-  mutating func writeSchemeContents<T>(_ schemeBytes: T) where T: Collection, T.Element == UInt8 {
-    writeBytes(schemeBytes)
-    writeByte(ASCII.colon.codePoint)
-  }
-
-  mutating func writeAuthoritySigil() {
-    writeByte(ASCII.forwardSlash.codePoint, count: 2)
-  }
-
-  mutating func writePathSigil() {
-    writeByte(ASCII.forwardSlash.codePoint)
-    writeByte(ASCII.period.codePoint)
-  }
-
-  mutating func writeUsernameContents<T>(_ usernameWriter: (WriterFunc<T>) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    usernameWriter { piece in
-      writeBytes(piece)
-    }
-  }
-
-  mutating func writePasswordContents<T>(_ passwordWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    writeByte(ASCII.colon.codePoint)
-    passwordWriter { piece in
-      writeBytes(piece)
-    }
-  }
-
-  mutating func writeCredentialsTerminator() {
-    writeByte(ASCII.commercialAt.codePoint)
-  }
-
-  mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ hostnameWriter: ((T) -> Void) -> Void
+  @inlinable
+  internal mutating func writeSchemeContents<T>(
+    _ schemeBytes: T
   ) where T: Collection, T.Element == UInt8 {
-    hostnameWriter { piece in
-      writeBytes(piece)
-    }
+    _writeBytes(schemeBytes)
+    _writeByte(ASCII.colon.codePoint)
   }
 
-  mutating func writePort(_ port: UInt16) {
-    writeByte(ASCII.colon.codePoint)
+  @inlinable
+  internal mutating func writeAuthoritySigil() {
+    _writeByte(ASCII.forwardSlash.codePoint, count: 2)
+  }
+
+  @inlinable
+  internal mutating func writePathSigil() {
+    _writeByte(ASCII.forwardSlash.codePoint)
+    _writeByte(ASCII.period.codePoint)
+  }
+
+  @inlinable
+  internal mutating func writeUsernameContents<T>(
+    _ usernameWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    usernameWriter { _writeBytes($0) }
+  }
+
+  @inlinable
+  internal mutating func writePasswordContents<T>(
+    _ passwordWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    _writeByte(ASCII.colon.codePoint)
+    passwordWriter { _writeBytes($0) }
+  }
+
+  @inlinable
+  internal mutating func writeCredentialsTerminator() {
+    _writeByte(ASCII.commercialAt.codePoint)
+  }
+
+  @inlinable
+  internal mutating func writeHostname<T>(
+    lengthIfKnown: Int?, _ hostnameWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    hostnameWriter { _writeBytes($0) }
+  }
+
+  @inlinable
+  internal mutating func writePort(_ port: UInt16) {
+    _writeByte(ASCII.colon.codePoint)
     var portString = String(port)
-    portString.withUTF8 {
-      writeBytes($0)
-    }
+    portString.withUTF8 { _writeBytes($0) }
   }
 
-  mutating func writeKnownAuthorityString(
+  @inlinable
+  internal mutating func writeKnownAuthorityString(
     _ authority: UnsafeBufferPointer<UInt8>,
     usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
   ) {
-    writeBytes(authority)
+    _writeBytes(authority)
   }
 
-  mutating func writePath<T>(firstComponentLength: Int, _ writer: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    writer { piece in
-      writeBytes(piece)
-    }
+  @inlinable
+  internal mutating func writePath<T>(
+    firstComponentLength: Int, _ writer: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    writer { _writeBytes($0) }
   }
 
-  mutating func writeUnsafePath(
+  @inlinable
+  internal mutating func writePresizedPathUnsafely(
     length: Int, firstComponentLength: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
     let space = UnsafeMutableBufferPointer(start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten, count: length)
@@ -444,20 +574,37 @@ struct UnsafePresizedBufferWriter: URLWriter {
     bytesWritten += pathBytesWritten
   }
 
-  mutating func writeQueryContents<T>(_ queryWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    writeByte(ASCII.questionMark.codePoint)
-    queryWriter {
-      writeBytes($0)
-    }
+  @inlinable
+  internal mutating func writeQueryContents<T>(
+    _ queryWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    _writeByte(ASCII.questionMark.codePoint)
+    queryWriter { _writeBytes($0) }
   }
 
-  mutating func writeFragmentContents<T>(_ fragmentWriter: ((T) -> Void) -> Void)
-  where T: Collection, T.Element == UInt8 {
-    writeByte(ASCII.numberSign.codePoint)
-    fragmentWriter {
-      writeBytes($0)
-    }
+  @inlinable
+  internal mutating func writeFragmentContents<T>(
+    _ fragmentWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    _writeByte(ASCII.numberSign.codePoint)
+    fragmentWriter { _writeBytes($0) }
+  }
+
+  @inlinable
+  internal func finalize() {
+    precondition(bytesWritten == buffer.count)
+  }
+
+  // Hints.
+
+  @inlinable
+  internal func getHint(maySkipPercentEncoding component: WebURL.Component) -> Bool {
+    knownHints.componentsWhichMaySkipPercentEncoding[component]
+  }
+
+  @inlinable
+  internal func getPathMetricsHint() -> PathMetrics? {
+    knownHints.pathMetrics
   }
 }
 
