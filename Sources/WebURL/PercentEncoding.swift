@@ -319,13 +319,33 @@ public struct _PercentEncodedByte: RandomAccessCollection {
       assert(position == 0, "Invalid index")
       return byte
     case .percentEncoded:
+      assert((0..<3).contains(position), "Invalid index")
       switch position {
       case 0: return ASCII.percentSign.codePoint
       case 1: return ASCII.uppercaseHexDigit(of: byte &>> 4).codePoint
-      case 2: return ASCII.uppercaseHexDigit(of: byte).codePoint
-      default: fatalError("Invalid index")
+      default: return ASCII.uppercaseHexDigit(of: byte).codePoint
       }
     }
+  }
+
+  @inlinable
+  public func index(after i: Int) -> Int {
+    i &+ 1
+  }
+
+  @inlinable
+  public func formIndex(after i: inout Int) {
+    i &+= 1
+  }
+
+  @inlinable
+  public func index(before i: Int) -> Int {
+    i &- 1
+  }
+
+  @inlinable
+  public func formIndex(before i: inout Int) {
+    i &-= 1
   }
 
   @inlinable
@@ -341,6 +361,11 @@ public struct _PercentEncodedByte: RandomAccessCollection {
   @inlinable
   public var count: Int {
     endIndex
+  }
+
+  @inlinable
+  public func distance(from start: Int, to end: Int) -> Int {
+    end &- start
   }
 }
 
