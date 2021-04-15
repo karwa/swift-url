@@ -513,10 +513,10 @@ extension URLStorage {
         bytesWritten += 1
       }
       for (key, value) in keyValuePairs {
-        bytesWritten += UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...]).initialize(from: key).1
+        bytesWritten += UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...]).fastInitialize(from: key)
         buffer[bytesWritten] = ASCII.equalSign.codePoint
         bytesWritten += 1
-        bytesWritten += UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...]).initialize(from: value).1
+        bytesWritten += UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...]).fastInitialize(from: value)
         if bytesWritten < buffer.count {
           buffer[bytesWritten] = ASCII.ampersand.codePoint
           bytesWritten += 1
@@ -598,7 +598,7 @@ extension URLStorage {
       header.copyStructure(from: newStructure)
       if !AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: codeUnits.count, structure: newStructure) {
         return AnyURLStorage(optimalStorageForCapacity: codeUnits.count, structure: newStructure) { buffer in
-          buffer.initialize(from: codeUnits).1
+          buffer.fastInitialize(from: codeUnits)
         }
       }
       return AnyURLStorage(self)
@@ -610,7 +610,7 @@ extension URLStorage {
       firstValueCodeUnitOffset..<firstValueCodeUnitOffset + firstOccurence.value.count,
       withUninitializedSpace: encodedValue.count,
       newStructure: newStructure,
-      initializer: { buffer in buffer.initialize(from: encodedValue).1 }
+      initializer: { buffer in buffer.fastInitialize(from: encodedValue) }
     ).newStorage
   }
 }

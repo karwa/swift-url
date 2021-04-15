@@ -319,13 +319,33 @@ public struct _PercentEncodedByte: RandomAccessCollection {
       assert(position == 0, "Invalid index")
       return byte
     case .percentEncoded:
+      assert((0..<3).contains(position), "Invalid index")
       switch position {
       case 0: return ASCII.percentSign.codePoint
       case 1: return ASCII.uppercaseHexDigit(of: byte &>> 4).codePoint
-      case 2: return ASCII.uppercaseHexDigit(of: byte).codePoint
-      default: fatalError("Invalid index")
+      default: return ASCII.uppercaseHexDigit(of: byte).codePoint
       }
     }
+  }
+
+  @inlinable
+  public func index(after i: Int) -> Int {
+    i &+ 1
+  }
+
+  @inlinable
+  public func formIndex(after i: inout Int) {
+    i &+= 1
+  }
+
+  @inlinable
+  public func index(before i: Int) -> Int {
+    i &- 1
+  }
+
+  @inlinable
+  public func formIndex(before i: inout Int) {
+    i &-= 1
   }
 
   @inlinable
@@ -342,6 +362,11 @@ public struct _PercentEncodedByte: RandomAccessCollection {
   public var count: Int {
     endIndex
   }
+
+  @inlinable
+  public func distance(from start: Int, to end: Int) -> Int {
+    end &- start
+  }
 }
 
 extension LazilyPercentEncodedGroups {
@@ -352,7 +377,10 @@ extension LazilyPercentEncodedGroups {
   @inlinable @inline(__always)
   internal func write(to writer: (_PercentEncodedByte) -> Void) -> Bool {
     var didEncode = false
-    for byteGroup in self {
+    // This leads to significantly better code generation than a 'for' loop, especially after inlining.
+    var i = startIndex
+    while i < endIndex {
+      let byteGroup = self[i]
       writer(byteGroup)
       switch byteGroup.encoding {
       case .percentEncoded, .substituted:
@@ -360,6 +388,7 @@ extension LazilyPercentEncodedGroups {
       case .unencoded:
         break
       }
+      formIndex(after: &i)
     }
     return didEncode
   }

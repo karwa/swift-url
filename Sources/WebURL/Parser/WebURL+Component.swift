@@ -58,11 +58,24 @@ extension WebURL {
       self._rawValue = elements.reduce(into: 0) { $0 |= $1.rawValue }
     }
 
+    @inlinable
+    internal subscript(component: Component) -> Bool {
+      get { contains(component) }
+      set { newValue ? insert(component) : remove(component) }
+    }
+
     /// Inserts a component in to the set.
     ///
     @inlinable
     internal mutating func insert(_ newMember: Component) {
       _rawValue |= newMember.rawValue
+    }
+
+    /// Removes a component from the set.
+    ///
+    @inlinable
+    internal mutating func remove(_ newMember: Component) {
+      _rawValue &= ~newMember.rawValue
     }
 
     /// Whether or not the given component is a member of this set.

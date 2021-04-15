@@ -37,6 +37,42 @@ extension UnsafeRawPointer {
 
 
 // --------------------------------------------
+// MARK: - Fast initialize
+// --------------------------------------------
+
+
+extension UnsafeMutableBufferPointer {
+
+  /// Initializes the buffer’s memory with the given elements.
+  ///
+  /// When calling the initialize(from:) method on a buffer b, the memory referenced by b must be uninitialized or the Element type must be a trivial type.
+  /// After the call, the memory referenced by this buffer up to, but not including, the returned index is initialized.
+  /// The buffer must contain sufficient memory to accommodate source.underestimatedCount.
+  ///
+  /// The returned index is the position of the element in the buffer one past the last element written.
+  /// If source contains no elements, the returned index is equal to the buffer’s startIndex.
+  /// If source contains an equal or greater number of elements than the buffer can hold, the returned index is equal to the buffer’s endIndex.
+  ///
+  /// This is like the standard library's `initialize(from:)` method, except that it doesn't return an iterator of remaining elements from the source,
+  /// and thus is able to be significantly faster for sources which implement `withContiguousStorageIfAvailable`.
+  ///
+  @inlinable
+  internal func fastInitialize<S>(from source: S) -> Int where S: Sequence, S.Element == Element {
+    // UMBP.initialize(from:) is slow with slices. https://bugs.swift.org/browse/SR-14491
+    let _bytesWritten = source.withContiguousStorageIfAvailable { srcBuffer -> Int in
+      guard let srcAddress = srcBuffer.baseAddress else { return 0 }
+      let bytesToWrite = Swift.min(count, srcBuffer.count)
+      self.baseAddress?.initialize(from: srcAddress, count: bytesToWrite)
+      return bytesToWrite
+    }
+    if let bytesWritten = _bytesWritten {
+      return bytesWritten
+    }
+    return initialize(from: source).1
+  }
+}
+
+// --------------------------------------------
 // MARK: - Pointers to tuple elements
 // --------------------------------------------
 

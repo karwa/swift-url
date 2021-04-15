@@ -136,3 +136,26 @@ extension OtherUtilitiesTests {
     XCTAssertURLIsIdempotent(url)
   }
 }
+
+extension OtherUtilitiesTests {
+
+  func testFastInitialize() {
+    let buffer = UnsafeMutableBufferPointer<Int>.allocate(capacity: 256)
+    XCTAssertEqual(buffer.endIndex, 256)
+
+    // Initialize with empty contiguous source. Should return 0.
+    XCTAssertEqual(buffer.fastInitialize(from: []), 0)
+
+    // Partially initialize from contiguous source. Should return number of elements written.
+    XCTAssertEqual(buffer.fastInitialize(from: Array(0..<100)), 100)
+    XCTAssertEqualElements(buffer[0..<100], 0..<100)
+
+    // Fully initialize from contiguous source. Should return number of elements written.
+    XCTAssertEqual(buffer.fastInitialize(from: Array(256..<512)), 256)
+    XCTAssertEqualElements(buffer, 256..<512)
+
+    // Initialize with a too-large contiguous source. Should return the buffer's endIndex.
+    XCTAssertEqual(buffer.fastInitialize(from: Array(512..<4096)), buffer.endIndex)
+    XCTAssertEqualElements(buffer, 512..<768)
+  }
+}
