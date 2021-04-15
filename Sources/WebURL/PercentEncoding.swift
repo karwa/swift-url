@@ -377,7 +377,10 @@ extension LazilyPercentEncodedGroups {
   @inlinable @inline(__always)
   internal func write(to writer: (_PercentEncodedByte) -> Void) -> Bool {
     var didEncode = false
-    for byteGroup in self {
+    // This leads to significantly better code generation than a 'for' loop, especially after inlining.
+    var i = startIndex
+    while i < endIndex {
+      let byteGroup = self[i]
       writer(byteGroup)
       switch byteGroup.encoding {
       case .percentEncoded, .substituted:
@@ -385,6 +388,7 @@ extension LazilyPercentEncodedGroups {
       case .unencoded:
         break
       }
+      formIndex(after: &i)
     }
     return didEncode
   }
