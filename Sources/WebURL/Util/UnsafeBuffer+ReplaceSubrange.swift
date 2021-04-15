@@ -101,7 +101,7 @@ where C: Collection, T.Element == C.Element {
     isUnique: isUnique,
     subrange: subrange,
     withElements: newElements.count,
-    initializedWith: { return $0.initialize(from: newElements).1 },
+    initializedWith: { return $0.fastInitialize(from: newElements) },
     storageConstructor: storageConstructor
   )
 }

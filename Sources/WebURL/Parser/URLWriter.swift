@@ -481,11 +481,10 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
   @inlinable
   internal mutating func _writeBytes<T>(_ bytes: T) where T: Collection, T.Element == UInt8 {
     assert(bytesWritten < buffer.count || bytes.isEmpty)
-    // FIXME: [performance]: UMBP.initialize(from:) is slow with slices. https://bugs.swift.org/browse/SR-14491
     let count = UnsafeMutableBufferPointer(
       start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten,
       count: buffer.count &- bytesWritten
-    ).initialize(from: bytes).1
+    ).fastInitialize(from: bytes)
     bytesWritten &+= count
   }
 
@@ -673,7 +672,7 @@ internal struct UnsafeBufferHostnameWriter: HostnameWriter {
     lengthIfKnown: Int?, _ writerFunc: ((T) -> Void) -> Void
   ) where T: Collection, T.Element == UInt8 {
     writerFunc { piece in
-      let n = buffer.initialize(from: piece).1
+      let n = buffer.fastInitialize(from: piece)
       buffer = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: n))
     }
   }

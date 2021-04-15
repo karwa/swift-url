@@ -203,9 +203,9 @@ internal struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> 
     precondition(minimumCapacity >= numElements)
     let newBuffer = Self.init(minimumCapacity: minimumCapacity, initialHeader: header)
     assert(newBuffer.count == 0)
-    newBuffer.withUnsafeMutablePointers { destHeader, destElemens in
+    newBuffer.withUnsafeMutablePointers { destHeader, destElems in
       self.withUnsafeMutablePointerToElements { srcElems in
-        destElemens.initialize(from: srcElems, count: numElements)
+        destElems.initialize(from: srcElems, count: numElements)
       }
       destHeader.pointee.count = numElements
     }
@@ -445,7 +445,7 @@ extension ManagedArrayBuffer {
     _ subrange: Range<Index>, with newElements: C
   ) -> Range<Index> where C: Collection, Self.Element == C.Element {
     unsafeReplaceSubrange(subrange, withUninitializedCapacity: newElements.count) { buffer in
-      buffer.initialize(from: newElements).1
+      buffer.fastInitialize(from: newElements)
     }
   }
 
@@ -456,6 +456,7 @@ extension ManagedArrayBuffer {
 
     let preAppendEnd = endIndex
 
+    // TODO: [performance]: Use withContiguousStorageIfAvailable
     var result: (S.Iterator, Int)?
     unsafeAppend(uninitializedCapacity: newElements.underestimatedCount) { ptr in
       result = ptr.initialize(from: newElements)

@@ -845,7 +845,7 @@ extension URLStorage {
             bytesWritten &+= 1
             bytesWritten &+=
               UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...])
-              .initialize(from: component.lazy.percentEncoded(as: \.pathComponent)).1
+              .fastInitialize(from: component.lazy.percentEncoded(as: \.pathComponent))
           }
           return bytesWritten
         })

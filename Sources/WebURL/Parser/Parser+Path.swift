@@ -748,7 +748,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         _ = UnsafeMutableBufferPointer(
           start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
           count: count
-        ).initialize(from: pathComponent)
+        ).fastInitialize(from: pathComponent)
         front = newFront
       }
       prependSlash()

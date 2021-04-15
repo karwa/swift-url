@@ -57,7 +57,7 @@ extension URLStorage {
     var commands: [ReplaceSubrangeOperation] = [
       .replace(subrange: oldStructure.rangeForReplacingCodeUnits(of: .scheme), withCount: newStructure.schemeLength) {
         dest in
-        let bytesWritten = dest.initialize(from: ASCII.Lowercased(newSchemeBytes)).1
+        let bytesWritten = dest.fastInitialize(from: ASCII.Lowercased(newSchemeBytes))
         dest[bytesWritten] = ASCII.colon.codePoint
         return bytesWritten + 1
       }
@@ -122,9 +122,9 @@ extension URLStorage {
     let result = replaceSubrange(oldRange, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       var bytesWritten = 0
       if needsEncoding {
-        bytesWritten += dest.initialize(from: newValue.lazy.percentEncoded(as: \.userInfo)).1
+        bytesWritten += dest.fastInitialize(from: newValue.lazy.percentEncoded(as: \.userInfo))
       } else {
-        bytesWritten += dest.initialize(from: newValue).1
+        bytesWritten += dest.fastInitialize(from: newValue)
       }
       if addSeparator {
         dest[bytesWritten] = ASCII.commercialAt.codePoint
@@ -178,11 +178,11 @@ extension URLStorage {
       if needsEncoding {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .initialize(from: newValue.lazy.percentEncoded(as: \.userInfo)).1
+          .fastInitialize(from: newValue.lazy.percentEncoded(as: \.userInfo))
       } else {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .initialize(from: newValue.lazy.percentEncoded(as: \.userInfo)).1
+          .fastInitialize(from: newValue.lazy.percentEncoded(as: \.userInfo))
       }
       dest[bytesWritten] = ASCII.commercialAt.codePoint
       bytesWritten += 1
@@ -892,11 +892,11 @@ extension URLStorage {
       if needsEncoding {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .initialize(from: newBytes.lazy.percentEncoded(as: encodeSet)).1
+          .fastInitialize(from: newBytes.lazy.percentEncoded(as: encodeSet))
       } else {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .initialize(from: newBytes.lazy.percentEncoded(as: encodeSet)).1
+          .fastInitialize(from: newBytes.lazy.percentEncoded(as: encodeSet))
       }
       return bytesWritten
     }
