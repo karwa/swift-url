@@ -117,10 +117,19 @@ final class ASCIITests: XCTestCase {
 
   func testASCIIDecimalPrinting() {
 
-    var buf: [UInt8] = [0, 0, 0, 0]
+    var buf: [UInt8] = [0, 0, 0, 0, 0, 0, 0, 0]
 
+    // UInt8.
     buf.withUnsafeMutableBytes { buffer in
       for num in (UInt8.min)...(UInt8.max) {
+        let bufferContentsCount = ASCII.writeDecimalString(for: num, to: buffer.baseAddress!)
+        XCTAssertEqualElements(buffer[..<Int(bufferContentsCount)], String(num, radix: 10).utf8)
+      }
+    }
+
+    // UInt16.
+    buf.withUnsafeMutableBytes { buffer in
+      for num in (UInt16.min)...(UInt16.max) {
         let bufferContentsCount = ASCII.writeDecimalString(for: num, to: buffer.baseAddress!)
         XCTAssertEqualElements(buffer[..<Int(bufferContentsCount)], String(num, radix: 10).utf8)
       }
