@@ -51,6 +51,8 @@
 /// [url-spec]: https://url.spec.whatwg.org/
 ///
 public struct WebURL {
+
+  @usableFromInline
   internal var storage: AnyURLStorage
 
   internal init(storage: AnyURLStorage) {

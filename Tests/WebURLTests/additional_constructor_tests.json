@@ -310,6 +310,20 @@
     "search": "",
     "hash": ""
   },
+  {
+    "input": "a",
+    "base": "file:///C:",
+    "href": "file:///C:/a",
+    "protocol": "file:",
+    "username": "",
+    "password": "",
+    "host": "",
+    "hostname": "",
+    "port": "",
+    "pathname": "/C:/a",
+    "search": "",
+    "hash": ""
+  },
   "[Path][Win] 1 slash - Absolute paths. If the parser in the standard goes down the 'file slash' state, absolute paths will be checked to see if they literally begin with a Windows drive letter as their first component, and otherwise (despite being absolute), will be relative to the base URL's drive letter (if it has one). They only copy the drive from the base URL, not any other parts of the path. \n\n Note that this only applies to the 'file slash' state - i.e. '/C:/Windows' or 'file:C:/Windows', and means that in a path like '/./D|/../foo' with a base URL of 'file:///C:/bar/', the 'D|' drive in the input will not be recognised because of 'C:' in the base URL (however, without that 'C:' in the base, we would recognise 'D|' as a drive).",
   {
     "input": "file:/D|/../foo",
