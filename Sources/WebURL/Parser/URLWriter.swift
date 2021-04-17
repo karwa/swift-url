@@ -544,8 +544,8 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
   @inlinable
   internal mutating func writePort(_ port: UInt16) {
     _writeByte(ASCII.colon.codePoint)
-    var portString = String(port)
-    portString.withUTF8 { _writeBytes($0) }
+    let rawPointer = UnsafeMutableRawPointer(buffer.baseAddress.unsafelyUnwrapped + bytesWritten)
+    bytesWritten &+= Int(ASCII.writeDecimalString(for: port, to: rawPointer))
   }
 
   @inlinable
@@ -570,7 +570,7 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
     let space = UnsafeMutableBufferPointer(start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten, count: length)
     let pathBytesWritten = writer(space)
     assert(pathBytesWritten == length)
-    bytesWritten += pathBytesWritten
+    bytesWritten &+= pathBytesWritten
   }
 
   @inlinable

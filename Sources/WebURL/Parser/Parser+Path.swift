@@ -65,6 +65,10 @@ internal protocol _PathParser {
   ///
   mutating func visitPathSigil()
 
+  /// An optional callback which is invoked when the parser encounters a non-fatal URL syntax oddity.
+  ///
+  /// The default implementation does nothing.
+  ///
   mutating func visitValidationError(_ error: ValidationError)
 }
 
@@ -86,16 +90,27 @@ extension _PathParser {
   }
 }
 
-private enum DeferredPathComponent<Source: Collection> {
-  case potentialWindowsDrive(Source, Int)
+
+// --------------------------------------------
+// MARK: - Parsing
+// --------------------------------------------
+
+
+@usableFromInline
+internal enum _DeferredPathComponent<Source: Collection> {
+  case potentialWindowsDrive(Source, UInt)
   case empties(Int)
 
-  var isPotentialWindowsDrive: Bool {
+  @inlinable
+  internal var isPotentialWindowsDrive: Bool {
     if case .potentialWindowsDrive = self { return true }
     return false
   }
 
-  func needsPathSigilWhenFlushing(_ state: PathState) -> Bool {
+  /// Whether this component contains enough deferred empties to require a path sigil, were it to be flushed as the start of a path string.
+  ///
+  @inlinable
+  internal func needsPathSigilWhenFlushing(_ state: _PathParserState) -> Bool {
     if state.didYieldComponent {
       if case .empties(let count) = self {
         return count != 0
@@ -109,129 +124,127 @@ private enum DeferredPathComponent<Source: Collection> {
   }
 }
 
-private struct PathState {
-  var popcount = 0
-  var didYieldComponent = false
-}
+@usableFromInline
+internal struct _PathParserState {
 
-extension WebURL {
+  @usableFromInline
+  internal var popcount: UInt
 
-  fileprivate func withNormalizedWindowsDriveLetter<T>(_ block: (Slice<UnsafeBufferPointer<UInt8>>?) -> T) -> T {
-    return self.storage.withUTF8(of: .path) {
-      if self.storage.structure.firstPathComponentLength == 3,
-        let firstComponent = $0?.dropFirst().prefix(2),  // dropFirst() due to the leading slash.
-        PathComponentParser.isNormalizedWindowsDriveLetter(firstComponent)
-      {
-        return block(firstComponent)
-      } else {
-        return block(nil)
-      }
-    }
-  }
+  @usableFromInline
+  internal var didYieldComponent: Bool
 
-  fileprivate var hasNormalizedWindowsDriveLetter: Bool {
-    return withNormalizedWindowsDriveLetter { $0 != nil }
+  @inlinable
+  internal init() {
+    self.popcount = 0
+    self.didYieldComponent = false
   }
 }
 
 extension _PathParser {
 
-  // FIXME: [swift]
-  // Some/all of these should be local functions inside 'walkPathComponents', but writing it
-  // that way introduces heap allocations which dominate the performance of the entire function.
-
-  /// Clears the given deferred component(s) and updates the path parser's state.
-  ///
-  /// - For potential Windows drives, this means we yield the component unless the popcount from the RHS would have popped it,
-  ///   then merge the resulting RHS popcount in to the LHS popcount in the given path parser state.
-  ///-   For empty components, we just check and yield them.
-  ///
-  private mutating func __flushDeferredComponent(
-    _ deferredComponent: inout DeferredPathComponent<InputString.SubSequence>?,
-    _ state: inout PathState
-  ) {
-    switch deferredComponent {
-    case .none:
-      break
-    case .potentialWindowsDrive(let componentContent, var storedPopcount):
-      // We've concluded that this is *not* a Windows drive letter, so yield it unless it would have been popped.
-      if storedPopcount == 0 {
-        visitInputPathComponent(componentContent, isWindowsDriveLetter: false)
-        state.didYieldComponent = true
-      } else {
-        storedPopcount -= 1
-      }
-      // Merge the popcount from the RHS of the Windows drive.
-      state.popcount += storedPopcount
-    case .empties(let count):
-      assert(count != 0, "0 is not a valid value for deferred empties")
-      visitEmptyPathComponents(count)
-      state.didYieldComponent = true
-    }
-    deferredComponent = .none
-  }
+  // Note: When making these local functions inside 'walkPathComponents', the compiler fails to prove they
+  // don't escape and introduces heap allocations which dominate the performance of the entire parser.
 
   /// Defers an empty path component. If there are already empty components deferred, it will be added to them.
-  /// Asserts that no other deferred components are inadvertedly overwritten.
   ///
-  private mutating func __deferTrailingEmptyAssert(
-    _ deferredComponent: inout DeferredPathComponent<InputString.SubSequence>?, _ state: inout PathState
+  /// Asserts that no potential Windows drive letters have been deferred.
+  ///
+  @inlinable
+  internal mutating func _deferEmptyAssertNotWindowsDrive(
+    _ deferred: inout _DeferredPathComponent<InputString.SubSequence>?, _ state: inout _PathParserState
   ) {
-    assert(state.popcount == 0, "cannot defer empty component - has been popped!")
-    guard case .empties(let count) = deferredComponent else {
-      assert(deferredComponent == nil, "cannot defer empty component - Windows drive already deferred!")
-      deferredComponent = .empties(1)
+
+    assert(state.popcount == 0, "This component has been popped. Cannot defer empty.")
+    guard case .empties(let count) = deferred else {
+      assert(deferred == nil, "Windows drive already deferred! Cannot defer empty.")
+      deferred = .empties(1)
       return
     }
-    deferredComponent = .empties(count + 1)
+    deferred = .empties(count &+ 1)
   }
 
-  /// Flushes deferred empty components.
-  /// Asserts that no other deferred components are inadvertedly flushed.
+  /// Flushes deferred empty components, if there are any, and asserts that no potential Windows drive letters have been deferred.
   ///
-  private mutating func __flushDeferredEmptiesAssert(
-    _ deferredComponent: inout DeferredPathComponent<InputString.SubSequence>?, _ state: inout PathState
+  @inlinable
+  internal mutating func _flushEmptiesAssertNotWindowsDrive(
+    _ deferred: inout _DeferredPathComponent<InputString.SubSequence>?, _ state: inout _PathParserState
   ) {
-    switch deferredComponent {
-    case .none: break
-    case .empties(_): __flushDeferredComponent(&deferredComponent, &state)
-    default: assertionFailure("Deferred non-empties")
+
+    guard case .empties(let count) = deferred else {
+      assert(deferred == nil, "Windows drive deferred! Cannot flush empties")
+      return
     }
+    assert(count != 0, "0 is not a valid number of deferred empties")
+    visitEmptyPathComponents(count)
+    state.didYieldComponent = true
+    deferred = .none
   }
 
-  private mutating func __flushDeferredComponentForFinalization(
-    _ deferredComponent: inout DeferredPathComponent<InputString.SubSequence>?, _ state: inout PathState
+  /// Flushes the deferred component(s).
+  ///
+  /// - For potential Windows drives, this means we have confirmed that the component is *not* a Windows drive.
+  ///   If the `popcount` on the RHS of the candidate was 0, the candidate is yielded as a regular component.
+  ///   Otherwise, the candidate is popped (like any other component would have been), and any remaining popcount from its RHS
+  ///   is merged with the parser's current `popcount`.
+  ///
+  /// - Empty components are yielded.
+  ///
+  @inlinable
+  internal mutating func _flushAndMergePopcount(
+    _ deferred: inout _DeferredPathComponent<InputString.SubSequence>?,
+    _ state: inout _PathParserState
   ) {
-    switch deferredComponent {
+    guard case .potentialWindowsDrive(let componentContent, var storedPopcount) = deferred else {
+      _flushEmptiesAssertNotWindowsDrive(&deferred, &state)
+      return
+    }
+    if storedPopcount == 0 {
+      visitInputPathComponent(componentContent, isWindowsDriveLetter: false)
+      state.didYieldComponent = true
+    } else {
+      storedPopcount -= 1
+    }
+    state.popcount += storedPopcount
+    deferred = .none
+  }
+
+  /// Flushes the deferred component(s) appropriately for the start of the path string.
+  ///
+  /// - For potential Windows drives, this means we have confirmed that the component *is* a Windows drive. It will be yielded with the appropriate flag.
+  ///
+  /// - Empty components are yielded, and if a path sigil is required, that is yielded, too.
+  ///
+  @inlinable
+  internal mutating func _flushForFinalization(
+    _ deferred: inout _DeferredPathComponent<InputString.SubSequence>?, _ state: inout _PathParserState
+  ) {
+    switch deferred {
     case .potentialWindowsDrive(let firstComponent, _):
       visitInputPathComponent(firstComponent, isWindowsDriveLetter: true)
-    case .empties(_), .none:
-      // If we haven't yielded anything yet, make sure we at least write an empty path.
-      if state.didYieldComponent == false {
-        __deferTrailingEmptyIfNone(&deferredComponent, &state)
-      }
-      // Determine if the path needs to be prefixed with a sigil, then flush remaining state.
-      let needsPathSigil = deferredComponent?.needsPathSigilWhenFlushing(state) ?? false
-      __flushDeferredEmptiesAssert(&deferredComponent, &state)
-      if needsPathSigil {
-        visitPathSigil()
-      }
-    }
-  }
-
-  private mutating func __deferTrailingEmptyIfNone(
-    _ deferredComponent: inout DeferredPathComponent<InputString.SubSequence>?, _ state: inout PathState
-  ) {
-    guard case .empties(let count) = deferredComponent else {
-      assert(deferredComponent == nil, "cannot defer empty component - Windows drive already deferred!")
-      deferredComponent = .empties(1)
       return
+    // If we haven't yielded anything yet, make sure we at least write an empty path.
+    case .empties(let count):
+      if state.didYieldComponent == false {
+        assert(count != 0)
+      }
+    case .none:
+      if state.didYieldComponent == false {
+        // This should be impossible to reach. A non-empty path string which doesn't yield anything would
+        // need to pop, and would need to at least end in a "..", but the parser ensures that such paths end in a "/".
+        // Handle it to make *absolutely* sure we don't accidentally create a URL with 'nil' path from non-empty input.
+        assertionFailure("Finalizing a path without yielding or deferring anything?!")
+        deferred = .empties(1)
+      }
     }
-    assert(count != 0)
+    let needsPathSigil = deferred?.needsPathSigilWhenFlushing(state) ?? false
+    _flushEmptiesAssertNotWindowsDrive(&deferred, &state)
+    if needsPathSigil {
+      visitPathSigil()
+    }
   }
 
-  /// Parses the given path string, optionally applied relative to the path of a base URL object, and yields the simplified list of path components.
-  /// These components are iterated in *reverse order*, and processed via the callback methods in `_PathParser`.
+  /// Parses the given path string, optionally relative to the path of a base URL object, and yields the simplified list of path components via callbacks
+  /// implemented on this `_PathParser`. The path components are yielded in *reverse order*.
   ///
   /// To construct the simplified path string, start with an empty string. For each path component yielded by the parser,
   /// prepend `"/"` (ASCII forward slash) followed by the path component's contents, to that string. Note that path components from the input string may require
@@ -243,22 +256,23 @@ extension _PathParser {
   /// - Note:
   /// If the input string is empty, and the scheme **is not** special, no callbacks will be called (the path is `nil`).
   /// If the input string is empty, and the scheme **is** special, the result is an implicit root path (`/`).
-  /// If the input string is not empty, this function will always yield something.
+  /// If the input string is not empty, this function will always yield a non-empty path.
   ///
   /// - parameters:
-  ///  - inputString:  The path string to parse, as a collection of UTF8-encoded bytes.
-  ///  - schemeKind:   The scheme of the URL which the path will be part of.
-  ///  - baseURL:      The URL whose path serves as the "base" for the input string, if it is a relative path.
-  ///                  Note that there are some edge-cases related to Windows drive letters which require the URL parser to provide the base URL
-  ///                  (if present), even for absolute paths.
+  ///  - input: The path string to parse, as a collection of UTF-8 code-units.
+  ///  - schemeKind: The scheme of the URL which the path will be part of.
+  ///  - baseURL: The URL whose path serves as the "base" for the input string, if it is a relative path.
+  ///             Note that there are some edge-cases related to Windows drive letters which require the base URL be provided (if present),
+  ///             even for absolute paths.
   ///  - absolutePathsCopyWindowsDriveFromBase: A flag set by the URL parser to enable special behaviours for absolute paths in path-only file
-  ///                                           URLs, making them copy the base URL's Windows drive letter in some cirumstances.
-  ///                                           For example, the path-only URL "file:/hello" parsed against the base URL
+  ///                                           URLs, forcing them to be relative to the base URL's Windows drive, even if the given path contains
+  ///                                           its own Windows drive. For example, the path-only URL "file:/hello" parsed against the base URL
   ///                                           "file:///C:/Windows" results in "file:///C:/hello", but the non-path-only
   ///                                           URL "file:///hello" results in "file:///hello" when parsed against the same base URL.
-  ///                                           In both cases the path parser only sees the string "/hello" as its input.
+  ///                                           In both cases the path parser only sees the string "/hello" as its input, so the value of this flag must
+  ///                                           be determined by the URL parser.
   ///
-  @usableFromInline
+  @inlinable @inline(never)
   internal mutating func walkPathComponents(
     pathString input: InputString,
     schemeKind: WebURL.SchemeKind,
@@ -266,44 +280,39 @@ extension _PathParser {
     absolutePathsCopyWindowsDriveFromBase: Bool
   ) {
 
-    // Set some definitions based on the scheme.
-    let isFileScheme = (schemeKind == .file)
-    let isPathSeparator: (_ byte: UInt8) -> Bool
-    if schemeKind.isSpecial {
-      isPathSeparator = { byte in ASCII(byte) == .forwardSlash || ASCII(byte) == .backslash }
-    } else {
-      isPathSeparator = { byte in ASCII(byte) == .forwardSlash }
-    }
-
-    var input = input[...]
-
     guard input.isEmpty == false else {
-      // Empty string. Special URLs have an implicit path, non-special URLs may have an empty path.
+      // Special URLs have an implicit path, non-special URLs may have an empty path.
       if schemeKind.isSpecial {
         visitEmptyPathComponent()
       }
       return
     }
 
-    // If the input string starts with a path separator, remove it.
-    // Leading path separators (e.g. "usr/lib" vs. "/usr/lib") denote absolute vs. relative paths.
-    //
-    // Removing the leading separator means that, when we consume components, the first component from
-    // input will be left as a remainder.
-    let isInputAbsolute = isPathSeparator(input[input.startIndex])
+    let isFileScheme = (schemeKind == .file)
+
+    // Determine if this is an absolute or relative path, as denoted by a leading path separator ("usr/lib" vs "/usr/lib").
+
+    let input_firstComponentStart: InputString.Index
+    let isInputAbsolute = PathComponentParser.isPathSeparator(input[input.startIndex], scheme: schemeKind)
     if isInputAbsolute {
-      input = input.dropFirst()
+      input_firstComponentStart = input.index(after: input.startIndex)
+    } else {
+      input_firstComponentStart = input.startIndex
     }
 
-    guard input.isEmpty == false else {
-      // The input string is just a single separator ("/" or "\"), i.e. a root/empty, absolute path.
+    guard input_firstComponentStart < input.endIndex else {
+      // The input string is a single separator, i.e. an absolute root path.
       // We can fast-path this: it results in a single "/", or the drive root if baseURL has a Windows drive letter.
       assert(isInputAbsolute)
       visitEmptyPathComponent()
-      if isFileScheme {
-        baseURL?.withNormalizedWindowsDriveLetter {
-          if let driveLetter = $0 {
-            visitBasePathComponent(UnsafeBufferPointer(rebasing: driveLetter))
+      if isFileScheme, let base = baseURL {
+        base.storage.withUTF8(of: .path) {
+          if let path = $0,
+            let drive = PathComponentParser._normalizedWindowsDrive(
+              in: path, firstCmptLength: base.storage.structure.firstPathComponentLength
+            )
+          {
+            visitBasePathComponent(drive)
           }
         }
       }
@@ -327,19 +336,25 @@ extension _PathParser {
     // Deferred Components
     // ===================
     //
-    // - Potential Windows drive letters. For file URLs, a component such as "C:" may not be popped when it is at the
-    //   start of the path. If it is not at the start of the path, it's just a regular component.
-    //   The way we handle this is by noting that while popped components are allowed ("abc/../C:" contains a drive),
-    //   any other non-popped component invalidates it. So we split the popcount on the LHS and RHS of the potential
-    //   drive, and if we see a component about to be yielded on the LHS, it means the candidate is not really a drive
-    //   so we can flush it and merge the popcounts.
+    // - Potential Windows drive letters (file URLs only). The parser in the URL standard visits components in-order,
+    //   "shortening" (popping) when it sees a "..", unless the pop would remove the first component, and that component
+    //   is a Windows drive letter. That means:
     //
-    // - Empty components. These were originally deferred due to special behaviour with empty components at the start
-    //   of file paths (which was removed in https://github.com/whatwg/url/pull/544). However, non-special URLs may
-    //   also require a "path sigil" if the path starts with an empty component ("//p2"), because otherwise that string
-    //   would look like an authority (see https://github.com/whatwg/url/pull/505), meaning we still have a
-    //   reason to track whether the last component we yielded was empty. Deferring the empty helps us do that,
-    //   even though we could also track it in other ways.
+    //     1. Windows drives cannot be popped ("C:/../../../foo" becomes "C:/foo")
+    //     2. Arbitrary stuff can appear before the drive, as long as it gets popped-out later.
+    //        When parsing "abc/../C:", at some point "C:" will land at path[0], at which point nothing can pop it out.
+    //
+    //   So when we see a potential Windows drive letter, we stash the component and popcount at that point, and
+    //   continue parsing everything left of the component. For a string like "abc/../C:", nothing on the left
+    //   actually yields a component, so the candidate "C:" is confirmed as a drive letter. If something does yield
+    //   ("abc/C:"), we know the candidate isn't really a drive, so we consider if it should have been popped and
+    //   merge the stashed popcount from the RHS with the one from the LHS.
+    //
+    // - Empty components. These were originally deferred because an older version of the standard required
+    //   empty components at the start of file paths to be removed (changed in https://github.com/whatwg/url/pull/544).
+    //   Currently, they are used to detect if the last yielded component was empty, and the resulting path string
+    //   would start with 2 slashes (e.g. "//p2"). https://github.com/whatwg/url/pull/505 introduced what we call
+    //   a "path sigil" for such paths, and tracking empty components is handy for that.
     //
     // Other special components
     // ========================
@@ -353,179 +368,150 @@ extension _PathParser {
     //   - If at the end of the path, they force a trailing slash/empty component.
     //     (even if they have popped all other components, the result is an empty path, not a nil path)
 
-    var remainingInput = input
-    var state = PathState()
-    var deferredComponent: DeferredPathComponent<InputString.SubSequence>? = .none
+    var remainingInput = input[...]
+    var state = _PathParserState()
+    var deferredComponent: _DeferredPathComponent<InputString.SubSequence>? = .none
 
-    // Since we trimmed the initial slash, this will *not* consume the first path component from the input string.
-    while var componentTerminatorIndex = remainingInput.lastIndex(where: isPathSeparator) {
-
-      let pathComponent = input[remainingInput.index(after: componentTerminatorIndex)..<remainingInput.endIndex]
-      defer { remainingInput = remainingInput.prefix(upTo: componentTerminatorIndex) }
-
-      if ASCII(input[componentTerminatorIndex]) == .backslash {
-        visitValidationError(.unexpectedReverseSolidus)
+    repeat {
+      let separatorIndex = remainingInput.lastIndex { PathComponentParser.isPathSeparator($0, scheme: schemeKind) }
+      let pathComponent: InputString.SubSequence
+      if let separatorIdx = separatorIndex {
+        pathComponent = remainingInput[remainingInput.index(after: separatorIdx)...]
+        if ASCII(input[separatorIdx]) == .backslash {
+          visitValidationError(.unexpectedReverseSolidus)
+        }
+      } else {
+        pathComponent = remainingInput
       }
 
       switch pathComponent {
       case _ where PathComponentParser.isDoubleDotPathSegment(pathComponent):
-        state.popcount += 1
+        state.popcount &+= 1
         fallthrough
 
       case _ where PathComponentParser.isSingleDotPathSegment(pathComponent):
+        // Don't defer this as it would have no effect due to the popcount increment.
+        // Since this must be at the end of the path, 'didYieldComponent' is sufficient for calculating path sigil.
         if pathComponent.endIndex == input.endIndex {
-          // Don't defer this as it will be nulled by the popcount increment. Only matches "p1/p2/.." or "p1/p2/.".
           visitEmptyPathComponent()
           state.didYieldComponent = true
         }
 
       case _ where isFileScheme && PathComponentParser.isWindowsDriveLetter(pathComponent):
-        __flushDeferredComponent(&deferredComponent, &state)
-        // Move the popcount in to deferredComponent and start a new count for the LHS of the Windows drive candidate.
+        _flushAndMergePopcount(&deferredComponent, &state)
         deferredComponent = .potentialWindowsDrive(pathComponent, state.popcount)
         state.popcount = 0
 
-      case _ where state.popcount != 0:
+      case _ where state.popcount > 0:
         state.popcount -= 1
 
       case _ where deferredComponent?.isPotentialWindowsDrive == true:
-        // Invalidate our candidate Windows drive letter: flush its component and merge the popcounts.
-        // Reset the cursor to re-check this component.
-        __flushDeferredComponent(&deferredComponent, &state)
-        componentTerminatorIndex = pathComponent.endIndex
+        _flushAndMergePopcount(&deferredComponent, &state)
+        continue  // Re-check this component with the new popcount.
 
       default:
         if pathComponent.isEmpty {
-          __deferTrailingEmptyAssert(&deferredComponent, &state)
+          _deferEmptyAssertNotWindowsDrive(&deferredComponent, &state)
         } else {
-          __flushDeferredEmptiesAssert(&deferredComponent, &state)
+          _flushEmptiesAssertNotWindowsDrive(&deferredComponent, &state)
           visitInputPathComponent(pathComponent, isWindowsDriveLetter: false)
           state.didYieldComponent = true
         }
       }
-    }
-    // 'remainingInput' now contains the first path component from the input string.
 
-    repeatFirstComponent: while true {
-      // TODO: This is exactly the same as above, except for using a `while` loop to repeat the component.
-      //       Good candidate for some refactoring.
-      switch remainingInput {
-      case _ where PathComponentParser.isDoubleDotPathSegment(remainingInput):
-        state.popcount += 1
-        fallthrough
+      remainingInput = remainingInput[..<(separatorIndex ?? remainingInput.startIndex)]
+    } while !remainingInput.isEmpty
 
-      case _ where PathComponentParser.isSingleDotPathSegment(remainingInput):
-        if remainingInput.endIndex == input.endIndex {
-          assert(state.didYieldComponent == false && deferredComponent == nil)
-          visitEmptyPathComponent()
-          state.didYieldComponent = true
-        }
-
-      case _ where isFileScheme && PathComponentParser.isWindowsDriveLetter(remainingInput):
-        __flushDeferredComponent(&deferredComponent, &state)
-        deferredComponent = .potentialWindowsDrive(remainingInput, state.popcount)
-        state.popcount = 0
-
-      case _ where state.popcount != 0:
-        state.popcount -= 1
-
-      case _ where deferredComponent?.isPotentialWindowsDrive == true:
-        __flushDeferredComponent(&deferredComponent, &state)
-        continue repeatFirstComponent  // Repeat the first component after restoring the popcount.
-
-      default:
-        if remainingInput.isEmpty {
-          __deferTrailingEmptyAssert(&deferredComponent, &state)
-        } else {
-          __flushDeferredEmptiesAssert(&deferredComponent, &state)
-          visitInputPathComponent(remainingInput, isWindowsDriveLetter: false)
-          state.didYieldComponent = true
-        }
-      }
-      break repeatFirstComponent
-    }
-
-    // We have now processed all of the input string, but we're not done yet.
-    remainingInput = remainingInput.prefix(0)
-    // This means we have already accounted for any trailing slashes (i.e. empty components) at the end of the path.
     assert(
       deferredComponent != nil || state.didYieldComponent,
-      "Since the input path was not empty, we must have either deferred or yielded something from it.")
+      "Since the input path was not empty, we must have either deferred or yielded something from it."
+    )
 
-    accessOptionalResource(from: baseURL, using: { $0.storage.withUTF8(of: .path, $1) }) {
+    accessUTF8FromOptionalURL(baseURL, of: .path) {
 
-      let baseHasWindowsDrive = (baseURL?.hasNormalizedWindowsDriveLetter ?? false)
+      var baseDrive: UnsafeBufferPointer<UInt8>?
+      if isFileScheme {
+        if let basePath = $0 {
+          let baseURLFirstCmptLength = baseURL.unsafelyUnwrapped.storage.structure.firstPathComponentLength
+          baseDrive = PathComponentParser._normalizedWindowsDrive(in: basePath, firstCmptLength: baseURLFirstCmptLength)
+        }
+        // If the first written component of the input string is a Windows drive letter, the path is never relative -
+        // even if it normally would be. [URL Standard: "file" state, "file slash" state]
+        if case .potentialWindowsDrive(let firstComponent, _) = deferredComponent,
+          firstComponent.startIndex == input_firstComponentStart
+        {
+          visitInputPathComponent(firstComponent, isWindowsDriveLetter: true)
+          return
+        }
+        // If the Windows drive is not the first written component of the input string, and the path is absolute,
+        // we still prefer to use the drive from the base URL. [URL Standard: "file slash" state]
+        if isInputAbsolute, absolutePathsCopyWindowsDriveFromBase, let baseDrive = baseDrive {
+          _flushAndMergePopcount(&deferredComponent, &state)
+          visitBasePathComponent(baseDrive)
+          return
+        }
+      }
 
-      if case .potentialWindowsDrive(let firstComponent, _) = deferredComponent,
-        firstComponent.startIndex == input.startIndex
-      {
-        // A Windows drive literally as the first component of the input string is never relative to the base path.
-        visitInputPathComponent(firstComponent, isWindowsDriveLetter: true)
+      guard isInputAbsolute == false, let basePath = $0 else {
+        _flushForFinalization(&deferredComponent, &state)
+        return  // Absolute paths, and relative paths with no base URL, are finished now.
+      }
+      assert(basePath.first == ASCII.forwardSlash.codePoint, "Normalized base paths must start with a /")
+
+      // Drop the last path component (unless it is a Windows drive, in which case flush and we're done).
+      if let baseDrive = baseDrive, basePath.count == 3 {
+        _flushAndMergePopcount(&deferredComponent, &state)
+        visitBasePathComponent(baseDrive)
         return
       }
-      if isFileScheme, isInputAbsolute, baseHasWindowsDrive, absolutePathsCopyWindowsDriveFromBase {
-        // Certain absolute paths whose drive letters (if they have one) are not literally the first component
-        // will insist that we discard any candidate drive letters and always use the drive letter from the base path.
-        // This depends on the surrounding URL structure, so there is no way to divine it from the path parser.
-        __flushDeferredComponent(&deferredComponent, &state)
-        baseURL!.withNormalizedWindowsDriveLetter { visitBasePathComponent(UnsafeBufferPointer(rebasing: $0!)) }
-        return
-      }
-      // Flush state for absolute paths, and relative paths with no base path.
-      guard isInputAbsolute == false, var basePath = $0?[...] else {
-        __flushDeferredComponentForFinalization(&deferredComponent, &state)
-        return
-      }
+      var remainingBasePath = basePath[..<(basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex)]
 
-      precondition(basePath.first == ASCII.forwardSlash.codePoint, "Normalized base paths must start with a /")
-      // Drop the last path component (unless it is a Windows drive, of course).
-      guard !(isFileScheme && PathComponentParser.isNormalizedWindowsDriveLetter(basePath.dropFirst())) else {
-        __flushDeferredComponent(&deferredComponent, &state)
-        visitBasePathComponent(UnsafeBufferPointer(rebasing: basePath.dropFirst()))
-        return
-      }
-      basePath = basePath[..<(basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex)]
-
-      while var componentTerminatorIndex = basePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
-        let pathComponent = basePath[basePath.index(after: componentTerminatorIndex)..<basePath.endIndex]
-        defer { basePath = basePath.prefix(upTo: componentTerminatorIndex) }
+      while let separatorIndex = remainingBasePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
+        let pathComponent = remainingBasePath[
+          Range(uncheckedBounds: (remainingBasePath.index(after: separatorIndex), remainingBasePath.endIndex))
+        ]
 
         assert(PathComponentParser.isDoubleDotPathSegment(pathComponent) == false)
         assert(PathComponentParser.isSingleDotPathSegment(pathComponent) == false)
 
         switch pathComponent {
         // If the base path has a Windows drive letter, we can flush everything and end.
-        case _
-        where componentTerminatorIndex == basePath.startIndex && isFileScheme
-          && PathComponentParser.isNormalizedWindowsDriveLetter(pathComponent):
-          __flushDeferredComponent(&deferredComponent, &state)
-          visitBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
+        case _ where separatorIndex == basePath.startIndex && baseDrive != nil:
+          _flushAndMergePopcount(&deferredComponent, &state)
+          visitBasePathComponent(baseDrive!)
           return
+
         case _ where state.popcount != 0:
           state.popcount -= 1
+
         case _ where deferredComponent?.isPotentialWindowsDrive == true:
-          __flushDeferredComponent(&deferredComponent, &state)
-          componentTerminatorIndex = pathComponent.endIndex
-          continue
+          _flushAndMergePopcount(&deferredComponent, &state)
+          continue  // Re-check this component with the new popcount.
+
         default:
           if pathComponent.isEmpty {
-            __deferTrailingEmptyAssert(&deferredComponent, &state)
+            _deferEmptyAssertNotWindowsDrive(&deferredComponent, &state)
           } else {
-            __flushDeferredEmptiesAssert(&deferredComponent, &state)
+            _flushEmptiesAssertNotWindowsDrive(&deferredComponent, &state)
             visitBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
             state.didYieldComponent = true
           }
         }
+
+        remainingBasePath = remainingBasePath[Range(uncheckedBounds: (remainingBasePath.startIndex, separatorIndex))]
       }
-      assert(basePath.isEmpty, "Normalized base paths must start with a /")
-      __flushDeferredComponentForFinalization(&deferredComponent, &state)
+
+      assert(remainingBasePath.isEmpty, "Normalized base paths must start with a /")
+      _flushForFinalization(&deferredComponent, &state)
       return  // Finally done!
     }
   }
 }
 
 
-// MARK: - PathMetrics.
+// --------------------------------------------
+// MARK: - Parsers
+// --------------------------------------------
 
 
 /// A summary of statistics about a of the lexically-normalized, percent-encoded path string.
@@ -629,16 +615,15 @@ extension PathMetrics {
   }
 }
 
-
-// MARK: - Path writing.
-
-
 extension UnsafeMutableBufferPointer where Element == UInt8 {
 
   /// Initializes this buffer to the simplified, normalized path parsed from `utf8`.
   ///
-  /// Returns the number of bytes written. Use `PathMetrics` to calculate the required size.
-  /// Currently, this method fails at runtime if the buffer is not precisely sized to fit the resulting path-string, so the returned value is always equal to `self.count`.
+  /// The buffer must have precisely the correct capacity to store the path string, or a runtime error will be triggered.  This implies that its address may not be `nil`.
+  /// The fact that the exact capacity is known is taken as proof that `PathMetrics` have been calculated, and that the number of bytes written will not overflow
+  /// an `Int`.
+  ///
+  /// - returns; The number of bytes written. This will be equal to `self.count`, but is calculated independently as an additional check.
   ///
   @inlinable
   internal func writeNormalizedPath<UTF8Bytes>(
@@ -708,7 +693,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 
     @inlinable
     internal mutating func prependSlash(_ n: Int = 1) {
-      front -= n
+      front &-= n
       buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
         .initialize(repeating: ASCII.forwardSlash.codePoint, count: n)
     }
@@ -723,7 +708,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       }
       guard isWindowsDriveLetter == false else {
         assert(pathComponent.count == 2)
-        front -= 2
+        front &-= 2
         buffer.baseAddress.unsafelyUnwrapped.advanced(by: front).initialize(to: pathComponent[pathComponent.startIndex])
         buffer.baseAddress.unsafelyUnwrapped.advanced(by: front &+ 1).initialize(to: ASCII.colon.codePoint)
         prependSlash()
@@ -744,7 +729,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         }
       } else {
         let count = pathComponent.count
-        let newFront = front - count
+        let newFront = front &- count
         _ = UnsafeMutableBufferPointer(
           start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
           count: count
@@ -766,17 +751,13 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 
     @inlinable
     internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
-      front -= pathComponent.count
+      front &-= pathComponent.count
       buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
         .initialize(from: pathComponent.baseAddress!, count: pathComponent.count)
       prependSlash()
     }
   }
 }
-
-
-// MARK: - Others parsers.
-
 
 /// An objects which checks for URL validation errors in a path string.
 ///
@@ -785,66 +766,126 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 /// - Invalid percent encoding (e.g. "%ZZ"), or
 /// - Backslashes as path separators
 ///
-/// This type cannot be initialized directly. To validate a path string, use the static `.validate` method.
+/// This type must not be initialized directly. To validate a path string, use the static `.validate` method.
 ///
-struct PathStringValidator<InputString, Callback>: _PathParser
-where InputString: BidirectionalCollection, InputString.Element == UInt8, Callback: URLParserCallback {
-  private var callback: Callback
-  private let path: InputString
+@usableFromInline
+internal struct PathStringValidator<UTF8Bytes, Callback>: _PathParser
+where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
-  static func validate(
-    pathString input: InputString,
+  @usableFromInline
+  internal let path: UTF8Bytes
+
+  @usableFromInline
+  internal let callback: UnsafeMutablePointer<Callback>
+
+  @inlinable
+  internal init(_doNotUse path: UTF8Bytes, callback: UnsafeMutablePointer<Callback>) {
+    self.path = path
+    self.callback = callback
+  }
+
+  /// Checks for non-fatal syntax oddities in the given path string.
+  ///
+  /// See the URL standard's "path state" or the type-level documentation for `PathStringValidator` for more information.
+  ///
+  @inlinable
+  internal static func validate(
+    pathString input: UTF8Bytes,
     schemeKind: WebURL.SchemeKind,
     callback: inout Callback
   ) {
+    // The compiler has a tough time optimizing this function away when we ignore validation errors.
     guard Callback.self != IgnoreValidationErrors.self else {
-      // The compiler has a tough time optimising this function away when we ignore validation errors.
       return
     }
-    var visitor = PathStringValidator(callback: callback, path: input)
-    // hasAuthority does not matter for input string validation.
+    var visitor = PathStringValidator(_doNotUse: input, callback: &callback)
     visitor.walkPathComponents(
       pathString: input, schemeKind: schemeKind, baseURL: nil,
       absolutePathsCopyWindowsDriveFromBase: false)
   }
 
-  mutating func visitInputPathComponent(
-    _ pathComponent: InputString.SubSequence, isWindowsDriveLetter: Bool
+  @usableFromInline
+  internal typealias InputString = UTF8Bytes
+
+  @usableFromInline
+  internal mutating func visitInputPathComponent(
+    _ pathComponent: UTF8Bytes.SubSequence, isWindowsDriveLetter: Bool
   ) {
-    validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
+    validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback.pointee)
   }
 
-  mutating func visitEmptyPathComponents(_ n: Int) {
+  @usableFromInline
+  internal mutating func visitEmptyPathComponents(_ n: Int) {
     // Nothing to do.
   }
 
-  func visitPathSigil() {
+  @usableFromInline
+  internal func visitPathSigil() {
     // Nothing to do.
   }
 
-  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+  @usableFromInline
+  internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
     assertionFailure("Should never be invoked without a base URL")
   }
 
-  mutating func visitValidationError(_ error: ValidationError) {
-    callback.validationError(error)
+  @usableFromInline
+  internal mutating func visitValidationError(_ error: ValidationError) {
+    callback.pointee.validationError(error)
   }
 }
 
 
+// --------------------------------------------
 // MARK: - Path Utilities
+// --------------------------------------------
 
 
 /// A namespace for functions relating to parsing of path components.
 ///
 @usableFromInline
-internal enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
+internal enum PathComponentParser<T> {}
+
+extension PathComponentParser where T == Never {
+
+  /// Whether the given UTF-8 code-unit is a path separator character for the given `scheme`.
+  ///
+  @inlinable @inline(__always)
+  internal static func isPathSeparator(_ codeUnit: UInt8, scheme: WebURL.SchemeKind) -> Bool {
+    ASCII(codeUnit) == .forwardSlash || (scheme.isSpecial && ASCII(codeUnit) == .backslash)
+  }
+}
+
+extension PathComponentParser where T == UnsafeBufferPointer<UInt8> {
+
+  /// Interprets the given buffer as a URL's normalized path whose first component length is `firstCmptLength`, and returns a rebased slice of the buffer
+  /// covering the path's normalized Windows drive letter, if it has one. If `firstCmptLength` is greater than 0, the buffer's address must not be `nil`.
+  ///
+  /// Windows drive letters only have meaning for `file` URLs.
+  ///
+  @inlinable
+  internal static func _normalizedWindowsDrive(
+    in path: UnsafeBufferPointer<UInt8>, firstCmptLength: Int
+  ) -> UnsafeBufferPointer<UInt8>? {
+
+    if firstCmptLength == 3 {
+      let firstComponentContent = UnsafeBufferPointer(start: path.baseAddress.unsafelyUnwrapped + 1, count: 2)
+      if PathComponentParser.isNormalizedWindowsDriveLetter(firstComponentContent) {
+        return firstComponentContent
+      }
+    }
+    return nil
+  }
+}
+
+extension PathComponentParser where T: Collection, T.Element == UInt8 {
 
   /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
   ///
   /// https://url.spec.whatwg.org/#url-miscellaneous
   ///
-  static func isWindowsDriveLetter(_ bytes: T) -> Bool {
+  @inlinable
+  internal static func isWindowsDriveLetter(_ bytes: T) -> Bool {
     var it = bytes.makeIterator()
     guard let byte1 = it.next(), ASCII(byte1)?.isAlpha == true else { return false }
     guard let byte2 = it.next(), ASCII(byte2) == .colon || ASCII(byte2) == .verticalBar else { return false }
@@ -856,7 +897,8 @@ internal enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
   ///
   /// https://url.spec.whatwg.org/#url-miscellaneous
   ///
-  static func isNormalizedWindowsDriveLetter(_ bytes: T) -> Bool {
+  @inlinable
+  internal static func isNormalizedWindowsDriveLetter(_ bytes: T) -> Bool {
     isWindowsDriveLetter(bytes) && (bytes.dropFirst().first.map { ASCII($0) == .colon } ?? false)
   }
 
@@ -882,12 +924,13 @@ internal enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
   /// Returns `true` if the next contents of `iterator` are either the ASCII byte U+002E (.), the string "%2e", or "%2E".
   /// Otherwise, `false`.
   ///
-  private static func checkForDotOrCaseInsensitivePercentEncodedDot(in iterator: inout T.Iterator) -> Bool {
+  @inlinable
+  internal static func _checkForDotOrCaseInsensitivePercentEncodedDot(in iterator: inout T.Iterator) -> Bool {
     guard let byte1 = iterator.next(), let ascii1 = ASCII(byte1) else { return false }
     if ascii1 == .period { return true }
     guard ascii1 == .percentSign,
       let byte2 = iterator.next(), ASCII(byte2) == .n2,
-      let byte3 = iterator.next(), ASCII(byte3) == .E || ASCII(byte3) == .e
+      let byte3 = iterator.next(), ASCII(byte3 & 0b11011111) == .E  // bitmask uppercases ASCII alphas.
     else {
       return false
     }
@@ -897,9 +940,10 @@ internal enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
   /// Returns `true` if `bytes` contains a single U+002E (.), the ASCII string "%2e" or "%2E" only.
   /// Otherwise, `false`.
   ///
-  static func isSingleDotPathSegment(_ bytes: T) -> Bool {
+  @inlinable
+  internal static func isSingleDotPathSegment(_ bytes: T) -> Bool {
     var it = bytes.makeIterator()
-    guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+    guard _checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
     guard it.next() == nil else { return false }
     return true
   }
@@ -907,10 +951,11 @@ internal enum PathComponentParser<T> where T: Collection, T.Element == UInt8 {
   /// Returns `true` if `bytes` contains two of either U+002E (.), the ASCII string "%2e" or "%2E" only.
   /// Otherwise, `false`.
   ///
-  static func isDoubleDotPathSegment(_ bytes: T) -> Bool {
+  @inlinable
+  internal static func isDoubleDotPathSegment(_ bytes: T) -> Bool {
     var it = bytes.makeIterator()
-    guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
-    guard checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+    guard _checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
+    guard _checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
     guard it.next() == nil else { return false }
     return true
   }

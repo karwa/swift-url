@@ -360,7 +360,7 @@ extension ASCII {
   ///
   /// - returns:  The number of bytes written to `stringBuffer`.
   ///
-  @inlinable
+  @usableFromInline
   internal static func writeDecimalString(for number: UInt8, to stringBuffer: UnsafeMutableRawPointer) -> UInt8 {
 
     var count: UInt8 = 0
@@ -379,6 +379,73 @@ extension ASCII {
     }
     do {
       let digit: UInt8
+      (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 10)
+      if count != 0 || digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit))!.codePoint,
+          toByteOffset: Int(count),
+          as: UInt8.self
+        )
+        count += 1
+      }
+    }
+    stringBuffer.storeBytes(
+      of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: remaining))!.codePoint,
+      toByteOffset: Int(count),
+      as: UInt8.self
+    )
+    count += 1
+    return count
+  }
+
+  /// Prints the decimal representation of `number` to the memory location given by `stringBuffer`.
+  /// A maximum of 5 bytes will be written.
+  ///
+  /// - returns:  The number of bytes written to `stringBuffer`.
+  ///
+  @usableFromInline
+  internal static func writeDecimalString(for number: UInt16, to stringBuffer: UnsafeMutableRawPointer) -> UInt8 {
+
+    var count: UInt8 = 0
+    var remaining = number
+    do {
+      let digit: UInt16
+      (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 10000)
+      if digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit))!.codePoint,
+          toByteOffset: 0,
+          as: UInt8.self
+        )
+        count += 1
+      }
+    }
+    do {
+      let digit: UInt16
+      (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 1000)
+      if count != 0 || digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit))!.codePoint,
+          toByteOffset: Int(count),
+          as: UInt8.self
+        )
+        count += 1
+      }
+    }
+    do {
+      let digit: UInt16
+      (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 100)
+      if count != 0 || digit != 0 {
+        stringBuffer.storeBytes(
+          of: ASCII.decimalDigit(of: UInt8(truncatingIfNeeded: digit))!.codePoint,
+          toByteOffset: Int(count),
+          as: UInt8.self
+        )
+        count += 1
+      }
+    }
+    do {
+      let digit: UInt16
       (digit, remaining) = remaining.quotientAndRemainder(dividingBy: 10)
       if count != 0 || digit != 0 {
         stringBuffer.storeBytes(

@@ -342,13 +342,14 @@ extension URLStorage {
     }
 
     if let newPort = newValue {
-      // TODO: [performance]: More efficient UInt16 serialisation.
-      var serialized = String(newPort)
-      let result = serialized.withUTF8 { ptr -> AnyURLStorage in
-        assert(ptr.isEmpty == false)
+      var stackBuffer = 0 as UInt64
+      let result = withUnsafeMutableBytes(of: &stackBuffer) { stackBytes -> AnyURLStorage in
+        let count = ASCII.writeDecimalString(for: newPort, to: stackBytes.baseAddress!)
+        let utf8Bytes = UnsafeRawBufferPointer(start: stackBytes.baseAddress!, count: Int(count))
+        assert(count > 0)
         return setSimpleComponent(
           .port,
-          to: ptr,
+          to: utf8Bytes,
           prefix: .colon,
           lengthKey: \.portLength,
           encodeSet: \.alreadyEncoded
