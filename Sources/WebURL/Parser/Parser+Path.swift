@@ -509,7 +509,9 @@ extension _PathParser {
 }
 
 
-// MARK: - PathMetrics.
+// --------------------------------------------
+// MARK: - Parsers
+// --------------------------------------------
 
 
 /// A summary of statistics about a of the lexically-normalized, percent-encoded path string.
@@ -613,16 +615,15 @@ extension PathMetrics {
   }
 }
 
-
-// MARK: - Path writing.
-
-
 extension UnsafeMutableBufferPointer where Element == UInt8 {
 
   /// Initializes this buffer to the simplified, normalized path parsed from `utf8`.
   ///
-  /// Returns the number of bytes written. Use `PathMetrics` to calculate the required size.
-  /// Currently, this method fails at runtime if the buffer is not precisely sized to fit the resulting path-string, so the returned value is always equal to `self.count`.
+  /// The buffer must have precisely the correct capacity to store the path string, or a runtime error will be triggered.  This implies that its address may not be `nil`.
+  /// The fact that the exact capacity is known is taken as proof that `PathMetrics` have been calculated, and that the number of bytes written will not overflow
+  /// an `Int`.
+  ///
+  /// - returns; The number of bytes written. This will be equal to `self.count`, but is calculated independently as an additional check.
   ///
   @inlinable
   internal func writeNormalizedPath<UTF8Bytes>(
@@ -692,7 +693,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 
     @inlinable
     internal mutating func prependSlash(_ n: Int = 1) {
-      front -= n
+      front &-= n
       buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
         .initialize(repeating: ASCII.forwardSlash.codePoint, count: n)
     }
@@ -707,7 +708,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       }
       guard isWindowsDriveLetter == false else {
         assert(pathComponent.count == 2)
-        front -= 2
+        front &-= 2
         buffer.baseAddress.unsafelyUnwrapped.advanced(by: front).initialize(to: pathComponent[pathComponent.startIndex])
         buffer.baseAddress.unsafelyUnwrapped.advanced(by: front &+ 1).initialize(to: ASCII.colon.codePoint)
         prependSlash()
@@ -750,17 +751,13 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 
     @inlinable
     internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
-      front -= pathComponent.count
+      front &-= pathComponent.count
       buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
         .initialize(from: pathComponent.baseAddress!, count: pathComponent.count)
       prependSlash()
     }
   }
 }
-
-
-// MARK: - Others parsers.
-
 
 /// An objects which checks for URL validation errors in a path string.
 ///
@@ -769,49 +766,72 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 /// - Invalid percent encoding (e.g. "%ZZ"), or
 /// - Backslashes as path separators
 ///
-/// This type cannot be initialized directly. To validate a path string, use the static `.validate` method.
+/// This type must not be initialized directly. To validate a path string, use the static `.validate` method.
 ///
-struct PathStringValidator<InputString, Callback>: _PathParser
-where InputString: BidirectionalCollection, InputString.Element == UInt8, Callback: URLParserCallback {
-  private var callback: Callback
-  private let path: InputString
+@usableFromInline
+internal struct PathStringValidator<UTF8Bytes, Callback>: _PathParser
+where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
-  static func validate(
-    pathString input: InputString,
+  @usableFromInline
+  internal let path: UTF8Bytes
+
+  @usableFromInline
+  internal let callback: UnsafeMutablePointer<Callback>
+
+  @inlinable
+  internal init(_doNotUse path: UTF8Bytes, callback: UnsafeMutablePointer<Callback>) {
+    self.path = path
+    self.callback = callback
+  }
+
+  /// Checks for non-fatal syntax oddities in the given path string.
+  ///
+  /// See the URL standard's "path state" or the type-level documentation for `PathStringValidator` for more information.
+  ///
+  @inlinable
+  internal static func validate(
+    pathString input: UTF8Bytes,
     schemeKind: WebURL.SchemeKind,
     callback: inout Callback
   ) {
+    // The compiler has a tough time optimizing this function away when we ignore validation errors.
     guard Callback.self != IgnoreValidationErrors.self else {
-      // The compiler has a tough time optimising this function away when we ignore validation errors.
       return
     }
-    var visitor = PathStringValidator(callback: callback, path: input)
-    // hasAuthority does not matter for input string validation.
+    var visitor = PathStringValidator(_doNotUse: input, callback: &callback)
     visitor.walkPathComponents(
       pathString: input, schemeKind: schemeKind, baseURL: nil,
       absolutePathsCopyWindowsDriveFromBase: false)
   }
 
-  mutating func visitInputPathComponent(
-    _ pathComponent: InputString.SubSequence, isWindowsDriveLetter: Bool
+  @usableFromInline
+  internal typealias InputString = UTF8Bytes
+
+  @usableFromInline
+  internal mutating func visitInputPathComponent(
+    _ pathComponent: UTF8Bytes.SubSequence, isWindowsDriveLetter: Bool
   ) {
-    validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback)
+    validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback.pointee)
   }
 
-  mutating func visitEmptyPathComponents(_ n: Int) {
+  @usableFromInline
+  internal mutating func visitEmptyPathComponents(_ n: Int) {
     // Nothing to do.
   }
 
-  func visitPathSigil() {
+  @usableFromInline
+  internal func visitPathSigil() {
     // Nothing to do.
   }
 
-  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+  @usableFromInline
+  internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
     assertionFailure("Should never be invoked without a base URL")
   }
 
-  mutating func visitValidationError(_ error: ValidationError) {
-    callback.validationError(error)
+  @usableFromInline
+  internal mutating func visitValidationError(_ error: ValidationError) {
+    callback.pointee.validationError(error)
   }
 }
 
@@ -838,18 +858,18 @@ extension PathComponentParser where T == Never {
 
 extension PathComponentParser where T == UnsafeBufferPointer<UInt8> {
 
-  /// Interprets this buffer as a URL's path whose first component length is `firstCmptLength`, and returns a rebased slice of the buffer
+  /// Interprets the given buffer as a URL's normalized path whose first component length is `firstCmptLength`, and returns a rebased slice of the buffer
   /// covering the path's normalized Windows drive letter, if it has one. If `firstCmptLength` is greater than 0, the buffer's address must not be `nil`.
   ///
   /// Windows drive letters only have meaning for `file` URLs.
   ///
   @inlinable
   internal static func _normalizedWindowsDrive(
-    in p: UnsafeBufferPointer<UInt8>, firstCmptLength: Int
+    in path: UnsafeBufferPointer<UInt8>, firstCmptLength: Int
   ) -> UnsafeBufferPointer<UInt8>? {
 
     if firstCmptLength == 3 {
-      let firstComponentContent = UnsafeBufferPointer(start: p.baseAddress.unsafelyUnwrapped + 1, count: 2)
+      let firstComponentContent = UnsafeBufferPointer(start: path.baseAddress.unsafelyUnwrapped + 1, count: 2)
       if PathComponentParser.isNormalizedWindowsDriveLetter(firstComponentContent) {
         return firstComponentContent
       }
@@ -910,7 +930,7 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
     if ascii1 == .period { return true }
     guard ascii1 == .percentSign,
       let byte2 = iterator.next(), ASCII(byte2) == .n2,
-      let byte3 = iterator.next(), ASCII(byte3) == .E || ASCII(byte3) == .e
+      let byte3 = iterator.next(), ASCII(byte3 & 0b11011111) == .E  // bitmask uppercases ASCII alphas.
     else {
       return false
     }
