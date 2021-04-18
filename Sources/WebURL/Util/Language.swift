@@ -33,11 +33,11 @@
 /// }
 /// ```
 ///
-/// This is rather a lot of code, and can be quite cumbersome when `body` is large. Instead, we can use `accessUTF8FromOptionalURL`:
+/// This is rather a lot of code, and can be quite cumbersome when `body` is large. Instead, we can use `withUTF8OfOptionalURL`:
 ///
 /// ```
 /// let optionalURL: MyObject? = ...
-/// accessUTF8FromOptionalURL(maybeObject, of: .path) { optionalPath in
+/// withUTF8OfOptionalURL(maybeObject, of: .path) { optionalPath in
 ///   guard let path = optionalPath else {
 ///     // Either optionalURL or optionalPath were nil
 ///   }
@@ -49,8 +49,8 @@
 /// `body`, collapsing the levels of `Optional`.
 ///
 @inlinable
-internal func accessUTF8FromOptionalURL<Result>(
-  _ root: WebURL?, of component: WebURL.Component, _ handler: (UnsafeBufferPointer<UInt8>?) -> Result
+internal func withUTF8OfOptionalURL<Result>(
+  _ root: WebURL?, component: WebURL.Component, _ handler: (UnsafeBufferPointer<UInt8>?) -> Result
 ) -> Result {
   guard let root = root else {
     return handler(nil)

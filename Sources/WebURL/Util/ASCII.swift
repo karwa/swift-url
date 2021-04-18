@@ -465,6 +465,29 @@ extension ASCII {
     return count
   }
 
+  /// Parses a 16-bit unsigned integer from a decimal representation contained in the given UTF-8 code-units.
+  ///
+  /// If parsing fails, it means the code-units contained a character which was not a decimal digit, or that the number overflows a 16-bit integer.
+  ///
+  @inlinable @inline(never)
+  internal static func parseDecimalU16<UTF8Bytes>(
+    from utf8: UTF8Bytes
+  ) -> UInt16? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+
+    var value: UInt16 = 0
+    var idx = utf8.startIndex
+    while idx < utf8.endIndex, let digit = ASCII(utf8[idx])?.decimalNumberValue {
+      var (overflowM, overflowA) = (false, false)
+      (value, overflowM) = value.multipliedReportingOverflow(by: 10)
+      (value, overflowA) = value.addingReportingOverflow(UInt16(digit))
+      if overflowM || overflowA {
+        return nil
+      }
+      idx = utf8.index(after: idx)
+    }
+    return idx < utf8.endIndex ? nil : value
+  }
+
   /// Prints the hex representation of `number` to the memory location given by `stringBuffer`.
   /// A maximum of `B.bitWidth / 4` bytes will be written (e.g. 2 bytes for an 8-bit integer, 4 bytes for a 16-bit integer, etc).
   ///

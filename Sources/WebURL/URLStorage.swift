@@ -371,6 +371,13 @@ extension URLStructure {
     }
   }
 
+  /// Whether the path described by this structure requires a path sigil when no authority is present.
+  ///
+  @inlinable
+  internal var pathRequiresSigil: Bool {
+    firstPathComponentLength == 1 && pathLength > 1
+  }
+
   /// If the string has credentials, it must contain a '@' separating them from the hostname. If it doesn't, it mustn't.
   ///
   @inlinable
@@ -490,7 +497,8 @@ extension URLStructure {
       case .authority:
         break
       case .path:
-        assert(pathLength >= 2, "Path sigil present, but path is too short to need one")
+        assert(firstPathComponentLength == 1, "Path sigil present, but path does not begin with an empty component")
+        assert(pathLength > 1, "Path sigil present, but path is too short to need one")
         fallthrough
       default:
         assert(usernameLength == 0, "A URL without authority cannot have a username")

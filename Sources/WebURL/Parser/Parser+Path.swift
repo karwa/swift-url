@@ -427,7 +427,7 @@ extension _PathParser {
       "Since the input path was not empty, we must have either deferred or yielded something from it."
     )
 
-    accessUTF8FromOptionalURL(baseURL, of: .path) {
+    withUTF8OfOptionalURL(baseURL, component: .path) {
 
       var baseDrive: UnsafeBufferPointer<UInt8>?
       if isFileScheme {
@@ -910,7 +910,8 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
   ///
   /// https://url.spec.whatwg.org/#url-miscellaneous
   ///
-  static func hasWindowsDriveLetterPrefix(_ bytes: T) -> Bool {
+  @inlinable
+  internal static func hasWindowsDriveLetterPrefix(_ bytes: T) -> Bool {
     var it = bytes.makeIterator()
     guard let byte1 = it.next(), ASCII(byte1)?.isAlpha == true else { return false }
     guard let byte2 = it.next(), ASCII(byte2) == .colon || ASCII(byte2) == .verticalBar else { return false }

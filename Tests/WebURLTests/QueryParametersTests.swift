@@ -515,6 +515,13 @@ final class QueryParametersTests: XCTestCase {
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertURLIsIdempotent(url)
 
+    // Copying from a base URL maintains the flag.
+    let joinedURL = url.join("#someFragment")!
+    XCTAssertEqual(joinedURL.serialized, "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&e=f#someFragment")
+    XCTAssertEqual(joinedURL.query, "a=b&c+is+the+key=d&e=&=foo&e=g&e=&e=f")
+    XCTAssertTrue(joinedURL.storage.structure.queryIsKnownFormEncoded)
+    XCTAssertURLIsIdempotent(joinedURL)
+
     // Setting via '.query' to a non-empty value sets the flag back to false.
     url.query = "foobar"
     XCTAssertEqual(url.serialized, "http://example.com/?foobar")

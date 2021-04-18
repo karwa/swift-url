@@ -136,6 +136,25 @@ final class ASCIITests: XCTestCase {
     }
   }
 
+  func testDecimalParsing() {
+
+    // All valid numbers can be parsed.
+    for num in (UInt16.min)...(UInt16.max) {
+      let stringRepresentation = String(num)
+      XCTAssertEqual(ASCII.parseDecimalU16(from: stringRepresentation.utf8), UInt16(stringRepresentation))
+    }
+
+    // Invalid numbers are rejected.
+    XCTAssertNil(ASCII.parseDecimalU16(from: "65536".utf8))
+    XCTAssertNil(ASCII.parseDecimalU16(from: "-1".utf8))
+    XCTAssertNil(ASCII.parseDecimalU16(from: "-100".utf8))
+    XCTAssertNil(ASCII.parseDecimalU16(from: "-0".utf8))
+    XCTAssertNil(ASCII.parseDecimalU16(from: "1234boo".utf8))
+
+    // Leading zeroes are fine.
+    XCTAssertEqual(ASCII.parseDecimalU16(from: "00000000080".utf8), 80)
+  }
+
   func testASCIIHexPrinting() {
 
     var buf: [UInt8] = [0, 0, 0, 0, 0, 0, 0, 0]
