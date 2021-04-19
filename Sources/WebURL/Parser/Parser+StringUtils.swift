@@ -123,11 +123,15 @@ internal func hasNonURLCodePoints<UTF8Bytes>(
 /// Otherwise, `false`.
 ///
 @inlinable
-internal func hasDoubleSolidusPrefix<UTF8Bytes>(
+internal func indexAfterDoubleSolidusPrefix<UTF8Bytes>(
   utf8: UTF8Bytes
-) -> Bool where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
-  var it = utf8.makeIterator()
-  return it.next() == ASCII.forwardSlash.codePoint && it.next() == ASCII.forwardSlash.codePoint
+) -> UTF8Bytes.Index? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  var idx = utf8.startIndex
+  guard idx < utf8.endIndex, utf8[idx] == ASCII.forwardSlash.codePoint else { return nil }
+  utf8.formIndex(after: &idx)
+  guard idx < utf8.endIndex, utf8[idx] == ASCII.forwardSlash.codePoint else { return nil }
+  utf8.formIndex(after: &idx)
+  return idx
 }
 
 @inlinable
