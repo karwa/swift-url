@@ -304,7 +304,7 @@ extension ParsedURLString.ProcessedMapping {
   ) where Callback: URLParserCallback {
 
     var scannedInfo = scannedInfo
-    assert(scannedInfo.checkInvariants(inputString, baseURL: baseURL))
+    scannedInfo.checkInvariants(inputString, baseURL: baseURL)
 
     if scannedInfo.schemeKind == nil {
       guard let baseURL = baseURL, scannedInfo.componentsToCopyFromBase.contains(.scheme) else {
@@ -967,14 +967,14 @@ extension URLScanner {
     assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the query
-    let startOfFragment = input.firstIndex(of: ASCII.numberSign.codePoint)
+    let startOfFrg = input.firstIndex(of: ASCII.numberSign.codePoint)
 
     // 3. Validate the query-string.
-    validateURLCodePointsAndPercentEncoding(input.prefix(upTo: startOfFragment ?? input.endIndex), callback: &callback)
+    validateURLCodePointsAndPercentEncoding(utf8: input.prefix(upTo: startOfFrg ?? input.endIndex), callback: &callback)
 
     // 3. Return the next component.
-    mapping.queryRange = Range(uncheckedBounds: (input.startIndex, startOfFragment ?? input.endIndex))
-    if let nextStart = startOfFragment {
+    mapping.queryRange = Range(uncheckedBounds: (input.startIndex, startOfFrg ?? input.endIndex))
+    if let nextStart = startOfFrg {
       return .scan(.fragment, input.index(after: nextStart))
     } else {
       return .scanningComplete
@@ -993,7 +993,7 @@ extension URLScanner {
     assert(mapping.fragmentRange == nil)
 
     // 2. Validate the fragment string.
-    validateURLCodePointsAndPercentEncoding(input, callback: &callback)
+    validateURLCodePointsAndPercentEncoding(utf8: input, callback: &callback)
 
     mapping.fragmentRange = Range(uncheckedBounds: (input.startIndex, input.endIndex))
     return .scanningComplete
@@ -1223,7 +1223,7 @@ extension URLScanner {
     let path = input[..<(startOfNextComponent ?? input.endIndex)]
 
     // 3. Validate the path.
-    validateURLCodePointsAndPercentEncoding(path, callback: &callback)
+    validateURLCodePointsAndPercentEncoding(utf8: path, callback: &callback)
 
     // 4. Return the next component.
     if let nextStart = startOfNextComponent {
@@ -1347,94 +1347,95 @@ extension URLScanner {
 }
 
 
-// MARK: - Post-scan validation.
+// --------------------------------------------
+// MARK: - Post-scan validation
+// --------------------------------------------
 
 
 extension ScannedRangesAndFlags where InputString: BidirectionalCollection, InputString.Element == UInt8 {
 
   /// Performs some basic invariant checks on the scanned URL data. For debug builds.
   ///
-  @inlinable
-  internal func checkInvariants(_ inputString: InputString, baseURL: WebURL?) -> Bool {
+  #if DEBUG
+    @usableFromInline
+    internal func checkInvariants(_ inputString: InputString, baseURL: WebURL?) {
 
-    // - Structural invariants.
-    // Ensure that the combination of scanned ranges and flags makes sense.
+      // - Structural invariants.
+      // Ensure that the combination of scanned ranges and flags makes sense.
 
-    // We must have a scheme from somewhere.
-    if schemeRange == nil {
-      guard componentsToCopyFromBase.contains(.scheme) else { return false }
-    }
-    // Authority components imply the presence of an authorityRange and hostname.
-    if usernameRange != nil || passwordRange != nil || hostnameRange != nil || portRange != nil {
-      guard hostnameRange != nil else { return false }
-      guard authorityRange != nil else { return false }
-      guard cannotBeABaseURL == false else { return false }
-    }
-    // A password implies the presence of a username.
-    if passwordRange != nil {
-      guard usernameRange != nil else { return false }
-    }
-
-    // Ensure components from input string do not overlap with 'componentsToCopyFromBase' (except path).
-    if schemeRange != nil {
-      // Scheme can only overlap in relative URLs of special schemes.
-      if componentsToCopyFromBase.contains(.scheme) {
-        guard schemeKind!.isSpecial, schemeKind == baseURL!._schemeKind else { return false }
+      if schemeRange == nil {
+        assert(componentsToCopyFromBase.contains(.scheme), "We must have a scheme from somewhere")
       }
-    }
-    if authorityRange != nil {
-      guard componentsToCopyFromBase.contains(.authority) == false else { return false }
-    }
-    if queryRange != nil {
-      guard componentsToCopyFromBase.contains(.query) == false else { return false }
-    }
+      if usernameRange != nil || passwordRange != nil || hostnameRange != nil || portRange != nil {
+        assert(hostnameRange != nil, "A scanned authority component implies a scanned hostname")
+        assert(authorityRange != nil, "A scanned authority component implies a scanned authority")
+        assert(!cannotBeABaseURL, "A URL with an authority cannot be a cannot-be-a-base URL")
+        if passwordRange != nil {
+          assert(usernameRange != nil, "Can't have a password without a username (even if empty)")
+        }
+        if portRange != nil {
+          assert(hostnameRange != nil, "Can't have a port without a hostname")
+        }
+      }
+      // Ensure components from input string do not overlap with 'componentsToCopyFromBase' (except path).
+      if schemeRange != nil {
+        // Scheme can only overlap in relative URLs of special schemes.
+        if componentsToCopyFromBase.contains(.scheme) {
+          assert(
+            schemeKind!.isSpecial && schemeKind == baseURL!._schemeKind, "Copying a different scheme from baseURL?!")
+        }
+      }
+      if authorityRange != nil {
+        assert(
+          !componentsToCopyFromBase.contains(.authority), "Authority was scanned; shouldn't be copied from baseURL")
+      }
+      if queryRange != nil {
+        assert(!componentsToCopyFromBase.contains(.query), "Query was scanned; shouldn't be copied from baseURL")
+      }
 
-    // - Content invariants.
-    // Make sure that things such as separators are where we expect and not inside the scanned ranges.
+      // - Content invariants.
+      // Make sure that things such as separators are where we expect and not inside the scanned ranges.
 
-    if schemeRange != nil {
-      guard inputString[schemeRange!].last != ASCII.colon.codePoint else { return false }
-    }
-    if authorityRange != nil {
-      if let username = usernameRange {
-        if let password = passwordRange {
-          guard inputString[inputString.index(before: password.lowerBound)] == ASCII.colon.codePoint else {
-            return false
+      if let schemeRange = schemeRange {
+        assert(!schemeRange.isEmpty)
+        assert(inputString[schemeRange].last != ASCII.colon.codePoint)
+      }
+      if authorityRange != nil {
+        if let username = usernameRange {
+          if let password = passwordRange {
+            assert(inputString[inputString.index(before: password.lowerBound)] == ASCII.colon.codePoint)
           }
+          assert(inputString[passwordRange?.upperBound ?? username.upperBound] == ASCII.commercialAt.codePoint)
         }
-        guard inputString[passwordRange?.upperBound ?? username.upperBound] == ASCII.commercialAt.codePoint else {
-          return false
-        }
-      }
-      guard hostnameRange != nil else { return false }
-      if let port = portRange {
-        guard inputString[inputString.index(before: port.lowerBound)] == ASCII.colon.codePoint else {
-          return false
+        assert(hostnameRange != nil)
+        if let port = portRange {
+          assert(inputString[inputString.index(before: port.lowerBound)] == ASCII.colon.codePoint)
         }
       }
-    }
-    if let query = queryRange {
-      guard inputString[inputString.index(before: query.lowerBound)] == ASCII.questionMark.codePoint else {
-        return false
+      if let query = queryRange {
+        assert(inputString[inputString.index(before: query.lowerBound)] == ASCII.questionMark.codePoint)
+      }
+      if let fragment = fragmentRange {
+        assert(inputString[inputString.index(before: fragment.lowerBound)] == ASCII.numberSign.codePoint)
       }
     }
-    if let fragment = fragmentRange {
-      guard inputString[inputString.index(before: fragment.lowerBound)] == ASCII.numberSign.codePoint else {
-        return false
-      }
-    }
-    return true
-  }
+  #else
+    @inlinable @inline(__always)
+    internal func checkInvariants(_ inputString: InputString, baseURL: WebURL?) {}
+  #endif
 }
 
 
-// MARK: - Helper functions.
+// --------------------------------------------
+// MARK: - Parsing Utilities
+// --------------------------------------------
 
 
-/// Parses a scheme from the given string of UTF8 bytes.
+/// Parses a scheme from the start of the given UTF-8 code-units.
 ///
 /// If the string contains a scheme terminator ("`:`"), the returned tuple's `terminator` element will be equal to its index.
 /// Otherwise, the entire string will be considered the scheme name, and `terminator` will be equal to the input string's `endIndex`.
+/// If the string does not contain a valid scheme, this function returns `nil`.
 ///
 @inlinable
 func parseScheme<UTF8Bytes>(
@@ -1463,17 +1464,18 @@ func parseScheme<UTF8Bytes>(
 }
 
 /// Given a string, like "example.com:99/some/path?hello=world", returns the endIndex of the hostname component.
-/// This is used by the Javascript model's URL setter, which accepts a rather wide variety of inputs.
+/// This is used by the Javascript model's `hostname` setter, which accepts a rather wide variety of inputs.
 ///
 /// This is a "scan-level" operation: the discovered hostname may need additional processing before being written to a URL string.
 /// The only situation in which this function returns `nil` is if the scheme is not `file`, and the given string starts with a `:`
 /// (i.e. contains a port but no hostname).
 ///
-func findEndOfHostnamePrefix<Input, Callback>(
-  _ input: Input, scheme: WebURL.SchemeKind, callback cb: inout Callback
-) -> Input.Index? where Input: BidirectionalCollection, Input.Element == UInt8, Callback: URLParserCallback {
+internal func findEndOfHostnamePrefix<UTF8Bytes, Callback>(
+  _ input: UTF8Bytes, scheme: WebURL.SchemeKind, callback cb: inout Callback
+) -> UTF8Bytes.Index?
+where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
-  var mapping = ScannedRangesAndFlags<Input>()
+  var mapping = ScannedRangesAndFlags<UTF8Bytes>()
 
   // See `URLScanner.scanAuthority`.
   let hostname = input.prefix {
@@ -1498,36 +1500,4 @@ func findEndOfHostnamePrefix<Input, Callback>(
     }
   }
   return mapping.hostnameRange?.upperBound ?? hostname.endIndex
-}
-
-/// Checks if `input`, which is a collection of UTF8-encoded bytes, contains any non-URL code-points or invalid percent encoding (e.g. "%XY").
-/// If it does, `callback` is informed with an appropriate `ValidationError`.
-///
-/// - Note: This method considers the percent sign ("%") to be a valid URL code-point.
-/// - Note: This method is a no-op if `callback` is an instance of `IgnoreValidationErrors`.
-///
-@inlinable
-internal func validateURLCodePointsAndPercentEncoding<Input, Callback>(
-  _ input: @autoclosure () -> Input, callback: inout Callback
-) where Input: Collection, Input.Element == UInt8, Callback: URLParserCallback {
-
-  guard Callback.self != IgnoreValidationErrors.self else {
-    // The compiler has a tough time optimising this function away when we ignore validation errors.
-    return
-  }
-
-  let input = input()
-
-  if hasNonURLCodePoints(utf8: input, allowPercentSign: true) {
-    callback.validationError(.invalidURLCodePoint)
-  }
-
-  var percentSignSearchIdx = input.startIndex
-  while let percentSignIdx = input[percentSignSearchIdx...].firstIndex(where: { ASCII($0) == .percentSign }) {
-    percentSignSearchIdx = input.index(after: percentSignIdx)
-    let nextTwo = input[percentSignIdx...].prefix(2)
-    if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
-      callback.validationError(.unescapedPercentSign)
-    }
-  }
 }

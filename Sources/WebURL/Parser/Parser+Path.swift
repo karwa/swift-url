@@ -811,7 +811,7 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
   internal mutating func visitInputPathComponent(
     _ pathComponent: UTF8Bytes.SubSequence, isWindowsDriveLetter: Bool
   ) {
-    validateURLCodePointsAndPercentEncoding(pathComponent, callback: &callback.pointee)
+    validateURLCodePointsAndPercentEncoding(utf8: pathComponent, callback: &callback.pointee)
   }
 
   @usableFromInline

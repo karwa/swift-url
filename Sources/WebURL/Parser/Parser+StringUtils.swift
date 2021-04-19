@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+// --------------------------------------------
+// MARK: - URL Code Points
+// --------------------------------------------
+
+
 /// Detects non-URL code points in the given sequence. The sequence is assumed to contain valid UTF8 text.
 ///
 /// - parameters:
@@ -118,6 +124,41 @@ internal func hasNonURLCodePoints<UTF8Bytes>(
   }
   return false
 }
+
+/// Checks if `utf8`, which is a collection of UTF-8 code-units, contains any non-URL code-points or invalid percent encoding (e.g. "%XY").
+/// If it does, `callback` is informed with an appropriate `ValidationError`.
+///
+/// - Note: This method considers the percent sign ("%") to be a valid URL code-point.
+/// - Note: This method is a no-op if `callback` is an instance of `IgnoreValidationErrors`.
+///
+@inlinable
+internal func validateURLCodePointsAndPercentEncoding<UTF8Bytes, Callback>(
+  utf8: @autoclosure () -> UTF8Bytes, callback: inout Callback
+) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
+
+  // The compiler has a tough time optimising this function away when we ignore validation errors.
+  guard Callback.self != IgnoreValidationErrors.self else {
+    return
+  }
+  let utf8 = utf8()
+  if hasNonURLCodePoints(utf8: utf8, allowPercentSign: true) {
+    callback.validationError(.invalidURLCodePoint)
+  }
+  var percentSignSearchIdx = utf8.startIndex
+  while let percentSignIdx = utf8[percentSignSearchIdx...].firstIndex(where: { ASCII($0) == .percentSign }) {
+    percentSignSearchIdx = utf8.index(after: percentSignIdx)
+    let nextTwo = utf8[percentSignIdx...].prefix(2)
+    if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {
+      callback.validationError(.unescapedPercentSign)
+    }
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Other Utilities
+// --------------------------------------------
+
 
 /// Returns `true` if `utf8` begins with two U+002F (/) codepoints.
 /// Otherwise, `false`.

@@ -134,7 +134,7 @@ extension ParsedHost {
         hostnameInfo.encodedCount += 2
       }
     }
-    validateURLCodePointsAndPercentEncoding(hostname, callback: &callback)
+    validateURLCodePointsAndPercentEncoding(utf8: hostname, callback: &callback)
     return hostnameInfo
   }
 
