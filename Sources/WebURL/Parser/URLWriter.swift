@@ -133,7 +133,7 @@ internal protocol URLWriter: HostnameWriter {
   /// Note that `queryWriter` is not guaranteed to be invoked.
   ///
   mutating func writeQueryContents<T>(
-    _ queryWriter: (PieceWriter<T>) -> Void
+    isKnownFormEncoded: Bool, _ queryWriter: (PieceWriter<T>) -> Void
   ) where T: Collection, T.Element == UInt8
 
   /// Appends the fragment separator character (`#`), followed by the UTF-8 code-units provided by `fragmentWriter`, to the URL string.
@@ -184,6 +184,13 @@ internal protocol URLWriter: HostnameWriter {
 }
 
 extension URLWriter {
+
+  @inlinable
+  internal mutating func writeQueryContents<T>(
+    _ queryWriter: (PieceWriter<T>) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+    writeQueryContents(isKnownFormEncoded: false, queryWriter)
+  }
 
   @inlinable
   internal mutating func finalize() {
@@ -398,12 +405,13 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
   @inlinable
   internal mutating func writeQueryContents<T>(
-    _ queryWriter: (PieceWriter<T>) -> Void
+    isKnownFormEncoded: Bool, _ queryWriter: (PieceWriter<T>) -> Void
   ) where T: Collection, T.Element == UInt8 {
 
     assert(structure.queryLength == 0)
     structure.queryLength = 1 /* "?" */
     queryWriter { structure.queryLength += $0.count }
+    structure.queryIsKnownFormEncoded = isKnownFormEncoded
     requiredCapacity += structure.queryLength
   }
 
@@ -421,8 +429,10 @@ internal struct StructureAndMetricsCollector: URLWriter {
   @inlinable
   internal mutating func finalize() {
     precondition(requiredCapacity >= 0)
-    // Empty and nil queries are considered form-encoded (i.e. they do not need to be re-encoded).
-    structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
+    if structure.queryIsKnownFormEncoded == false {
+      // Empty and nil queries are considered form-encoded (i.e. they do not need to be re-encoded).
+      structure.queryIsKnownFormEncoded = (structure.queryLength == 0 || structure.queryLength == 1)
+    }
     structure.checkInvariants()
   }
 
@@ -575,7 +585,7 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
 
   @inlinable
   internal mutating func writeQueryContents<T>(
-    _ queryWriter: (PieceWriter<T>) -> Void
+    isKnownFormEncoded: Bool, _ queryWriter: (PieceWriter<T>) -> Void
   ) where T: Collection, T.Element == UInt8 {
     _writeByte(ASCII.questionMark.codePoint)
     queryWriter { _writeBytes($0) }

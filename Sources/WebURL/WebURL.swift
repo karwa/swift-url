@@ -55,6 +55,7 @@ public struct WebURL {
   @usableFromInline
   internal var storage: AnyURLStorage
 
+  @inlinable
   internal init(storage: AnyURLStorage) {
     self.storage = storage
   }
@@ -101,7 +102,7 @@ public struct WebURL {
 extension WebURL {
 
   // Flags used by the parser.
-
+  @inlinable
   internal var _schemeKind: WebURL.SchemeKind {
     storage.schemeKind
   }
