@@ -37,7 +37,7 @@ extension WebURL {
 
     public init?(_ input: String, base: String?) {
       if let baseStr = base {
-        let _url = WebURL(baseStr)?.join(input)
+        let _url = WebURL(baseStr)?.resolve(input)
         guard let url = _url else { return nil }
         self.init(storage: url.storage)
 
@@ -118,7 +118,7 @@ extension WebURL.JSModel {
     }
     set {
       var swift = swiftModel
-      try? swift.setUsername(to: newValue)
+      try? swift.setUsername(newValue)
       self = swift.jsModel
     }
   }
@@ -129,7 +129,7 @@ extension WebURL.JSModel {
     }
     set {
       var swift = swiftModel
-      try? swift.setPassword(to: newValue)
+      try? swift.setPassword(newValue)
       self = swift.jsModel
     }
   }
@@ -154,7 +154,7 @@ extension WebURL.JSModel {
         trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[...].utf8)
       }
       var swift = swiftModel
-      try? swift.setScheme(utf8: trimmedAndFiltered)
+      try? swift.utf8.setScheme(trimmedAndFiltered)
       self = swift.jsModel
     }
   }
@@ -170,7 +170,7 @@ extension WebURL.JSModel {
         return
       }
       var swift = swiftModel
-      try? swift.setHostname(utf8: filtered[..<hostnameEnd])
+      try? swift.utf8.setHostname(filtered[..<hostnameEnd])
       self = swift.jsModel
     }
   }
@@ -205,7 +205,7 @@ extension WebURL.JSModel {
     }
     set {
       var swift = swiftModel
-      try? swift.setPath(utf8: ASCII.NewlineAndTabFiltered(newValue.utf8))
+      try? swift.utf8.setPath(ASCII.NewlineAndTabFiltered(newValue.utf8))
       self = swift.jsModel
     }
   }
@@ -233,7 +233,7 @@ extension WebURL.JSModel {
       }
       // - The remainder gets filtered of particular ASCII whitespace characters.
       var swift = swiftModel
-      swift.setQuery(utf8: ASCII.NewlineAndTabFiltered(newQuery.utf8))
+      swift.utf8.setQuery(ASCII.NewlineAndTabFiltered(newQuery.utf8))
       self = swift.jsModel
     }
   }
@@ -261,7 +261,7 @@ extension WebURL.JSModel {
       }
       // - The remainder gets filtered of particular ASCII whitespace characters.
       var swift = swiftModel
-      swift.setFragment(utf8: ASCII.NewlineAndTabFiltered(newFragment.utf8))
+      swift.utf8.setFragment(ASCII.NewlineAndTabFiltered(newFragment.utf8))
       self = swift.jsModel
     }
   }

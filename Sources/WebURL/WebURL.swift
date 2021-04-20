@@ -14,40 +14,9 @@
 
 /// A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.
 ///
-/// - A URL’s `scheme` is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing.
-///   For example, software that speaks the HTTP protocol will know how to process requests involving URLs with the "http" scheme.
-///   A scheme is always required, and determines the way in which other components are encoded in the URL.
-///   Some schemes ("http", "https", "ws", "wss", "ftp", and "file") are referred to as being "special"; their components may be encoded differently,
-///   or gain additional semantic meaning.
-///   Scheme usage is coordinated by the [Internet Assigned Numbers Authority][iana-schemes].
+/// Parsing and manipulation of URLs is compatible with the [WHATWG URL Specification][url-spec].
+/// The `WebURL` API differs slightly from the Javascript API described in the standard, which is available via the `.jsModel` property.
 ///
-/// - The `hostname` is an optional component which can be a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
-///   Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
-///   Domains may be resolved to IP addresses using the [Domain Name System (DNS)][dns] .
-///
-/// - Additionally, the hostname may be augmented by a `username`, `password` or `port`. Collectively, these are known as the URL's "authority".
-///
-/// - The `path` is a list of zero or more ASCII strings, usually identifying a location in hierarchical form.
-///   Hierarchical paths will be lexically simplified according to the `scheme`.
-///
-/// - The `query` is an optional, ordered sequence of key-value pairs.
-///
-/// - The `fragment` is an optional string which may be used for further processing on the resource identified by the other components.
-///   It is typically used for client-side information and not sent to the host, although this is a scheme- and implementation-specific detail.
-///
-/// Additionally, URLs without a host and with a non-hierarchical path are said to be "cannot be a base" URLs.
-/// (e.g. `mailto:somebody@example.com`, or `javascript:alert("hello")`). Joining a relative URL string to such a URL will always fail,
-/// unless that string consists only of a fragment (e.g. "#my-fragment").
-///
-/// URLs are always ASCII Strings. Non-ASCII characters must be percent-encoded, except in domains, where they are encoded as ASCII by
-/// the [IDNA transformation][idna-spec] .
-///
-/// Parsing of URL strings is compatible with the [WHATWG URL Specification][url-spec].
-/// The model exposed here differs slightly from the Javascript model described in the standard, which is available via the `.jsModel` view.
-///
-/// [iana-schemes]: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
-/// [dns]: https://en.wikipedia.org/wiki/Domain_Name_System
-/// [idna-spec]: https://unicode.org/reports/tr46/
 /// [url-spec]: https://url.spec.whatwg.org/
 ///
 public struct WebURL {
@@ -60,63 +29,74 @@ public struct WebURL {
     self.storage = storage
   }
 
-  /// Attempts to create a URL by parsing the given absolute URL string.
+  /// Attempt to construct a URL by parsing the given string.
   ///
-  /// The created URL is normalized in a number of ways - for instance, whitespace characters may be stripped, other characters may be percent-encoded,
+  /// The created URL is normalized in a number of ways - for instance, whitespace characters may be removed, other characters may be percent-encoded,
   /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
-  /// serialized result may look different to the original contents. These transformations are defined in the URL specification.
+  /// resulting object's serialized string may look different to the original contents. These transformations are defined in the URL standard.
   ///
   @inlinable @inline(__always)
   public init?<S>(_ string: S) where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     self.init(utf8: string.utf8)
   }
 
+  /// Attempt to construct a URL by parsing the given string, provided as a collection of UTF-8 code-units.
+  ///
+  /// The created URL is normalized in a number of ways - for instance, whitespace characters may be removed, other characters may be percent-encoded,
+  /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
+  /// resulting object's serialized string may look different to the original contents. These transformations are defined in the URL standard.
+  ///
   @inlinable @inline(__always)
-  init?<C>(utf8 bytes: C) where C: BidirectionalCollection, C.Element == UInt8 {
-    guard let url = urlFromBytes(bytes, baseURL: nil) else {
-      return nil
-    }
+  public init?<UTF8Bytes>(utf8: UTF8Bytes) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
+    guard let url = urlFromBytes(utf8, baseURL: nil) else { return nil }
     self = url
   }
 
-  /// Attempts to create a URL by parsing the given absolute or relative URL string with this URL as its base.
+  /// Attempt to create a URL by parsing the given string with this URL as its base.
   ///
-  /// The created URL is normalized in a number of ways - for instance, whitespace characters may be stripped, other characters may be percent-encoded,
-  /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
-  /// serialized result may look different to the original contents. These transformations are defined in the URL specification.
+  /// This function supports a wide range of relative URL strings, producing the same result as an HTML `<a>` tag on the page given by this URL.
+  /// In particular, users should note that the resulting URL may have a different host to this one, and may even have a different scheme if the given string
+  /// is an absolute URL string.
+  ///
+  /// ```swift
+  /// let base = WebURL("http://example.com/karl/index.html")!
+  ///
+  /// base.resolve("img.jpg?size=200x200")! // "http://example.com/karl/img.jpg?size=200x200"
+  /// base.resolve("/mary/lambs/")! // "http://example.com/mary/lambs/"
+  /// base.resolve("//test.com")! // "http://test.com/"
+  /// base.resolve("ftp://test.com/some/file")! // "ftp://test.com/some/file"
+  /// ```
   ///
   @inlinable @inline(__always)
-  public func join<S>(_ string: S) -> WebURL? where S: StringProtocol, S.UTF8View: BidirectionalCollection {
-    return join(utf8: string.utf8)
+  public func resolve<S>(_ string: S) -> WebURL? where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+    resolve(utf8: string.utf8)
   }
 
+  /// Attempt to create a URL by parsing the given string, provided as a collection of UTF-8 code-units, with this URL as its base.
+  ///
+  /// This function supports a wide range of relative URL strings, producing the same result as an HTML `<a>` tag on the page given by this URL.
+  /// In particular, users should note that the resulting URL may have a different host to this one, and may even have a different scheme if the given string
+  /// is an absolute URL string.
+  ///
   @inlinable @inline(__always)
-  func join<C>(utf8 bytes: C) -> WebURL? where C: BidirectionalCollection, C.Element == UInt8 {
-    guard let url = urlFromBytes(bytes, baseURL: self) else {
-      return nil
-    }
-    return url
+  public func resolve<UTF8Bytes>(
+    utf8: UTF8Bytes
+  ) -> WebURL? where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
+    urlFromBytes(utf8, baseURL: self)
   }
 }
 
-extension WebURL {
 
-  // Flags used by the parser.
-  @inlinable
-  internal var _schemeKind: WebURL.SchemeKind {
-    storage.schemeKind
-  }
-}
-
-
-// MARK: - Standard protocols.
+// --------------------------------------------
+// MARK: - Standard protocols
+// --------------------------------------------
 
 
 extension WebURL: Equatable, Hashable, Comparable {
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.storage.withUTF8 { lhsBuffer in
-      rhs.storage.withUTF8 { rhsBuffer in
+    lhs.utf8.withUnsafeBufferPointer { lhsBuffer in
+      rhs.utf8.withUnsafeBufferPointer { rhsBuffer in
         (lhsBuffer.baseAddress == rhsBuffer.baseAddress && lhsBuffer.count == rhsBuffer.count)
           || lhsBuffer.elementsEqual(rhsBuffer)
       }
@@ -124,14 +104,14 @@ extension WebURL: Equatable, Hashable, Comparable {
   }
 
   public func hash(into hasher: inout Hasher) {
-    storage.withUTF8 { buffer in
+    utf8.withUnsafeBufferPointer { buffer in
       hasher.combine(bytes: UnsafeRawBufferPointer(buffer))
     }
   }
 
   public static func < (lhs: Self, rhs: Self) -> Bool {
-    lhs.storage.withUTF8 { lhsBuffer in
-      rhs.storage.withUTF8 { rhsBuffer in
+    lhs.utf8.withUnsafeBufferPointer { lhsBuffer in
+      rhs.utf8.withUnsafeBufferPointer { rhsBuffer in
         return lhsBuffer.lexicographicallyPrecedes(rhsBuffer)
       }
     }
@@ -162,161 +142,161 @@ extension WebURL: Codable {
 }
 
 
-// MARK: - Properties.
+// --------------------------------------------
+// MARK: - Properties
+// --------------------------------------------
 
+
+extension WebURL {
+
+  // Required by the parser.
+  @inlinable
+  internal var schemeKind: WebURL.SchemeKind {
+    storage.schemeKind
+  }
+}
 
 extension WebURL {
 
   /// The string representation of this URL.
   ///
   public var serialized: String {
-    storage.withUTF8 { String(decoding: $0, as: UTF8.self) }
+    String(decoding: utf8, as: UTF8.self)
+  }
+
+  /// The string representation of this URL, excluding the URL's fragment.
+  ///
+  public var serializedExcludingFragment: String {
+    utf8.withUnsafeBufferPointer { String(decoding: $0[..<storage.structure.fragmentStart], as: UTF8.self) }
   }
 
   /// The scheme of this URL, for example `https` or `file`.
   ///
-  /// A URL’s `scheme` is an ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing after parsing.
-  /// All URLs have a scheme, which is never the empty string.
-  /// Setting this property may fail if the URL does not support the new value.
+  /// A URL’s `scheme` is a non-empty ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing.
+  /// For example, software that speaks the HTTP protocol will know how to process requests for URLs with the "http" scheme. Every URL must have a scheme.
+  ///
+  /// Some schemes (http, https, ws, wss, ftp, and file) are referred to as being "special"; the components of URLs with these schemes may have unique
+  /// encoding requirements, or additional meaning. Scheme usage is co-ordinated by the [Internet Assigned Numbers Authority][iana-schemes].
+  ///
+  /// Setting this property may fail if the new scheme is invalid, or if the URL cannot be adjusted to the new scheme.
+  ///
+  /// [iana-schemes]: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
   ///
   public var scheme: String {
-    get {
-      storage.withUTF8(of: .scheme) { componentOrNil in
-        guard let component = componentOrNil, component.count > 1 else { preconditionFailure("Invalid scheme") }
-        return String(decoding: component.dropLast(), as: UTF8.self)
-      }
-    }
-    set {
-      try? setScheme(to: newValue)
-    }
+    get { String(decoding: utf8.scheme, as: UTF8.self) }
+    set { try? setScheme(newValue) }
   }
 
-  /// The username of this URL, if present, as a percent-encoded string.
+  /// The username of this URL, if present, as a non-empty, percent-encoded ASCII string.
   ///
-  /// If present, the username is never the empty sring.
-  /// When setting this property, disallowed characters will be percent-encoded.
-  /// However, the operation may still fail if the URL does not support the new value for other reasons.
+  /// When setting this property, the new contents will be percent-encoded if necessary.
+  /// Setting this property may fail if the URL does not allow credentials.
   ///
   public var username: String? {
-    get {
-      storage.withUTF8(of: .username) { componentOrNil in
-        componentOrNil.map { String(decoding: $0, as: UTF8.self) }
-      }
-    }
-    set { try? setUsername(to: newValue) }
+    get { utf8.username.map { String(decoding: $0, as: UTF8.self) } }
+    set { try? setUsername(newValue) }
   }
 
-  /// The password of this URL, if present, as a percent-encoded string.
+  /// The password of this URL, if present, as a non-empty, percent-encoded string.
   ///
-  /// If present, the password is never the empty sring.
-  /// When setting this property, disallowed characters will be percent-encoded.
-  /// However, the operation may still fail if the URL does not support the new value for other reasons.
+  /// When setting this property, the new contents will be percent-encoded if necessary.
+  /// Setting this property may fail if the URL does not allow credentials.
   ///
   public var password: String? {
-    get {
-      storage.withUTF8(of: .password) { componentOrNil in
-        guard let component = componentOrNil, component.count > 1 else { return nil }
-        return String(decoding: component.dropFirst(), as: UTF8.self)
-      }
-    }
-    set {
-      try? setPassword(to: newValue)
-    }
+    get { utf8.password.map { String(decoding: $0, as: UTF8.self) } }
+    set { try? setPassword(newValue) }
   }
 
   /// The string representation of this URL's host, if present.
   ///
-  /// A URL's host may be a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
-  /// Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
-  /// When setting this property, disallowed characters will **not** be percent-encoded, and will cause the operation to fail.
+  /// A URL's host which can be a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+  /// Typically a host serves as a network address, but is sometimes used as an opaque identifier in URLs where a network address is not necessary.
+  ///
+  /// When setting this property, the new contents will be parsed and normalized (e.g. domains will be percent-decoded and lowercased, and IP addresses
+  /// rewritten in a canonical format). Setting this property will fail if the new contents contain invalid host code-points or a malformed IP address.
   ///
   public var hostname: String? {
-    get {
-      storage.withUTF8(of: .hostname) { componentOrNil in
-        componentOrNil.map { String(decoding: $0, as: UTF8.self) }
-      }
-    }
-    set { try? setHostname(to: newValue) }
+    get { utf8.hostname.map { String(decoding: $0, as: UTF8.self) } }
+    set { try? setHostname(newValue) }
   }
 
   /// The port of this URL, if present. Valid port numbers are in the range `0 ..< 65536`.
   ///
-  /// Setting this property may fail if the URL does not support the new value.
+  /// Setting this property may fail if the new value is out of range, or if the URL does not support port numbers.
+  /// If the URL has a "special" scheme, setting the port to its known default value will remove the port.
   ///
   public var port: Int? {
-    get {
-      storage.withUTF8(of: .port) { componentOrNil in
-        guard let component = componentOrNil, component.count > 1 else { return nil }
-        return Int(String(decoding: component.dropFirst(), as: UTF8.self), radix: 10)!
-      }
-    }
-    set {
-      try? setPort(to: newValue)
-    }
+    get { utf8.port.map { Int(String(decoding: $0, as: UTF8.self), radix: 10)! } }
+    set { try? setPort(newValue) }
+  }
+
+  /// The port of this URL, if present, or the default port of its scheme, if it has one.
+  ///
+  public var portOrKnownDefault: Int? {
+    port ?? schemeKind.defaultPort.map { Int($0) }
   }
 
   /// The string representation of this URL's path.
   ///
-  /// A URL's path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form.
-  /// URLs with special schemes have an implicit path "/", which cannot be removed. URLs with other schemes may have an empty path.
-  /// When setting this property, disallowed characters will be percent-encoded.
-  /// However, the operation may still fail if the URL does not support the new value for other reasons.
+  /// A URL's path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form. Hierarchical paths begin with a "/".
+  ///
+  /// URLs with "special" schemes always have non-empty, hierarchical paths, and attempting to set the path to an empty string will instead set it to "/".
+  /// URLs with non-special schemes may have an empty path under certain circumstances.
+  /// URLs with non-hierarchical paths are referred to as `cannotBeABase` URLs.
+  ///
+  /// ```swift
+  /// let file = WebURL("file:///usr/bin/swift")!
+  /// print(file) // "file:///usr/bin/swift"
+  /// print(file.path) // "/usr/bin/swift"
+  /// print(file.cannotBeABase) // false
+  ///
+  /// let hasImplictPath = WebURL("http://example.com")!
+  /// print(hasImplictPath) // "http://example.com/"
+  /// print(hasImplictPath.path) // "/"
+  /// print(hasImplictPath.cannotBeABase) // false
+  ///
+  /// let mailURL = WebURL("mailto:bob@example.com")!
+  /// print(mailURL) // "mailto:bob@example.com"
+  /// print(mailURL.path) // "bob@example.com"
+  /// print(mailURL.cannotBeABase) // true
+  /// ```
+  ///
+  /// When setting this property, the new contents will be parsed, lexically simplified, and percent-encoded if necessary.
+  /// Setting this property will fail if the URL `cannotBeABase`.
   ///
   public var path: String {
-    get {
-      storage.withUTF8(of: .path) { componentOrNil in
-        componentOrNil.map { String(decoding: $0, as: UTF8.self) }
-      } ?? ""
-    }
-    set { try? setPath(to: newValue) }
+    get { String(decoding: utf8.path, as: UTF8.self) }
+    set { try? setPath(newValue) }
   }
 
   /// The string representation of this URL's query, if present.
   ///
-  /// A URL's `query` is an optional, ordered sequence of key-value pairs. This string representation does not include the leading `?`.
-  /// When setting this property, disallowed characters will be percent-encoded.
+  /// A URL's `query` contains non-hierarchical data that, along with the `path`, serves to identify a resource. The precise structure of the query string is not
+  /// standardized, but is often used to store a list of key-value pairs ("parameters").
+  ///
+  /// This string representation does not include the leading `?` delimiter.
+  /// When setting this property, the new contents will be percent-encoded if necessary. Setting this property does not fail.
   ///
   public var query: String? {
-    get {
-      storage.withUTF8(of: .query) { componentOrNil in
-        guard let component = componentOrNil else { return nil }
-        guard component.count != 1 else {
-          assert(component.first == ASCII.questionMark.codePoint)
-          return ""
-        }
-        return String(decoding: component.dropFirst(), as: UTF8.self)
-      }
-    }
-    set {
-      setQuery(to: newValue)
-    }
+    get { utf8.query.map { String(decoding: $0, as: UTF8.self) } }
+    set { setQuery(newValue) }
   }
 
   /// The fragment of this URL, if present, as a percent-encoded string.
   ///
   /// A URL's `fragment` is an optional string which may be used for further processing on the resource identified by the other components.
-  /// This string representation does not include the leading `#`.
-  /// When setting this property, disallowed characters will be percent-encoded.
+  ///
+  /// This string representation does not include the leading `#` delimiter.
+  /// When setting this property, the new contents will be percent-encoded if necessary. Setting this property does not fail.
   ///
   public var fragment: String? {
-    get {
-      storage.withUTF8(of: .fragment) { componentOrNil in
-        guard let component = componentOrNil else { return nil }
-        guard component.count != 1 else {
-          assert(component.first == ASCII.numberSign.codePoint)
-          return ""
-        }
-        return String(decoding: component.dropFirst(), as: UTF8.self)
-      }
-    }
-    set {
-      setFragment(to: newValue)
-    }
+    get { utf8.fragment.map { String(decoding: $0, as: UTF8.self) } }
+    set { setFragment(newValue) }
   }
 
   /// Whether this URL cannot be a base.
   ///
-  /// URLs marked as 'cannot be a base' do not have special schemes (such as http or file), authority components or hierarchical paths.
+  /// URLs which 'cannot be a base' do not have special schemes (such as http or file), authority components or hierarchical paths.
   /// When parsing a relative URL string against such a URL, only strings which set the fragment are allowed, and any modifications which would change
   /// a URL's structure to be a valid base URL (or vice versa) are not allowed.
   /// Examples of URLs which cannot be a base are:
@@ -331,173 +311,57 @@ extension WebURL {
 }
 
 
+// --------------------------------------------
 // MARK: - Setters
+// --------------------------------------------
 
-
-/// The URL `a:` - essentially the smallest valid URL string. This is used to temporarily occupy WebURL's storage property,
-/// so that its actual storage can be moved to a uniquely-referenced local variable. It should not be possible to observe a URL whose storage is set to this object.
-///
-internal let _tempStorage = AnyURLStorage(
-  URLStorage<BasicURLHeader<UInt8>>(
-    count: 2,
-    structure: URLStructure(
-      schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
-      portLength: 0, pathLength: 0, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 0,
-      sigil: nil, schemeKind: .other, cannotBeABaseURL: true, queryIsKnownFormEncoded: true),
-    initializingCodeUnitsWith: { buffer in
-      buffer[0] = ASCII.a.codePoint
-      buffer[1] = ASCII.colon.codePoint
-      return 2
-    }
-  )
-)
 
 extension WebURL {
 
-  internal mutating func withMutableStorage(
-    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage),
-    _ generic: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage)
-  ) {
-    try! withMutableStorage({ (small(&$0), nil) }, { (generic(&$0), nil) })
-  }
-
-  internal mutating func withMutableStorage(
-    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
-    _ generic: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage, URLSetterError?)
-  ) throws {
-
-    var error: URLSetterError?
-
-    // We need to go through a bit of a dance in order to get a unique reference to the storage.
-    // It's like if you have something stuck to one hand and try to remove it with the other hand.
-    //
-    // Basically:
-    // 1. Swap our storage to temporarily point to some read-only global, so our only storage reference is
-    //    via a local variable.
-    // 2. Extract the URLStorage (which is a COW value type) from local variable's enum payload, and set
-    //    the local to also point that read-only global.
-    // 3. Hand that extracted storage off to closure (`inout`, but `__consuming` might also work),
-    //    which returns a storage object back (possibly the same storage object).
-    // 4. We round it all off by assigning that value as our new storage. Phew.
-    var localRef = self.storage
-    self.storage = _tempStorage
-    switch localRef {
-    case .large(var extracted_storage):
-      localRef = _tempStorage
-      (self.storage, error) = generic(&extracted_storage)
-    case .small(var extracted_storage):
-      localRef = _tempStorage
-      (self.storage, error) = small(&extracted_storage)
-    }
-    if let error = error {
-      throw error
-    }
-  }
-}
-
-extension WebURL {
-
-  // UTF-8 setters.
-
-  mutating func setScheme<C>(utf8 newScheme: C) throws where C: Collection, C.Element == UInt8 {
-    try withMutableStorage(
-      { small in small.setScheme(to: newScheme) },
-      { large in large.setScheme(to: newScheme) }
-    )
-  }
-
-  mutating func setUsername<C>(utf8 newUsername: C?) throws where C: Collection, C.Element == UInt8 {
-    try withMutableStorage(
-      { small in small.setUsername(to: newUsername) },
-      { large in large.setUsername(to: newUsername) }
-    )
-  }
-
-  mutating func setPassword<C>(utf8 newPassword: C?) throws where C: Collection, C.Element == UInt8 {
-    try withMutableStorage(
-      { small in small.setPassword(to: newPassword) },
-      { large in large.setPassword(to: newPassword) }
-    )
-  }
-
-  mutating func setHostname<C>(utf8 newHostname: C?) throws where C: BidirectionalCollection, C.Element == UInt8 {
-    try withMutableStorage(
-      { small in small.setHostname(to: newHostname) },
-      { large in large.setHostname(to: newHostname) }
-    )
-  }
-
-  mutating func setPath<C>(utf8 newPath: C) throws where C: BidirectionalCollection, C.Element == UInt8 {
-    try withMutableStorage(
-      { small in small.setPath(to: newPath) },
-      { large in large.setPath(to: newPath) }
-    )
-  }
-
-  mutating func setQuery<C>(utf8 newQuery: C?) where C: Collection, C.Element == UInt8 {
-    withMutableStorage(
-      { small in small.setQuery(to: newQuery) },
-      { large in large.setQuery(to: newQuery) }
-    )
-  }
-
-  mutating func setFragment<C>(utf8 newFragment: C?) where C: Collection, C.Element == UInt8 {
-    withMutableStorage(
-      { small in small.setFragment(to: newFragment) },
-      { large in large.setFragment(to: newFragment) }
-    )
-  }
-
-  // StringProtocol/Int setters.
-
-  /// Sets this URL's `scheme`, throwing an error if the operation fails.
+  /// Replaces this URL's `scheme` with the given string.
   ///
   /// - seealso: `scheme`
   ///
-  @_specialize(where S == String)
-  @_specialize(where S == Substring)
-  public mutating func setScheme<S>(to newScheme: S) throws where S: StringProtocol {
-    try setScheme(utf8: newScheme.utf8)
+  @inlinable
+  public mutating func setScheme<S>(_ newScheme: S) throws where S: StringProtocol {
+    try utf8.setScheme(newScheme.utf8)
   }
 
-  /// Sets this URL's `username`, throwing an error if the operation fails.
+  /// Replaces this URL's `username` with the given string.
   ///
   /// - seealso: `username`
   ///
-  @_specialize(where S == String)
-  @_specialize(where S == Substring)
-  public mutating func setUsername<S>(to newUsername: S?) throws where S: StringProtocol {
-    try setUsername(utf8: newUsername?.utf8)
+  @inlinable
+  public mutating func setUsername<S>(_ newUsername: S?) throws where S: StringProtocol {
+    try utf8.setUsername(newUsername?.utf8)
   }
 
-  /// Sets this URL's `password`, throwing an error if the operation fails.
+  /// Replaces this URL's `password` with the given string.
   ///
   /// - seealso: `password`
   ///
-  @_specialize(where S == String)
-  @_specialize(where S == Substring)
-  public mutating func setPassword<S>(to newPassword: S?) throws where S: StringProtocol {
-    try setPassword(utf8: newPassword?.utf8)
+  @inlinable
+  public mutating func setPassword<S>(_ newPassword: S?) throws where S: StringProtocol {
+    try utf8.setPassword(newPassword?.utf8)
   }
 
-  /// Sets this URL's `hostname`, throwing an error if the operation fails.
+  /// Replaces this URL's `hostname` with the given string.
   ///
   /// - seealso: `hostname`
   ///
-  @_specialize(where S == String)
-  @_specialize(where S == Substring)
-  public mutating func setHostname<S>(to newHostname: S?) throws
+  @inlinable
+  public mutating func setHostname<S>(_ newHostname: S?) throws
   where S: StringProtocol, S.UTF8View: BidirectionalCollection {
-    try setHostname(utf8: newHostname?.utf8)
+    try utf8.setHostname(newHostname?.utf8)
   }
 
-  /// Sets this URL's `port`, throwing an error if the operation fails.
+  /// Replaces this URL's `port`.
   ///
   /// - seealso: `port`
   ///
-  public mutating func setPort(to newPort: Int?) throws {
+  public mutating func setPort(_ newPort: Int?) throws {
     guard let newPort = newPort else {
-      try withMutableStorage(
+      try storage.withUnwrappedMutableStorage(
         { small in small.setPort(to: nil) },
         { large in large.setPort(to: nil) }
       )
@@ -506,39 +370,47 @@ extension WebURL {
     guard let uint16Port = UInt16(exactly: newPort) else {
       throw URLSetterError.portValueOutOfBounds
     }
-    try withMutableStorage(
+    try storage.withUnwrappedMutableStorage(
       { small in small.setPort(to: uint16Port) },
       { large in large.setPort(to: uint16Port) }
     )
   }
 
-  /// Sets this URL's `path`, throwing an error if the operation fails.
+  /// Replaces this URL's `path` with the given string.
   ///
   /// - seealso: `path`
   ///
-  @_specialize(where S == String)
-  @_specialize(where S == Substring)
-  public mutating func setPath<S>(to newPath: S) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
-    try setPath(utf8: newPath.utf8)
+  @inlinable
+  public mutating func setPath<S>(_ newPath: S) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+    try utf8.setPath(newPath.utf8)
   }
 
-  /// Sets this URL's `query`.
+  /// Replaces this URL's `query` with the given string.
   ///
   /// - seealso: `query`
   ///
-  @_specialize(where S == String)
-  @_specialize(where S == Substring)
-  public mutating func setQuery<S>(to newQuery: S?) where S: StringProtocol {
-    setQuery(utf8: newQuery?.utf8)
+  @inlinable
+  public mutating func setQuery<S>(_ newQuery: S?) where S: StringProtocol {
+    utf8.setQuery(newQuery?.utf8)
   }
 
-  /// Sets this URL's `fragment`.
+  /// Replaces this URL's `fragment` with the given string.
   ///
   /// - seealso: `fragment`
   ///
-  @_specialize(where S == String)
-  @_specialize(where S == Substring)
-  public mutating func setFragment<S>(to newFragment: S?) where S: StringProtocol {
-    setFragment(utf8: newFragment?.utf8)
+  @inlinable
+  public mutating func setFragment<S>(_ newFragment: S?) where S: StringProtocol {
+    utf8.setFragment(newFragment?.utf8)
+  }
+}
+
+extension WebURL {
+
+  // Legacy function used by pathComponents/queryParams views.
+  internal mutating func withMutableStorage(
+    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage),
+    _ generic: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage)
+  ) {
+    storage.withUnwrappedMutableStorage(small, generic)
   }
 }

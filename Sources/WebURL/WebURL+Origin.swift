@@ -48,7 +48,7 @@ extension WebURL {
   /// ```
   ///
   public var origin: Origin {
-    switch _schemeKind {
+    switch schemeKind {
     case .http, .https, .ws, .wss, .ftp:
       let serializedTuple = "\(scheme)://\(hostname ?? "")\(port.map { ":\($0)" } ?? "")"
       return Origin(kind: .tuple(serializedTuple))

@@ -310,7 +310,7 @@ extension ParsedURLString.ProcessedMapping {
       guard let baseURL = baseURL, scannedInfo.componentsToCopyFromBase.contains(.scheme) else {
         preconditionFailure("We must have a scheme")
       }
-      scannedInfo.schemeKind = baseURL._schemeKind
+      scannedInfo.schemeKind = baseURL.schemeKind
     }
 
     // Port.
@@ -358,7 +358,7 @@ extension ParsedURLString.ProcessedMapping {
       writer.writeSchemeContents(ASCII.Lowercased(inputString[inputScheme]))
     } else {
       precondition(info.componentsToCopyFromBase.contains(.scheme), "Cannot construct a URL without a scheme")
-      assert(schemeKind == baseURL!._schemeKind)
+      assert(schemeKind == baseURL!.schemeKind)
       baseURL.unsafelyUnwrapped.storage.withUTF8(of: .scheme) { baseScheme in
         writer.writeSchemeContents(baseScheme!.dropLast() /* ':' */)
       }
@@ -625,7 +625,7 @@ extension URLScanner {
       return scanResults
     }
 
-    if case .file = base._schemeKind {
+    if case .file = base.schemeKind {
       scanResults.componentsToCopyFromBase = [.scheme]
       return scanAllFileURLComponents(
         relative,
@@ -637,7 +637,7 @@ extension URLScanner {
 
     return scanAllRelativeURLComponents(
       relative,
-      baseScheme: base._schemeKind,
+      baseScheme: base.schemeKind,
       &scanResults,
       callback: &callback
     ) ? scanResults : nil
@@ -679,7 +679,7 @@ extension URLScanner {
         authority = authority[afterPrefix...]
       } else {
         // Since `scheme` is special, comparing the kind is sufficient.
-        if scheme == baseURL?._schemeKind {
+        if scheme == baseURL?.schemeKind {
           callback.validationError(.relativeURLMissingBeginningSolidus)
           return scanAllRelativeURLComponents(input, baseScheme: scheme, &mapping, callback: &callback)
         }
@@ -1053,7 +1053,7 @@ extension URLScanner {
     // - 3 slahses:  empty host, parse as absolute path.
     // - 4+ slashes: invalid.
 
-    let baseScheme = baseURL?._schemeKind
+    let baseScheme = baseURL?.schemeKind
 
     var cursor = input.startIndex
     guard cursor < input.endIndex, let c0 = ASCII(input[cursor]), c0 == .forwardSlash || c0 == .backslash else {
@@ -1382,7 +1382,7 @@ extension ScannedRangesAndFlags where InputString: BidirectionalCollection, Inpu
         // Scheme can only overlap in relative URLs of special schemes.
         if componentsToCopyFromBase.contains(.scheme) {
           assert(
-            schemeKind!.isSpecial && schemeKind == baseURL!._schemeKind, "Copying a different scheme from baseURL?!")
+            schemeKind!.isSpecial && schemeKind == baseURL!.schemeKind, "Copying a different scheme from baseURL?!")
         }
       }
       if authorityRange != nil {

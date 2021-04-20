@@ -42,7 +42,7 @@ extension WebURL {
   public var host: Host? {
     guard let hostname = self.hostname else { return nil }
     var callback = IgnoreValidationErrors()
-    switch ParsedHost(hostname.utf8, schemeKind: _schemeKind, callback: &callback) {
+    switch ParsedHost(hostname.utf8, schemeKind: schemeKind, callback: &callback) {
     case .none:
       assertionFailure("Normalized hostname failed to reparse")
       return nil
