@@ -178,6 +178,12 @@ extension WebURLTests {
     }
     XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/j/k?m=n&o=p#zz")
     XCTAssertURLIsIdempotent(url)
+    // Chained modifying wrappers.
+    checkDoesNotCopy(&url) {
+      $0.jsModel.swiftModel.jsModel.swiftModel.jsModel.swiftModel.fragment = "aa"
+    }
+    XCTAssertEqual(url.serialized, "ftp://resu:ssap@moc.elpmaxe:42/j/k?m=n&o=p#aa")
+    XCTAssertURLIsIdempotent(url)
   }
 }
 

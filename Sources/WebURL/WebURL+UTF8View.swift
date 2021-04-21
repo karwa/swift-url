@@ -80,7 +80,7 @@ extension WebURL.UTF8View: RandomAccessCollection {
 
   @inlinable
   public subscript(position: Index) -> Element {
-    // bounds-checking is performed by `ManagedArrayBuffer`
+    // bounds-checking is performed by `ManagedArrayBuffer`.
     switch storage {
     case .small(let small): return small.codeUnits[position]
     case .large(let large): return large.codeUnits[position]
@@ -129,6 +129,18 @@ extension WebURL.UTF8View: RandomAccessCollection {
 
   @inlinable
   public func withContiguousStorageIfAvailable<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R? {
+    try withUnsafeBufferPointer(body)
+  }
+
+  /// Invokes `body` with a pointer to the contiguous UTF-8 code-units of the entire serialized URL.
+  ///
+  /// - important: The provided pointer is valid only for the duration of `body`. Do not store or return the pointer for later use.
+  /// - complexity: O(*1*)
+  /// - parameters:
+  ///   - body: A closure which processes the content of the serialized URL.
+  ///
+  @inlinable
+  public func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
     switch storage {
     case .small(let small): return try small.codeUnits.withUnsafeBufferPointer(body)
     case .large(let large): return try large.codeUnits.withUnsafeBufferPointer(body)
@@ -143,18 +155,6 @@ extension WebURL.UTF8View: RandomAccessCollection {
 
 
 extension WebURL.UTF8View {
-
-  /// Invokes `body` with a pointer to the contiguous UTF-8 code-units of the entire serialized URL.
-  ///
-  /// - important: The provided pointer is valid only for the duration of `body`. Do not store or return the pointer for later use.
-  /// - complexity: O(*1*)
-  /// - parameters:
-  ///   - body: A closure which processes the content of the serialized URL.
-  ///
-  @inlinable
-  public func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
-    try storage.withUTF8(body)
-  }
 
   /// The UTF-8 code-units containing this URL's `scheme`.
   ///
