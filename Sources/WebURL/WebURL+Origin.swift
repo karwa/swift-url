@@ -37,7 +37,7 @@ extension WebURL {
   /// The origin of this URL.
   ///
   /// Note that the only URLs with meaningul origins are those with the http, https, ftp, ws, or wss schemes,
-  /// as well as cannot-be-a-base-URLs with the "blob" scheme which have another URL string as their path.
+  /// as well as cannot-be-a-base-URLs with the "blob" scheme whose path is another URL.
   /// All other URLs have "opaque" origins. See the `isOpaque` property for details.
   ///
   /// ```swift
@@ -50,24 +50,21 @@ extension WebURL {
   public var origin: Origin {
     switch schemeKind {
     case .http, .https, .ws, .wss, .ftp:
-      let serializedTuple = "\(scheme)://\(hostname ?? "")\(port.map { ":\($0)" } ?? "")"
+      let serializedTuple = "\(scheme)://\(hostname!)\(port.map { ":\($0)" } ?? "")"
       return Origin(kind: .tuple(serializedTuple))
-    case .file:
-      return Origin(kind: .opaque)
-    case .other where scheme == "blob":
-      // Only cannot-be-a-base URLs might have a non-opaque URL as their first path component.
-      // Short-circuiting prevents recursion for "blob:blob:blob:blob...".
-      guard self.cannotBeABase else { return Origin(kind: .opaque) }
-      // Also, the paths of cannot-be-a-base URLs are never broken in to components by the standard's parser,
-      // so the entire path is the first component.
+    case .other where cannotBeABase && utf8.scheme.elementsEqual("blob".utf8):
       return WebURL(path)?.origin ?? Origin(kind: .opaque)
-    case .other:
+    default:
       return Origin(kind: .opaque)
     }
   }
 }
 
-// Standard protocols.
+
+// --------------------------------------------
+// MARK: - Standard protocols
+// --------------------------------------------
+
 
 extension WebURL.Origin: Equatable, Hashable {
 
@@ -98,11 +95,15 @@ extension WebURL.Origin: CustomStringConvertible {
   }
 }
 
-// Properties.
+
+// --------------------------------------------
+// MARK: - Properties
+// --------------------------------------------
+
 
 extension WebURL.Origin {
 
-  /// If `true`, this origin is a opaque, internal value. Note that opaque origins are **not considered same-origin with themselves**.
+  /// If `true`, this origin is an opaque, internal value. Note that opaque origins are **not considered same-origin with themselves**.
   ///
   /// Since opaque origins are not same-origin with themselves, they compare as not equal using the `==` operator. That means you should not store
   /// them in hash-tables such as `Set` or `Dictionary`, as they will always insert in to the table and quickly degrade its performance:
