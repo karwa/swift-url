@@ -29,28 +29,39 @@ extension PathComponentsTests {
 
   func testPathComponents_documentationExamples() {
 
+    // WebURL.pathComponents property.
     do {
       let url = WebURL("http://example.com/swift/packages/swift-url")!
-      XCTAssertEqualElements(url.pathComponents!, ["swift", "packages", "swift-url"])
-      XCTAssertEqual(url.pathComponents!.last, "swift-url")
-      XCTAssertEqual(url.pathComponents!.dropLast().last, "packages")
+      XCTAssertEqualElements(url.pathComponents, ["swift", "packages", "swift-url"])
+      XCTAssertEqual(url.pathComponents.last, "swift-url")
+      XCTAssertEqual(url.pathComponents.dropLast().last, "packages")
     }
     do {
-      let url = WebURL("http://example.com/swift/packages/🦆/")!
-      XCTAssertEqualElements(url.pathComponents!, ["swift", "packages", "🦆", ""])
-      XCTAssertEqual(url.pathComponents!.count, 4)
-      XCTAssertEqual(url.pathComponents!.last, "")
-      XCTAssertEqual(url.pathComponents!.dropLast().last, "🦆")
+      var url = WebURL("http://example.com/")!
+      XCTAssertEqual(url.pathComponents.last!, "")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      url.pathComponents.append("swift")
+      XCTAssertEqual(url.serialized, "http://example.com/swift")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      url.pathComponents.append(contentsOf: ["packages", "swift-url"])
+      XCTAssertEqual(url.serialized, "http://example.com/swift/packages/swift-url")
+      XCTAssertEqual(url.pathComponents.count, 3)
+
+      url.pathComponents.ensureDirectoryPath()
+      XCTAssertEqual(url.serialized, "http://example.com/swift/packages/swift-url/")
+      XCTAssertEqual(url.pathComponents.last!, "")
+      XCTAssertEqual(url.pathComponents.count, 4)
     }
-  }
-
-  func testCannotBeABaseURL() {
-
-    let url = WebURL("mailto:bob")!
-    XCTAssertEqual(url.serialized, "mailto:bob")
-    XCTAssertEqual(url.path, "bob")
-    XCTAssertTrue(url.cannotBeABase)
-    XCTAssertNil(url.pathComponents)
+    // TODO: Where is this?
+    do {
+      let url = WebURL("http://example.com/swift/packages/🦆/")!
+      XCTAssertEqualElements(url.pathComponents, ["swift", "packages", "🦆", ""])
+      XCTAssertEqual(url.pathComponents.count, 4)
+      XCTAssertEqual(url.pathComponents.last, "")
+      XCTAssertEqual(url.pathComponents.dropLast().last, "🦆")
+    }
   }
 
   func testURLWithNoPath() {
@@ -59,14 +70,11 @@ extension PathComponentsTests {
     XCTAssertEqual(url.serialized, "foo://somehost?someQuery")
     XCTAssertEqual(url.path, "")
     XCTAssertFalse(url.cannotBeABase)
-    if let pathComponents = url.pathComponents {
-      XCTAssertEqualElements(pathComponents, [])
-      XCTAssertEqual(pathComponents.count, 0)
-      XCTAssertTrue(pathComponents.isEmpty)
-      CollectionChecker.check(pathComponents)
-    } else {
-      XCTFail("Expected empty, non-nil path components")
-    }
+
+    XCTAssertEqualElements(url.pathComponents, [])
+    XCTAssertEqual(url.pathComponents.count, 0)
+    XCTAssertTrue(url.pathComponents.isEmpty)
+    CollectionChecker.check(url.pathComponents)
   }
 
   func testURLWithRootPath() {
@@ -75,14 +83,11 @@ extension PathComponentsTests {
     XCTAssertEqual(url.serialized, "http://example.com/?someQuery")
     XCTAssertEqual(url.path, "/")
     XCTAssertFalse(url.cannotBeABase)
-    if let pathComponents = url.pathComponents {
-      XCTAssertEqualElements(pathComponents, [""])
-      XCTAssertEqual(pathComponents.count, 1)
-      XCTAssertFalse(pathComponents.isEmpty)
-      CollectionChecker.check(pathComponents)
-    } else {
-      XCTFail("Expected empty, non-nil path components")
-    }
+
+    XCTAssertEqualElements(url.pathComponents, [""])
+    XCTAssertEqual(url.pathComponents.count, 1)
+    XCTAssertFalse(url.pathComponents.isEmpty)
+    CollectionChecker.check(url.pathComponents)
   }
 
   func testPathOnlyURL() {
@@ -91,14 +96,11 @@ extension PathComponentsTests {
     XCTAssertEqual(url.serialized, "foo:/a/b/c")
     XCTAssertEqual(url.path, "/a/b/c")
     XCTAssertFalse(url.cannotBeABase)
-    if let pathComponents = url.pathComponents {
-      XCTAssertEqualElements(pathComponents, ["a", "b", "c"])
-      XCTAssertEqual(pathComponents.count, 3)
-      XCTAssertFalse(pathComponents.isEmpty)
-      CollectionChecker.check(pathComponents)
-    } else {
-      XCTFail("Expected empty, non-nil path components")
-    }
+
+    XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
+    XCTAssertEqual(url.pathComponents.count, 3)
+    XCTAssertFalse(url.pathComponents.isEmpty)
+    CollectionChecker.check(url.pathComponents)
   }
 
   func testEmptyComponents() {
@@ -109,14 +111,11 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com//?someQuery")
       XCTAssertEqual(url.path, "//")
       XCTAssertFalse(url.cannotBeABase)
-      if let pathComponents = url.pathComponents {
-        XCTAssertEqualElements(pathComponents, ["", ""])
-        XCTAssertEqual(pathComponents.count, 2)
-        XCTAssertFalse(pathComponents.isEmpty)
-        CollectionChecker.check(pathComponents)
-      } else {
-        XCTFail("Expected empty, non-nil path components")
-      }
+
+      XCTAssertEqualElements(url.pathComponents, ["", ""])
+      XCTAssertEqual(url.pathComponents.count, 2)
+      XCTAssertFalse(url.pathComponents.isEmpty)
+      CollectionChecker.check(url.pathComponents)
     }
     // 3 empty components.
     do {
@@ -124,14 +123,11 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com///?someQuery")
       XCTAssertEqual(url.path, "///")
       XCTAssertFalse(url.cannotBeABase)
-      if let pathComponents = url.pathComponents {
-        XCTAssertEqualElements(pathComponents, ["", "", ""])
-        XCTAssertEqual(pathComponents.count, 3)
-        XCTAssertFalse(pathComponents.isEmpty)
-        CollectionChecker.check(pathComponents)
-      } else {
-        XCTFail("Expected empty, non-nil path components")
-      }
+
+      XCTAssertEqualElements(url.pathComponents, ["", "", ""])
+      XCTAssertEqual(url.pathComponents.count, 3)
+      XCTAssertFalse(url.pathComponents.isEmpty)
+      CollectionChecker.check(url.pathComponents)
     }
     // 4 empty components.
     do {
@@ -139,14 +135,11 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com////?someQuery")
       XCTAssertEqual(url.path, "////")
       XCTAssertFalse(url.cannotBeABase)
-      if let pathComponents = url.pathComponents {
-        XCTAssertEqualElements(pathComponents, ["", "", "", ""])
-        XCTAssertEqual(pathComponents.count, 4)
-        XCTAssertFalse(pathComponents.isEmpty)
-        CollectionChecker.check(pathComponents)
-      } else {
-        XCTFail("Expected empty, non-nil path components")
-      }
+
+      XCTAssertEqualElements(url.pathComponents, ["", "", "", ""])
+      XCTAssertEqual(url.pathComponents.count, 4)
+      XCTAssertFalse(url.pathComponents.isEmpty)
+      CollectionChecker.check(url.pathComponents)
     }
     // 1 empty + 1 non-empty + 3 empty.
     do {
@@ -154,14 +147,11 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com//p///?someQuery")
       XCTAssertEqual(url.path, "//p///")
       XCTAssertFalse(url.cannotBeABase)
-      if let pathComponents = url.pathComponents {
-        XCTAssertEqualElements(pathComponents, ["", "p", "", "", ""])
-        XCTAssertEqual(pathComponents.count, 5)
-        XCTAssertFalse(pathComponents.isEmpty)
-        CollectionChecker.check(pathComponents)
-      } else {
-        XCTFail("Expected empty, non-nil path components")
-      }
+
+      XCTAssertEqualElements(url.pathComponents, ["", "p", "", "", ""])
+      XCTAssertEqual(url.pathComponents.count, 5)
+      XCTAssertFalse(url.pathComponents.isEmpty)
+      CollectionChecker.check(url.pathComponents)
     }
   }
 
@@ -173,14 +163,11 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c?someQuery")
       XCTAssertEqual(url.path, "/a/b/c")
       XCTAssertFalse(url.cannotBeABase)
-      if let pathComponents = url.pathComponents {
-        XCTAssertEqualElements(pathComponents, ["a", "b", "c"])
-        XCTAssertEqual(pathComponents.count, 3)
-        XCTAssertFalse(pathComponents.isEmpty)
-        CollectionChecker.check(pathComponents)
-      } else {
-        XCTFail("Expected empty, non-nil path components")
-      }
+
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
+      XCTAssertEqual(url.pathComponents.count, 3)
+      XCTAssertFalse(url.pathComponents.isEmpty)
+      CollectionChecker.check(url.pathComponents)
     }
     // Directory paths (i.e. with trailing slash) have an empty final component.
     do {
@@ -188,14 +175,11 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
       XCTAssertEqual(url.path, "/a/b/c/")
       XCTAssertFalse(url.cannotBeABase)
-      if let pathComponents = url.pathComponents {
-        XCTAssertEqualElements(pathComponents, ["a", "b", "c", ""])
-        XCTAssertEqual(pathComponents.count, 4)
-        XCTAssertFalse(pathComponents.isEmpty)
-        CollectionChecker.check(pathComponents)
-      } else {
-        XCTFail("Expected empty, non-nil path components")
-      }
+
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
+      XCTAssertEqual(url.pathComponents.count, 4)
+      XCTAssertFalse(url.pathComponents.isEmpty)
+      CollectionChecker.check(url.pathComponents)
     }
   }
 
@@ -205,24 +189,21 @@ extension PathComponentsTests {
     XCTAssertEqual(url.serialized, "file:///C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
     XCTAssertEqual(url.path, "/C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
     XCTAssertFalse(url.cannotBeABase)
-    if let pathComponents = url.pathComponents {
-      XCTAssertEqualElements(pathComponents, ["C:", "Windows", "🦆", "System 32", "somefile.dll"])
-      XCTAssertEqual(pathComponents.count, 5)
-      XCTAssertFalse(pathComponents.isEmpty)
-      CollectionChecker.check(pathComponents)
 
-      for (num, index) in pathComponents.indices.enumerated() {
-        switch num {
-        case 0: pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "C:".utf8) }
-        case 1: pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "Windows".utf8) }
-        case 2: pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "%F0%9F%A6%86".utf8) }
-        case 3: pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "System%2032".utf8) }
-        case 4: pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "somefile.dll".utf8) }
-        default: XCTFail("Too many path components")
-        }
+    XCTAssertEqualElements(url.pathComponents, ["C:", "Windows", "🦆", "System 32", "somefile.dll"])
+    XCTAssertEqual(url.pathComponents.count, 5)
+    XCTAssertFalse(url.pathComponents.isEmpty)
+    CollectionChecker.check(url.pathComponents)
+
+    for (num, index) in url.pathComponents.indices.enumerated() {
+      switch num {
+      case 0: url.pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "C:".utf8) }
+      case 1: url.pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "Windows".utf8) }
+      case 2: url.pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "%F0%9F%A6%86".utf8) }
+      case 3: url.pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "System%2032".utf8) }
+      case 4: url.pathComponents.withUTF8(component: index) { XCTAssertEqualElements($0, "somefile.dll".utf8) }
+      default: XCTFail("Too many path components")
       }
-    } else {
-      XCTFail("Expected empty, non-nil path components")
     }
   }
 
@@ -232,25 +213,22 @@ extension PathComponentsTests {
     XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
     XCTAssertEqual(url.path, "/a/b/c/")
     XCTAssertFalse(url.cannotBeABase)
-    if let pathComponents = url.pathComponents {
-      XCTAssertEqualElements(pathComponents, ["a", "b", "c", ""])
-      XCTAssertEqual(pathComponents.count, 4)
-      XCTAssertFalse(pathComponents.isEmpty)
-      CollectionChecker.check(pathComponents)
-      // Incrementing endIndex always returns endIndex.
-      var index = pathComponents.endIndex
-      for _ in 0..<5 {
-        index = pathComponents.index(after: index)
-        XCTAssertEqual(index, pathComponents.endIndex)
-      }
-      // Decrementing startIndex always returns startIndex.
-      index = pathComponents.startIndex
-      for _ in 0..<5 {
-        index = pathComponents.index(before: index)
-        XCTAssertEqual(index, pathComponents.startIndex)
-      }
-    } else {
-      XCTFail("Expected empty, non-nil path components")
+
+    XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
+    XCTAssertEqual(url.pathComponents.count, 4)
+    XCTAssertFalse(url.pathComponents.isEmpty)
+    CollectionChecker.check(url.pathComponents)
+    // Incrementing endIndex always returns endIndex.
+    var index = url.pathComponents.endIndex
+    for _ in 0..<5 {
+      index = url.pathComponents.index(after: index)
+      XCTAssertEqual(index, url.pathComponents.endIndex)
+    }
+    // Decrementing startIndex always returns startIndex.
+    index = url.pathComponents.startIndex
+    for _ in 0..<5 {
+      index = url.pathComponents.index(before: index)
+      XCTAssertEqual(index, url.pathComponents.startIndex)
     }
   }
 
@@ -260,22 +238,18 @@ extension PathComponentsTests {
     XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
     XCTAssertEqual(url.path, "/a/b/c/")
     XCTAssertFalse(url.cannotBeABase)
-    if let pathComponents = url.pathComponents {
-      XCTAssertEqualElements(pathComponents, ["a", "b", "c", ""])
-      XCTAssertEqual(pathComponents.count, 4)
-      XCTAssertFalse(pathComponents.isEmpty)
 
-      var index = pathComponents.startIndex
-      for step in 0..<5 {
-        XCTAssertEqual(pathComponents.distance(from: pathComponents.startIndex, to: index), step)
-        XCTAssertEqual(pathComponents.distance(from: index, to: pathComponents.startIndex), -step)
-        index = pathComponents.index(after: index)
-      }
-      XCTAssertEqual(index, pathComponents.endIndex)
+    XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
+    XCTAssertEqual(url.pathComponents.count, 4)
+    XCTAssertFalse(url.pathComponents.isEmpty)
 
-    } else {
-      XCTFail("Expected empty, non-nil path components")
+    var index = url.pathComponents.startIndex
+    for step in 0..<5 {
+      XCTAssertEqual(url.pathComponents.distance(from: url.pathComponents.startIndex, to: index), step)
+      XCTAssertEqual(url.pathComponents.distance(from: index, to: url.pathComponents.startIndex), -step)
+      index = url.pathComponents.index(after: index)
     }
+    XCTAssertEqual(index, url.pathComponents.endIndex)
   }
 }
 
@@ -291,26 +265,26 @@ extension PathComponentsTests {
 
     // Check that we can modify a URL in-place via the '.pathComponents' view.
     var url = WebURL("http://example.com/a/b/c/d")!
-    XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+    XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-    let slice = url.pathComponents!.dropFirst().prefix(2)
-    let range = url.pathComponents!.replaceSubrange(slice.startIndex..<slice.endIndex, with: ["MAKE", "S O M E", "🔊"])
+    let slice = url.pathComponents.dropFirst().prefix(2)
+    let range = url.pathComponents.replaceSubrange(slice.startIndex..<slice.endIndex, with: ["MAKE", "S O M E", "🔊"])
 
-    XCTAssertEqualElements(url.pathComponents!, ["a", "MAKE", "S O M E", "🔊", "d"])
-    XCTAssertEqualElements(url.pathComponents![range], ["MAKE", "S O M E", "🔊"])
+    XCTAssertEqualElements(url.pathComponents, ["a", "MAKE", "S O M E", "🔊", "d"])
+    XCTAssertEqualElements(url.pathComponents[range], ["MAKE", "S O M E", "🔊"])
     XCTAssertEqual(url.serialized, "http://example.com/a/MAKE/S%20O%20M%20E/%F0%9F%94%8A/d")
     XCTAssertURLIsIdempotent(url)
 
     // Check that COW still happens if the storage is not uniquely-referenced.
     let copy = url
-    url.pathComponents!.replaceSubrange(
-      url.pathComponents!.startIndex..<url.pathComponents!.endIndex, with: ["hello", "world"]
+    url.pathComponents.replaceSubrange(
+      url.pathComponents.startIndex..<url.pathComponents.endIndex, with: ["hello", "world"]
     )
-    XCTAssertEqualElements(url.pathComponents!, ["hello", "world"])
+    XCTAssertEqualElements(url.pathComponents, ["hello", "world"])
     XCTAssertEqual(url.serialized, "http://example.com/hello/world")
     XCTAssertURLIsIdempotent(url)
 
-    XCTAssertEqualElements(copy.pathComponents!, ["a", "MAKE", "S O M E", "🔊", "d"])
+    XCTAssertEqualElements(copy.pathComponents, ["a", "MAKE", "S O M E", "🔊", "d"])
     XCTAssertEqual(copy.serialized, "http://example.com/a/MAKE/S%20O%20M%20E/%F0%9F%94%8A/d")
     XCTAssertURLIsIdempotent(copy)
   }
@@ -322,32 +296,31 @@ extension PathComponentsTests {
       // Check that we can store a freestanding path components object and mutate it independently.
       var url = WebURL("http://example.com/a/b/c/d")!
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c/d")
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-      var freestandingComponents = url.pathComponents!
+      var freestandingComponents = url.pathComponents
       freestandingComponents.append("e")
       XCTAssertEqualElements(freestandingComponents, ["a", "b", "c", "d", "e"])
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c/d")
       XCTAssertURLIsIdempotent(url)
 
-      url.pathComponents.modify { path in
-        path.removeSubrange(path.startIndex..<path.endIndex)
-        path.append("test")
-      }
+      url.path = ""
+      url.pathComponents.append("test")
+
       XCTAssertEqualElements(freestandingComponents, ["a", "b", "c", "d", "e"])
-      XCTAssertEqualElements(url.pathComponents!, ["test"])
+      XCTAssertEqualElements(url.pathComponents, ["test"])
       XCTAssertEqual(url.serialized, "http://example.com/test")
       XCTAssertURLIsIdempotent(url)
 
       // Check that we can assign path components to a different URL.
       var otherURL = WebURL("file://my-pc/some/path/")!
       XCTAssertEqual(otherURL.serialized, "file://my-pc/some/path/")
-      XCTAssertEqualElements(otherURL.pathComponents!, ["some", "path", ""])
+      XCTAssertEqualElements(otherURL.pathComponents, ["some", "path", ""])
 
       otherURL.pathComponents = freestandingComponents
       XCTAssertEqual(otherURL.serialized, "file://my-pc/a/b/c/d/e")
-      XCTAssertEqualElements(otherURL.pathComponents!, ["a", "b", "c", "d", "e"])
+      XCTAssertEqualElements(otherURL.pathComponents, ["a", "b", "c", "d", "e"])
       XCTAssertURLIsIdempotent(otherURL)
     }
 
@@ -360,66 +333,66 @@ extension PathComponentsTests {
 
     // Path sigil.
     do {
-      let componentsRequiringSigil = WebURL("file:////test")!.pathComponents!
+      let componentsRequiringSigil = WebURL("file:////test")!.pathComponents
       XCTAssertEqualElements(componentsRequiringSigil, ["", "test"])
 
-      let componentsWithoutSigil = WebURL("file:///boo")!.pathComponents!
+      let componentsWithoutSigil = WebURL("file:///boo")!.pathComponents
       XCTAssertEqualElements(componentsWithoutSigil, ["boo"])
 
       // Sigil is added/removed based on the combination of components and surrounding context.
       do {
         var url = WebURL("foo:/")!
         XCTAssertEqual(url.serialized, "foo:/")
-        XCTAssertEqualElements(url.pathComponents!, [""])
+        XCTAssertEqualElements(url.pathComponents, [""])
 
         url.pathComponents = componentsRequiringSigil
         XCTAssertEqual(url.serialized, "foo:/.//test")
-        XCTAssertEqualElements(url.pathComponents!, ["", "test"])
+        XCTAssertEqualElements(url.pathComponents, ["", "test"])
         XCTAssertURLIsIdempotent(url)
 
         url.pathComponents = componentsWithoutSigil
         XCTAssertEqual(url.serialized, "foo:/boo")
-        XCTAssertEqualElements(url.pathComponents!, ["boo"])
+        XCTAssertEqualElements(url.pathComponents, ["boo"])
         XCTAssertURLIsIdempotent(url)
       }
       // As above, but in a context where no sigil is required.
       do {
         var url = WebURL("foo://host")!
         XCTAssertEqual(url.serialized, "foo://host")
-        XCTAssertEqualElements(url.pathComponents!, [])
+        XCTAssertEqualElements(url.pathComponents, [])
 
         url.pathComponents = componentsRequiringSigil
         XCTAssertEqual(url.serialized, "foo://host//test")
-        XCTAssertEqualElements(url.pathComponents!, ["", "test"])
+        XCTAssertEqualElements(url.pathComponents, ["", "test"])
         XCTAssertURLIsIdempotent(url)
 
         url.pathComponents = componentsWithoutSigil
         XCTAssertEqual(url.serialized, "foo://host/boo")
-        XCTAssertEqualElements(url.pathComponents!, ["boo"])
+        XCTAssertEqualElements(url.pathComponents, ["boo"])
         XCTAssertURLIsIdempotent(url)
       }
     }
     // Empty paths.
     do {
-      let emptyComponents = WebURL("foo://host")!.pathComponents!
+      let emptyComponents = WebURL("foo://host")!.pathComponents
       XCTAssertEqualElements(emptyComponents, [])
 
       // Empty components allowed for non-special schemes with host.
       do {
         var url = WebURL("ssh://my-pc/some/path")!
         XCTAssertEqual(url.serialized, "ssh://my-pc/some/path")
-        XCTAssertEqualElements(url.pathComponents!, ["some", "path"])
+        XCTAssertEqualElements(url.pathComponents, ["some", "path"])
 
         url.pathComponents = emptyComponents
         XCTAssertEqual(url.serialized, "ssh://my-pc")
-        XCTAssertEqualElements(url.pathComponents!, [])
+        XCTAssertEqualElements(url.pathComponents, [])
         XCTAssertURLIsIdempotent(url)
       }
       // Empty components not allowed for non-special schemes without host.
       do {
         var url = WebURL("bar:/a/path")!
         XCTAssertEqual(url.serialized, "bar:/a/path")
-        XCTAssertEqualElements(url.pathComponents!, ["a", "path"])
+        XCTAssertEqualElements(url.pathComponents, ["a", "path"])
 
         url.pathComponents = emptyComponents
         // https://github.com/whatwg/url/issues/581
@@ -431,11 +404,11 @@ extension PathComponentsTests {
       do {
         var url = WebURL("http://example.com/paul/john/george/ringo")!
         XCTAssertEqual(url.serialized, "http://example.com/paul/john/george/ringo")
-        XCTAssertEqualElements(url.pathComponents!, ["paul", "john", "george", "ringo"])
+        XCTAssertEqualElements(url.pathComponents, ["paul", "john", "george", "ringo"])
 
         url.pathComponents = emptyComponents
         XCTAssertEqual(url.serialized, "http://example.com/")
-        XCTAssertEqualElements(url.pathComponents!, [""])
+        XCTAssertEqualElements(url.pathComponents, [""])
         XCTAssertURLIsIdempotent(url)
       }
     }
@@ -446,15 +419,15 @@ extension PathComponentsTests {
     // We cannot set an empty path on a special URL.
     do {
       var url = WebURL("http://example.com/a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.endIndex, with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, [""])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
 
       XCTAssertEqual(url.serialized, "http://example.com/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -462,15 +435,15 @@ extension PathComponentsTests {
     // "."/".." components are skipped and do not make a path non-empty.
     do {
       var url = WebURL("http://example.com/a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.endIndex, with: ["%2e%2E", "..", "%2e", "."])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, [""])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: ["%2e%2E", "..", "%2e", "."]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
 
       XCTAssertEqual(url.serialized, "http://example.com/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -478,15 +451,15 @@ extension PathComponentsTests {
     // We cannot set an empty path on a non-special URL, unless it has an authority.
     do {
       var url = WebURL("foo:/a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.endIndex, with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, [""])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
 
       XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -494,15 +467,15 @@ extension PathComponentsTests {
     // If the URL has a path sigil, it is removed.
     do {
       var url = WebURL("foo:/.//a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["", "a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.endIndex, with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, [""])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
 
       XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -510,16 +483,16 @@ extension PathComponentsTests {
     // Non-special URLs with an authority support empty paths.
     do {
       var url = WebURL("foo://example.com/a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.endIndex, with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, [])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertEqualElements(url.pathComponents[range], [])
 
       XCTAssertEqual(url.serialized, "foo://example.com?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -531,16 +504,16 @@ extension PathComponentsTests {
     // Append a non-empty component to a directory path.
     do {
       var url = WebURL("file:///usr/lib/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["swift"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["swift"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", "swift"])
-      XCTAssertEqualElements(url.pathComponents![range], ["swift"])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", "swift"])
+      XCTAssertEqualElements(url.pathComponents[range], ["swift"])
 
       XCTAssertEqual(url.serialized, "file:///usr/lib/swift?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -548,53 +521,53 @@ extension PathComponentsTests {
     // Appending a single empty component to a directory path does not actually change the path.
     do {
       var url = WebURL("file:///usr/lib/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: [""])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
 
       XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // You can even append multiple times and they all result in no change.
-      _ = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: [""])
-      }
+      _ = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
+      )
       XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
-      _ = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: [""])
-      }
+      _ = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
+      )
       XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
-      _ = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: [""])
-      }
+      _ = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
+      )
       XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
       XCTAssertURLIsIdempotent(url)
     }
     // In order to maintain the empty component, it needs to be included in the appended contents.
     do {
       var url = WebURL("file:///usr/lib/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["", "swift"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.endIndex, offsetBy: -2))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["", "swift"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -2))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", "", "swift"])
-      XCTAssertEqualElements(url.pathComponents![range], ["", "swift"])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", "", "swift"])
+      XCTAssertEqualElements(url.pathComponents[range], ["", "swift"])
 
       XCTAssertEqual(url.serialized, "file:///usr/lib//swift?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -602,29 +575,29 @@ extension PathComponentsTests {
     // A trailing empty can be ensured by appending an empty component to any path.
     do {
       var url = WebURL("file:///usr/lib?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib"])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: [""])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
 
       XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // As before, subsequent single-empty appends have no effect.
-      let range2 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: [""])
-      }
-      XCTAssertEqual(range2.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range2.upperBound, url.pathComponents!.endIndex)
+      let range2 = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
+      )
+      XCTAssertEqual(range2.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range2.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range2.lowerBound, range2.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents[range2], [""])
 
       XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -645,16 +618,16 @@ extension PathComponentsTests {
     // Append a non-empty component to a root path.
     do {
       var url = WebURL("foo://example.com/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["test"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["test"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["test"])
-      XCTAssertEqualElements(url.pathComponents![range], ["test"])
+      XCTAssertEqualElements(url.pathComponents, ["test"])
+      XCTAssertEqualElements(url.pathComponents[range], ["test"])
 
       XCTAssertEqual(url.serialized, "foo://example.com/test?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -662,16 +635,16 @@ extension PathComponentsTests {
     // Appending an empty component to a root path does not actually change the path.
     do {
       var url = WebURL("foo://example.com/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: [""])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, [""])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
 
       XCTAssertEqual(url.serialized, "foo://example.com/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -679,16 +652,16 @@ extension PathComponentsTests {
     // Appending 2 empty components to a root path results in 2 empty components.
     do {
       var url = WebURL("foo://example.com/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["", ""])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["", ""]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", ""])
-      XCTAssertEqualElements(url.pathComponents![range], ["", ""])
+      XCTAssertEqualElements(url.pathComponents, ["", ""])
+      XCTAssertEqualElements(url.pathComponents[range], ["", ""])
 
       XCTAssertEqual(url.serialized, "foo://example.com//?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -696,16 +669,16 @@ extension PathComponentsTests {
     // Removing the empty subrange from endIndex..<endIdex also does not change the path.
     do {
       var url = WebURL("foo://host/?query")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.endIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.endIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, [""])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[range], [])
 
       XCTAssertEqual(url.serialized, "foo://host/?query")
       XCTAssertURLIsIdempotent(url)
@@ -713,16 +686,16 @@ extension PathComponentsTests {
     // Inserting in the range startIndex..<startIndex works as it does for other paths.
     do {
       var url = WebURL("foo://example.com/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.startIndex, with: ["test"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.startIndex, with: ["test"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["test", ""])
-      XCTAssertEqualElements(url.pathComponents![range], ["test"])
+      XCTAssertEqualElements(url.pathComponents, ["test", ""])
+      XCTAssertEqualElements(url.pathComponents[range], ["test"])
 
       XCTAssertEqual(url.serialized, "foo://example.com/test/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -735,16 +708,16 @@ extension PathComponentsTests {
     // Must be normalized to be idempotent.
     do {
       var url = WebURL("file:///")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["C|", "Windows"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["C|", "Windows"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["C:", "Windows"])
-      XCTAssertEqualElements(url.pathComponents![range], ["C:", "Windows"])
+      XCTAssertEqualElements(url.pathComponents, ["C:", "Windows"])
+      XCTAssertEqualElements(url.pathComponents[range], ["C:", "Windows"])
 
       XCTAssertEqual(url.serialized, "file:///C:/Windows")
       XCTAssertURLIsIdempotent(url)
@@ -752,16 +725,16 @@ extension PathComponentsTests {
     // Does not apply to non-file URLs.
     do {
       var url = WebURL("http://example/")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["C|", "Windows"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["C|", "Windows"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["C|", "Windows"])
-      XCTAssertEqualElements(url.pathComponents![range], ["C|", "Windows"])
+      XCTAssertEqualElements(url.pathComponents, ["C|", "Windows"])
+      XCTAssertEqualElements(url.pathComponents[range], ["C|", "Windows"])
 
       XCTAssertEqual(url.serialized, "http://example/C|/Windows")
       XCTAssertURLIsIdempotent(url)
@@ -771,16 +744,16 @@ extension PathComponentsTests {
     // Must be normalized to be idempotent.
     do {
       var url = WebURL("file://host/windrive-blocker/C|/foo/")!
-      XCTAssertEqualElements(url.pathComponents!, ["windrive-blocker", "C|", "foo", ""])
+      XCTAssertEqualElements(url.pathComponents, ["windrive-blocker", "C|", "foo", ""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(after: path.startIndex), with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.startIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(after: url.pathComponents.startIndex), with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.startIndex)
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["C:", "foo", ""])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, ["C:", "foo", ""])
+      XCTAssertEqualElements(url.pathComponents[range], [])
 
       XCTAssertEqual(url.serialized, "file://host/C:/foo/")
       XCTAssertURLIsIdempotent(url)
@@ -788,16 +761,16 @@ extension PathComponentsTests {
     // Does not apply to non-file URLs.
     do {
       var url = WebURL("http://host/windrive-blocker/C|/foo/")!
-      XCTAssertEqualElements(url.pathComponents!, ["windrive-blocker", "C|", "foo", ""])
+      XCTAssertEqualElements(url.pathComponents, ["windrive-blocker", "C|", "foo", ""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(after: path.startIndex), with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.startIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(after: url.pathComponents.startIndex), with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.startIndex)
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["C|", "foo", ""])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, ["C|", "foo", ""])
+      XCTAssertEqualElements(url.pathComponents[range], [])
 
       XCTAssertEqual(url.serialized, "http://host/C|/foo/")
       XCTAssertURLIsIdempotent(url)
@@ -810,16 +783,16 @@ extension PathComponentsTests {
     // part of the 'path' encode-set.
     do {
       var url = WebURL("foo://example.com/a/b?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["//boo/"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["//boo/"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "//boo/"])
-      XCTAssertEqualElements(url.pathComponents![range], ["//boo/"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "//boo/"])
+      XCTAssertEqualElements(url.pathComponents[range], ["//boo/"])
 
       XCTAssertEqual(url.serialized, "foo://example.com/a/b/%2F%2Fboo%2F?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -828,16 +801,16 @@ extension PathComponentsTests {
     // not in such a way that it would cause an idempotence failure when reparsed.
     do {
       var url = WebURL("foo://example.com/a/b?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["/.."])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["/.."]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "/.."])
-      XCTAssertEqualElements(url.pathComponents![range], ["/.."])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "/.."])
+      XCTAssertEqualElements(url.pathComponents[range], ["/.."])
 
       XCTAssertEqual(url.serialized, "foo://example.com/a/b/%2F..?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -845,16 +818,16 @@ extension PathComponentsTests {
     // Backslashes are also encoded, as they are treated like regular slashes in special URLs.
     do {
       var url = WebURL("foo://example.com/a/b?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["\\"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["\\"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "\\"])
-      XCTAssertEqualElements(url.pathComponents![range], ["\\"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "\\"])
+      XCTAssertEqualElements(url.pathComponents[range], ["\\"])
 
       XCTAssertEqual(url.serialized, "foo://example.com/a/b/%5C?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -872,58 +845,58 @@ extension PathComponentsTests {
     do {
       // Sigil should be added when inserting an empty component at the front of the path.
       var url = WebURL("foo:/a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.startIndex, with: [""])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.startIndex, with: [""]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", "a", "b", "c", "d"])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
 
       XCTAssertEqual(url.serialized, "foo:/.//a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is not added/removed when inserting a non-empty component at the front of the path.
-      let range2 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.startIndex, with: ["not empty"])
-      }
-      XCTAssertEqual(range2.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range2.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
+      let range2 = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.startIndex, with: ["not empty"]
+      )
+      XCTAssertEqual(range2.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range2.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["not empty", "", "a", "b", "c", "d"])
-      XCTAssertEqualElements(url.pathComponents![range2], ["not empty"])
+      XCTAssertEqualElements(url.pathComponents, ["not empty", "", "a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents[range2], ["not empty"])
 
       XCTAssertEqual(url.serialized, "foo:/not%20empty//a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is not added/is removed when replacing the empty component at the front of the path with a non-empty one.
       url = WebURL("foo:/.//a/b/c/d?aQuery#someFragment")!
-      let range3 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(after: path.startIndex), with: ["book"])
-      }
-      XCTAssertEqual(range3.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range3.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
+      let range3 = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(after: url.pathComponents.startIndex), with: ["book"]
+      )
+      XCTAssertEqual(range3.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range3.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
       XCTAssertNotEqual(range3.lowerBound, range3.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["book", "a", "b", "c", "d"])
-      XCTAssertEqualElements(url.pathComponents![range3], ["book"])
+      XCTAssertEqualElements(url.pathComponents, ["book", "a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents[range3], ["book"])
 
       XCTAssertEqual(url.serialized, "foo:/book/a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is _not_ added when inserting an empty component at the front of the path _if authority present_.
       url = WebURL("foo://host/a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
-      let range4 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.startIndex, with: [""])
-      }
-      XCTAssertEqual(range4.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range4.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
+      let range4 = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.startIndex, with: [""]
+      )
+      XCTAssertEqual(range4.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range4.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
       XCTAssertNotEqual(range4.lowerBound, range4.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", "a", "b", "c", "d"])
-      XCTAssertEqualElements(url.pathComponents![range4], [""])
+      XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents[range4], [""])
 
       XCTAssertEqual(url.serialized, "foo://host//a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -933,48 +906,50 @@ extension PathComponentsTests {
     do {
       // Sigil is removed if the empty component at the front is removed.
       var url = WebURL("foo:/.//a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["", "a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(after: path.startIndex), with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.startIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(after: url.pathComponents.startIndex), with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.startIndex)
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents[range], [])
 
       XCTAssertEqual(url.serialized, "foo:/a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is inserted when a removal at the front causes an empty component to become first.
       url = WebURL("foo:/a/b//c")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "", "c"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "", "c"])
 
-      let range2 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2), with: [String]())
-      }
-      XCTAssertEqual(range2.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range2.upperBound, url.pathComponents!.startIndex)
+      let range2 = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2),
+        with: [String]()
+      )
+      XCTAssertEqual(range2.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range2.upperBound, url.pathComponents.startIndex)
       XCTAssertEqual(range2.lowerBound, range2.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", "c"])
-      XCTAssertEqualElements(url.pathComponents![range2], [])
+      XCTAssertEqualElements(url.pathComponents, ["", "c"])
+      XCTAssertEqualElements(url.pathComponents[range2], [])
 
       XCTAssertEqual(url.serialized, "foo:/.//c")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is _not_ inserted when a removal at the front causes an empty component to become first _if authority present_.
       url = WebURL("foo://host/a/b//c")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "", "c"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "", "c"])
 
-      let range3 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2), with: [String]())
-      }
-      XCTAssertEqual(range3.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range3.upperBound, url.pathComponents!.startIndex)
+      let range3 = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2),
+        with: [String]()
+      )
+      XCTAssertEqual(range3.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range3.upperBound, url.pathComponents.startIndex)
       XCTAssertEqual(range3.lowerBound, range3.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", "c"])
-      XCTAssertEqualElements(url.pathComponents![range3], [])
+      XCTAssertEqualElements(url.pathComponents, ["", "c"])
+      XCTAssertEqualElements(url.pathComponents[range3], [])
 
       XCTAssertEqual(url.serialized, "foo://host//c")
       XCTAssertURLIsIdempotent(url)
@@ -984,63 +959,63 @@ extension PathComponentsTests {
     do {
       // Sigil is inserted if appending components beginning with an empty to a root path.
       var url = WebURL("foo:/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["", "f"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["", "f"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", "f"])
-      XCTAssertEqualElements(url.pathComponents![range], ["", "f"])
+      XCTAssertEqualElements(url.pathComponents, ["", "f"])
+      XCTAssertEqualElements(url.pathComponents[range], ["", "f"])
 
       XCTAssertEqual(url.serialized, "foo:/.//f?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is unaffected by appending a component to a root path, due to special-casing appends to root paths.
       url = WebURL("foo:/?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range2 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["f"])
-      }
-      XCTAssertEqual(range2.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range2.upperBound, url.pathComponents!.endIndex)
+      let range2 = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["f"]
+      )
+      XCTAssertEqual(range2.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range2.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range2.lowerBound, range2.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["f"])
-      XCTAssertEqualElements(url.pathComponents![range2], ["f"])
+      XCTAssertEqualElements(url.pathComponents, ["f"])
+      XCTAssertEqualElements(url.pathComponents[range2], ["f"])
 
       XCTAssertEqual(url.serialized, "foo:/f?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is unaffected by appending components after the 2nd component.
       url = WebURL("foo:/.//a/b?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["", "a", "b"])
+      XCTAssertEqualElements(url.pathComponents, ["", "a", "b"])
 
-      let range3 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["c"])
-      }
-      XCTAssertEqual(range3.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range3.upperBound, url.pathComponents!.endIndex)
+      let range3 = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["c"]
+      )
+      XCTAssertEqual(range3.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range3.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range3.lowerBound, range3.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", "a", "b", "c"])
-      XCTAssertEqualElements(url.pathComponents![range3], ["c"])
+      XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c"])
+      XCTAssertEqualElements(url.pathComponents[range3], ["c"])
 
       XCTAssertEqual(url.serialized, "foo:/.//a/b/c?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       url = WebURL("foo:/a/b?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b"])
 
-      let range4 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["c"])
-      }
-      XCTAssertEqual(range4.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range4.upperBound, url.pathComponents!.endIndex)
+      let range4 = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["c"]
+      )
+      XCTAssertEqual(range4.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range4.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range4.lowerBound, range4.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c"])
-      XCTAssertEqualElements(url.pathComponents![range4], ["c"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
+      XCTAssertEqualElements(url.pathComponents[range4], ["c"])
 
       XCTAssertEqual(url.serialized, "foo:/a/b/c?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -1050,32 +1025,33 @@ extension PathComponentsTests {
     do {
       // Sigil is removed if every component but the first is removed.
       var url = WebURL("foo:/.//a?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["", "a"])
+      XCTAssertEqualElements(url.pathComponents, ["", "a"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.index(after: path.startIndex)..<path.endIndex, with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.endIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.index(after: url.pathComponents.startIndex)..<url.pathComponents.endIndex, with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.endIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, [""])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[range], [])
 
       XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is unaffected when removing components after the 2nd one.
       url = WebURL("foo:/.//a/b/c?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents!, ["", "a", "b", "c"])
+      XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c"])
 
-      let range2 = url.pathComponents.modify { path in
-        path.replaceSubrange(path.index(path.startIndex, offsetBy: 2)..<path.endIndex, with: [String]())
-      }
-      XCTAssertEqual(range2.lowerBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqual(range2.upperBound, url.pathComponents!.endIndex)
+      let range2 = url.pathComponents.replaceSubrange(
+        url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2)..<url.pathComponents.endIndex,
+        with: [String]()
+      )
+      XCTAssertEqual(range2.lowerBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqual(range2.upperBound, url.pathComponents.endIndex)
       XCTAssertEqual(range2.lowerBound, range2.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", "a"])
-      XCTAssertEqualElements(url.pathComponents![range2], [])
+      XCTAssertEqualElements(url.pathComponents, ["", "a"])
+      XCTAssertEqualElements(url.pathComponents[range2], [])
 
       XCTAssertEqual(url.serialized, "foo:/.//a?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
@@ -1085,16 +1061,16 @@ extension PathComponentsTests {
     do {
       // Sigil is inserted when replacing the entire path contents.
       var url = WebURL("foo:/a/b/c")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.endIndex, with: ["", "g"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: ["", "g"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertNotEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["", "g"])
-      XCTAssertEqualElements(url.pathComponents![range], ["", "g"])
+      XCTAssertEqualElements(url.pathComponents, ["", "g"])
+      XCTAssertEqualElements(url.pathComponents[range], ["", "g"])
 
       XCTAssertEqual(url.serialized, "foo:/.//g")
       XCTAssertURLIsIdempotent(url)
@@ -1116,17 +1092,18 @@ extension PathComponentsTests {
     // Shrink at the start.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2), with: ["a"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["a", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2),
+        with: ["a"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqualElements(url.pathComponents, ["a", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a"])
       XCTAssertEqual(url.path, "/a/3")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/a/3")
       XCTAssertURLIsIdempotent(url)
@@ -1135,19 +1112,19 @@ extension PathComponentsTests {
     // Shrink in the middle.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(
-          path.index(after: path.startIndex)..<path.index(path.startIndex, offsetBy: 3), with: ["a"]
-        )
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["1", "a", "4"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      let startIndex = url.pathComponents.startIndex
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.index(after: startIndex)..<url.pathComponents.index(startIndex, offsetBy: 3),
+        with: ["a"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqualElements(url.pathComponents, ["1", "a", "4"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a"])
       XCTAssertEqual(url.path, "/1/a/4")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/a/4")
       XCTAssertURLIsIdempotent(url)
@@ -1156,17 +1133,17 @@ extension PathComponentsTests {
     // Shrink at the end.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.index(path.endIndex, offsetBy: -2)..<path.endIndex, with: ["a"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "a"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -2)..<url.pathComponents.endIndex, with: ["a"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "a"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a"])
       XCTAssertEqual(url.path, "/1/2/a")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/a")
       XCTAssertURLIsIdempotent(url)
@@ -1175,17 +1152,18 @@ extension PathComponentsTests {
     // Grow at the start.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2), with: ["a", "b", "c", "d"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b", "c", "d"])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2),
+        with: ["a", "b", "c", "d"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b", "c", "d"])
       XCTAssertEqual(url.path, "/a/b/c/d/3")
-      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c/d/3")
       XCTAssertURLIsIdempotent(url)
@@ -1194,19 +1172,19 @@ extension PathComponentsTests {
     // Grow in the middle.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(
-          path.index(after: path.startIndex)..<path.index(before: path.endIndex), with: ["a", "b", "c", "d"]
-        )
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["1", "a", "b", "c", "d", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b", "c", "d"])
+      let startIndex = url.pathComponents.startIndex
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.index(after: startIndex)..<url.pathComponents.index(before: url.pathComponents.endIndex),
+        with: ["a", "b", "c", "d"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqualElements(url.pathComponents, ["1", "a", "b", "c", "d", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b", "c", "d"])
       XCTAssertEqual(url.path, "/1/a/b/c/d/3")
-      XCTAssertEqual(url.pathComponents!.count, 6)
+      XCTAssertEqual(url.pathComponents.count, 6)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/a/b/c/d/3")
       XCTAssertURLIsIdempotent(url)
@@ -1215,17 +1193,18 @@ extension PathComponentsTests {
     // Grow at the end.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.index(before: path.endIndex)..<path.endIndex, with: ["a", "b", "c", "d"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "a", "b", "c", "d"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b", "c", "d"])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.index(before: url.pathComponents.endIndex)..<url.pathComponents.endIndex,
+        with: ["a", "b", "c", "d"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b", "c", "d"])
       XCTAssertEqual(url.path, "/1/2/a/b/c/d")
-      XCTAssertEqual(url.pathComponents!.count, 6)
+      XCTAssertEqual(url.pathComponents.count, 6)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/a/b/c/d")
       XCTAssertURLIsIdempotent(url)
@@ -1234,18 +1213,19 @@ extension PathComponentsTests {
     // Remove from the start.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2), with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.startIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2),
+        with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.startIndex)
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["3", "4"])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, ["3", "4"])
+      XCTAssertEqualElements(url.pathComponents[range], [])
       XCTAssertEqual(url.path, "/3/4")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/3/4")
       XCTAssertURLIsIdempotent(url)
@@ -1254,18 +1234,20 @@ extension PathComponentsTests {
     // Remove from the middle.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.index(after: path.startIndex)..<path.index(before: path.endIndex), with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
+      let startIndex = url.pathComponents.startIndex
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.index(after: startIndex)..<url.pathComponents.index(before: url.pathComponents.endIndex),
+        with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(before: url.pathComponents.endIndex))
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "4"])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, ["1", "4"])
+      XCTAssertEqualElements(url.pathComponents[range], [])
       XCTAssertEqual(url.path, "/1/4")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/4")
       XCTAssertURLIsIdempotent(url)
@@ -1274,18 +1256,19 @@ extension PathComponentsTests {
     // Remove from the end.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.index(path.endIndex, offsetBy: -2)..<path.endIndex, with: [String]())
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.endIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -2)..<url.pathComponents.endIndex,
+        with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.endIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
       XCTAssertEqual(range.lowerBound, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2"])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2"])
+      XCTAssertEqualElements(url.pathComponents[range], [])
       XCTAssertEqual(url.path, "/1/2")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2")
       XCTAssertURLIsIdempotent(url)
@@ -1294,17 +1277,17 @@ extension PathComponentsTests {
     // Insert elements at the start.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.startIndex..<path.startIndex, with: ["a", "b"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "1", "2", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b"])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.startIndex, with: ["a", "b"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b"])
       XCTAssertEqual(url.path, "/a/b/1/2/3")
-      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/a/b/1/2/3")
       XCTAssertURLIsIdempotent(url)
@@ -1313,18 +1296,16 @@ extension PathComponentsTests {
     // Insert in the middle.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let range: Range<WebURL.PathComponents.Index> = url.pathComponents.modify { path in
-        let insertionPoint = path.index(path.startIndex, offsetBy: 2)
-        return path.replaceSubrange(insertionPoint..<insertionPoint, with: ["a", "b"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 4))
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "a", "b", "3", "4"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b"])
+      let insertionPoint = url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2)
+      let range = url.pathComponents.replaceSubrange(insertionPoint..<insertionPoint, with: ["a", "b"])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 4))
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "a", "b", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b"])
       XCTAssertEqual(url.path, "/1/2/a/b/3/4")
-      XCTAssertEqual(url.pathComponents!.count, 6)
+      XCTAssertEqual(url.pathComponents.count, 6)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/a/b/3/4")
       XCTAssertURLIsIdempotent(url)
@@ -1333,17 +1314,17 @@ extension PathComponentsTests {
     // Insert at the end.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceSubrange(path.endIndex..<path.endIndex, with: ["a", "b"])
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 3))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "a", "b"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b"])
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["a", "b"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 3))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "a", "b"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b"])
       XCTAssertEqual(url.path, "/1/2/3/a/b")
-      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3/a/b")
       XCTAssertURLIsIdempotent(url)
@@ -1358,17 +1339,15 @@ extension PathComponentsTests {
     // Insert at the front.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: ["a", "b"], at: path.startIndex)
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "1", "2", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b"])
+      let range = url.pathComponents.insert(contentsOf: ["a", "b"], at: url.pathComponents.startIndex)
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b"])
       XCTAssertEqual(url.path, "/a/b/1/2/3")
-      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/a/b/1/2/3")
       XCTAssertURLIsIdempotent(url)
@@ -1377,17 +1356,17 @@ extension PathComponentsTests {
     // Insert in the middle.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: ["a", "b"], at: path.index(path.startIndex, offsetBy: 2))
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 4))
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "a", "b", "3", "4"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b"])
+      let range = url.pathComponents.insert(
+        contentsOf: ["a", "b"], at: url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2)
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 4))
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "a", "b", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b"])
       XCTAssertEqual(url.path, "/1/2/a/b/3/4")
-      XCTAssertEqual(url.pathComponents!.count, 6)
+      XCTAssertEqual(url.pathComponents.count, 6)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/a/b/3/4")
       XCTAssertURLIsIdempotent(url)
@@ -1396,17 +1375,15 @@ extension PathComponentsTests {
     // Insert at the end.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: ["a", "b"], at: path.endIndex)
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 3))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "a", "b"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b"])
+      let range = url.pathComponents.insert(contentsOf: ["a", "b"], at: url.pathComponents.endIndex)
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 3))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "a", "b"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b"])
       XCTAssertEqual(url.path, "/1/2/3/a/b")
-      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3/a/b")
       XCTAssertURLIsIdempotent(url)
@@ -1415,17 +1392,15 @@ extension PathComponentsTests {
     // Insert after root path.
     do {
       var url = WebURL("http://example.com/")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: ["hello", "world"], at: path.endIndex)
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["hello", "world"])
-      XCTAssertEqualElements(url.pathComponents![range], ["hello", "world"])
+      let range = url.pathComponents.insert(contentsOf: ["hello", "world"], at: url.pathComponents.endIndex)
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["hello", "world"])
+      XCTAssertEqualElements(url.pathComponents[range], ["hello", "world"])
       XCTAssertEqual(url.path, "/hello/world")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/hello/world")
       XCTAssertURLIsIdempotent(url)
@@ -1434,17 +1409,15 @@ extension PathComponentsTests {
     // Insert after directory path.
     do {
       var url = WebURL("http://example.com/foo/bar/")!
-      XCTAssertEqualElements(url.pathComponents!, ["foo", "bar", ""])
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", ""])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: ["hello", "world"], at: path.endIndex)
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["foo", "bar", "hello", "world"])
-      XCTAssertEqualElements(url.pathComponents![range], ["hello", "world"])
+      let range = url.pathComponents.insert(contentsOf: ["hello", "world"], at: url.pathComponents.endIndex)
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", "hello", "world"])
+      XCTAssertEqualElements(url.pathComponents[range], ["hello", "world"])
       XCTAssertEqual(url.path, "/foo/bar/hello/world")
-      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents.count, 4)
 
       XCTAssertEqual(url.serialized, "http://example.com/foo/bar/hello/world")
       XCTAssertURLIsIdempotent(url)
@@ -1453,17 +1426,15 @@ extension PathComponentsTests {
     // Insert to introduce path sigil.
     do {
       var url = WebURL("foo:/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: [""], at: path.startIndex)
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["", "1", "2", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      let range = url.pathComponents.insert(contentsOf: [""], at: url.pathComponents.startIndex)
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqualElements(url.pathComponents, ["", "1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
       XCTAssertEqual(url.path, "//1/2/3")
-      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents.count, 4)
 
       XCTAssertEqual(url.serialized, "foo:/.//1/2/3")
       XCTAssertURLIsIdempotent(url)
@@ -1472,17 +1443,15 @@ extension PathComponentsTests {
     // Insert non-normalized Windows drive letter.
     do {
       var url = WebURL("file:///Users/jim/")!
-      XCTAssertEqualElements(url.pathComponents!, ["Users", "jim", ""])
+      XCTAssertEqualElements(url.pathComponents, ["Users", "jim", ""])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: ["C|"], at: path.startIndex)
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["C:", "Users", "jim", ""])
-      XCTAssertEqualElements(url.pathComponents![range], ["C:"])
+      let range = url.pathComponents.insert(contentsOf: ["C|"], at: url.pathComponents.startIndex)
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqualElements(url.pathComponents, ["C:", "Users", "jim", ""])
+      XCTAssertEqualElements(url.pathComponents[range], ["C:"])
       XCTAssertEqual(url.path, "/C:/Users/jim/")
-      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents.count, 4)
 
       XCTAssertEqual(url.serialized, "file:///C:/Users/jim/")
       XCTAssertURLIsIdempotent(url)
@@ -1491,17 +1460,15 @@ extension PathComponentsTests {
     // Insert ".." components.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: ["..", ".."], at: path.endIndex)
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.endIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      let range = url.pathComponents.insert(contentsOf: ["..", ".."], at: url.pathComponents.endIndex)
+      XCTAssertEqual(range.lowerBound, url.pathComponents.endIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], [])
       XCTAssertEqual(url.path, "/1/2/3")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3")
       XCTAssertURLIsIdempotent(url)
@@ -1510,17 +1477,15 @@ extension PathComponentsTests {
     // Insert components with slashes.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.insert(contentsOf: ["/a", #"\b"#], at: path.endIndex)
-      }
-      XCTAssertEqual(url.pathComponents!.index(url.pathComponents!.endIndex, offsetBy: -2), range.lowerBound)
-      XCTAssertEqual(url.pathComponents!.endIndex, range.upperBound)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "/a", #"\b"#])
-      XCTAssertEqualElements(url.pathComponents![range], ["/a", #"\b"#])
+      let range = url.pathComponents.insert(contentsOf: ["/a", #"\b"#], at: url.pathComponents.endIndex)
+      XCTAssertEqual(url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -2), range.lowerBound)
+      XCTAssertEqual(url.pathComponents.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "/a", #"\b"#])
+      XCTAssertEqualElements(url.pathComponents[range], ["/a", #"\b"#])
       XCTAssertEqual(url.path, "/1/2/3/%2Fa/%5Cb")
-      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3/%2Fa/%5Cb")
       XCTAssertURLIsIdempotent(url)
@@ -1532,15 +1497,15 @@ extension PathComponentsTests {
     // Regular append on to non-root path.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents!.append(contentsOf: ["a", "b"])
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.endIndex, offsetBy: -2))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "a", "b"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a", "b"])
+      let range = url.pathComponents.append(contentsOf: ["a", "b"])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -2))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "a", "b"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b"])
       XCTAssertEqual(url.path, "/1/2/3/a/b")
-      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3/a/b")
       XCTAssertURLIsIdempotent(url)
@@ -1549,15 +1514,15 @@ extension PathComponentsTests {
     // Appending to root path.
     do {
       var url = WebURL("http://example.com/")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents!.append(contentsOf: ["hello", "world"])
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["hello", "world"])
-      XCTAssertEqualElements(url.pathComponents![range], ["hello", "world"])
+      let range = url.pathComponents.append(contentsOf: ["hello", "world"])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["hello", "world"])
+      XCTAssertEqualElements(url.pathComponents[range], ["hello", "world"])
       XCTAssertEqual(url.path, "/hello/world")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/hello/world")
       XCTAssertURLIsIdempotent(url)
@@ -1566,15 +1531,15 @@ extension PathComponentsTests {
     // Appending to directory path.
     do {
       var url = WebURL("http://example.com/foo/bar/")!
-      XCTAssertEqualElements(url.pathComponents!, ["foo", "bar", ""])
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", ""])
 
-      let range = url.pathComponents!.append(contentsOf: ["hello", "world"])
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["foo", "bar", "hello", "world"])
-      XCTAssertEqualElements(url.pathComponents![range], ["hello", "world"])
+      let range = url.pathComponents.append(contentsOf: ["hello", "world"])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", "hello", "world"])
+      XCTAssertEqualElements(url.pathComponents[range], ["hello", "world"])
       XCTAssertEqual(url.path, "/foo/bar/hello/world")
-      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents.count, 4)
 
       XCTAssertEqual(url.serialized, "http://example.com/foo/bar/hello/world")
       XCTAssertURLIsIdempotent(url)
@@ -1583,15 +1548,15 @@ extension PathComponentsTests {
     // Appending to introduce path sigil.
     do {
       var url = WebURL("foo:/")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents!.append(contentsOf: ["", "bar"])
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["", "bar"])
-      XCTAssertEqualElements(url.pathComponents![range], ["", "bar"])
+      let range = url.pathComponents.append(contentsOf: ["", "bar"])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["", "bar"])
+      XCTAssertEqualElements(url.pathComponents[range], ["", "bar"])
       XCTAssertEqual(url.path, "//bar")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "foo:/.//bar")
       XCTAssertURLIsIdempotent(url)
@@ -1600,15 +1565,15 @@ extension PathComponentsTests {
     // Appending non-normalized Windows drive letter to root path.
     do {
       var url = WebURL("file://host/")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents!.append(contentsOf: ["C|", "Windows", "System32", ""])
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["C:", "Windows", "System32", ""])
-      XCTAssertEqualElements(url.pathComponents![range], ["C:", "Windows", "System32", ""])
+      let range = url.pathComponents.append(contentsOf: ["C|", "Windows", "System32", ""])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["C:", "Windows", "System32", ""])
+      XCTAssertEqualElements(url.pathComponents[range], ["C:", "Windows", "System32", ""])
       XCTAssertEqual(url.path, "/C:/Windows/System32/")
-      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents.count, 4)
 
       XCTAssertEqual(url.serialized, "file://host/C:/Windows/System32/")
       XCTAssertURLIsIdempotent(url)
@@ -1617,15 +1582,15 @@ extension PathComponentsTests {
     // Appending ".." components.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents!.append(contentsOf: ["..", ".."])
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.endIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      let range = url.pathComponents.append(contentsOf: ["..", ".."])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.endIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], [])
       XCTAssertEqual(url.path, "/1/2/3")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3")
       XCTAssertURLIsIdempotent(url)
@@ -1634,15 +1599,15 @@ extension PathComponentsTests {
     // Appending components with slashes.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents!.append(contentsOf: ["/a", #"\b"#])
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(url.pathComponents!.endIndex, offsetBy: -2))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "/a", #"\b"#])
-      XCTAssertEqualElements(url.pathComponents![range], ["/a", #"\b"#])
+      let range = url.pathComponents.append(contentsOf: ["/a", #"\b"#])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -2))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "/a", #"\b"#])
+      XCTAssertEqualElements(url.pathComponents[range], ["/a", #"\b"#])
       XCTAssertEqual(url.path, "/1/2/3/%2Fa/%5Cb")
-      XCTAssertEqual(url.pathComponents!.count, 5)
+      XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3/%2Fa/%5Cb")
       XCTAssertURLIsIdempotent(url)
@@ -1654,16 +1619,16 @@ extension PathComponentsTests {
     // Removal from the front.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let idx = url.pathComponents.modify { path in
-        path.removeSubrange(path.startIndex..<path.index(after: path.startIndex))
-      }
-      XCTAssertEqual(idx, url.pathComponents!.startIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["2", "3"])
-      XCTAssertEqual(url.pathComponents![idx], "2")
+      let idx = url.pathComponents.removeSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(after: url.pathComponents.startIndex)
+      )
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, ["2", "3"])
+      XCTAssertEqual(url.pathComponents[idx], "2")
       XCTAssertEqual(url.path, "/2/3")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/2/3")
       XCTAssertURLIsIdempotent(url)
@@ -1672,16 +1637,17 @@ extension PathComponentsTests {
     // Removal from the middle.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let idx = url.pathComponents.modify { path in
-        path.removeSubrange(path.index(after: path.startIndex)..<path.index(path.startIndex, offsetBy: 3))
-      }
-      XCTAssertEqual(idx, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["1", "4"])
-      XCTAssertEqual(url.pathComponents![idx], "4")
+      let startIndex = url.pathComponents.startIndex
+      let idx = url.pathComponents.removeSubrange(
+        url.pathComponents.index(after: startIndex)..<url.pathComponents.index(startIndex, offsetBy: 3)
+      )
+      XCTAssertEqual(idx, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqualElements(url.pathComponents, ["1", "4"])
+      XCTAssertEqual(url.pathComponents[idx], "4")
       XCTAssertEqual(url.path, "/1/4")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/4")
       XCTAssertURLIsIdempotent(url)
@@ -1690,15 +1656,15 @@ extension PathComponentsTests {
     // Removal from the end.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let idx = url.pathComponents.modify { path in
-        path.removeSubrange(path.index(after: path.startIndex)..<path.endIndex)
-      }
-      XCTAssertEqual(idx, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1"])
+      let idx = url.pathComponents.removeSubrange(
+        url.pathComponents.index(after: url.pathComponents.startIndex)..<url.pathComponents.endIndex
+      )
+      XCTAssertEqual(idx, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1"])
       XCTAssertEqual(url.path, "/1")
-      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents.count, 1)
 
       XCTAssertEqual(url.serialized, "http://example.com/1")
       XCTAssertURLIsIdempotent(url)
@@ -1707,15 +1673,13 @@ extension PathComponentsTests {
     // Removal from root path.
     do {
       var url = WebURL("http://example.com/")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let idx = url.pathComponents.modify { path in
-        path.removeSubrange(path.startIndex..<path.endIndex)
-      }
-      XCTAssertEqual(idx, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      let idx = url.pathComponents.removeSubrange(url.pathComponents.startIndex..<url.pathComponents.endIndex)
+      XCTAssertEqual(idx, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqual(url.path, "/")
-      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents.count, 1)
 
       XCTAssertEqual(url.serialized, "http://example.com/")
       XCTAssertURLIsIdempotent(url)
@@ -1724,16 +1688,16 @@ extension PathComponentsTests {
     // Removal which introduces path sigil.
     do {
       var url = WebURL("foo:/a/b//c/d")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "", "c", "d"])
 
-      let idx = url.pathComponents.modify { path in
-        path.removeSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2))
-      }
-      XCTAssertEqual(idx, url.pathComponents!.startIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["", "c", "d"])
-      XCTAssertEqual(url.pathComponents![idx], "")
+      let idx = url.pathComponents.removeSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2)
+      )
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, ["", "c", "d"])
+      XCTAssertEqual(url.pathComponents[idx], "")
       XCTAssertEqual(url.path, "//c/d")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "foo:/.//c/d")
       XCTAssertURLIsIdempotent(url)
@@ -1742,16 +1706,16 @@ extension PathComponentsTests {
     // Removal which introduces non-normalized Windows drive letter.
     do {
       var url = WebURL("file:///a/b/C|/d")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "C|", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "C|", "d"])
 
-      let idx = url.pathComponents.modify { path in
-        path.removeSubrange(path.startIndex..<path.index(path.startIndex, offsetBy: 2))
-      }
-      XCTAssertEqual(idx, url.pathComponents!.startIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["C:", "d"])
-      XCTAssertEqual(url.pathComponents![idx], "C:")
+      let idx = url.pathComponents.removeSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2)
+      )
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, ["C:", "d"])
+      XCTAssertEqual(url.pathComponents[idx], "C:")
       XCTAssertEqual(url.path, "/C:/d")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "file:///C:/d")
       XCTAssertURLIsIdempotent(url)
@@ -1763,17 +1727,15 @@ extension PathComponentsTests {
     // Replacement at the front.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.startIndex, with: "a")
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["a", "2", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      let range = url.pathComponents.replaceComponent(at: url.pathComponents.startIndex, with: "a")
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqualElements(url.pathComponents, ["a", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a"])
       XCTAssertEqual(url.path, "/a/2/3")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/a/2/3")
       XCTAssertURLIsIdempotent(url)
@@ -1782,17 +1744,17 @@ extension PathComponentsTests {
     // Replacement in the middle.
     do {
       var url = WebURL("http://example.com/1/2/3/4")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "4"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.index(after: path.startIndex), with: "a")
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqualElements(url.pathComponents!, ["1", "a", "3", "4"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      let range = url.pathComponents.replaceComponent(
+        at: url.pathComponents.index(after: url.pathComponents.startIndex), with: "a"
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqualElements(url.pathComponents, ["1", "a", "3", "4"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a"])
       XCTAssertEqual(url.path, "/1/a/3/4")
-      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents.count, 4)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/a/3/4")
       XCTAssertURLIsIdempotent(url)
@@ -1801,17 +1763,17 @@ extension PathComponentsTests {
     // Replacement at the end.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.index(before: path.endIndex), with: "a")
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "a"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      let range = url.pathComponents.replaceComponent(
+        at: url.pathComponents.index(before: url.pathComponents.endIndex), with: "a"
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "a"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a"])
       XCTAssertEqual(url.path, "/1/2/a")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/a")
       XCTAssertURLIsIdempotent(url)
@@ -1820,17 +1782,15 @@ extension PathComponentsTests {
     // Replacement of root path.
     do {
       var url = WebURL("http://example.com/")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.startIndex, with: "a")
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.endIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["a"])
-      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      let range = url.pathComponents.replaceComponent(at: url.pathComponents.startIndex, with: "a")
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["a"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a"])
       XCTAssertEqual(url.path, "/a")
-      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents.count, 1)
 
       XCTAssertEqual(url.serialized, "http://example.com/a")
       XCTAssertURLIsIdempotent(url)
@@ -1839,17 +1799,17 @@ extension PathComponentsTests {
     // Replacement of directory path.
     do {
       var url = WebURL("http://example.com/foo/bar/")!
-      XCTAssertEqualElements(url.pathComponents!, ["foo", "bar", ""])
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", ""])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.index(after: path.startIndex), with: "a")
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(before: url.pathComponents!.endIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["foo", "a", ""])
-      XCTAssertEqualElements(url.pathComponents![range], ["a"])
+      let range = url.pathComponents.replaceComponent(
+        at: url.pathComponents.index(after: url.pathComponents.startIndex), with: "a"
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(before: url.pathComponents.endIndex))
+      XCTAssertEqualElements(url.pathComponents, ["foo", "a", ""])
+      XCTAssertEqualElements(url.pathComponents[range], ["a"])
       XCTAssertEqual(url.path, "/foo/a/")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/foo/a/")
       XCTAssertURLIsIdempotent(url)
@@ -1858,17 +1818,15 @@ extension PathComponentsTests {
     // Replacement which introduces path sigil.
     do {
       var url = WebURL("foo:/a/b/c/d")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.startIndex, with: "")
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["", "b", "c", "d"])
-      XCTAssertEqualElements(url.pathComponents![range], [""])
+      let range = url.pathComponents.replaceComponent(at: url.pathComponents.startIndex, with: "")
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqualElements(url.pathComponents, ["", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
       XCTAssertEqual(url.path, "//b/c/d")
-      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents.count, 4)
 
       XCTAssertEqual(url.serialized, "foo:/.//b/c/d")
       XCTAssertURLIsIdempotent(url)
@@ -1877,17 +1835,15 @@ extension PathComponentsTests {
     // Replacement which introduces non-normalized Windows drive letter.
     do {
       var url = WebURL("file:///a/b/c/d")!
-      XCTAssertEqualElements(url.pathComponents!, ["a", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.startIndex, with: "C|")
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqualElements(url.pathComponents!, ["C:", "b", "c", "d"])
-      XCTAssertEqualElements(url.pathComponents![range], ["C:"])
+      let range = url.pathComponents.replaceComponent(at: url.pathComponents.startIndex, with: "C|")
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqualElements(url.pathComponents, ["C:", "b", "c", "d"])
+      XCTAssertEqualElements(url.pathComponents[range], ["C:"])
       XCTAssertEqual(url.path, "/C:/b/c/d")
-      XCTAssertEqual(url.pathComponents!.count, 4)
+      XCTAssertEqual(url.pathComponents.count, 4)
 
       XCTAssertEqual(url.serialized, "file:///C:/b/c/d")
       XCTAssertURLIsIdempotent(url)
@@ -1896,17 +1852,15 @@ extension PathComponentsTests {
     // Replacement with ".." component.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.startIndex, with: "..")
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents!.startIndex)
-      XCTAssertEqualElements(url.pathComponents!, ["2", "3"])
-      XCTAssertEqualElements(url.pathComponents![range], [])
+      let range = url.pathComponents.replaceComponent(at: url.pathComponents.startIndex, with: "..")
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, ["2", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], [])
       XCTAssertEqual(url.path, "/2/3")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/2/3")
       XCTAssertURLIsIdempotent(url)
@@ -1915,17 +1869,17 @@ extension PathComponentsTests {
     // Replacement containing with slashes.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      let range = url.pathComponents.modify { path in
-        path.replaceComponent(at: path.index(after: path.startIndex), with: #"\b"#)
-      }
-      XCTAssertEqual(range.lowerBound, url.pathComponents!.index(after: url.pathComponents!.startIndex))
-      XCTAssertEqual(range.upperBound, url.pathComponents!.index(url.pathComponents!.startIndex, offsetBy: 2))
-      XCTAssertEqualElements(url.pathComponents!, ["1", #"\b"#, "3"])
-      XCTAssertEqualElements(url.pathComponents![range], [#"\b"#])
+      let range = url.pathComponents.replaceComponent(
+        at: url.pathComponents.index(after: url.pathComponents.startIndex), with: #"\b"#
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqualElements(url.pathComponents, ["1", #"\b"#, "3"])
+      XCTAssertEqualElements(url.pathComponents[range], [#"\b"#])
       XCTAssertEqual(url.path, "/1/%5Cb/3")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/%5Cb/3")
       XCTAssertURLIsIdempotent(url)
@@ -1940,12 +1894,12 @@ extension PathComponentsTests {
     // Remove 1, non-empty component.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      url.pathComponents!.removeLast()
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2"])
+      url.pathComponents.removeLast()
+      XCTAssertEqualElements(url.pathComponents, ["1", "2"])
       XCTAssertEqual(url.path, "/1/2")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2")
       XCTAssertURLIsIdempotent(url)
@@ -1953,12 +1907,12 @@ extension PathComponentsTests {
     // Remove 2, non-empty components.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      url.pathComponents!.removeLast(2)
-      XCTAssertEqualElements(url.pathComponents!, ["1"])
+      url.pathComponents.removeLast(2)
+      XCTAssertEqualElements(url.pathComponents, ["1"])
       XCTAssertEqual(url.path, "/1")
-      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents.count, 1)
 
       XCTAssertEqual(url.serialized, "http://example.com/1")
       XCTAssertURLIsIdempotent(url)
@@ -1966,12 +1920,12 @@ extension PathComponentsTests {
     // Remove all components, special URL.
     do {
       var url = WebURL("http://example.com/1/2/3")!
-      XCTAssertEqualElements(url.pathComponents!, ["1", "2", "3"])
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
 
-      url.pathComponents!.removeLast(3)
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      url.pathComponents.removeLast(3)
+      XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqual(url.path, "/")
-      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents.count, 1)
 
       XCTAssertEqual(url.serialized, "http://example.com/")
       XCTAssertURLIsIdempotent(url)
@@ -1979,12 +1933,12 @@ extension PathComponentsTests {
     // Remove 1, empty component.
     do {
       var url = WebURL("file:///usr/lib/")!
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
-      url.pathComponents!.removeLast()
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib"])
+      url.pathComponents.removeLast()
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib"])
       XCTAssertEqual(url.path, "/usr/lib")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "file:///usr/lib")
       XCTAssertURLIsIdempotent(url)
@@ -1992,12 +1946,12 @@ extension PathComponentsTests {
     // Remove 2 empty components.
     do {
       var url = WebURL("file:///usr/lib//")!
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", "", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", "", ""])
 
-      url.pathComponents!.removeLast(2)
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib"])
+      url.pathComponents.removeLast(2)
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib"])
       XCTAssertEqual(url.path, "/usr/lib")
-      XCTAssertEqual(url.pathComponents!.count, 2)
+      XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "file:///usr/lib")
       XCTAssertURLIsIdempotent(url)
@@ -2009,12 +1963,12 @@ extension PathComponentsTests {
     // Appends an empty component if the last component isn't empty.
     do {
       var url = WebURL("file:///usr/lib")!
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib"])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib"])
 
-      url.pathComponents!.ensureDirectoryPath()
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      url.pathComponents.ensureDirectoryPath()
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
       XCTAssertEqual(url.path, "/usr/lib/")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "file:///usr/lib/")
       XCTAssertURLIsIdempotent(url)
@@ -2022,12 +1976,12 @@ extension PathComponentsTests {
     // Does not append an empty component if the last component is already empty.
     do {
       var url = WebURL("file:///usr/lib/")!
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
-      url.pathComponents!.ensureDirectoryPath()
-      XCTAssertEqualElements(url.pathComponents!, ["usr", "lib", ""])
+      url.pathComponents.ensureDirectoryPath()
+      XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
       XCTAssertEqual(url.path, "/usr/lib/")
-      XCTAssertEqual(url.pathComponents!.count, 3)
+      XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "file:///usr/lib/")
       XCTAssertURLIsIdempotent(url)
@@ -2035,12 +1989,12 @@ extension PathComponentsTests {
     // Does not append an empty component to root paths.
     do {
       var url = WebURL("file:///")!
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      XCTAssertEqualElements(url.pathComponents, [""])
 
-      url.pathComponents!.ensureDirectoryPath()
-      XCTAssertEqualElements(url.pathComponents!, [""])
+      url.pathComponents.ensureDirectoryPath()
+      XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqual(url.path, "/")
-      XCTAssertEqual(url.pathComponents!.count, 1)
+      XCTAssertEqual(url.pathComponents.count, 1)
 
       XCTAssertEqual(url.serialized, "file:///")
       XCTAssertURLIsIdempotent(url)

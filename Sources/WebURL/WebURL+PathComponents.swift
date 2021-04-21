@@ -12,17 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extension Optional where Wrapped == WebURL.PathComponents {
-
-  /// Modifies the given URL path components in-place.
-  /// If the URL does not have a hierarchical path (i.e. it is a "cannot-be-a-base" URL), a runtime error is triggered.
-  ///
-  @inlinable @inline(__always)
-  public mutating func modify<Result>(_ body: (inout Wrapped) throws -> Result) rethrows -> Result {
-    try body(&self!)
-  }
-}
-
 extension WebURL {
 
   /// The URL's path components, if it has a hierarchical path.
@@ -31,86 +20,68 @@ extension WebURL {
   ///
   /// ```swift
   /// var url = WebURL("http://example.com/swift/packages/%F0%9F%A6%86%20tracker")!
-  /// print(url.pathComponents!.first!) // Prints "swift"
-  /// print(url.pathComponents!.last!) // Prints "🦆 tracker"
+  /// print(url.pathComponents.first!) // Prints "swift"
+  /// print(url.pathComponents.last!) // Prints "🦆 tracker"
   ///
-  /// url.pathComponents!.removeLast()
-  /// url.pathComponents!.append("swift-url")
+  /// url.pathComponents.removeLast()
+  /// url.pathComponents.append("swift-url")
   /// print(url) // Prints "http://example.com/swift/packages/swift-url"
   /// ```
-  ///
-  /// Paths which end in a trailing "/" (also referred to as directory paths), end with an empty component. When appending to such a path, this empty component
-  /// is merged with the appended components. To create a directory path, append an empty component or call `ensureDirectoryPath`.
-  ///
-  /// ```swift
-  /// let url = WebURL("http://example.com/")!
-  /// print(url.pathComponents!.last!) // Prints ""
-  /// print(url.pathComponents!.count) // Prints "1"
-  ///
-  /// url.pathComponents!.append(contentsOf: ["swift", "packages", "swift-url"])
-  ///
-  /// print(url) // Prints "http://example.com/swift/packages/swift-url"
-  /// print(url.pathComponents!.count) // Prints "3"
-  ///
-  /// url.pathComponents!.ensureDirectoryPath()
-  /// print(url) // Prints "http://example.com/swift/packages/swift-url/"
-  /// print(url.pathComponents!.count) // Prints "4"
-  /// ```
-  ///
-  /// Note that even though we appended 3 path components to a path containing 1 component, the result has 3 components (not 4). This sort of result
-  /// is typical when manipulating path components. In general, if you need to continue processing a path after modifying it, use the indices
-  /// returned by path-modifying functions rather than making assumptions about the position, number, or lengths of inserted/removed components.
-  ///
   /// Mutating the URL, such as by setting its `.path` or any other properties, invalidates all path component indices.
   ///
-  /// Almost all URLs have hierarchical paths. The ones which _don't_ are known as "cannot-be-a-base" URLs - and they can be recognized by the lack of slashes
-  /// immediately following their scheme. Examples of such URLs are:
+  /// Path components run from their leading slash until the leading slash of the next component (or the end of the path). That means that a URL whose
+  /// path is "/" contains a single, empty path component, and paths which end with a "/" (also referred to as directory paths) end with an empty path component.
+  /// When appending to a path whose last component is empty, this empty component is merged with the new components.
+  /// To create a directory path, append an empty component or call `ensureDirectoryPath`.
+  ///
+  /// ```swift
+  /// var url = WebURL("http://example.com/")!
+  /// print(url.pathComponents.last!) // Prints ""
+  /// print(url.pathComponents.count) // Prints "1"
+  ///
+  /// url.pathComponents.append("swift") // http://example.com/swift
+  /// print(url.pathComponents.count) // Prints "1", because the empty component was merged.
+  ///
+  /// url.pathComponents.append(contentsOf: ["packages", "swift-url"]) // "http://example.com/swift/packages/swift-url"
+  /// print(url.pathComponents.count) // Prints "3"
+  ///
+  /// url.pathComponents.ensureDirectoryPath() // "http://example.com/swift/packages/swift-url/"
+  /// print(url.pathComponents.last!) // Prints ""
+  /// print(url.pathComponents.count) // Prints "4"
+  /// ```
+  ///
+  /// Paths can be difficult. In order to manipulate them reliably, you should adhere strictly to the principle that every modification invalidates every path-component
+  /// index. Additionally, try to avoid making assumptions about how the number of path components (or `count`) is affected by a modification. For instance,
+  /// URLs with special schemes are forbidden from ever having empty paths, and if you have such a URL and attempt to remove all of its path components,
+  /// the result will be a path with a single, empty component (as above). These are the same caveats which apply to the `WebURL.path` property.
+  ///
+  /// This view does not support URLs with non-hierarchical paths (`cannotBeABase` is `true`), and triggers a runtime error if it is accessed on such a URL.
+  ///
+  /// Almost all URLs _do_ have hierarchical paths (in particular, URLs with special schemes, such as http(s) and file, always have hierarchical paths).
+  /// The ones which _don't_ are known as "cannot-be-a-base" URLs - and they can be recognized by the lack of slashes immediately following their scheme.
+  /// Examples of such URLs are:
   ///
   /// - `mailto:bob@example.com`
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  /// These URLs tend to be rare, and if you do not expect to encounter them, it is reasonable to force-unwrap this property or use the `modify` function.
-  /// URLs with _special_ schemes, such as http(s) and file URLs, are never "cannot-be-a-base".
+  /// See the `cannotBeABase` property for more information about these URLs.
   ///
-  /// Note that the complexity of the subscript operation is O(*m*), where *m* is the length of the component being read, due to the need to
-  /// percent-decode the component's contents and return them as a `String`. A component's raw, percent-encoded bytes can be accessed in O(*1*) using
-  /// the `withUTF8` method.
-  ///
-  /// - important: If this value is `nil`, it must not be set to any value other than `nil`. Likewise, if it is non-`nil`, it must not be set to `nil`.
-  ///              Otherwise, a runtime error is triggered.
-  ///
-  public var pathComponents: PathComponents? {
+  public var pathComponents: PathComponents {
     get {
-      guard self.cannotBeABase == false else { return nil }
+      precondition(!cannotBeABase, "cannot-be-a-base URLs do not have path components")
       return PathComponents(url: self)
     }
     _modify {
-      guard self.cannotBeABase == false else {
-        var value: PathComponents? = nil
-        yield &value
-        precondition(value == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
-        return
-      }
-      var components = Optional(PathComponents(url: self))
-      self.storage = _tempStorage
-      defer {
-        guard let modifiedURL = components?.url else {
-          preconditionFailure("Cannot set nil pathComponents on URL unless it cannot-be-a-base")
-        }
-        self.storage = modifiedURL.storage
-      }
-      yield &components
+      precondition(!cannotBeABase, "cannot-be-a-base URLs do not have path components")
+      var view = PathComponents(url: self)
+      storage = _tempStorage
+      defer { storage = view.url.storage }
+      yield &view
     }
     set {
-      guard self.cannotBeABase == false else {
-        precondition(newValue == nil, "Cannot set non-nil pathComponents on cannot-be-a-base URL")
-        return
-      }
-      guard let newPathSource = newValue?.url else {
-        preconditionFailure("Cannot set nil pathComponents on URL unless it cannot-be-a-base")
-      }
-      self.path = newPathSource.path
+      precondition(!cannotBeABase, "cannot-be-a-base URLs do not have path components")
+      path = newValue.url.path
     }
   }
 
