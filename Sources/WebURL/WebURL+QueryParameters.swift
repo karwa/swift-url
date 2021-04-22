@@ -91,12 +91,10 @@ extension WebURL {
 extension WebURL.QueryParameters {
 
   internal func withQueryUTF8<ResultType>(_ body: (UnsafeBufferPointer<UInt8>) -> ResultType) -> ResultType {
-    return url.storage.withUTF8(of: .query) { maybeBytes in
-      guard let bytes = maybeBytes, bytes.count > 1 else {
-        return body(UnsafeBufferPointer(start: nil, count: 0))
-      }
-      return body(UnsafeBufferPointer(rebasing: bytes.dropFirst()))
+    guard let bytes = url.utf8.query, bytes.count > 1 else {
+      return body(UnsafeBufferPointer(start: nil, count: 0))
     }
+    return bytes.withUnsafeBufferPointer { body($0) }
   }
 
   internal var formEncodedQueryBytes: [UInt8]? {

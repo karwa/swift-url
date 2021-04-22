@@ -127,7 +127,7 @@ extension WebURL.UTF8View: RandomAccessCollection {
     end &- start
   }
 
-  @inlinable
+  @inlinable @inline(__always)
   public func withContiguousStorageIfAvailable<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R? {
     try withUnsafeBufferPointer(body)
   }
@@ -139,7 +139,7 @@ extension WebURL.UTF8View: RandomAccessCollection {
   /// - parameters:
   ///   - body: A closure which processes the content of the serialized URL.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
     switch storage {
     case .small(let small): return try small.codeUnits.withUnsafeBufferPointer(body)
@@ -157,7 +157,7 @@ extension Slice where Base == WebURL.UTF8View {
   /// - parameters:
   ///   - body: A closure which processes the content of the serialized URL.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
     switch base.storage {
     case .small(let small): return try small.codeUnits.withUnsafeBufferPointer(range: startIndex..<endIndex, body)

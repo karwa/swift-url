@@ -359,9 +359,7 @@ extension ParsedURLString.ProcessedMapping {
     } else {
       precondition(info.componentsToCopyFromBase.contains(.scheme), "Cannot construct a URL without a scheme")
       assert(schemeKind == baseURL!.schemeKind)
-      baseURL.unsafelyUnwrapped.storage.withUTF8(of: .scheme) { baseScheme in
-        writer.writeSchemeContents(baseScheme!.dropLast() /* ':' */)
-      }
+      writer.writeSchemeContents(baseURL.unsafelyUnwrapped.utf8.scheme)
     }
 
     // 3: Authority.
@@ -463,14 +461,11 @@ extension ParsedURLString.ProcessedMapping {
 
     case .none where info.componentsToCopyFromBase.contains(.path):
       let baseURL = baseURL.unsafelyUnwrapped
-      baseURL.storage.withUTF8(of: .path) {
-        guard let basePath = $0 else { return }
-        if baseURL.storage.structure.pathRequiresSigil, hasAuthority == false {
-          writer.writePathSigil()
-        }
-        writer.writePath(firstComponentLength: baseURL.storage.structure.firstPathComponentLength) { writer in
-          writer(basePath)
-        }
+      if baseURL.storage.structure.pathRequiresSigil, hasAuthority == false {
+        writer.writePathSigil()
+      }
+      writer.writePath(firstComponentLength: baseURL.storage.structure.firstPathComponentLength) { writer in
+        writer(baseURL.utf8.path)
       }
 
     case .none where schemeKind.isSpecial:
@@ -499,8 +494,7 @@ extension ParsedURLString.ProcessedMapping {
 
     } else if info.componentsToCopyFromBase.contains(.query) {
       let baseURL = baseURL.unsafelyUnwrapped
-      baseURL.storage.withUTF8(of: .query) {
-        guard let baseQuery = $0?.dropFirst() /* '?' */ else { return }
+      if let baseQuery = baseURL.utf8.query {
         let isFormEncoded = baseURL.storage.structure.queryIsKnownFormEncoded
         writer.writeQueryContents(isKnownFormEncoded: isFormEncoded) { writer in writer(baseQuery) }
       }

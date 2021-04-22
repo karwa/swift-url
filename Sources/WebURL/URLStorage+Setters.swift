@@ -63,12 +63,12 @@ extension URLStorage {
       }
     ]
     // If the current port is the default for the new scheme, it must be removed.
-    withUTF8(of: .port) {
-      guard let portBytes = $0 else { return }
+    if let portRange = oldStructure.range(of: .port) {
+      let portBytes = codeUnits[portRange]
       assert(portBytes.count > 1, "invalid URLStructure: port must either be nil or >1 character")
       if newStructure.schemeKind.isDefaultPort(utf8: portBytes.dropFirst()) {
         newStructure.portLength = 0
-        commands.append(.remove(subrange: oldStructure.rangeForReplacingCodeUnits(of: .port)))
+        commands.append(.remove(subrange: portRange))
       }
     }
     return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
@@ -263,9 +263,10 @@ extension URLStorage {
           return (removeSubrange(hostnameRange, newStructure: newStructure).newStorage, nil)
         }
         // hostname -> nil: Remove authority sigil, replacing it with a path sigil if required.
-        let needsPathSigil = withUTF8(of: .path) { pathBytes in
-          pathBytes.map { PathComponentParser.doesNormalizedPathRequirePathSigil($0) } ?? false
-        }
+        let needsPathSigil =
+          oldStructure.range(of: .path).map {
+            PathComponentParser.doesNormalizedPathRequirePathSigil(codeUnits[$0])
+          } ?? false
         newStructure.sigil = needsPathSigil ? .path : .none
         let commands: [ReplaceSubrangeOperation] = [
           .replace(

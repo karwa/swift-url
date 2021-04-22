@@ -56,9 +56,9 @@ let stringWithEveryASCIICharacter: String = {
 
 @inline(__always)
 func checkDoesNotCopy(_ url: inout WebURL, _ body: (inout WebURL) -> Void) {
-  let addressBefore = url.storage.withUTF8 { $0.baseAddress }
+  let addressBefore = url.utf8.withUnsafeBufferPointer { $0.baseAddress }
   body(&url)
-  XCTAssertEqual(addressBefore, url.storage.withUTF8 { $0.baseAddress })
+  XCTAssertEqual(addressBefore, url.utf8.withUnsafeBufferPointer { $0.baseAddress })
 }
 
 /// Checks that the given URL returns precisely the same value when its serialized representation is re-parsed.
@@ -73,11 +73,7 @@ func XCTAssertURLIsIdempotent(_ url: WebURL) {
   // Check that the URLStructure (i.e. code-unit offsets, flags, etc) are the same.
   XCTAssertTrue(url.storage.structure.describesSameStructure(as: reparsed.storage.structure))
   // Check that the code-units are the same.
-  url.storage.withUTF8 { original in
-    reparsed.storage.withUTF8 { reparsed in
-      XCTAssertEqualElements(original, reparsed)
-    }
-  }
+  XCTAssertEqualElements(url.utf8, reparsed.utf8)
   // Triple check: check that the serialized representations are the same.
   XCTAssertEqual(serialized, reparsed.serialized)
 }

@@ -331,17 +331,17 @@ extension URLStructure {
     // Other components may not be both present and empty.
     // A length of 0 means "not present"/nil.
     case .username:
-      guard usernameLength != 0 else { return nil }
+      guard usernameLength > 0 else { return nil }
     case .password:
-      guard passwordLength != 0 else { return nil }
+      guard passwordLength > 0 else { return nil }
     case .port:
-      guard portLength != 0 else { return nil }
+      guard portLength > 0 else { return nil }
     case .path:
-      guard pathLength != 0 else { return nil }
+      guard pathLength > 0 else { return nil }
     case .query:
-      guard queryLength != 0 else { return nil }
+      guard queryLength > 0 else { return nil }
     case .fragment:
-      guard fragmentLength != 0 else { return nil }
+      guard fragmentLength > 0 else { return nil }
     default:
       preconditionFailure("Invalid component")
     }
@@ -664,19 +664,6 @@ internal struct URLStorage<Header: URLHeader> {
 extension URLStorage {
 
   @inlinable
-  internal func withUTF8<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
-    try codeUnits.withUnsafeBufferPointer(body)
-  }
-
-  @inlinable
-  internal func withUTF8<R>(
-    of component: WebURL.Component, _ body: (UnsafeBufferPointer<UInt8>?) throws -> R
-  ) rethrows -> R {
-    guard let range = header.structure.range(of: component) else { return try body(nil) }
-    return try codeUnits.withUnsafeBufferPointer(range: range, body)
-  }
-
-  @inlinable
   internal func withUTF8OfAllAuthorityComponents<T>(
     _ body: (
       _ authorityString: UnsafeBufferPointer<UInt8>?,
@@ -688,8 +675,8 @@ extension URLStorage {
   ) -> T {
     let structure = header.structure
     guard let range = structure.rangeOfAuthorityString else { return body(nil, 0, 0, 0, 0) }
-    return codeUnits.withUnsafeBufferPointer(range: Range(uncheckedBounds: (range.lowerBound, range.upperBound))) {
-      buffer in
+    // Note: ManagedArrayBuffer.withUnsafeBufferPointer(range:) is bounds-checked.
+    return codeUnits.withUnsafeBufferPointer(range: range) { buffer in
       body(buffer, structure.usernameLength, structure.passwordLength, structure.hostnameLength, structure.portLength)
     }
   }
@@ -777,24 +764,6 @@ extension AnyURLStorage {
   @inlinable
   internal var cannotBeABaseURL: Bool {
     structure.cannotBeABaseURL
-  }
-
-  @inlinable
-  internal func withUTF8<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
-    switch self {
-    case .small(let storage): return try storage.withUTF8(body)
-    case .large(let storage): return try storage.withUTF8(body)
-    }
-  }
-
-  @inlinable
-  internal func withUTF8<R>(
-    of component: WebURL.Component, _ body: (UnsafeBufferPointer<UInt8>?) throws -> R
-  ) rethrows -> R {
-    switch self {
-    case .small(let storage): return try storage.withUTF8(of: component, body)
-    case .large(let storage): return try storage.withUTF8(of: component, body)
-    }
   }
 
   @inlinable
