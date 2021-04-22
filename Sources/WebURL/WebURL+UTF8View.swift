@@ -148,6 +148,24 @@ extension WebURL.UTF8View: RandomAccessCollection {
   }
 }
 
+extension Slice where Base == WebURL.UTF8View {
+
+  /// Invokes `body` with a pointer to the contiguous UTF-8 code-units of the entire serialized URL.
+  ///
+  /// - important: The provided pointer is valid only for the duration of `body`. Do not store or return the pointer for later use.
+  /// - complexity: O(*1*)
+  /// - parameters:
+  ///   - body: A closure which processes the content of the serialized URL.
+  ///
+  @inlinable
+  public func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
+    switch base.storage {
+    case .small(let small): return try small.codeUnits.withUnsafeBufferPointer(range: startIndex..<endIndex, body)
+    case .large(let large): return try large.codeUnits.withUnsafeBufferPointer(range: startIndex..<endIndex, body)
+    }
+  }
+}
+
 
 // --------------------------------------------
 // MARK: - Components
@@ -317,5 +335,19 @@ extension WebURL.UTF8View {
       { small in small.setFragment(to: newFragment) },
       { large in large.setFragment(to: newFragment) }
     )
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - AnyURLStorage access
+// --------------------------------------------
+
+
+extension AnyURLStorage {
+
+  @inlinable
+  internal var utf8: WebURL.UTF8View {
+    WebURL.UTF8View(self)
   }
 }

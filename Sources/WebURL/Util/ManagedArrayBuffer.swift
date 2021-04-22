@@ -306,6 +306,7 @@ extension ManagedArrayBuffer {
     uninitializedCapacity: Int, initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int
   ) -> Index {
 
+    precondition(uninitializedCapacity >= 0, "Cannot append a negative number of elements")
     let oldCount = self.count
     let newCount = oldCount + uninitializedCapacity
     reserveCapacity(newCount)
@@ -349,6 +350,8 @@ extension ManagedArrayBuffer {
     initializingWith initializer: (inout UnsafeMutableBufferPointer<Element>) -> Int
   ) -> Range<Index> {
 
+    precondition(subrange.lowerBound >= startIndex && subrange.upperBound <= endIndex, "Range is out of bounds")
+    precondition(newSubrangeCount >= 0, "Cannot replace subrange with a negative number of elements")
     let isUnique = _storage.isKnownUniqueReference()
     let result = _storage.withUnsafeMutablePointerToElements { elems in
       return replaceElements(
@@ -395,14 +398,12 @@ extension ManagedArrayBuffer: RandomAccessCollection {
 
   @inlinable
   internal func index(after i: Index) -> Index {
-    precondition(i < endIndex, "Cannot increment endIndex")
-    return i &+ 1
+    i &+ 1
   }
 
   @inlinable
   internal func index(before i: Index) -> Index {
-    precondition(i > startIndex, "Cannot decrement startIndex")
-    return i &- 1
+    i &- 1
   }
 
   @inlinable
