@@ -406,7 +406,7 @@ extension WebURL {
 
 extension WebURL {
 
-  // Legacy function used by pathComponents/queryParams views.
+  // Legacy function used by pathComponents/formParams views.
   internal mutating func withMutableStorage(
     _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage),
     _ generic: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage)

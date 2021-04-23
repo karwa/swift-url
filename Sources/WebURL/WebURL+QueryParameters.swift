@@ -16,39 +16,39 @@ extension WebURL {
 
   /// A view of the `application/x-www-form-urlencoded` key-value pairs in this URL's `query`.
   ///
-  /// The `queryParams` view allows you to conveniently get and set the values for particular keys by accessing them as members.
+  /// The `formParams` view allows you to conveniently get and set the values for particular keys by accessing them as members.
   /// For keys which cannot be written as members, the `get` and `set` functions provide equivalent functionality.
   ///
   /// ```swift
   /// var url = WebURL("http://example.com/shopping/deals?category=food&limit=25")!
-  /// assert(url.queryParams.category == "food")
+  /// assert(url.formParams.category == "food")
   ///
-  /// url.queryParams.distance = "10km"
+  /// url.formParams.distance = "10km"
   /// assert(url.serialized == "http://example.com/shopping/deals?category=food&limit=25&distance=10km")
   ///
-  /// url.queryParams.limit = nil
+  /// url.formParams.limit = nil
   /// assert(url.serialized == "http://example.com/shopping/deals?category=food&distance=10km")
   ///
-  /// url.queryParams.set("cuisine", to: "🇮🇹")
+  /// url.formParams.set("cuisine", to: "🇮🇹")
   /// assert(url.serialized == "http://example.com/shopping/deals?category=food&distance=10km&cuisine=%F0%9F%87%AE%F0%9F%87%B9")
   /// ```
   ///
   /// Additionally, you can iterate all of the key-value pairs using the `.allKeyValuePairs` property:
   ///
   /// ```swift
-  /// for (key, value) in url.queryParams.allKeyValuePairs {
+  /// for (key, value) in url.formParams.allKeyValuePairs {
   ///   // ("category", "food")
   ///   // ("distance", "10km")
   ///   // ("cuisine", "🇮🇹")
   /// }
   /// ```
   ///
-  public var queryParams: QueryParameters {
+  public var formParams: FormEncodedQueryParameters {
     get {
-      return QueryParameters(url: self)
+      return FormEncodedQueryParameters(url: self)
     }
     _modify {
-      var params = QueryParameters(url: self)
+      var params = FormEncodedQueryParameters(url: self)
       self.storage = _tempStorage
       defer { self.storage = params.url.storage }
       yield &params
@@ -75,7 +75,7 @@ extension WebURL {
   /// A view of the `application/x-www-form-urlencoded` key-value pairs in a URL's `query`.
   ///
   @dynamicMemberLookup
-  public struct QueryParameters {
+  public struct FormEncodedQueryParameters {
 
     @usableFromInline
     internal var url: WebURL
@@ -88,7 +88,7 @@ extension WebURL {
 
 // backing.
 
-extension WebURL.QueryParameters {
+extension WebURL.FormEncodedQueryParameters {
 
   internal func withQueryUTF8<ResultType>(_ body: (UnsafeBufferPointer<UInt8>) -> ResultType) -> ResultType {
     guard let bytes = url.utf8.query, bytes.count > 1 else {
@@ -131,7 +131,7 @@ extension WebURL.QueryParameters {
 // --------------------------------------------
 
 
-extension WebURL.QueryParameters {
+extension WebURL.FormEncodedQueryParameters {
 
   /// A `Sequence` allowing iteration over all key-value pairs contained by the query parameters.
   ///
@@ -143,9 +143,9 @@ extension WebURL.QueryParameters {
   ///
   public struct KeyValuePairs: Sequence {
 
-    internal var params: WebURL.QueryParameters
+    internal var params: WebURL.FormEncodedQueryParameters
 
-    internal init(params: WebURL.QueryParameters) {
+    internal init(params: WebURL.FormEncodedQueryParameters) {
       self.params = params
     }
 
@@ -162,10 +162,10 @@ extension WebURL.QueryParameters {
 
     public struct Iterator: IteratorProtocol {
 
-      internal var params: WebURL.QueryParameters
+      internal var params: WebURL.FormEncodedQueryParameters
       internal var utf8Offset: Int
 
-      internal init(params: WebURL.QueryParameters) {
+      internal init(params: WebURL.FormEncodedQueryParameters) {
         self.params = params
         self.utf8Offset = 0
       }
@@ -251,7 +251,7 @@ extension WebURL.QueryParameters {
   }
 }
 
-extension WebURL.QueryParameters {
+extension WebURL.FormEncodedQueryParameters {
 
   /// Whether or not these query parameters contain a value for the given key.
   ///
@@ -298,7 +298,7 @@ extension WebURL.QueryParameters {
 // --------------------------------------------
 
 
-extension WebURL.QueryParameters {
+extension WebURL.FormEncodedQueryParameters {
 
   /// Appends the given key-value pair to the query parameters. No existing key-value pairs are removed.
   ///
@@ -343,7 +343,7 @@ extension WebURL.QueryParameters {
 
 // The many faces of append(contentsOf:).
 
-extension WebURL.QueryParameters {
+extension WebURL.FormEncodedQueryParameters {
 
   /// Appends the given sequence of key-value pairs to these query parameters. Existing values will not be removed.
   ///
@@ -363,7 +363,7 @@ extension WebURL.QueryParameters {
 
   @inlinable
   public static func += <CollectionType, StringType>(
-    lhs: inout WebURL.QueryParameters, rhs: CollectionType
+    lhs: inout WebURL.FormEncodedQueryParameters, rhs: CollectionType
   ) where CollectionType: Collection, CollectionType.Element == (StringType, StringType), StringType: StringProtocol {
     lhs.append(contentsOf: rhs)
   }
@@ -385,7 +385,7 @@ extension WebURL.QueryParameters {
 
   @inlinable
   public static func += <CollectionType, StringType>(
-    lhs: inout WebURL.QueryParameters, rhs: CollectionType
+    lhs: inout WebURL.FormEncodedQueryParameters, rhs: CollectionType
   )
   where
     CollectionType: Collection, CollectionType.Element == (key: StringType, value: StringType),
@@ -416,7 +416,7 @@ extension WebURL.QueryParameters {
 
   @inlinable
   public static func += <StringType>(
-    lhs: inout WebURL.QueryParameters, rhs: [StringType: StringType]
+    lhs: inout WebURL.FormEncodedQueryParameters, rhs: [StringType: StringType]
   ) where StringType: StringProtocol {
     lhs.append(contentsOf: rhs)
   }
@@ -424,7 +424,7 @@ extension WebURL.QueryParameters {
 
 
 // --------------------------------------------
-// MARK: - URLStorage + QueryParameters
+// MARK: - URLStorage + FormEncodedQueryParameters
 // --------------------------------------------
 
 
@@ -542,7 +542,7 @@ extension URLStorage {
     let firstOccurence: (pairEnd: Int, value: Range<Int>)
     if let encodedValue = encodedValue {
       let _firstMatch = codeUnits.withUnsafeBufferPointer(range: oldQueryRange) { queryBytes in
-        WebURL.QueryParameters.RawKeyValuePairs(utf8: queryBytes)
+        WebURL.FormEncodedQueryParameters.RawKeyValuePairs(utf8: queryBytes)
           .first(where: { queryBytes[$0.key].elementsEqual(encodedKey) })
       }
       guard let firstMatch = _firstMatch else {
@@ -560,7 +560,7 @@ extension URLStorage {
     var totalRemovedBytes = 0
     codeUnits.unsafeTruncate(oldQueryRange.lowerBound + firstOccurence.pairEnd..<oldQueryRange.upperBound) { query in
       var remaining = query
-      while let nextMatch = WebURL.QueryParameters.RawKeyValuePairs(utf8: remaining)
+      while let nextMatch = WebURL.FormEncodedQueryParameters.RawKeyValuePairs(utf8: remaining)
         .first(where: { remaining[$0.key].elementsEqual(encodedKey) })
       {
         (remaining.baseAddress! + nextMatch.pair.lowerBound).assign(
