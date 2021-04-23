@@ -46,7 +46,7 @@ where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
   var callback = IgnoreValidationErrors()
   return inputString.withContiguousStorageIfAvailable {
-    _urlFromBytes_impl($0, baseURL: baseURL, callback: &callback)
+    _urlFromBytes_impl($0.withoutTrappingOnIndexOverflow, baseURL: baseURL, callback: &callback)
   } ?? _urlFromBytes_impl(inputString, baseURL: baseURL, callback: &callback)
 }
 

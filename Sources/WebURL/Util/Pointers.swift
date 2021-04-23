@@ -72,6 +72,7 @@ extension UnsafeMutableBufferPointer {
   }
 }
 
+
 // --------------------------------------------
 // MARK: - Pointers to tuple elements
 // --------------------------------------------
@@ -154,5 +155,202 @@ internal func withUnsafeMutableBufferPointerToElements<T, Result>(
   return withUnsafeMutableBytes(of: &tuple) {
     var ptr = $0._assumingMemoryBound(to: T.self)
     return body(&ptr)
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Reducing arithmetic overflow traps
+// --------------------------------------------
+// The implementation of UnsafeBufferPointer uses arithmetic which traps on overflow in its indexing operations
+// (e.g. index(after:)). This isn't a part of memory safety - UnsafeBufferPointer is, as the name suggests, unsafe.
+// The thing that makes it unsafe is that it lacks bounds-checking in release mode, so you can tell it to read from
+// any nonsense offset (too large, negative, whatever), and it'll just do it and think everything was fine.
+//
+// Collection doesn't make any guarantees about what happens when you use a Collection incorrectly;
+// incrementing an invalid index could trap, or it could always return startIndex, endIndex, or anything.
+// The same goes for subscripting - a Collection of Ints could trap, or return 0 or -1 if you ask for an out-of-bounds
+// element. Generic Collection code has to do things like checking an index is less than endIndex before incrementing -
+// otherwise it will invoke _unspecified_ behaviour (not the same as UB in C) and may give you nonsense results.
+//
+// The one thing a Collection should never do (or any type in Swift, Collection or not), is violate memory safety.
+// --> **Even if you use it incorrectly** <--. That's the difference with C-style undefined behaviour.
+// The exception to this rule is UnsafeBufferPointer - as explained above, if you ask it to read from an invalid index,
+// it will happily do so. Incorrect usage _will_ invoke C-style undefined behaviour and violate memory safety.
+//
+// This tweaked implementation of UnsafeBufferPointer makes some changes to the stdlib's implementation,
+// but is no more or less safe (you can't be "more or less safe" than something else; something is safe or it isn't):
+//
+// - Indexing operations do not overflow. As explained above, there is no requirement to trap.
+//   UnsafeBufferPointer won't bounds-check the index anyway, so trap or not, reading from an index you incremented
+//   too far will violate memory safety. Trapping on overflow doesn't make incorrect code safe.
+//
+//   See discussion at:
+//   https://forums.swift.org/t/is-it-okay-to-ignore-overflow-when-incrementing-decrementing-collection-indexes/47416
+//
+// - It is self-slicing. This helps to ensure that `Slice` doesn't mess up any of the low-level performance tweaks.
+//   It also allows us to implement `_copyContents` without having to create a custom iterator, which is nice.
+//
+// --------------------------------------------
+
+
+extension UnsafeBufferPointer {
+
+  @inlinable
+  internal var withoutTrappingOnIndexOverflow: NoOverflowUnsafeBufferPointer<Element> {
+    NoOverflowUnsafeBufferPointer(self)
+  }
+}
+
+@usableFromInline
+internal struct NoOverflowUnsafeBufferPointer<Element> {
+
+  @usableFromInline
+  internal var baseAddress: UnsafePointer<Element>?
+
+  @usableFromInline
+  internal var bounds: Range<Int>
+
+  @inlinable
+  internal init(baseAddress: UnsafePointer<Element>?, count: Int) {
+    assert(count >= 0)
+    assert(count == 0 || baseAddress != nil)
+    self.baseAddress = baseAddress
+    self.bounds = Range(uncheckedBounds: (0, count))
+  }
+
+  @inlinable
+  internal init(_ buffer: UnsafeBufferPointer<Element>) {
+    self.init(baseAddress: buffer.baseAddress, count: buffer.count)
+  }
+
+  @inlinable
+  internal init(slicing base: Self, bounds: Range<Int>) {
+    base._failEarlyRangeCheck(bounds, bounds: base.bounds)
+    self.baseAddress = base.baseAddress
+    self.bounds = bounds
+  }
+}
+
+extension NoOverflowUnsafeBufferPointer: RandomAccessCollection {
+
+  @inlinable
+  internal var startIndex: Int {
+    _assumeNonNegative(bounds.lowerBound)
+  }
+
+  @inlinable
+  internal var endIndex: Int {
+    _assumeNonNegative(bounds.upperBound)
+  }
+
+  @inlinable
+  internal var count: Int {
+    endIndex &- startIndex
+  }
+
+  @inlinable
+  internal var isEmpty: Bool {
+    // startIndex will never be greater than endIndex, but by writing it this way (rather than startIndex != endIndex),
+    // we communicate that when 'isEmpty == false', startIndex is definitely < endIndex. This means:
+    // - startIndex + 1 won't overflow
+    // - The range startIndex..<endIndex is well-formed and shouldn't trap, and
+    // - startIndex + 1 will at most be equal to endIndex
+    //
+    // This can indeed be shown to make an observable difference in smaller code snippets,
+    // although most uses of 'isEmpty == false' have been changed to 'startIndex < endIndex' anyway.
+    startIndex >= endIndex
+  }
+
+  @inlinable
+  internal subscript(position: Int) -> Element {
+    _failEarlyRangeCheck(position, bounds: bounds)
+    return baseAddress.unsafelyUnwrapped[position]
+  }
+
+  @inlinable
+  internal subscript(sliceBounds: Range<Int>) -> NoOverflowUnsafeBufferPointer<Element> {
+    NoOverflowUnsafeBufferPointer(slicing: self, bounds: sliceBounds)
+  }
+
+  @inlinable
+  internal func _failEarlyRangeCheck(_ index: Int, bounds: Range<Int>) {
+    assert(index >= bounds.lowerBound)
+    assert(index < bounds.upperBound)
+  }
+
+  @inlinable
+  internal func _failEarlyRangeCheck(_ range: Range<Int>, bounds: Range<Int>) {
+    assert(range.lowerBound >= bounds.lowerBound)
+    assert(range.upperBound <= bounds.upperBound)
+  }
+
+  @inlinable
+  internal func _copyContents(
+    initializing destination: UnsafeMutableBufferPointer<Element>
+  ) -> (Iterator, UnsafeMutableBufferPointer<Element>.Index) {
+    guard !isEmpty && !destination.isEmpty else { return (makeIterator(), 0) }
+    let src = self.baseAddress.unsafelyUnwrapped + bounds.lowerBound
+    let dst = destination.baseAddress.unsafelyUnwrapped
+    let n = Swift.min(destination.count, self.count)
+    dst.initialize(from: src, count: n)
+    return (self[Range(uncheckedBounds: (bounds.lowerBound &+ n, bounds.upperBound))].makeIterator(), n)
+  }
+
+  @inlinable
+  internal var indices: Range<Int> {
+    bounds
+  }
+
+  @inlinable @inline(__always)
+  internal func index(after i: Int) -> Int {
+    i &+ 1
+  }
+
+  @inlinable @inline(__always)
+  internal func formIndex(after i: inout Int) {
+    i &+= 1
+  }
+
+  @inlinable
+  internal func index(_ i: Int, offsetBy distance: Int) -> Int {
+    i &+ distance
+  }
+
+  @inlinable
+  internal func formIndex(_ i: inout Int, offsetBy distance: Int) {
+    i &+= distance
+  }
+
+  @inlinable
+  internal func index(_ i: Int, offsetBy n: Int, limitedBy limit: Int) -> Int? {
+    let l = limit &- i
+    if n > 0 ? l >= 0 && l < n : l <= 0 && n < l {
+      return nil
+    }
+    return i &+ n
+  }
+
+  @inlinable @inline(__always)
+  internal func index(before i: Int) -> Int {
+    i &- 1
+  }
+
+  @inlinable @inline(__always)
+  internal func formIndex(before i: inout Int) {
+    i &-= 1
+  }
+
+  @inlinable
+  internal func distance(from start: Int, to end: Int) -> Int {
+    end &- start
+  }
+
+  @inlinable
+  internal func withContiguousStorageIfAvailable<R>(
+    _ body: (UnsafeBufferPointer<Element>) throws -> R
+  ) rethrows -> R? {
+    guard let baseAddress = baseAddress else { return try body(UnsafeBufferPointer(start: nil, count: 0)) }
+    return try body(UnsafeBufferPointer(start: baseAddress + startIndex, count: _assumeNonNegative(count)))
   }
 }
