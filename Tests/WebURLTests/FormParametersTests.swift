@@ -16,7 +16,7 @@ import XCTest
 
 @testable import WebURL
 
-final class QueryParametersTests: XCTestCase {
+final class FormEncodedQueryParametersTests: XCTestCase {
 
   func testDocumentationExamples() {
 
