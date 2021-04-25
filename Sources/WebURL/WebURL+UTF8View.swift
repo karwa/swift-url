@@ -39,17 +39,27 @@ extension WebURL {
   ///
   @inlinable
   public var utf8: UTF8View {
+    get { storage.utf8 }
+    _modify { yield &storage.utf8 }
+    set { storage.utf8 = newValue }
+  }
+}
+
+extension AnyURLStorage {
+
+  @inlinable
+  internal var utf8: WebURL.UTF8View {
     get {
-      UTF8View(storage)
+      WebURL.UTF8View(self)
     }
     _modify {
-      var view = UTF8View(storage)
-      storage = _tempStorage
-      defer { storage = view.storage }
+      var view = WebURL.UTF8View(self)
+      self = _tempStorage
+      defer { self = view.storage }
       yield &view
     }
     set {
-      storage = newValue.storage
+      self = newValue.storage
     }
   }
 }
@@ -335,19 +345,5 @@ extension WebURL.UTF8View {
       { small in small.setFragment(to: newFragment) },
       { large in large.setFragment(to: newFragment) }
     )
-  }
-}
-
-
-// --------------------------------------------
-// MARK: - AnyURLStorage access
-// --------------------------------------------
-
-
-extension AnyURLStorage {
-
-  @inlinable
-  internal var utf8: WebURL.UTF8View {
-    WebURL.UTF8View(self)
   }
 }

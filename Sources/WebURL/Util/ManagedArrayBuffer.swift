@@ -373,6 +373,32 @@ extension ManagedArrayBuffer {
     }
     return subrange.lowerBound..<(subrange.lowerBound + result.insertedCount)
   }
+
+  /// Invokes `body` with a pointer to the mutable elements in the given range.
+  ///
+  /// `body` returns the new number of elements in the range, `n`, which must be less than or equal to the existing number of elements.
+  /// When `body` completes, the `n` elements at the start of the buffer must be initialized, and elements from `n` until the end of the given buffer
+  /// must be deinitialized.
+  ///
+  @discardableResult @inlinable
+  internal mutating func unsafeTruncate(
+    _ subrange: Range<Index>, _ body: (inout UnsafeMutableBufferPointer<Element>) -> Int
+  ) -> Index {
+    precondition(subrange.lowerBound >= startIndex && subrange.upperBound <= endIndex, "Range is out of bounds")
+    var removedElements = 0
+    withUnsafeMutableBufferPointer { buffer in
+      var slice = UnsafeMutableBufferPointer(rebasing: buffer[subrange])
+      let newSliceCount = body(&slice)
+      precondition(newSliceCount <= slice.count, "unsafeTruncate cannot initialize more content than it had space for")
+      // Space in the range newSliceCount..<range.upperBound is now uninitialized. Move elements to fill the gap.
+      (buffer.baseAddress! + subrange.lowerBound + newSliceCount).moveInitialize(
+        from: (buffer.baseAddress! + subrange.upperBound), count: buffer.count - subrange.upperBound
+      )
+      removedElements = subrange.count - newSliceCount
+    }
+    self.header.count -= removedElements
+    return subrange.endIndex - removedElements
+  }
 }
 
 // Collection protocols.
@@ -472,6 +498,14 @@ extension ManagedArrayBuffer {
   @discardableResult @inlinable
   internal mutating func append(_ element: Element) -> Index {
     append(contentsOf: CollectionOfOne(element)).lowerBound
+  }
+
+  @discardableResult @inlinable
+  internal mutating func removeSubrange(_ subrange: Range<Index>) -> Index {
+    unsafeTruncate(subrange) { buffer in
+      buffer.baseAddress?.deinitialize(count: buffer.count)
+      return 0
+    }
   }
 }
 
