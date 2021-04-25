@@ -19,12 +19,10 @@ extension WebURL {
   ///
   /// * A domain is a non-empty ASCII string which identifies a realm within a network.
   ///   The hosts of URLs with special schemes (http, ftp, file, etc) are always either domains, IPv4 or v6 addresses, and never opaque.
-  ///   In terms of unicode equivalence, domains are already normalized by the IDNA transform and encoded with Punycode, so they may be compared directly.
   ///
   /// * An opaque host is a non-empty ASCII string which can be used for further processing.
   ///   The hosts of URLs with non-special schemes are always either opaque or IPv6 addresses, and never domains or IPv4 addresses.
   ///   The name may contain non-ASCII characters or other forbidden host code-points in percent-encoded form.
-  ///   The URL parser does not normalize these in any way.
   ///
   public enum Host {
     case ipv4Address(IPv4Address)
@@ -42,7 +40,7 @@ extension WebURL {
   public var host: Host? {
     guard let hostname = self.hostname else { return nil }
     var callback = IgnoreValidationErrors()
-    switch ParsedHost(hostname.utf8, schemeKind: _schemeKind, callback: &callback) {
+    switch ParsedHost(hostname.utf8, schemeKind: schemeKind, callback: &callback) {
     case .none:
       assertionFailure("Normalized hostname failed to reparse")
       return nil
@@ -60,7 +58,11 @@ extension WebURL {
   }
 }
 
-// Standard protocols.
+
+// --------------------------------------------
+// MARK: - Standard protocols
+// --------------------------------------------
+
 
 extension WebURL.Host: Equatable, Hashable {}
 
@@ -71,7 +73,11 @@ extension WebURL.Host: CustomStringConvertible {
   }
 }
 
-// Serialization.
+
+// --------------------------------------------
+// MARK: - Serialization
+// --------------------------------------------
+
 
 extension WebURL.Host {
 

@@ -14,22 +14,15 @@
 
 extension WebURL {
 
-  /// An interface to this URL with the same names and behaviour as the Javascript `URL` type.
+  /// An interface to this URL whose properties have the same behaviour as the JavaScript `URL` class described in the [URL Standard][whatwg-js-type].
   ///
-  public var jsModel: JSModel {
-    return JSModel(storage: self.storage)
-  }
-
-  /// The Javascript `URL` model as described by the [WHATWG URL Specification](https://url.spec.whatwg.org/#url-class) .
+  /// - seealso: `WebURL.jsModel`
+  ///
+  /// [whatwg-js-type]: https://url.spec.whatwg.org/#url-class
   ///
   public struct JSModel {
-    var storage: AnyURLStorage
 
-    /// An interface to this URL designed for Swift :)
-    ///
-    var swiftModel: WebURL {
-      return WebURL(storage: self.storage)
-    }
+    internal var storage: AnyURLStorage
 
     init(storage: AnyURLStorage) {
       self.storage = storage
@@ -37,7 +30,7 @@ extension WebURL {
 
     public init?(_ input: String, base: String?) {
       if let baseStr = base {
-        let _url = WebURL(baseStr)?.join(input)
+        let _url = WebURL(baseStr)?.resolve(input)
         guard let url = _url else { return nil }
         self.init(storage: url.storage)
 
@@ -51,97 +44,162 @@ extension WebURL {
   }
 }
 
-// In-place mutation hack.
+extension WebURL {
 
-extension WebURL.JSModel {
-
-  private mutating func withMutableStorage(
-    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> AnyURLStorage,
-    _ generic: (inout URLStorage<BasicURLHeader<Int>>) -> AnyURLStorage
-  ) {
-    // We need to go through a bit of a dance in order to get a unique reference to the storage.
-    // It's like if you have tape stuck to one hand and try to remove it with the other hand.
-    //
-    // Basically:
-    // 1. Swap our storage to temporarily point to some read-only global, so our only storage reference is
-    //    via a local variable.
-    // 2. Extract the URLStorage (which is a COW value type) from local variable's payload, and set
-    //    the local to also point that read-only global.
-    // 3. Hand that extracted storage off to closure (`inout`, but `__consuming` might also work),
-    //    which returns a storage object back (possibly the same storage object).
-    // 4. We round it all off by assigning that value as our new storage. Phew.
-    var localRef = self.storage
-    self.storage = _tempStorage
-    switch localRef {
-    case .large(var extracted_storage):
-      localRef = _tempStorage
-      self.storage = generic(&extracted_storage)
-    case .small(var extracted_storage):
-      localRef = _tempStorage
-      self.storage = small(&extracted_storage)
+  /// An interface to this URL whose properties have the same behaviour as the JavaScript `URL` class described in the [URL Standard][whatwg-js-type].
+  ///
+  /// Use of this interface should be considered carefully; the other APIs exposed by `WebURL` are designed as a better fit for Swift developers.
+  /// The primary purpose of this API is to facilitate testing (this API is tested directly against the common web-platform-tests used by major browsers to
+  /// ensure standards compliance), and to aid developers porting applications from JavaScript or other languages.
+  ///
+  /// The main differences between the Swift `WebURL` API and the JavaScript `URL` class are:
+  ///
+  /// - `WebURL` uses `nil` to represent not-present values, rather than empty strings.
+  ///   This can be a more accurate description of a component which may be the empty string.
+  ///
+  /// - `WebURL` does not include delimiters in its components.
+  ///    For example, the leading "?" of the query string is not part of the string returned by `WebURL.query`, but it _is_ part of `URL.search` in JS.
+  ///
+  /// - If modifying a component of a parsed URL and the new value contains ASCII whitespace, the JavaScript class will filter (ignore) those characters.
+  ///   `WebURL` does not; if the new value contains whitespace, it will be percent-encoded as other disallowed characters are.
+  ///
+  /// - `WebURL` does not ignore trailing content when setting a component.
+  ///    In this example, JavaScript's `URL` class finds a hostname at the start of the given new value, but silently drops the path and query which it also contains:
+  ///    ```
+  ///    var url = new URL("http://example.com/");
+  ///    url.hostname = "test.com/some/path?query";
+  ///    url.href; // "http://test.com/"
+  ///    ```
+  ///    This example would fail with `WebURL`.
+  ///
+  /// [whatwg-js-type]: https://url.spec.whatwg.org/#url-class
+  ///
+  public var jsModel: JSModel {
+    get {
+      JSModel(storage: storage)
+    }
+    _modify {
+      var view = JSModel(storage: storage)
+      storage = _tempStorage
+      defer { storage = view.storage }
+      yield &view
+    }
+    set {
+      storage = newValue.storage
     }
   }
 }
 
 extension WebURL.JSModel {
 
-  // Flags.
+  /// The `WebURL` interface to this URL, with properties and functionality designed for Swift developers.
+  ///
+  public var swiftModel: WebURL {
+    get {
+      WebURL(storage: storage)
+    }
+    _modify {
+      var view = WebURL(storage: storage)
+      storage = _tempStorage
+      defer { storage = view.storage }
+      yield &view
+    }
+    set {
+      storage = newValue.storage
+    }
+  }
+}
 
-  var schemeKind: WebURL.SchemeKind {
-    return storage.schemeKind
+
+// --------------------------------------------
+// MARK: - Standard Protocols
+// --------------------------------------------
+
+
+extension WebURL.JSModel: CustomStringConvertible {
+
+  public var description: String {
+    swiftModel.serialized
+  }
+}
+
+extension WebURL.JSModel: Equatable, Hashable {
+
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.swiftModel == rhs.swiftModel
   }
 
-  public var cannotBeABaseURL: Bool {
-    return storage.cannotBeABaseURL
+  public func hash(into hasher: inout Hasher) {
+    swiftModel.hash(into: &hasher)
   }
+}
 
-  // Components.
-  // Note: erasure to empty strings is done to fit the Javascript model for WHATWG tests.
 
+// --------------------------------------------
+// MARK: - Components
+// --------------------------------------------
+
+
+// Note: Documentation comments for these properties is copied from Node.js (MIT-licensed).
+//       It is not the primary interface for WebURL, so it isn't worth copying the whole thing or writing our own,
+//       but it is API and should at least have a brief comment.
+//       Node docs: https://nodejs.org/api/url.html#url_class_url
+
+extension WebURL.JSModel {
+
+  /// Gets and sets the serialized URL.
+  ///
   public var href: String {
     get {
       swiftModel.serialized
     }
     set {
-      guard let newURL = WebURL(newValue) else { return }
-      self = newURL.jsModel
+      if let newURL = WebURL(newValue) {
+        self = newURL.jsModel
+      }
     }
   }
 
+  /// Gets the read-only serialization of the URL's origin.
+  ///
   public var origin: String {
     swiftModel.origin.serialized
   }
 
+  /// Gets and sets the username portion of the URL.
+  ///
   public var username: String {
     get {
       swiftModel.username ?? ""
     }
     set {
-      var swift = swiftModel
-      try? swift.setUsername(to: newValue)
-      self = swift.jsModel
+      try? swiftModel.setUsername(newValue)
     }
   }
 
+  /// Gets and sets the password portion of the URL.
+  ///
   public var password: String {
     get {
       swiftModel.password ?? ""
     }
     set {
-      var swift = swiftModel
-      try? swift.setPassword(to: newValue)
-      self = swift.jsModel
+      try? swiftModel.setPassword(newValue)
     }
   }
 
   // Setters for the following components tend to be more complex. They tend to go through the URL parser,
-  // which filters tabs and newlines (but won't trim ASCII C0 or spaces),
+  // which filters tabs and newlines (but doesn't trim ASCII C0 or spaces),
   // and allows trailing data that just gets silently ignored.
   //
   // The Swift model setters do not filter tabs or newlines, nor do they silently drop any part of the given value,
   // and they may choose to represent non-present values as 'nil' rather than empty strings,
   // but in all other respects they should behave the same.
 
+  /// Gets and sets the protocol portion of the URL.
+  ///
+  ///  - Note: This property is called `protocol` in Javascript.
+  ///
   public var scheme: String {
     get {
       swiftModel.scheme + ":"
@@ -153,12 +211,12 @@ extension WebURL.JSModel {
       } else {
         trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[...].utf8)
       }
-      var swift = swiftModel
-      try? swift.setScheme(utf8: trimmedAndFiltered)
-      self = swift.jsModel
+      try? swiftModel.utf8.setScheme(trimmedAndFiltered)
     }
   }
 
+  /// Gets and sets the host name portion of the URL. Does not include the port.
+  ///
   public var hostname: String {
     get {
       swiftModel.hostname ?? ""
@@ -166,15 +224,16 @@ extension WebURL.JSModel {
     set {
       let filtered = ASCII.NewlineAndTabFiltered(newValue.utf8)
       var callback = IgnoreValidationErrors()
+      let schemeKind = swiftModel.schemeKind
       guard let hostnameEnd = findEndOfHostnamePrefix(filtered, scheme: schemeKind, callback: &callback) else {
         return
       }
-      var swift = swiftModel
-      try? swift.setHostname(utf8: filtered[..<hostnameEnd])
-      self = swift.jsModel
+      try? swiftModel.utf8.setHostname(filtered[..<hostnameEnd])
     }
   }
 
+  /// Gets and sets the port portion of the URL.
+  ///
   public var port: String {
     get {
       swiftModel.port.map { String($0) } ?? ""
@@ -193,23 +252,23 @@ extension WebURL.JSModel {
         }
         newPort = parsedPort
       }
-      var swift = swiftModel
-      swift.port = newPort.map { Int($0) }
-      self = swift.jsModel
+      swiftModel.port = newPort.map { Int($0) }
     }
   }
 
+  /// Gets and sets the path portion of the URL.
+  ///
   public var pathname: String {
     get {
       swiftModel.path
     }
     set {
-      var swift = swiftModel
-      try? swift.setPath(utf8: ASCII.NewlineAndTabFiltered(newValue.utf8))
-      self = swift.jsModel
+      try? swiftModel.utf8.setPath(ASCII.NewlineAndTabFiltered(newValue.utf8))
     }
   }
 
+  /// The `search` property consists of the entire "query string" portion of the URL, including the leading ASCII question mark (?) character.
+  ///
   public var search: String {
     get {
       let swiftValue = swiftModel.query ?? ""
@@ -219,25 +278,22 @@ extension WebURL.JSModel {
       return "?" + swiftValue
     }
     set {
-      // - If the new value is empty, the query is removed (set to nil).
       guard newValue.isEmpty == false else {
-        var swift = swiftModel
-        swift.query = nil
-        self = swift.jsModel
+        swiftModel.query = nil
         return
       }
       var newQuery = newValue[...]
-      // - If the new value starts with a "?", it is dropped.
       if newValue.first?.asciiValue == ASCII.questionMark.codePoint {
         newQuery = newValue.dropFirst()
       }
-      // - The remainder gets filtered of particular ASCII whitespace characters.
-      var swift = swiftModel
-      swift.setQuery(utf8: ASCII.NewlineAndTabFiltered(newQuery.utf8))
-      self = swift.jsModel
+      swiftModel.utf8.setQuery(ASCII.NewlineAndTabFiltered(newQuery.utf8))
     }
   }
 
+  /// Gets and sets the fragment portion of the URL.
+  ///
+  ///  - Note: This property is called `hash` in Javascript.
+  ///
   public var fragment: String {
     get {
       let swiftValue = swiftModel.fragment ?? ""
@@ -247,65 +303,15 @@ extension WebURL.JSModel {
       return "#" + swiftValue
     }
     set {
-      // - If the new value is empty, the fragment is removed (set to nil).
       guard newValue.isEmpty == false else {
-        var swift = swiftModel
-        swift.fragment = nil
-        self = swift.jsModel
+        swiftModel.fragment = nil
         return
       }
       var newFragment = newValue[...]
-      // - If the new value starts with a "?", it is dropped.
       if newValue.first?.asciiValue == ASCII.numberSign.codePoint {
         newFragment = newValue.dropFirst()
       }
-      // - The remainder gets filtered of particular ASCII whitespace characters.
-      var swift = swiftModel
-      swift.setFragment(utf8: ASCII.NewlineAndTabFiltered(newFragment.utf8))
-      self = swift.jsModel
+      swiftModel.utf8.setFragment(ASCII.NewlineAndTabFiltered(newFragment.utf8))
     }
-  }
-}
-
-// Standard protocols.
-
-extension WebURL.JSModel: CustomStringConvertible, TextOutputStreamable {
-
-  public var description: String {
-    return swiftModel.serialized
-  }
-
-  public func write<Target>(to target: inout Target) where Target: TextOutputStream {
-    target.write(description)
-  }
-
-  /* testable */
-  var _debugDescription: String {
-    return """
-      {
-        .href:     \(href)
-        .origin:   \(origin)
-        .protocol: \(scheme) (\(schemeKind))
-        .username: \(username)
-        .password: \(password)
-        .hostname: \(hostname)
-        .port:     \(port)
-        .pathname: \(pathname)
-        .search:   \(search)
-        .hash:     \(fragment)
-        .cannotBeABaseURL: \(cannotBeABaseURL)
-      }
-      """
-  }
-}
-
-extension WebURL.JSModel: Equatable, Hashable {
-
-  public static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.swiftModel == rhs.swiftModel
-  }
-
-  public func hash(into hasher: inout Hasher) {
-    swiftModel.hash(into: &hasher)
   }
 }

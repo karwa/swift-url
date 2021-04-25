@@ -331,17 +331,17 @@ extension URLStructure {
     // Other components may not be both present and empty.
     // A length of 0 means "not present"/nil.
     case .username:
-      guard usernameLength != 0 else { return nil }
+      guard usernameLength > 0 else { return nil }
     case .password:
-      guard passwordLength != 0 else { return nil }
+      guard passwordLength > 0 else { return nil }
     case .port:
-      guard portLength != 0 else { return nil }
+      guard portLength > 0 else { return nil }
     case .path:
-      guard pathLength != 0 else { return nil }
+      guard pathLength > 0 else { return nil }
     case .query:
-      guard queryLength != 0 else { return nil }
+      guard queryLength > 0 else { return nil }
     case .fragment:
-      guard fragmentLength != 0 else { return nil }
+      guard fragmentLength > 0 else { return nil }
     default:
       preconditionFailure("Invalid component")
     }
@@ -664,19 +664,6 @@ internal struct URLStorage<Header: URLHeader> {
 extension URLStorage {
 
   @inlinable
-  internal func withUTF8<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
-    try codeUnits.withUnsafeBufferPointer(body)
-  }
-
-  @inlinable
-  internal func withUTF8<R>(
-    of component: WebURL.Component, _ body: (UnsafeBufferPointer<UInt8>?) throws -> R
-  ) rethrows -> R {
-    guard let range = header.structure.range(of: component) else { return try body(nil) }
-    return try codeUnits.withUnsafeBufferPointer(range: range, body)
-  }
-
-  @inlinable
   internal func withUTF8OfAllAuthorityComponents<T>(
     _ body: (
       _ authorityString: UnsafeBufferPointer<UInt8>?,
@@ -688,8 +675,8 @@ extension URLStorage {
   ) -> T {
     let structure = header.structure
     guard let range = structure.rangeOfAuthorityString else { return body(nil, 0, 0, 0, 0) }
-    return codeUnits.withUnsafeBufferPointer(range: Range(uncheckedBounds: (range.lowerBound, range.upperBound))) {
-      buffer in
+    // Note: ManagedArrayBuffer.withUnsafeBufferPointer(range:) is bounds-checked.
+    return codeUnits.withUnsafeBufferPointer(range: range) { buffer in
       body(buffer, structure.usernameLength, structure.passwordLength, structure.hostnameLength, structure.portLength)
     }
   }
@@ -780,24 +767,6 @@ extension AnyURLStorage {
   }
 
   @inlinable
-  internal func withUTF8<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
-    switch self {
-    case .small(let storage): return try storage.withUTF8(body)
-    case .large(let storage): return try storage.withUTF8(body)
-    }
-  }
-
-  @inlinable
-  internal func withUTF8<R>(
-    of component: WebURL.Component, _ body: (UnsafeBufferPointer<UInt8>?) throws -> R
-  ) rethrows -> R {
-    switch self {
-    case .small(let storage): return try storage.withUTF8(of: component, body)
-    case .large(let storage): return try storage.withUTF8(of: component, body)
-    }
-  }
-
-  @inlinable
   internal func withUTF8OfAllAuthorityComponents<R>(
     _ body: (
       _ authorityString: UnsafeBufferPointer<UInt8>?,
@@ -810,6 +779,80 @@ extension AnyURLStorage {
     switch self {
     case .small(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
     case .large(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
+    }
+  }
+}
+
+/// The URL `a:` - essentially the smallest valid URL string. This is a used to temporarily occupy an `AnyURLStorage`,
+/// so that its _actual_ storage can be moved to a uniquely-referenced local variable.
+///
+/// It should not be possible to observe a URL whose storage is set to this object.
+///
+@usableFromInline
+internal let _tempStorage = AnyURLStorage(
+  URLStorage<BasicURLHeader<UInt8>>(
+    count: 2,
+    structure: URLStructure(
+      schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
+      portLength: 0, pathLength: 0, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 0,
+      sigil: nil, schemeKind: .other, cannotBeABaseURL: true, queryIsKnownFormEncoded: true),
+    initializingCodeUnitsWith: { buffer in
+      buffer[0] = ASCII.a.codePoint
+      buffer[1] = ASCII.colon.codePoint
+      return 2
+    }
+  )
+)
+
+extension AnyURLStorage {
+
+  @inlinable
+  internal mutating func withUnwrappedMutableStorage(
+    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage),
+    _ large: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage)
+  ) {
+    // We need to go through a bit of a dance in order to get a unique reference to the storage.
+    // It's like if you have something stuck to one hand and try to remove it with the other hand.
+    //
+    // Basically:
+    // 1. Swap our storage to temporarily point to some read-only global, so our only storage reference is
+    //    via a local variable.
+    // 2. Extract the URLStorage (which is a COW value type) from local variable's enum payload, and set
+    //    the local to also point that read-only global.
+    // 3. Hand that extracted storage off to closure `inout`, which does what it wants and
+    //    returns a storage object back (possibly the same storage object).
+    // 4. We round it all off by assigning that value as our new storage. Phew.
+    var localRef = self
+    self = _tempStorage
+    switch localRef {
+    case .large(var extracted_storage):
+      localRef = _tempStorage
+      self = large(&extracted_storage)
+    case .small(var extracted_storage):
+      localRef = _tempStorage
+      self = small(&extracted_storage)
+    }
+  }
+
+  @inlinable
+  internal mutating func withUnwrappedMutableStorage(
+    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
+    _ large: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage, URLSetterError?)
+  ) throws {
+    // As above, but allows the closure to return a URLSetterError.
+    var error: URLSetterError?
+    var localRef = self
+    self = _tempStorage
+    switch localRef {
+    case .large(var extracted_storage):
+      localRef = _tempStorage
+      (self, error) = large(&extracted_storage)
+    case .small(var extracted_storage):
+      localRef = _tempStorage
+      (self, error) = small(&extracted_storage)
+    }
+    if let error = error {
+      throw error
     }
   }
 }

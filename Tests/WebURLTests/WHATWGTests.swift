@@ -234,7 +234,7 @@ extension WHATWGTests {
     }
     // 2. Set the value.
     url[keyPath: property] = testcase.newValue
-    reporter.capture(key: "Actual result", url._debugDescription)
+    reporter.capture(key: "Actual result", url.urlValues.description)
     // 3. Check all given keys against their expected values.
     for (expected_key, expected_value) in testcase.expected {
       if let stringKey = webURLStringPropertyWithJSName(expected_key) {

@@ -417,7 +417,7 @@ extension Collection where Element == UInt8 {
     as encodeSet: KeyPath<PercentEncodeSet, EncodeSet.Type>
   ) -> String {
     withContiguousStorageIfAvailable {
-      String(decoding: $0.lazy.percentEncoded(as: encodeSet), as: UTF8.self)
+      String(decoding: $0.withoutTrappingOnIndexOverflow.lazy.percentEncoded(as: encodeSet), as: UTF8.self)
     } ?? String(decoding: self.lazy.percentEncoded(as: encodeSet), as: UTF8.self)
   }
 
@@ -701,7 +701,7 @@ extension Collection where Element == UInt8 {
     from decodeSet: KeyPath<PercentDecodeSet, EncodeSet.Type>
   ) -> String where EncodeSet: PercentEncodeSetProtocol {
     withContiguousStorageIfAvailable {
-      String(decoding: $0.lazy.percentDecodedUTF8(from: decodeSet), as: UTF8.self)
+      String(decoding: $0.withoutTrappingOnIndexOverflow.lazy.percentDecodedUTF8(from: decodeSet), as: UTF8.self)
     } ?? String(decoding: self.lazy.percentDecodedUTF8(from: decodeSet), as: UTF8.self)
   }
 

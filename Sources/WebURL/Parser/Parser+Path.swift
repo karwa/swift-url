@@ -49,7 +49,7 @@ internal protocol _PathParser {
   /// - parameters:
   ///   - pathComponent: The path component yielded by the parser.
   ///
-  mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>)
+  mutating func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence)
 
   /// A callback which is invoked when the parser yields a number of consecutive empty path components.
   /// Note that this does not imply that path components yielded via other callbacks are non-empty.
@@ -306,14 +306,11 @@ extension _PathParser {
       assert(isInputAbsolute)
       visitEmptyPathComponent()
       if isFileScheme, let base = baseURL {
-        base.storage.withUTF8(of: .path) {
-          if let path = $0,
-            let drive = PathComponentParser._normalizedWindowsDrive(
-              in: path, firstCmptLength: base.storage.structure.firstPathComponentLength
-            )
-          {
-            visitBasePathComponent(drive)
-          }
+        let _baseDrive = PathComponentParser._normalizedWindowsDrive(
+          in: base.utf8.path, firstCmptLength: base.storage.structure.firstPathComponentLength
+        )
+        if let baseDrive = _baseDrive {
+          visitBasePathComponent(baseDrive)
         }
       }
       return
@@ -427,84 +424,83 @@ extension _PathParser {
       "Since the input path was not empty, we must have either deferred or yielded something from it."
     )
 
-    withUTF8OfOptionalURL(baseURL, component: .path) {
+    let _basePath = baseURL?.utf8.path
+    var baseDrive: WebURL.UTF8View.SubSequence?
 
-      var baseDrive: UnsafeBufferPointer<UInt8>?
-      if isFileScheme {
-        if let basePath = $0 {
-          let baseURLFirstCmptLength = baseURL.unsafelyUnwrapped.storage.structure.firstPathComponentLength
-          baseDrive = PathComponentParser._normalizedWindowsDrive(in: basePath, firstCmptLength: baseURLFirstCmptLength)
-        }
-        // If the first written component of the input string is a Windows drive letter, the path is never relative -
-        // even if it normally would be. [URL Standard: "file" state, "file slash" state]
-        if case .potentialWindowsDrive(let firstComponent, _) = deferredComponent,
-          firstComponent.startIndex == input_firstComponentStart
-        {
-          visitInputPathComponent(firstComponent, isWindowsDriveLetter: true)
-          return
-        }
-        // If the Windows drive is not the first written component of the input string, and the path is absolute,
-        // we still prefer to use the drive from the base URL. [URL Standard: "file slash" state]
-        if isInputAbsolute, absolutePathsCopyWindowsDriveFromBase, let baseDrive = baseDrive {
-          _flushAndMergePopcount(&deferredComponent, &state)
-          visitBasePathComponent(baseDrive)
-          return
-        }
+    if isFileScheme {
+      if let basePath = _basePath {
+        let baseURLFirstCmptLength = baseURL.unsafelyUnwrapped.storage.structure.firstPathComponentLength
+        baseDrive = PathComponentParser._normalizedWindowsDrive(in: basePath, firstCmptLength: baseURLFirstCmptLength)
       }
-
-      guard isInputAbsolute == false, let basePath = $0 else {
-        _flushForFinalization(&deferredComponent, &state)
-        return  // Absolute paths, and relative paths with no base URL, are finished now.
+      // If the first written component of the input string is a Windows drive letter, the path is never relative -
+      // even if it normally would be. [URL Standard: "file" state, "file slash" state]
+      if case .potentialWindowsDrive(let firstComponent, _) = deferredComponent,
+        firstComponent.startIndex == input_firstComponentStart
+      {
+        visitInputPathComponent(firstComponent, isWindowsDriveLetter: true)
+        return
       }
-      assert(basePath.first == ASCII.forwardSlash.codePoint, "Normalized base paths must start with a /")
-
-      // Drop the last path component (unless it is a Windows drive, in which case flush and we're done).
-      if let baseDrive = baseDrive, basePath.count == 3 {
+      // If the Windows drive is not the first written component of the input string, and the path is absolute,
+      // we still prefer to use the drive from the base URL. [URL Standard: "file slash" state]
+      if isInputAbsolute, absolutePathsCopyWindowsDriveFromBase, let baseDrive = baseDrive {
         _flushAndMergePopcount(&deferredComponent, &state)
         visitBasePathComponent(baseDrive)
         return
       }
-      var remainingBasePath = basePath[..<(basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex)]
+    }
 
-      while let separatorIndex = remainingBasePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
-        let pathComponent = remainingBasePath[
-          Range(uncheckedBounds: (remainingBasePath.index(after: separatorIndex), remainingBasePath.endIndex))
-        ]
+    guard isInputAbsolute == false, let basePath = _basePath, basePath.startIndex < basePath.endIndex else {
+      _flushForFinalization(&deferredComponent, &state)
+      return  // Absolute paths, and relative paths with no base URL, are finished now.
+    }
+    assert(basePath.first == ASCII.forwardSlash.codePoint, "Normalized non-empty base paths must start with a /")
 
-        assert(PathComponentParser.isDoubleDotPathSegment(pathComponent) == false)
-        assert(PathComponentParser.isSingleDotPathSegment(pathComponent) == false)
+    // Drop the last base path component (unless it is a Windows drive, in which case flush and we're done).
+    if let baseDrive = baseDrive, basePath.count == 3 {
+      _flushAndMergePopcount(&deferredComponent, &state)
+      visitBasePathComponent(baseDrive)
+      return
+    }
+    var remainingBasePath = basePath[..<(basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex)]
 
-        switch pathComponent {
-        // If the base path has a Windows drive letter, we can flush everything and end.
-        case _ where separatorIndex == basePath.startIndex && baseDrive != nil:
-          _flushAndMergePopcount(&deferredComponent, &state)
-          visitBasePathComponent(baseDrive!)
-          return
+    while let separatorIndex = remainingBasePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
+      let pathComponent = remainingBasePath[
+        Range(uncheckedBounds: (remainingBasePath.index(after: separatorIndex), remainingBasePath.endIndex))
+      ]
 
-        case _ where state.popcount != 0:
-          state.popcount -= 1
+      assert(PathComponentParser.isDoubleDotPathSegment(pathComponent) == false)
+      assert(PathComponentParser.isSingleDotPathSegment(pathComponent) == false)
 
-        case _ where deferredComponent?.isPotentialWindowsDrive == true:
-          _flushAndMergePopcount(&deferredComponent, &state)
-          continue  // Re-check this component with the new popcount.
+      switch pathComponent {
+      // If we reached the base path's Windows drive letter, we can flush everything and end.
+      case _ where separatorIndex == basePath.startIndex && baseDrive != nil:
+        _flushAndMergePopcount(&deferredComponent, &state)
+        visitBasePathComponent(baseDrive!)
+        return
 
-        default:
-          if pathComponent.isEmpty {
-            _deferEmptyAssertNotWindowsDrive(&deferredComponent, &state)
-          } else {
-            _flushEmptiesAssertNotWindowsDrive(&deferredComponent, &state)
-            visitBasePathComponent(UnsafeBufferPointer(rebasing: pathComponent))
-            state.didYieldComponent = true
-          }
+      case _ where state.popcount != 0:
+        state.popcount -= 1
+
+      case _ where deferredComponent?.isPotentialWindowsDrive == true:
+        _flushAndMergePopcount(&deferredComponent, &state)
+        continue  // Re-check this component with the new popcount.
+
+      default:
+        if pathComponent.isEmpty {
+          _deferEmptyAssertNotWindowsDrive(&deferredComponent, &state)
+        } else {
+          _flushEmptiesAssertNotWindowsDrive(&deferredComponent, &state)
+          visitBasePathComponent(pathComponent)
+          state.didYieldComponent = true
         }
-
-        remainingBasePath = remainingBasePath[Range(uncheckedBounds: (remainingBasePath.startIndex, separatorIndex))]
       }
 
-      assert(remainingBasePath.isEmpty, "Normalized base paths must start with a /")
-      _flushForFinalization(&deferredComponent, &state)
-      return  // Finally done!
+      remainingBasePath = remainingBasePath[Range(uncheckedBounds: (remainingBasePath.startIndex, separatorIndex))]
     }
+
+    assert(remainingBasePath.isEmpty, "Normalized non-empty base paths must start with a /")
+    _flushForFinalization(&deferredComponent, &state)
+    // Finally done!
   }
 }
 
@@ -607,7 +603,7 @@ extension PathMetrics {
     }
 
     @inlinable
-    internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+    internal mutating func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence) {
       metrics.numberOfComponents += 1
       metrics.firstComponentLength = 1 /* "/" */ + pathComponent.count
       metrics.requiredCapacity += metrics.firstComponentLength
@@ -750,10 +746,14 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     }
 
     @inlinable
-    internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
-      front &-= pathComponent.count
-      buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
-        .initialize(from: pathComponent.baseAddress!, count: pathComponent.count)
+    internal mutating func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence) {
+      let count = pathComponent.count
+      let newFront = front &- count
+      _ = UnsafeMutableBufferPointer(
+        start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
+        count: count
+      ).fastInitialize(from: pathComponent)
+      front = newFront
       prependSlash()
     }
   }
@@ -825,7 +825,7 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
   }
 
   @usableFromInline
-  internal mutating func visitBasePathComponent(_ pathComponent: UnsafeBufferPointer<UInt8>) {
+  internal mutating func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence) {
     assertionFailure("Should never be invoked without a base URL")
   }
 
@@ -853,28 +853,6 @@ extension PathComponentParser where T == Never {
   @inlinable @inline(__always)
   internal static func isPathSeparator(_ codeUnit: UInt8, scheme: WebURL.SchemeKind) -> Bool {
     ASCII(codeUnit) == .forwardSlash || (scheme.isSpecial && ASCII(codeUnit) == .backslash)
-  }
-}
-
-extension PathComponentParser where T == UnsafeBufferPointer<UInt8> {
-
-  /// Interprets the given buffer as a URL's normalized path whose first component length is `firstCmptLength`, and returns a rebased slice of the buffer
-  /// covering the path's normalized Windows drive letter, if it has one. If `firstCmptLength` is greater than 0, the buffer's address must not be `nil`.
-  ///
-  /// Windows drive letters only have meaning for `file` URLs.
-  ///
-  @inlinable
-  internal static func _normalizedWindowsDrive(
-    in path: UnsafeBufferPointer<UInt8>, firstCmptLength: Int
-  ) -> UnsafeBufferPointer<UInt8>? {
-
-    if firstCmptLength == 3 {
-      let firstComponentContent = UnsafeBufferPointer(start: path.baseAddress.unsafelyUnwrapped + 1, count: 2)
-      if PathComponentParser.isNormalizedWindowsDriveLetter(firstComponentContent) {
-        return firstComponentContent
-      }
-    }
-    return nil
   }
 }
 
@@ -920,6 +898,25 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
     case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: return true
     default: return false
     }
+  }
+
+  /// Interprets the given collection as a URL's normalized path whose first component length is `firstCmptLength`, and returns a slice
+  /// covering the path's normalized Windows drive letter, if it has one.
+  ///
+  /// Windows drive letters only have meaning for `file` URLs.
+  ///
+  @inlinable
+  internal static func _normalizedWindowsDrive(
+    in path: T, firstCmptLength: Int
+  ) -> T.SubSequence? {
+
+    if firstCmptLength == 3 {
+      let firstComponentContent = path.dropFirst().prefix(2)
+      if PathComponentParser<T.SubSequence>.isNormalizedWindowsDriveLetter(firstComponentContent) {
+        return firstComponentContent
+      }
+    }
+    return nil
   }
 
   /// Returns `true` if the next contents of `iterator` are either the ASCII byte U+002E (.), the string "%2e", or "%2E".

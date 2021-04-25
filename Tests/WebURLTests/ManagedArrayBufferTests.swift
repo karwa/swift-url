@@ -387,5 +387,74 @@ extension ManagedArrayBufferTests {
     }
     XCTAssertNotNil(lastBuffer)  // Needs to be read to silence warning.
   }
+}
 
+extension ManagedArrayBufferTests {
+
+  func doTestRemoveSubrange(_ didFinishTestStep: (inout ManagedArrayBuffer<DataHolderHeader<Int>, Int>) -> Void) {
+
+    var buffer = ManagedArrayBuffer<DataHolderHeader<Int>, Int>(
+      minimumCapacity: 10, initialHeader: DataHolderHeader(data: 42, count: -1, capacity: -1)
+    )
+    buffer.reserveCapacity(500)  // Make sure we never reallocate due to capacity, only due to COW.
+    didFinishTestStep(&buffer)
+
+    XCTAssertEqualElements(buffer, [])
+    XCTAssertTrue(buffer.isEmpty)
+    buffer.append(contentsOf: 100..<200)
+    XCTAssertEqualElements(buffer, 100..<200)
+    didFinishTestStep(&buffer)
+
+    // Remove from the start.
+    let index0 = buffer.removeSubrange(0..<10)
+    XCTAssertEqualElements(buffer, [110..<200].joined())
+    XCTAssertEqual(index0, 0)
+    XCTAssertEqual(buffer.header.data, 42)
+    XCTAssertEqual(buffer.count, 90)
+    XCTAssertEqual(buffer.header.count, 90)
+    didFinishTestStep(&buffer)
+
+    // Remove from the middle.
+    let index1 = buffer.removeSubrange(40..<50)
+    XCTAssertEqualElements(buffer, [110..<150, 160..<200].joined())
+    XCTAssertEqual(index1, 40)
+    XCTAssertEqual(buffer.header.data, 42)
+    XCTAssertEqual(buffer.count, 80)
+    XCTAssertEqual(buffer.header.count, 80)
+    didFinishTestStep(&buffer)
+
+    // Remove from the end.
+    let index2 = buffer.removeSubrange(70..<80)
+    XCTAssertEqualElements(buffer, [110..<150, 160..<190].joined())
+    XCTAssertEqual(index2, 70)
+    XCTAssertEqual(buffer.header.data, 42)
+    XCTAssertEqual(buffer.count, 70)
+    XCTAssertEqual(buffer.header.count, 70)
+    didFinishTestStep(&buffer)
+  }
+
+  func testRemoveSubrange_inplace() {
+    var lastAddress: UnsafePointer<Int>?
+    doTestRemoveSubrange { buffer in
+      let thisAddress = buffer.withUnsafeBufferPointer { $0.baseAddress }
+      if lastAddress != nil {
+        XCTAssertEqual(lastAddress, thisAddress)
+      }
+      lastAddress = thisAddress
+    }
+  }
+
+  func testRemoveSubrange_outOfPlace() {
+    var lastAddress: UnsafePointer<Int>?
+    var lastBuffer: ManagedArrayBuffer<DataHolderHeader<Int>, Int>?
+    doTestRemoveSubrange { buffer in
+      let thisAddress = buffer.withUnsafeBufferPointer { $0.baseAddress }
+      if lastAddress != nil {
+        XCTAssertNotEqual(lastAddress, thisAddress)
+      }
+      lastAddress = thisAddress
+      lastBuffer = buffer  // Escape the buffer.
+    }
+    XCTAssertNotNil(lastBuffer)  // Needs to be read to silence warning.
+  }
 }
