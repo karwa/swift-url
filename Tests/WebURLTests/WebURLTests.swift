@@ -26,8 +26,7 @@ extension WebURLTests {
   ///
   func testURLConstructor() throws {
 
-    let url = URL(fileURLWithPath: #file).deletingLastPathComponent()
-      .appendingPathComponent("additional_constructor_tests.json")
+    let url = Bundle.module.url(forResource: "Resources/additional_constructor_tests", withExtension: "json")!
     let fileContents = try JSONDecoder().decode([URLConstructorTest.FileEntry].self, from: try Data(contentsOf: url))
     assert(
       fileContents.count == 83,

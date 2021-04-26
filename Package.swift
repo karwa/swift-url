@@ -1,4 +1,4 @@
-// swift-tools-version:5.1
+// swift-tools-version:5.3
 
 // Copyright The swift-url Contributors.
 //
@@ -24,11 +24,15 @@ let package = Package(
   ],
   dependencies: [
     // Swift-checkit for testing protocol conformances.
-    .package(url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
+    .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
   ],
   targets: [
     .target(name: "WebURL"),
     .target(name: "WebURLTestSupport", dependencies: ["WebURL"]),
-    .testTarget(name: "WebURLTests", dependencies: ["WebURL", "WebURLTestSupport", "Checkit"]),
+    .testTarget(
+      name: "WebURLTests",
+      dependencies: ["WebURL", "WebURLTestSupport", "Checkit"],
+      resources: [.copy("Resources")]
+    ),
   ]
 )

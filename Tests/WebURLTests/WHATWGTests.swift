@@ -37,7 +37,7 @@ final class WHATWGTests: ReportGeneratingTestCase {}
 extension WHATWGTests {
 
   func testURLConstructor() throws {
-    let url = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("urltestdata.json")
+    let url = Bundle.module.url(forResource: "Resources/urltestdata", withExtension: "json")!
     let fileContents = try JSONDecoder().decode([URLConstructorTest.FileEntry].self, from: try Data(contentsOf: url))
     assert(
       fileContents.count == 665,
@@ -143,13 +143,12 @@ extension WHATWGTests {
   }
 
   func testURLSetters() throws {
-    let url = URL(fileURLWithPath: #file).deletingLastPathComponent().appendingPathComponent("setters_tests.json")
+    let url = Bundle.module.url(forResource: "Resources/setters_tests", withExtension: "json")!
     try runURLSetterTest(inputFile: url, reportName: "weburl_setters_wpt.txt")
   }
 
   func testURLSetters_additional() throws {
-    let url = URL(fileURLWithPath: #file).deletingLastPathComponent()
-      .appendingPathComponent("additional_setters_tests.json")
+    let url = Bundle.module.url(forResource: "Resources/additional_setters_tests", withExtension: "json")!
     try runURLSetterTest(inputFile: url, reportName: "weburl_setters_more.txt")
   }
 
