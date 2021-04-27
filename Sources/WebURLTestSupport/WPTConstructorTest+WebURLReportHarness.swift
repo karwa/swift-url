@@ -14,9 +14,9 @@
 
 import WebURL
 
-extension URLConstructorTest {
+extension WPTConstructorTest {
 
-  /// A harness for running a series of `URLConstructorTest`s with the `WebURL` parser and accumulating the results in a `SimpleTestReport`.
+  /// A harness for running a series of `WPTConstructorTest`s with the `WebURL` parser and accumulating the results in a `SimpleTestReport`.
   ///
   public struct WebURLReportHarness {
     public private(set) var report = SimpleTestReport()
@@ -29,21 +29,18 @@ extension URLConstructorTest {
   }
 }
 
-extension URLConstructorTest.WebURLReportHarness: URLConstructorTest.Harness {
+extension WPTConstructorTest.WebURLReportHarness: WPTConstructorTest.Harness {
 
   public func parseURL(_ input: String, base: String?) -> URLValues? {
     return WebURL.JSModel(input, base: base)?.urlValues
   }
 
-  public mutating func reportNonTestEntry(_ entry: URLConstructorTest.FileEntry) {
+  public mutating func reportComment(_ comment: String) {
     entriesSeen += 1
-    switch entry {
-    case .comment(let comment): report.markSection(comment)
-    case .testcase: assertionFailure("Unexpected test in reportNonTestEntry")
-    }
+    report.markSection(comment)
   }
 
-  public mutating func reportTestResult(_ result: URLConstructorTest.Result) {
+  public mutating func reportTestResult(_ result: WPTConstructorTest.Result) {
     entriesSeen += 1
     report.performTest { reporter in
       reporter.capture(key: "Testcase", result.testcase)
@@ -67,11 +64,8 @@ extension URLConstructorTest.WebURLReportHarness: URLConstructorTest.Harness {
           reporter.fail("Unexpected successful parsing")
         }
         if let _ = remainingFailures.remove(.propertyMismatch) {
-          let diff = URLValues.diff(result.testcase.expectedValues, result.propertyValues)
-          let namedDiff = URLValues.allProperties.filter { diff.contains($0.keyPath) }
-          assert(!diff.isEmpty && !namedDiff.isEmpty, "Test failed due to mismatching properties, but diff was empty")
-          for (mismatchingPropertyName, _) in namedDiff {
-            reporter.fail(mismatchingPropertyName)
+          for mismatch in URLValues.diff(result.testcase.expectedValues, result.propertyValues) {
+            reporter.fail(mismatch.name)
           }
         }
         if let _ = remainingFailures.remove(.notIdempotent) {

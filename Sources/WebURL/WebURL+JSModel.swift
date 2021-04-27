@@ -232,6 +232,16 @@ extension WebURL.JSModel {
     }
   }
 
+  /// Gets the host portion of the URL.
+  ///
+  public var host: String {
+    guard let hostname = storage.utf8.hostname else { return "" }
+    if let port = storage.utf8.port {
+      return String(decoding: storage.utf8[hostname.startIndex..<port.endIndex], as: UTF8.self)
+    }
+    return String(decoding: hostname, as: UTF8.self)
+  }
+
   /// Gets and sets the port portion of the URL.
   ///
   public var port: String {

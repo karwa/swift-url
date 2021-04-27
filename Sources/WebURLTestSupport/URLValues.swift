@@ -14,36 +14,59 @@
 
 import WebURL
 
+/// A property exposed by the WHATWG URL model.
+///
+public enum URLModelProperty: String, CaseIterable, Equatable, Hashable, CodingKey {
+  case href = "href"
+  case origin = "origin"
+  case `protocol` = "protocol"
+  case username = "username"
+  case password = "password"
+  case host = "host"
+  case hostname = "hostname"
+  case port = "port"
+  case pathname = "pathname"
+  case search = "search"
+  case hash = "hash"
+
+  public var name: String {
+    stringValue
+  }
+}
+
 /// A storage type for the properties exposed in the WHATWG URL model.
 ///
 public struct URLValues: Equatable, Hashable {
-  public var href: String
-  public var `protocol`: String
-  public var username: String
-  public var password: String
-  public var host: String
-  public var hostname: String
-  public var port: String
-  public var pathname: String
-  public var search: String
-  public var hash: String
-
+  private var href: String
+  private var `protocol`: String
+  private var username: String
+  private var password: String
+  private var host: String
+  private var hostname: String
+  private var port: String
+  private var pathname: String
+  private var search: String
+  private var hash: String
   // Unfortunately, the WPT constructor tests often omit the origin 😐.
   // "The origin key may be missing. In that case, the API’s origin attribute is not tested."
   public var origin: String?
 
-  public static var allProperties: [(name: String, keyPath: PartialKeyPath<URLValues>)] {
-    var result = [(String, PartialKeyPath<URLValues>)]()
-    result.append(("href", \URLValues.href))
-    result.append(("origin", \URLValues.origin))
-    result.append(contentsOf: [
-      ("protocol", \URLValues.protocol),
-      ("username", \URLValues.username), ("password", \URLValues.password),
-      ("hostname", \URLValues.hostname), ("port", \URLValues.port),
-      ("pathname", \URLValues.pathname), ("search", \URLValues.search), ("hash", \URLValues.hash),
-    ])
-
-    return result
+  public subscript(property: URLModelProperty) -> String? {
+    get {
+      switch property {
+      case .href: return href
+      case .origin: return origin
+      case .protocol: return self.protocol
+      case .username: return username
+      case .password: return password
+      case .host: return host
+      case .hostname: return hostname
+      case .port: return port
+      case .pathname: return pathname
+      case .search: return search
+      case .hash: return hash
+      }
+    }
   }
 
   public init(
@@ -91,7 +114,7 @@ extension WebURL.JSModel {
     return .init(
       href: href, origin: origin, protocol: scheme,
       username: username, password: password,
-      host: "<unsupported>", hostname: hostname, port: port,
+      host: host, hostname: hostname, port: port,
       pathname: pathname, search: search, hash: fragment
     )
   }
@@ -100,35 +123,34 @@ extension WebURL.JSModel {
 
 extension URLValues {
 
-  /// The properties which must always be present, and always be tested.
-  private static var requiredProperties: [KeyPath<URLValues, String>] {
-    return [
-      \.href,
-      \.protocol,
-      \.username, \.password,
-      // TODO: 'host' not yet supported by WebURL.
-      \.hostname, \.port,
-      \.pathname, \.search, \.hash,
-    ]
-  }
-
-  public static func diff(_ lhs: URLValues?, _ rhs: URLValues?) -> [PartialKeyPath<URLValues>] {
+  public static func diff(_ lhs: URLValues?, _ rhs: URLValues?) -> [URLModelProperty] {
     switch (lhs, rhs) {
     case (.none, .none): return []
-    case (.some, .none), (.none, .some): return requiredProperties
+    case (.some, .none), (.none, .some): return URLModelProperty.allCases
     case (.some(let lhs), .some(let rhs)): return rhs.allMismatchingURLProperties(comparedWith: lhs)
     }
   }
 
-  func allMismatchingURLProperties(comparedWith other: URLValues) -> [PartialKeyPath<URLValues>] {
-    var results = [PartialKeyPath<URLValues>]()
-    for property in Self.requiredProperties {
-      if self[keyPath: property] != other[keyPath: property] {
+  /// The properties which must always be present, and always be tested.
+  private static var minimumPropertiesToDiff: [URLModelProperty] {
+    return [
+      .href,
+      .protocol,
+      .username, .password,
+      .hostname, .port, .host,
+      .pathname, .search, .hash,
+    ]
+  }
+
+  func allMismatchingURLProperties(comparedWith other: URLValues) -> [URLModelProperty] {
+    var results = [URLModelProperty]()
+    for property in Self.minimumPropertiesToDiff {
+      if self[property] != other[property] {
         results.append(property)
       }
     }
     if let origin = self.origin, let otherOrigin = other.origin, origin != otherOrigin {
-      results.append(\URLValues.origin)
+      results.append(.origin)
     }
     return results
   }
