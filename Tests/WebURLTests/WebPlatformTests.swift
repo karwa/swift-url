@@ -17,24 +17,18 @@ import XCTest
 
 @testable import WebURL
 
-// Data files:
-//
-// Constructor tests:
+final class WebPlatformTests: ReportGeneratingTestCase {}
+
+
+// --------------------------------------------
+// MARK: - URL Constructor
+// --------------------------------------------
 // https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json
 // at version 33e4ac09029c463ea6ee57d6f33477a9043e98e8
 // Adjusted to remove an invalid surrogate pair which Foundation's JSON parser refuses to parse.
-//
-// Setter tests:
-// https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json
-// at version 050308a616a8388f1ad5d6e87eac0270fd35023f (unaltered).
 
-final class WHATWGTests: ReportGeneratingTestCase {}
 
-// WHATWG URL Constructor Tests.
-// Creates a URL object from a (input: String, base: String) pair, and checks that it has the expected
-// properties (host, port, path, etc).
-//
-extension WHATWGTests {
+extension WebPlatformTests {
 
   func testURLConstructor() throws {
     let url = Bundle.module.url(forResource: "Resources/urltestdata", withExtension: "json")!
@@ -43,6 +37,7 @@ extension WHATWGTests {
       testFile.tests.count == 665,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
+
     var harness = WPTConstructorTest.WebURLReportHarness(expectedFailures: [
       // These test failures are due to us not having implemented the `domain2ascii` transform,
       // often in combination with other features (e.g. with percent encoding).
@@ -58,12 +53,9 @@ extension WHATWGTests {
       566,  // domain2ascii: IDNA ignored code points in file URLs hosts.
       567,  // domain2ascii: IDNA ignored code points in file URLs hosts.
     ])
-
     harness.runTests(testFile)
     XCTAssert(harness.entriesSeen == 665, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
-
-    // Generate a report file because the XCTest ones really aren't that helpful.
 
     let reportURL = fileURLForReport(named: "weburl_constructor_wpt.txt")
     try harness.report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
@@ -71,37 +63,39 @@ extension WHATWGTests {
   }
 
   func testURLConstructor_additional() throws {
-
     let url = Bundle.module.url(forResource: "Resources/additional_constructor_tests", withExtension: "json")!
     let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: try Data(contentsOf: url))
     assert(
       testFile.tests.count == 83,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
+
     var harness = WPTConstructorTest.WebURLReportHarness()
     harness.runTests(testFile)
     XCTAssert(harness.entriesSeen == 83, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
-    // Generate a report file because the XCTest ones really aren't that helpful.
     let reportURL = fileURLForReport(named: "weburl_constructor_more.txt")
     try harness.report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
     print("ℹ️ Report written to \(reportURL)")
   }
 }
 
-// WHATWG Setter Tests.
-// Creates a URL object from an input String (which must not fail), and modifies one property.
-// Checks the resulting (serialised) URL and that the property now returns the expected value,
-// including making any necessary transformations or ignoring invalid new-values.
-//
-extension WHATWGTests {
+
+// --------------------------------------------
+// MARK: - Setters
+// --------------------------------------------
+// https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json
+// at version 050308a616a8388f1ad5d6e87eac0270fd35023f
+
+
+extension WebPlatformTests {
 
   func testURLSetters() throws {
     let url = Bundle.module.url(forResource: "Resources/setters_tests", withExtension: "json")!
     let testFile = try JSONDecoder().decode(WPTSetterTest.TestFile.self, from: try Data(contentsOf: url))
-    var harness = WPTSetterTest.WebURLReportHarness()
 
+    var harness = WPTSetterTest.WebURLReportHarness()
     harness.runTests(testFile)
     XCTAssertEqual(harness.entriesSeen, 156, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
@@ -114,8 +108,8 @@ extension WHATWGTests {
   func testURLSetters_additional() throws {
     let url = Bundle.module.url(forResource: "Resources/additional_setters_tests", withExtension: "json")!
     let testFile = try JSONDecoder().decode(WPTSetterTest.TestFile.self, from: try Data(contentsOf: url))
-    var harness = WPTSetterTest.WebURLReportHarness()
 
+    var harness = WPTSetterTest.WebURLReportHarness()
     harness.runTests(testFile)
     XCTAssertEqual(harness.entriesSeen, 5, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
