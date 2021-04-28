@@ -79,7 +79,7 @@ extension WPTConstructorTest {
   ///
   ///      The `origin` key may be missing. In that case, the API’s `origin` attribute is not tested.
   ///
-  public struct Testcase: Codable {
+  public struct Testcase: Equatable, Hashable, Codable {
     public var input: String
     public var base: String
     public var expectedValues: URLValues? = nil
@@ -236,7 +236,7 @@ extension WPTConstructorTest {
 
   /// The result of executing a WPT URL constructor test.
   ///
-  public struct Result {
+  public struct Result: Equatable, Hashable {
 
     /// The number of tests that have been run prior to this test.
     public var testNumber: Int

@@ -47,7 +47,7 @@ extension WPTSetterTest {
 
   /// A WPT URL setter test for a particular property, consisting of a starting URL, new value for the property, and expected property values after the set operation.
   ///
-  public struct Testcase: Codable {
+  public struct Testcase: Equatable, Hashable, Codable {
     public var comment: String?
     public var href: String
     public var new_value: String
@@ -124,7 +124,7 @@ extension WPTSetterTest {
 
   /// The result of executing a WPT URL setter test.
   ///
-  public struct Result {
+  public struct Result: Equatable, Hashable {
 
     /// The property that was set by this test.
     public var property: URLModelProperty
