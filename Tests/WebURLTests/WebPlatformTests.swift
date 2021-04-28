@@ -38,7 +38,7 @@ func loadTestResource(name: String) -> Data? {
 // MARK: - URL Constructor
 // --------------------------------------------
 // https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json
-// at version 33e4ac09029c463ea6ee57d6f33477a9043e98e8
+// at version 52e358a1209a23c42e9443641c7ed0ba23600c93
 // Adjusted to remove an invalid surrogate pair which Foundation's JSON parser refuses to parse.
 
 
@@ -48,7 +48,7 @@ extension WebPlatformTests {
     let data = loadTestResource(name: "urltestdata")!
     let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: data)
     assert(
-      testFile.tests.count == 665,
+      testFile.tests.count == 696,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
 
@@ -64,11 +64,11 @@ extension WebPlatformTests {
       286,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
       369,  // domain2ascii: Hosts and percent-encoding.
       370,  // domain2ascii: Hosts and percent-encoding.
-      566,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      567,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      582,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      583,  // domain2ascii: IDNA ignored code points in file URLs hosts.
     ])
     harness.runTests(testFile)
-    XCTAssert(harness.entriesSeen == 665, "Unexpected number of tests executed.")
+    XCTAssert(harness.entriesSeen == 696, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "weburl_constructor_wpt.txt")
@@ -80,13 +80,13 @@ extension WebPlatformTests {
     let data = loadTestResource(name: "additional_constructor_tests")!
     let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: data)
     assert(
-      testFile.tests.count == 83,
+      testFile.tests.count == 82,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
 
     var harness = WPTConstructorTest.WebURLReportHarness()
     harness.runTests(testFile)
-    XCTAssert(harness.entriesSeen == 83, "Unexpected number of tests executed.")
+    XCTAssert(harness.entriesSeen == 82, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "weburl_constructor_more.txt")

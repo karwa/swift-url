@@ -510,20 +510,6 @@
     "search": "",
     "hash": ""
   },
-  {
-    "input": "not-file://D|/../foo",
-    "base": "not-file:///C:/bar/baz/qux",
-    "href": "not-file://D|/foo",
-    "protocol": "not-file:",
-    "username": "",
-    "password": "",
-    "host": "D|",
-    "hostname": "D|",
-    "port": "",
-    "pathname": "/foo",
-    "search": "",
-    "hash": ""
-  },
   "[Path] 3+ leading slashes.",
   {
     "input": "file:///././D|/../foo",
