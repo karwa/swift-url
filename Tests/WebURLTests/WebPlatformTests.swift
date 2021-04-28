@@ -19,6 +19,20 @@ import XCTest
 
 final class WebPlatformTests: ReportGeneratingTestCase {}
 
+func loadTestResource(name: String) -> Data? {
+  // Yeah. This is for real.
+  // I'm pretty massively disappointed that I need to do this.
+  #if os(macOS)
+    let url = Bundle.module.url(forResource: "Resources/\(name)", withExtension: "json")!
+    return try? Data(contentsOf: url)  
+  #else
+    var path = #filePath
+    path.removeLast(22) // "WebPlatformTests.swift"
+    path += "Resources/\(name).json"
+    return FileManager.default.contents(atPath: path)
+  #endif
+}
+
 
 // --------------------------------------------
 // MARK: - URL Constructor
@@ -31,8 +45,8 @@ final class WebPlatformTests: ReportGeneratingTestCase {}
 extension WebPlatformTests {
 
   func testURLConstructor() throws {
-    let url = Bundle.module.url(forResource: "Resources/urltestdata", withExtension: "json")!
-    let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: try Data(contentsOf: url))
+    let data = loadTestResource(name: "urltestdata")!
+    let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: data)
     assert(
       testFile.tests.count == 665,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
@@ -63,8 +77,8 @@ extension WebPlatformTests {
   }
 
   func testURLConstructor_additional() throws {
-    let url = Bundle.module.url(forResource: "Resources/additional_constructor_tests", withExtension: "json")!
-    let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: try Data(contentsOf: url))
+    let data = loadTestResource(name: "additional_constructor_tests")!
+    let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: data)
     assert(
       testFile.tests.count == 83,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
@@ -92,8 +106,8 @@ extension WebPlatformTests {
 extension WebPlatformTests {
 
   func testURLSetters() throws {
-    let url = Bundle.module.url(forResource: "Resources/setters_tests", withExtension: "json")!
-    let testFile = try JSONDecoder().decode(WPTSetterTest.TestFile.self, from: try Data(contentsOf: url))
+    let data = loadTestResource(name: "setters_tests")!
+    let testFile = try JSONDecoder().decode(WPTSetterTest.TestFile.self, from: data)
 
     var harness = WPTSetterTest.WebURLReportHarness()
     harness.runTests(testFile)
@@ -106,8 +120,8 @@ extension WebPlatformTests {
   }
 
   func testURLSetters_additional() throws {
-    let url = Bundle.module.url(forResource: "Resources/additional_setters_tests", withExtension: "json")!
-    let testFile = try JSONDecoder().decode(WPTSetterTest.TestFile.self, from: try Data(contentsOf: url))
+    let data = loadTestResource(name: "additional_setters_tests")!
+    let testFile = try JSONDecoder().decode(WPTSetterTest.TestFile.self, from: data)
 
     var harness = WPTSetterTest.WebURLReportHarness()
     harness.runTests(testFile)
