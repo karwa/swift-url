@@ -343,7 +343,7 @@ extension WebURL.PathComponents {
   ///
   /// The contents of the appended components will be percent-encoded, if necessary.
   /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive), those components are ignored.
-	///
+  ///
   /// If appending to a path whose last component is empty (i.e. a directory path),
   /// the trailing empty component will be dropped and replaced by the first inserted component.
   ///

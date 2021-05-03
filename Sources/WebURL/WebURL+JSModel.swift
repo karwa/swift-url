@@ -248,7 +248,7 @@ extension WebURL.JSModel {
     }
   }
 
-	/// Gets and sets the host name portion of the URL.
+  /// Gets and sets the host name portion of the URL.
   /// The key difference between `url.host` and `url.hostname` is that `url.hostname` does not include the port.
   ///
   public var hostname: String {

@@ -77,21 +77,7 @@ public struct WebURL {
   ///
   @inlinable @inline(__always)
   public func resolve<S>(_ string: S) -> WebURL? where S: StringProtocol, S.UTF8View: BidirectionalCollection {
-    resolve(utf8: string.utf8)
-  }
-
-  /// Parses the given string, which is provided as a collection of UTF-8 code-units, with this URL as its base.
-  ///
-  /// This function supports a wide range of relative URL strings, producing the same result as an HTML `<a>` tag on the page given by this URL.
-  ///
-  /// It should be noted that this method accepts protocol-relative URLs, which are able to direct to a different hostname, as well as absolute URL strings,
-  /// which do not copy any information from their base URLs.
-  ///
-  @inlinable @inline(__always)
-  public func resolve<UTF8Bytes>(
-    utf8: UTF8Bytes
-  ) -> WebURL? where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
-    urlFromBytes(utf8, baseURL: self)
+    utf8.resolve(string.utf8)
   }
 }
 
