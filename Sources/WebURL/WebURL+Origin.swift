@@ -19,13 +19,50 @@ extension WebURL {
   /// Two actors in the Web platform that share an origin are assumed to trust each other and to have the same authority.
   /// Actors with differing origins are considered potentially hostile versus each other, and are isolated from each other to varying degrees.
   ///
+  /// The origin is not an attribute or component of a URL; it is a value which may be computed from a URL.
+  ///
+  /// The only URLs for which meaningul origins may be computed are:
+  /// - Those with the http, https, ftp, ws, or wss schemes (i.e. the "special" schemes, excluding file), and
+  /// - Those with the "blob" scheme, which do not have an authority (cannot-be-a-base), and whose path is another URL.
+  ///
+  /// Computing an origin using any other URL results in an _opaque origin_, which is defined to be an "internal value, with no serialization it can be recreated from,
+  /// [...] and for which the only meaningful operation is testing for equality." ([HTML Standard][HTML-origin]).
+  ///
+  /// The URL standard requires every computation of an opaque origin to result in a _new_ value; and the HTML standard builds on that by computing
+  /// new opaque origins at specific times for specific elements or browsing context, when it desires more specific behaviour for trust/security domains.
+  ///
+  /// This type deviates slightly from the URL standard in that it separates computing an origin using a URL from establishing a new trust/security domain.
+  /// Opaque origins are instead considered to be _undefined_ security domains - it does not matter if you call `url.origin` again or store
+  /// a previously-computed origin in your application state; an opaque origin will never compare as being "same origin" with anything, even itself.
+  /// This behaviour is in some respects analogous to a floating-point NaN value.
+  ///
+  /// Instead, if an application wishes to establish a trust/security domain, it should do so explicitly by using an augmented origin type, for instance:
+  ///
+  /// ```
+  /// enum ApplicationSpecificOrigin {
+  ///   case derivedFromURL(WebURL.Origin) // security domain is 'obvious' due to URL scheme known by the standard.
+  ///   case applicationDefined(T) // A security domain which has been established by application-specific logic.
+  ///   case undefinedOpaque // opaque origin, application unable to determine a security domain.
+  /// }
+  /// ```
+  /// This can also be useful to define application-specific origins for "file" URLs, which the [URL standard][URL-origin] leaves as "an exercise for the reader".
+  ///
+  /// It is also recommended to read [RFC-6456 ("The Web Origin Concept")][RFC-6454] for a holistic understanding of the origin-based security model.
+  ///
+  /// [HTML-origin]: https://html.spec.whatwg.org/multipage/origin.html#concept-origin-opaque
+  /// [URL-origin]: https://url.spec.whatwg.org/#origin
+  /// [RFC-6454]: https://tools.ietf.org/html/rfc6454
+  ///
   public struct Origin {
-    /// See https://html.spec.whatwg.org/multipage/origin.html#origin for definitions.
+
     fileprivate enum Kind {
-      /// An "opaque origin", which is a unique internal value, generated and assigned to particular DOM elements at specific times.
+
+      /// An "opaque origin", which is an internal value. This type deviates from the standard by assigning these no identity, rather than assigning
+      /// a unique identity upon creation. This should not matter for security, as the change in behaviour only leads to _more_ isolation, never less.
       case opaque
+
       /// A tuple of (scheme, host, port, null/domain). Stored pre-serialized.
-      /// According to the URL standard, the 'domain' should always be null ( https://url.spec.whatwg.org/#origin ).
+      /// According to the URL standard, the 'domain' should always be null.
       case tuple(String)
     }
     fileprivate var kind: Kind
@@ -36,16 +73,9 @@ extension WebURL {
 
   /// The origin of this URL.
   ///
-  /// Note that the only URLs with meaningul origins are those with the http, https, ftp, ws, or wss schemes,
-  /// as well as cannot-be-a-base-URLs with the "blob" scheme whose path is another URL.
-  /// All other URLs have "opaque" origins. See the `isOpaque` property for details.
-  ///
-  /// ```swift
-  /// WebURL("https://example.com/index.html")!.origin // "https://example.com"
-  /// WebURL("http://localhost:8080/index.html")!.origin // "http://localhost:8080"
-  /// WebURL("file:///usr/bin/swift")!.origin // "null"
-  /// WebURL("blob:https://example.com:443/index.html")!.origin // "https://example.com"
-  /// ```
+  /// Origins are the fundamental currency of the Web's security model.
+  /// Two actors in the Web platform that share an origin are assumed to trust each other and to have the same authority.
+  /// Actors with differing origins are considered potentially hostile versus each other, and are isolated from each other to varying degrees.
   ///
   public var origin: Origin {
     switch schemeKind {
@@ -68,6 +98,10 @@ extension WebURL {
 
 extension WebURL.Origin: Equatable, Hashable {
 
+  /// Whether this origin is considered "same origin" with respect to another origin.
+  ///
+  /// Note that this always returns `false` for opaque origins.
+  ///
   public static func == (lhs: WebURL.Origin, rhs: WebURL.Origin) -> Bool {
     switch (lhs.kind, rhs.kind) {
     // Opaque origins are like floating-point NaNs; not same-origin WRT each other.
@@ -103,14 +137,15 @@ extension WebURL.Origin: CustomStringConvertible {
 
 extension WebURL.Origin {
 
-  /// If `true`, this origin is an opaque, internal value. Note that opaque origins are **not considered same-origin with themselves**.
+  /// If `true`, this is an opaque origin with no meaningful value for use as a trust or security domain.
   ///
-  /// Since opaque origins are not same-origin with themselves, they compare as not equal using the `==` operator. That means you should not store
-  /// them in hash-tables such as `Set` or `Dictionary`, as they will always insert in to the table and quickly degrade its performance:
+  /// Note that, analogous to floating-point NaN values, opaque origins are **not considered same-origin with themselves**.
+  /// This also means that opaque origins compare as _not equal_ using the `==` operator, and should not be stored in hash-tables
+  /// such as `Set` or `Dictionary`, as they will _always_ insert in to the table and degrade its performance:
   ///
   /// ```swift
   /// let myURL = WebURL("foo://exampleHost:4567/")!
-  /// myURL.origin.isOpaque // true
+  /// myURL.origin.isOpaque // true. WebURL is unable to define a security domain for "foo" URLs.
   ///
   /// myURL.origin == myURL.origin // false!
   ///

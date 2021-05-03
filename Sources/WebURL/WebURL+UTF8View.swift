@@ -14,11 +14,13 @@
 
 extension WebURL {
 
-  /// A view of a `WebURL`'s underlying UTF-8 code-units.
+  /// A view of the UTF-8 code-units in a serialized URL.
   ///
-  /// This view allows access to a `WebURL`'s code-units, including information about where each URL component is situated.
-  /// The component properties and setter functions have the same semantics and behaviour as the corresponding properties on `WebURL`.
-  /// The code-units are guaranteed to only contain ASCII codepoints.
+  /// This view provides efficient random-access as well as read-write access to the code-units of a serialized URL string,
+  /// including information about where each URL component is situated. The code-units are guaranteed to only contain ASCII code-points.
+  ///
+  /// Component properties (such as `scheme`, `path`, and `query`) and setter methods (such as `setQuery`), have the same semantics and
+  /// behaviour as the corresponding methods on `WebURL`.
   ///
   public struct UTF8View {
 
@@ -31,11 +33,7 @@ extension WebURL {
     }
   }
 
-  /// A view of a `WebURL`'s underlying UTF-8 code-units.
-  ///
-  /// This view allows access to a `WebURL`'s code-units, including information about where each URL component is situated.
-  /// The component properties and setter functions have the same semantics and behaviour as the corresponding properties on `WebURL`.
-  /// The code-units are guaranteed to only contain ASCII codepoints.
+  /// A mutable view of the UTF-8 code-units of this URL's serialization.
   ///
   @inlinable
   public var utf8: UTF8View {
@@ -142,7 +140,7 @@ extension WebURL.UTF8View: RandomAccessCollection {
     try withUnsafeBufferPointer(body)
   }
 
-  /// Invokes `body` with a pointer to the contiguous UTF-8 code-units of the entire serialized URL.
+  /// Invokes `body` with a pointer to the contiguous UTF-8 code-units of the serialized URL string.
   ///
   /// - important: The provided pointer is valid only for the duration of `body`. Do not store or return the pointer for later use.
   /// - complexity: O(*1*)
@@ -160,7 +158,7 @@ extension WebURL.UTF8View: RandomAccessCollection {
 
 extension Slice where Base == WebURL.UTF8View {
 
-  /// Invokes `body` with a pointer to the contiguous UTF-8 code-units of the entire serialized URL.
+  /// Invokes `body` with a pointer to the contiguous UTF-8 code-units of this portion of the serialized URL string.
   ///
   /// - important: The provided pointer is valid only for the duration of `body`. Do not store or return the pointer for later use.
   /// - complexity: O(*1*)
@@ -217,6 +215,8 @@ extension WebURL.UTF8View {
 
   /// Replaces this URL's `username` with the given UTF-8 code-units.
   ///
+  /// Any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
+  ///
   @inlinable
   public mutating func setUsername<UTF8Bytes>(
     _ newUsername: UTF8Bytes?
@@ -232,13 +232,14 @@ extension WebURL.UTF8View {
   /// - seealso: `WebURL.password`
   ///
   public var password: SubSequence? {
-    guard let range = storage.structure.range(of: .password), range.count > 1 else {
-      return nil
-    }
+    guard let range = storage.structure.range(of: .password) else { return nil }
+    assert(range.count > 1)
     return self[range.dropFirst()]
   }
 
   /// Replaces this URL's `password` with the given UTF-8 code-units.
+  ///
+  /// Any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
   ///
   @inlinable
   public mutating func setPassword<UTF8Bytes>(
@@ -260,6 +261,11 @@ extension WebURL.UTF8View {
 
   /// Replaces this URL's `hostname` with the given UTF-8 code-units.
   ///
+  /// Unlike other setters, not all code-points which are invalid for use in hostnames will be percent-encoded.
+  /// If the new content contains a [forbidden host code-point][URL-fhcp], the operation will fail.
+  ///
+  /// [URL-fhcp]: https://url.spec.whatwg.org/#forbidden-host-code-point
+  ///
   @inlinable
   public mutating func setHostname<UTF8Bytes>(
     _ newHostname: UTF8Bytes?
@@ -275,9 +281,8 @@ extension WebURL.UTF8View {
   /// - seealso: `WebURL.port`
   ///
   public var port: SubSequence? {
-    guard let range = storage.structure.range(of: .port), range.count > 1 else {
-      return nil
-    }
+    guard let range = storage.structure.range(of: .port) else { return nil }
+    assert(range.count > 1)
     return self[range.dropFirst()]
   }
 
@@ -290,6 +295,8 @@ extension WebURL.UTF8View {
   }
 
   /// Replaces this URL's `path` with the given UTF-8 code-units.
+  ///
+  /// The given path string will be lexically simplified, and any code-points in the path's components that are not valid for use will be percent-encoded.
   ///
   @inlinable
   public mutating func setPath<UTF8Bytes>(
@@ -306,13 +313,15 @@ extension WebURL.UTF8View {
   /// - seealso: `WebURL.query`
   ///
   public var query: SubSequence? {
-    guard let range = storage.structure.range(of: .query), !range.isEmpty else {
-      return nil
-    }
+    guard let range = storage.structure.range(of: .query) else { return nil }
+    assert(!range.isEmpty)
     return self[range.dropFirst()]
   }
 
   /// Replaces this URL's `query` with the given UTF-8 code-units.
+  ///
+  /// Any code-points which are not valid for use in the URL's query will be percent-encoded.
+  /// Note that the set of code-points which are valid depends on the URL's `scheme`.
   ///
   @inlinable
   public mutating func setQuery<UTF8Bytes>(
@@ -329,13 +338,14 @@ extension WebURL.UTF8View {
   /// - seealso: `WebURL.fragment`
   ///
   public var fragment: SubSequence? {
-    guard let range = storage.structure.range(of: .fragment), !range.isEmpty else {
-      return nil
-    }
+    guard let range = storage.structure.range(of: .fragment) else { return nil }
+    assert(!range.isEmpty)
     return self[range.dropFirst()]
   }
 
   /// Replaces this URL's `fragment` with the given UTF-8 code-units.
+  ///
+  /// Any code-points which are not valid for use in the URL's fragment will be percent-encoded.
   ///
   @inlinable
   public mutating func setFragment<UTF8Bytes>(

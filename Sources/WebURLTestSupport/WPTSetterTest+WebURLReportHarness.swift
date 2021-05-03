@@ -53,7 +53,7 @@ extension WPTSetterTest.WebURLReportHarness: WPTSetterTest.Harness {
     case .search:
       url.search = newValue
     case .hash:
-      url.fragment = newValue
+      url.hash = newValue
     case .origin:
       assertionFailure("The URL Standard does not allow setting the origin directly")
     case .host:

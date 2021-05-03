@@ -14,7 +14,10 @@
 
 extension WebURL {
 
-  /// The URL's path components. The URL must have a hierarchical path (`cannotBeABase` is `false`).
+  /// A mutable view of this URL's path components.
+  ///
+  /// Use of this view requires that the URL is hierarchical (`cannotBeABase` is `false`).
+  /// Using this view with a non-hierachical URL will trigger a runtime error.
   ///
   public var pathComponents: PathComponents {
     get {
@@ -34,58 +37,59 @@ extension WebURL {
     }
   }
 
-  /// The URL's path components, if it has a hierarchical path.
+  /// A view of the components in a hierarchical URL's path.
   ///
-  /// This collection gives you efficient, bidirectional, read-write access to the URL's path components. Components are retrieved in their percent-decoded form.
+  /// This collection provides efficient, bidirectional, read-write access to the URL's path components.
+  /// Components are percent-decoded when they are returned and percent-encoded when they are replaced.
   ///
   /// ```swift
   /// var url = WebURL("http://example.com/swift/packages/%F0%9F%A6%86%20tracker")!
-  /// print(url.pathComponents.first!) // Prints "swift"
-  /// print(url.pathComponents.last!) // Prints "🦆 tracker"
+  /// url.pathComponents.first! // "swift"
+  /// url.pathComponents.last! // "🦆 tracker"
   ///
   /// url.pathComponents.removeLast()
   /// url.pathComponents.append("swift-url")
   /// print(url) // Prints "http://example.com/swift/packages/swift-url"
   /// ```
-  /// Mutating the URL, such as by setting its `.path` or any other properties, invalidates all path component indices.
   ///
-  /// Path components run from their leading slash until the leading slash of the next component (or the end of the path). That means that a URL whose
-  /// path is "/" contains a single, empty path component, and paths which end with a "/" (also referred to as directory paths) end with an empty path component.
-  /// When appending to a path whose last component is empty, this empty component is merged with the new components.
-  /// To create a directory path, append an empty component or call `ensureDirectoryPath`.
+  /// Path components extend from their leading slash until the leading slash of the next component (or the end of the path). That means that a URL whose
+  /// path is "/" contains a single, empty path component, and paths which end with a "/" (also referred to as directory paths) end with an empty component.
+  /// When appending to a directory path (through `append` or any other function which replaces path components), this empty component is dropped
+  /// so that the result does not contain excessive empties. To create a directory path, append an empty component or call `ensureDirectoryPath`.
   ///
   /// ```swift
-  /// var url = WebURL("http://example.com/")!
-  /// print(url.pathComponents.last!) // Prints ""
-  /// print(url.pathComponents.count) // Prints "1"
+  /// var url = WebURL("file:///")!
+  /// url.pathComponents.last! // ""
+  /// url.pathComponents.count // 1
   ///
-  /// url.pathComponents.append("swift") // http://example.com/swift
-  /// print(url.pathComponents.count) // Prints "1", because the empty component was merged.
+  /// url.pathComponents.append("usr") // file:///usr
+  /// url.pathComponents.count // 1, because the trailing empty component was dropped.
   ///
-  /// url.pathComponents.append(contentsOf: ["packages", "swift-url"]) // "http://example.com/swift/packages/swift-url"
-  /// print(url.pathComponents.count) // Prints "3"
+  /// url.pathComponents += ["bin", "swift"] // file:///usr/bin/swift
+  /// url.pathComponents.last! // "swift"
+  /// url.pathComponents.count // 3
   ///
-  /// url.pathComponents.ensureDirectoryPath() // "http://example.com/swift/packages/swift-url/"
-  /// print(url.pathComponents.last!) // Prints ""
-  /// print(url.pathComponents.count) // Prints "4"
+  /// url.pathComponents.ensureDirectoryPath() // file:///usr/bin/swift/
+  /// url.pathComponents.last! // ""
+  /// url.pathComponents.count // 4
   /// ```
   ///
-  /// Paths can be difficult. In order to manipulate them reliably, you should adhere strictly to the principle that every modification invalidates every path-component
-  /// index. Additionally, try to avoid making assumptions about how the number of path components (or `count`) is affected by a modification. For instance,
-  /// URLs with special schemes are forbidden from ever having empty paths, and if you have such a URL and attempt to remove all of its path components,
-  /// the result will be a path with a single, empty component (as above). These are the same caveats which apply to the `WebURL.path` property.
+  /// Modifying the URL, such as by setting its `path` or any other properties, invalidates all previously obtained path component indices.
+  /// Functions which modify the path components return new indices which may be used to maintain position across modifications.
   ///
-  /// This view does not support URLs with non-hierarchical paths (`cannotBeABase` is `true`), and triggers a runtime error if it is accessed on such a URL.
+  /// It is best to avoid making assumptions about how this collection's `count` is affected by a modification. In addition to the dropping of trailing empty
+  /// components described above, URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+  /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
-  /// Almost all URLs _do_ have hierarchical paths (in particular, URLs with special schemes, such as http(s) and file, always have hierarchical paths).
-  /// The ones which _don't_ are known as "cannot-be-a-base" URLs - and they can be recognized by the lack of slashes immediately following their scheme.
-  /// Examples of such URLs are:
+  /// This view does not support non-hierarchical URLs (`cannotBeABase` is `true`), and triggers a runtime error if it is accessed on such a URL.
+  /// Almost all URLs are hierarchical (in particular, URLs with special schemes, such as http, https, and file, are always hierarchical).
+  /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme. Examples of such URLs are:
   ///
   /// - `mailto:bob@example.com`
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  /// See the `cannotBeABase` property for more information about these URLs.
+  /// See the `WebURL.cannotBeABase` property for more information about these URLs.
   ///
   public struct PathComponents {
 
@@ -130,7 +134,7 @@ extension WebURL.PathComponents {
 
 extension WebURL.UTF8View {
 
-  /// The UTF-8 code-units of the given path component.
+  /// The UTF-8 code-units containing the given path component.
   ///
   public func pathComponent(_ component: WebURL.PathComponents.Index) -> SubSequence {
     // These bounds checks are only for semantics, not for memory safety; the slicing subscript handles that.
@@ -198,9 +202,10 @@ extension WebURL.PathComponents {
   ///
   /// This method has the effect of removing the specified range of components from the path and inserting the new components at the same location.
   /// The number of new components need not match the number of elements being removed, and their contents will be percent-encoded, if necessary,
-  /// upon insertion.
+  /// upon insertion. If any of the new components in `newComponents` are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive),
+  /// those components are ignored.
   ///
-  /// The following example shows replacing the last 2 components of a `file:` URL with an array of strings.
+  /// The following example shows replacing the last 2 components of a `file:` URL with an array of 4 strings.
   ///
   /// ```swift
   /// var url = WebURL("file:///usr/bin/swift")!
@@ -215,45 +220,46 @@ extension WebURL.PathComponents {
   /// print(url) // Prints "file:///usr/lib/swift/linux/libswiftCore.so"
   /// ```
   ///
-  /// If you pass a zero-length range as the `range` parameter, this method inserts the elements of `newComponents` at `range.lowerBound`.
-  /// Calling the `insert(contentsOf:at:)` method instead is preferred. If appending to a path which ends in a "/" (i.e. a directory path),
-  /// the trailing empty component will be replaced by the first appended component.
+  /// If you pass a zero-length range as the `bounds` parameter, this method inserts the elements of `newComponents` at `bounds.lowerBound`.
+  /// Calling the `insert(contentsOf:at:)` method instead is preferred. If inserting at the end of a path whose last component is empty (i.e. a directory path),
+  /// the trailing empty component will be dropped and replaced by the first inserted component.
   ///
-  /// Note how the following example appends 2 components to a path with 2 components (the last of which is empty), and emerges with 3 components rather than 4:
+  /// Note how the following example inserts 2 components at the end of a path which already contains 2 components (the last of which is empty),
+  /// resulting in a path with only 3 components:
   ///
   /// ```swift
   /// var url = WebURL("file:///usr/")!
-  /// print(url.pathComponents.last!) // Prints ""
-  /// print(url.pathComponents.count) // Prints 2
+  /// url.pathComponents.last! // ""
+  /// url.pathComponents.count // 2
   ///
   /// url.pathComponents.replaceSubrange(
   ///   url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["bin", "swift"]
   /// )
   ///
   /// print(url) // Prints "file:///usr/bin/swift"
-  /// print(url.pathComponents.last!) // Prints "swift"
-  /// print(url.pathComponents.count) // Prints 3
+  /// url.pathComponents.last! // "swift"
+  /// url.pathComponents.count // 3
   /// ```
   ///
-  /// If you pass a zero-length collection as the `newComponents` parameter, this method removes the components in the given subrange without replacement.
-  /// Calling the `removeSubrange(_:)` method instead is preferred. Some URLs may not allow empty paths; attempting to remove
-  /// all components from such a URL will instead set its path to the root path ("/").
+  /// If the collection passed as the `newComponents` parameter does not contain any insertable components (i.e. it has a `count` of 0, or contains only
+  /// "." or ".." components), this method removes the components in the given subrange without replacement.
+  /// Calling the `removeSubrange(_:)` method instead is preferred.
+  /// URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+  /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
   /// ```swift
-  /// var url = WebURL("http://example.com/foo/index.html")!
-  /// print(url.pathComponents.first!) // Prints "foo"
-  /// print(url.pathComponents.count) // Prints 2
+  /// var url = WebURL("http://example.com/awesome_product/index.html")!
+  /// url.pathComponents.first! // "awesome_product"
+  /// url.pathComponents.count // 2
   ///
   /// url.pathComponents.replaceSubrange(
   ///   url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [] as [String]
   /// )
   ///
   /// print(url) // Prints "http://example.com/"
-  /// print(url.pathComponents.first!) // Prints ""
-  /// print(url.pathComponents.count) // Prints 1
+  /// url.pathComponents.first! // ""
+  /// url.pathComponents.count // 1
   /// ```
-  ///
-  /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), those components are ignored.
   ///
   /// Calling this method invalidates any existing indices for this URL.
   ///
@@ -267,6 +273,7 @@ extension WebURL.PathComponents {
   public mutating func replaceSubrange<Components>(
     _ bounds: Range<Index>, with newComponents: Components
   ) -> Range<Index> where Components: Collection, Components.Element: StringProtocol {
+    // TODO: [performance]: Create a specialized StringProtocol -> UTF8View projection wrapper.
     replaceComponents(bounds, withUTF8: newComponents.lazy.map { $0.utf8 })
   }
 
@@ -301,10 +308,9 @@ extension WebURL.PathComponents {
   /// Inserts the elements of a collection into the path at the specified position.
   ///
   /// The new components are inserted before the component currently at the specified index, and their contents will be percent-encoded, if necessary.
-  /// If you pass the path's `endIndex` property as the `index` parameter, the new elements are appended to the path.
-  /// If appending to a path which ends in a "/" (i.e. a directory path), the trailing empty component will be replaced by the first appended component.
+  /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive), those components are ignored.
   ///
-  /// Here's an example of inserting an array of path components in the middle of a path:
+  /// The following example inserts an array of path components in the middle of a path:
   ///
   /// ```swift
   /// var url = WebURL("file:///usr/swift")!
@@ -314,7 +320,9 @@ extension WebURL.PathComponents {
   /// print(url) // Prints "file:///usr/local/bin/swift"
   /// ```
   ///
-  /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), those components are ignored.
+  /// If you pass the path's `endIndex` property as the `position` parameter, the new elements are appended to the path.
+  /// Calling the `append(contentsOf:)` method instead is preferred. If inserting at the end of a path whose last component is empty (i.e. a directory path),
+  /// the trailing empty component will be dropped and replaced by the first inserted component.
   ///
   /// Calling this method invalidates any existing indices for this URL.
   ///
@@ -334,25 +342,29 @@ extension WebURL.PathComponents {
   /// Adds the elements of a collection to the end of this path.
   ///
   /// The contents of the appended components will be percent-encoded, if necessary.
-  /// If appending to a path which ends in a "/" (i.e. a directory path), the trailing empty component will be replaced by the first appended component.
-  /// Here's an example of building a path by appending path components. Note that the first `append` does not change the `count`.
+  /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive), those components are ignored.
+	///
+  /// If appending to a path whose last component is empty (i.e. a directory path),
+  /// the trailing empty component will be dropped and replaced by the first inserted component.
+  ///
+  /// The following example builds a path by appending path components. Note that the first `append` does not change the `count`, as the URL initially
+  /// has a directory path.
   ///
   /// ```swift
   /// var url = WebURL("file:///")!
-  /// print(url.pathComponents.last!) // Prints ""
-  /// print(url.pathComponents.count) // Prints 1
+  /// url.pathComponents.last! // ""
+  /// url.pathComponents.count // 1
   ///
   /// url.pathComponents.append(contentsOf: ["tmp"])
-  /// print(url.pathComponents.last!) // Prints "tmp"
-  /// print(url.pathComponents.count) // Prints 1
+  /// url.pathComponents.last! // "tmp"
+  /// url.pathComponents.count // 1
   ///
   /// url.pathComponents.append(contentsOf: ["my_app", "data.json"])
-  /// print(url) // Prints "file:///tmp/my_app/data.json"
-  /// print(url.pathComponents.last!) // Prints "data.json"
-  /// print(url.pathComponents.count) // Prints 3
-  /// ```
+  /// url.pathComponents.last! // "data.json"
+  /// url.pathComponents.count // 3
   ///
-  /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), those components are ignored.
+  /// print(url) // Prints "file:///tmp/my_app/data.json"
+  /// ```
   ///
   /// Calling this method invalidates any existing indices for this URL.
   ///
@@ -370,25 +382,29 @@ extension WebURL.PathComponents {
   /// Adds the elements of a collection to the end of this path.
   ///
   /// The contents of the appended components will be percent-encoded, if necessary.
-  /// If appending to a path which ends in a "/" (i.e. a directory path), the trailing empty component will be replaced by the first appended component.
-  /// Here's an example of building a path by appending path components. Note that the first append does not change the `count`.
+  /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive), those components are ignored.
+  ///
+  /// If appending to a path whose last component is empty (i.e. a directory path),
+  /// the trailing empty component will be dropped and replaced by the first inserted component.
+  ///
+  /// The following example builds a path by appending path components. Note that the first `+=` does not change the `count`, as the URL initially
+  /// has a directory path.
   ///
   /// ```swift
   /// var url = WebURL("file:///")!
-  /// print(url.pathComponents.last!) // Prints ""
-  /// print(url.pathComponents.count) // Prints 1
+  /// url.pathComponents.last! // ""
+  /// url.pathComponents.count // 1
   ///
   /// url.pathComponents += ["tmp"]
-  /// print(url.pathComponents.last!) // Prints "tmp"
-  /// print(url.pathComponents.count) // Prints 1
+  /// url.pathComponents.last! // "tmp"
+  /// url.pathComponents.count // 1
   ///
   /// url.pathComponents += ["my_app", "data.json"]
-  /// print(url) // Prints "file:///tmp/my_app/data.json"
-  /// print(url.pathComponents.last!) // Prints "data.json"
-  /// print(url.pathComponents.count) // Prints 3
-  /// ```
+  /// url.pathComponents.last! // "data.json"
+  /// url.pathComponents.count // 3
   ///
-  /// If any of the new components are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), those components are ignored.
+  /// print(url) // Prints "file:///tmp/my_app/data.json"
+  /// ```
   ///
   /// Calling this method invalidates any existing indices for this URL.
   ///
@@ -409,10 +425,11 @@ extension WebURL.PathComponents {
   /// print(url) // Prints "http://example.com/projects"
   /// ```
   ///
-  /// Some URLs may not allow empty paths; attempting to remove all components from such a URL will instead set its path to the root path ("/"):
+  /// URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+  /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
   /// ```swift
-  /// var url = WebURL("http://example.com/foo/index.html")!
+  /// var url = WebURL("http://example.com/awesome_product/index.html")!
   /// url.pathComponents.removeSubrange(
   ///   url.pathComponents.startIndex..<url.pathComponents.endIndex
   /// )
@@ -442,7 +459,7 @@ extension WebURL.PathComponents {
   /// print(url) // Prints "file:///usr/lib/swift"
   /// ```
   ///
-  /// If the new component is "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), the component is removed -
+  /// If the new component is "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive), the component at `position` is removed -
   /// as if calling `replaceSubrange` with an empty collection.
   ///
   /// Calling this method invalidates any existing indices for this URL.
@@ -464,20 +481,22 @@ extension WebURL.PathComponents {
   /// Inserts a component into the path at the specified position.
   ///
   /// The new component is inserted before the component currently at the specified index, and its contents will be percent-encoded, if necessary.
-  /// If you pass the path's `endIndex` property as the `index` parameter, the new component is appended to the path.
-  /// If appending to a path which ends in a "/" (i.e. a directory path), the trailing empty component will be replaced by the first appended component.
-  /// See `append` for more information.
+  /// If the new component is "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive), it is ignored.
   ///
-  /// Here's an example of inserting a path component in the middle of a path:
+  /// The following example inserts a component in the middle of a path:
   ///
   /// ```swift
   /// var url = WebURL("file:///usr/swift")!
-  /// url.pathComponents.insert("bin", at: url.pathComponents.index(after: url.pathComponents.startIndex))
+  /// url.pathComponents.insert(
+  ///   "bin",
+  ///   at: url.pathComponents.index(after: url.pathComponents.startIndex)
+  /// )
   /// print(url) // Prints "file:///usr/bin/swift"
   /// ```
   ///
-  /// If the new component is "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), it is ignored.
-  /// Otherwise, the contents of the new component are percent-encoded as it is written to the URL's path.
+  /// If you pass the path's `endIndex` property as the `position` parameter, the new component is appended to the path.
+  /// Calling the `append(_:)` method instead is preferred. If inserting at the end of a path whose last component is empty (i.e. a directory path),
+  /// the trailing empty component will be dropped and replaced by the new component.
   ///
   /// Calling this method invalidates any existing indices for this URL.
   ///
@@ -497,25 +516,29 @@ extension WebURL.PathComponents {
   /// Adds a component to the end of this path.
   ///
   /// The contents of the appended component will be percent-encoded, if necessary.
-  /// If appending to a path which ends in a "/" (i.e. a directory path), the trailing empty component will be replaced by the appended component.
-  /// Here's an example of building a path by appending path components. Note that the first `append` does not change the `count`.
+  /// If the new component is "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive), it will be ignored.
+  ///
+  /// If appending to a path whose last component is empty (i.e. a directory path),
+  /// the trailing empty component will be dropped and replaced by the new component.
+  ///
+  /// The following example builds a path by appending components. Note that the first `append` does not change the `count`, as the URL initially
+  /// has a directory path.
   ///
   /// ```swift
   /// var url = WebURL("file:///")!
-  /// print(url.pathComponents.last!) // Prints ""
-  /// print(url.pathComponents.count) // Prints 1
+  /// url.pathComponents.last! // ""
+  /// url.pathComponents.count // 1
   ///
   /// url.pathComponents.append("tmp")
-  /// print(url.pathComponents.last!) // Prints "tmp"
-  /// print(url.pathComponents.count) // Prints 1
+  /// url.pathComponents.last! // "tmp"
+  /// url.pathComponents.count // 1
   ///
   /// url.pathComponents.append("data.json")
-  /// print(url) // Prints "file:///tmp/data.json"
-  /// print(url.pathComponents.last!) // Prints "data.json"
-  /// print(url.pathComponents.count) // Prints 2
-  /// ```
+  /// url.pathComponents.last! // "data.json"
+  /// url.pathComponents.count // 2
   ///
-  /// If the new component is "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case insensitive), it is ignored.
+  /// print(url) // Prints "file:///tmp/data.json"
+  /// ```
   ///
   /// Calling this method invalidates any existing indices for this URL.
   ///
@@ -534,11 +557,14 @@ extension WebURL.PathComponents {
   ///
   /// ```swift
   /// var url = WebURL("http://example.com/projects/swift/swift-url/Sources/")!
-  /// url.pathComponents.remove(at: url.pathComponents.index(after: url.pathComponents.startIndex))
+  /// url.pathComponents.remove(
+  ///   at: url.pathComponents.index(after: url.pathComponents.startIndex)
+  /// )
   /// print(url) // Prints "http://example.com/projects/swift-url/Sources/"
   /// ```
   ///
-  /// Some URLs may not allow empty paths; attempting to remove the last component from such a URL will instead set its path to the root path ("/"):
+  /// URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+  /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
   /// ```swift
   /// var url = WebURL("http://example.com/foo")!
@@ -563,7 +589,6 @@ extension WebURL.PathComponents {
   /// Removes the specified number of components from the end of the path.
   ///
   /// Attempting to remove more components than exist in the path triggers a runtime error.
-  /// Some URLs may not allow empty paths; attempting to remove all components from such a URL will instead set its path to the root path ("/"):
   ///
   /// ```swift
   /// var url = WebURL("http://example.com/foo/bar")!
@@ -573,6 +598,9 @@ extension WebURL.PathComponents {
   /// url.pathComponents.removeLast()
   /// print(url) // Prints "http://example.com/"
   /// ```
+  ///
+  /// URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+  /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
   /// Calling this method invalidates any existing indices for this URL.
   ///
@@ -587,8 +615,8 @@ extension WebURL.PathComponents {
   /// Appends an empty component to the path, if it does not already end with an empty component.
   /// This has the effect of ensuring the path ends with a trailing slash.
   ///
-  /// The following example demonstrates building a file path by appending, followed by `ensureDirectoryPath` to finish the path
-  /// with a trailing slash:
+  /// The following example demonstrates building a file path by appending components,
+  /// and finishes by using `ensureDirectoryPath` to ensure the path ends in a trailing slash:
   ///
   /// ```swift
   /// var url = WebURL("file:///")!
@@ -596,7 +624,7 @@ extension WebURL.PathComponents {
   /// url.pathComponents.ensureDirectoryPath() // "file:///Users/karl/Desktop/"
   /// ```
   ///
-  /// If the path already ends in a trailing slash (or is a root path), this method has no effect.
+  /// If the path is already a directory path, this method has no effect.
   ///
   /// - returns: The index of the last component, which will be an empty component.
   ///

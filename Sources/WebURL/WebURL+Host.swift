@@ -17,18 +17,35 @@ extension WebURL {
   /// A host is a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
   /// Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
   ///
-  /// * A domain is a non-empty ASCII string which identifies a realm within a network.
-  ///   The hosts of URLs with special schemes (http, ftp, file, etc) are always either domains, IPv4 or v6 addresses, and never opaque.
+  /// The [URL Standard][URL-hostcombinations] defines the allowed scheme/host combinations:
   ///
-  /// * An opaque host is a non-empty ASCII string which can be used for further processing.
-  ///   The hosts of URLs with non-special schemes are always either opaque or IPv6 addresses, and never domains or IPv4 addresses.
-  ///   The name may contain non-ASCII characters or other forbidden host code-points in percent-encoded form.
+  /// - The host of a http, https, ftp, ws, or wss URL is always either a domain, an IPv4 address, or an IPv6 address.
+  /// - The host of a file URL is always either a domain, an IPv4 address, an IPv6 address, or the empty host.
+  /// - The host of any other URL is always either an opaque hostname, an IPv6 address, the empty host, or `nil` (no host).
+  ///
+  /// [URL-hostcombinations]: https://url.spec.whatwg.org/#url-representation
   ///
   public enum Host {
+
+    /// An Internet Protocol, version 4 address.
+    ///
     case ipv4Address(IPv4Address)
+
+    /// An Internet Protocol, version 6 address.
+    ///
     case ipv6Address(IPv6Address)
+
+    /// A domain is a non-empty ASCII string which identifies a realm within a network.
+    ///
     case domain(String)
+
+    /// An opaque host is a non-empty ASCII string which can be used for further processing.
+    /// The name may contain non-ASCII characters or other forbidden host code-points in percent-encoded form.
+    ///
     case opaque(String)
+
+    /// An empty hostname.
+    ///
     case empty
   }
 
@@ -38,9 +55,9 @@ extension WebURL {
   /// Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
   ///
   public var host: Host? {
-    guard let hostname = self.hostname else { return nil }
+    guard let hostnameCodeUnits = utf8.hostname else { return nil }
     var callback = IgnoreValidationErrors()
-    switch ParsedHost(hostname.utf8, schemeKind: schemeKind, callback: &callback) {
+    switch ParsedHost(hostnameCodeUnits, schemeKind: schemeKind, callback: &callback) {
     case .none:
       assertionFailure("Normalized hostname failed to reparse")
       return nil
@@ -51,9 +68,9 @@ extension WebURL {
     case .empty:
       return .empty
     case .asciiDomain:
-      return .domain(hostname)
+      return .domain(String(decoding: hostnameCodeUnits, as: UTF8.self))
     case .opaque:
-      return .opaque(hostname)
+      return .opaque(String(decoding: hostnameCodeUnits, as: UTF8.self))
     }
   }
 }

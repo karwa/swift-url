@@ -115,7 +115,7 @@ extension WebURL.JSModel {
       href: href, origin: origin, protocol: scheme,
       username: username, password: password,
       host: host, hostname: hostname, port: port,
-      pathname: pathname, search: search, hash: fragment
+      pathname: pathname, search: search, hash: hash
     )
   }
 }

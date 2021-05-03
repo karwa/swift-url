@@ -29,38 +29,34 @@ extension PathComponentsTests {
 
   func testPathComponents_documentationExamples() {
 
-    // WebURL.pathComponents property.
+    // WebURL.PathComponents type.
     do {
-      let url = WebURL("http://example.com/swift/packages/swift-url")!
-      XCTAssertEqualElements(url.pathComponents, ["swift", "packages", "swift-url"])
-      XCTAssertEqual(url.pathComponents.last, "swift-url")
-      XCTAssertEqual(url.pathComponents.dropLast().last, "packages")
+      var url = WebURL("http://example.com/swift/packages/%F0%9F%A6%86%20tracker")!
+      XCTAssertEqual(url.pathComponents.first, "swift")
+      XCTAssertEqual(url.pathComponents.last, "🦆 tracker")
+
+      url.pathComponents.removeLast()
+      url.pathComponents.append("swift-url")
+      XCTAssertEqual(url.serialized, "http://example.com/swift/packages/swift-url")
     }
     do {
-      var url = WebURL("http://example.com/")!
-      XCTAssertEqual(url.pathComponents.last!, "")
+      var url = WebURL("file:///")!
+      XCTAssertEqual(url.pathComponents.last, "")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      url.pathComponents.append("swift")
-      XCTAssertEqual(url.serialized, "http://example.com/swift")
+      url.pathComponents.append("usr")
+      XCTAssertEqual(url.serialized, "file:///usr")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      url.pathComponents.append(contentsOf: ["packages", "swift-url"])
-      XCTAssertEqual(url.serialized, "http://example.com/swift/packages/swift-url")
+      url.pathComponents += ["bin", "swift"]
+      XCTAssertEqual(url.serialized, "file:///usr/bin/swift")
+      XCTAssertEqual(url.pathComponents.last, "swift")
       XCTAssertEqual(url.pathComponents.count, 3)
 
       url.pathComponents.ensureDirectoryPath()
-      XCTAssertEqual(url.serialized, "http://example.com/swift/packages/swift-url/")
-      XCTAssertEqual(url.pathComponents.last!, "")
-      XCTAssertEqual(url.pathComponents.count, 4)
-    }
-    // TODO: Where is this?
-    do {
-      let url = WebURL("http://example.com/swift/packages/🦆/")!
-      XCTAssertEqualElements(url.pathComponents, ["swift", "packages", "🦆", ""])
-      XCTAssertEqual(url.pathComponents.count, 4)
+      XCTAssertEqual(url.serialized, "file:///usr/bin/swift/")
       XCTAssertEqual(url.pathComponents.last, "")
-      XCTAssertEqual(url.pathComponents.dropLast().last, "🦆")
+      XCTAssertEqual(url.pathComponents.count, 4)
     }
     // WebURL.PathComponents.replaceSubrange
     do {
@@ -78,24 +74,24 @@ extension PathComponentsTests {
     }
     do {
       var url = WebURL("file:///usr/")!
-      XCTAssertEqual(url.pathComponents.last!, "")
+      XCTAssertEqual(url.pathComponents.last, "")
       XCTAssertEqual(url.pathComponents.count, 2)
       url.pathComponents.replaceSubrange(
         url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["bin", "swift"]
       )
       XCTAssertEqual(url.serialized, "file:///usr/bin/swift")
-      XCTAssertEqual(url.pathComponents.last!, "swift")
+      XCTAssertEqual(url.pathComponents.last, "swift")
       XCTAssertEqual(url.pathComponents.count, 3)
     }
     do {
-      var url = WebURL("http://example.com/foo/index.html")!
-      XCTAssertEqual(url.pathComponents.first!, "foo")
+      var url = WebURL("http://example.com/awesome_product/index.html")!
+      XCTAssertEqual(url.pathComponents.first, "awesome_product")
       XCTAssertEqual(url.pathComponents.count, 2)
       url.pathComponents.replaceSubrange(
         url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [] as [String]
       )
       XCTAssertEqual(url.serialized, "http://example.com/")
-      XCTAssertEqual(url.pathComponents.first!, "")
+      XCTAssertEqual(url.pathComponents.first, "")
       XCTAssertEqual(url.pathComponents.count, 1)
     }
     // WebURL.PathComponents.insert(contentsOf:at:)
@@ -109,31 +105,31 @@ extension PathComponentsTests {
     // WebURL.PathComponents.append(contentsOf:)
     do {
       var url = WebURL("file:///")!
-      XCTAssertEqual(url.pathComponents.last!, "")
+      XCTAssertEqual(url.pathComponents.last, "")
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents.append(contentsOf: ["tmp"])
-      XCTAssertEqual(url.pathComponents.last!, "tmp")
+      XCTAssertEqual(url.pathComponents.last, "tmp")
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents.append(contentsOf: ["my_app", "data.json"])
       XCTAssertEqual(url.serialized, "file:///tmp/my_app/data.json")
-      XCTAssertEqual(url.pathComponents.last!, "data.json")
+      XCTAssertEqual(url.pathComponents.last, "data.json")
       XCTAssertEqual(url.pathComponents.count, 3)
     }
     // WebURL.PathComponents.+=
     do {
       var url = WebURL("file:///")!
-      XCTAssertEqual(url.pathComponents.last!, "")
+      XCTAssertEqual(url.pathComponents.last, "")
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents += ["tmp"]
-      XCTAssertEqual(url.pathComponents.last!, "tmp")
+      XCTAssertEqual(url.pathComponents.last, "tmp")
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents += ["my_app", "data.json"]
       XCTAssertEqual(url.serialized, "file:///tmp/my_app/data.json")
-      XCTAssertEqual(url.pathComponents.last!, "data.json")
+      XCTAssertEqual(url.pathComponents.last, "data.json")
       XCTAssertEqual(url.pathComponents.count, 3)
     }
     // WebURL.PathComponents.removeSubrange(_:)
@@ -145,7 +141,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com/projects")
     }
     do {
-      var url = WebURL("http://example.com/foo/index.html")!
+      var url = WebURL("http://example.com/awesome_product/index.html")!
       url.pathComponents.removeSubrange(
         url.pathComponents.startIndex..<url.pathComponents.endIndex
       )
@@ -169,7 +165,7 @@ extension PathComponentsTests {
     // WebURL.PathComponents.append(_:)
     do {
       var url = WebURL("file:///")!
-      XCTAssertEqual(url.pathComponents.last!, "")
+      XCTAssertEqual(url.pathComponents.last, "")
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents.append("tmp")
@@ -178,7 +174,7 @@ extension PathComponentsTests {
 
       url.pathComponents.append("data.json")
       XCTAssertEqual(url.serialized, "file:///tmp/data.json")
-      XCTAssertEqual(url.pathComponents.last!, "data.json")
+      XCTAssertEqual(url.pathComponents.last, "data.json")
       XCTAssertEqual(url.pathComponents.count, 2)
     }
     // WebURL.PathComponents.remove(at:)

@@ -157,23 +157,23 @@ extension LazyCollectionProtocol where Element == UInt8 {
   }
 }
 
-/// A `Collection` which lazily percent-encodes some given `Source` UTF8 code-units with a given `EncodeSet`.
-/// This collection only adds percent-encoding or substitutions; it does not decode any pre-existing percent-encoded or substituted bytes in the `Source`.
+/// A `Collection` which lazily percent-encodes its `Source` UTF8 code-units using a given `EncodeSet`.
+/// This collection only _adds_ percent-encoding or substitutions; it does not decode any pre-existing percent-encoded or substituted code-points in `Source`.
 ///
-/// Percent encoding transforms arbitrary Unicode strings to a limited set of ASCII characters which the `EncodeSet` permits.
+/// Percent encoding transforms arbitrary Unicode strings to a limited set of ASCII code-points which are permitted by the `EncodeSet`.
 /// If the `EncodeSet` performs substitutions, users should take care to decode the contents using the same `EncodeSet`.
 ///
 public typealias LazilyPercentEncodedUTF8<Source, EncodeSet> =
   FlattenSequence<LazilyPercentEncodedGroups<Source, EncodeSet>>
 where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetProtocol
 
-/// A `Collection` which lazily percent-encodes some given `Source` UTF8 code-units with a given `EncodeSet`.
-/// This collection only adds percent-encoding or substitutions; it does not decode any pre-existing percent-encoded or substituted bytes in the `Source`.
+/// A `Collection` which lazily percent-encodes its `Source` UTF8 code-units using a given `EncodeSet`.
+/// This collection only _adds_ percent-encoding or substitutions; it does not decode any pre-existing percent-encoded or substituted code-points in `Source`.
 ///
-/// The elements of this collection are `_PercentEncodedByte`s, themselves collections of 1 or 3 ASCII codepoints depending on how the source
-/// byte must be encoded. The overall, encoded UTF8 code-unit sequence is obtained by flattening this collection's elements.
+/// The elements of this collection are `_PercentEncodedByte`s, which are small clusters of either 1 or 3 ASCII code-points depending on how the source
+/// code-unit must be encoded. The overall, encoded ASCII string is obtained by flattening this 2-dimensional collection.
 ///
-/// Percent encoding transforms arbitrary Unicode strings to a limited set of ASCII characters which the `EncodeSet` permits.
+/// Percent encoding transforms arbitrary Unicode strings to a limited set of ASCII code-points which are permitted by the `EncodeSet`.
 /// If the `EncodeSet` performs substitutions, users should take care to decode the contents using the same `EncodeSet`.
 ///
 public struct LazilyPercentEncodedGroups<Source, EncodeSet>: Collection, LazyCollectionProtocol
@@ -408,7 +408,7 @@ extension LazilyPercentEncodedGroups {
 
 extension Collection where Element == UInt8 {
 
-  /// Interpets this collection's elements as UTF-8 code-units, and returns a `String` formed by encoding them with the given `EncodeSet`.
+  /// Interpets this collection's elements as UTF-8 code-units, and returns a `String` formed by encoding them using the given `EncodeSet`.
   ///
   /// - seealso: `StringProtocol.percentEncoded(as:)`
   ///
@@ -421,7 +421,7 @@ extension Collection where Element == UInt8 {
     } ?? String(decoding: self.lazy.percentEncoded(as: encodeSet), as: UTF8.self)
   }
 
-  /// Interpets this collection's elements as UTF-8 code-units, and returns a `String` formed by encoding them with the `\.component` encoding-set.
+  /// Interpets this collection's elements as UTF-8 code-units, and returns a `String` formed by encoding them using the `\.component` encoding-set.
   ///
   /// - seealso: `StringProtocol.urlComponentEncoded`
   ///
@@ -430,7 +430,7 @@ extension Collection where Element == UInt8 {
     percentEncodedString(as: \.component)
   }
 
-  /// Interpets this collection's elements as UTF-8 code-units, and returns a `String` formed by encoding them with the
+  /// Interpets this collection's elements as UTF-8 code-units, and returns a `String` formed by encoding them using the
   /// `application/x-www-form-urlencoded` (`\.form`) encoding-set.
   ///
   /// - seealso: `StringProtocol.urlFormEncoded`
@@ -443,12 +443,12 @@ extension Collection where Element == UInt8 {
 
 extension StringProtocol {
 
-  /// Returns a copy of this string, encoded with the given `EncodeSet`.
+  /// Returns a copy of this string, encoded using the given `EncodeSet`.
   ///
-  /// This function only adds percent-encoding or substitutions as required by `EncodeSet`; it does not decode any percent-encoded or substituted characters
-  /// already contained by the string.
+  /// This function only _adds_ percent-encoding or substitutions as required by `EncodeSet`; it does not decode any percent-encoded or substituted characters
+  /// already contained in the string.
   ///
-  /// Percent encoding transforms strings containing arbitrary Unicode characters to ones containing a limited set of ASCII characters permitted by
+  /// Percent-encoding transforms strings containing arbitrary Unicode characters to ones containing a limited set of ASCII code-points permitted by
   /// the `EncodeSet`. If the `EncodeSet` performs substitutions, users should take care to decode the contents using the same `EncodeSet`.
   ///
   /// ```swift
@@ -465,12 +465,13 @@ extension StringProtocol {
     utf8.percentEncodedString(as: encodeSet)
   }
 
-  /// Returns a copy of this string, encoded with the `\.component` encoding-set.
+  /// Returns a copy of this string, encoded using the `\.component` encoding-set.
   ///
   /// The `\.component` encoding-set is suitable for encoding strings so they may be embedded in a URL's `path`, `query`, `fragment`,
-  /// or in the names of opaque `host`s. It does not include substitutions.
+  /// or in the names of opaque `host`s. It does not perform substitutions.
   ///
-  /// The URL standard confirms that encoding a string with the `\.component` set gives identical results to JavaScript's `encodeURIComponent()` function.
+  /// The URL standard confirms that encoding a string using the `\.component` set gives identical results
+  /// to JavaScript's `encodeURIComponent()` function.
   ///
   /// ```swift
   /// "hello, world!".urlComponentEncoded // hello%2C%20world!
@@ -483,7 +484,7 @@ extension StringProtocol {
     utf8.urlComponentEncodedString
   }
 
-  /// Returns a copy of this string, encoded with the `application/x-www-form-urlencoded` (`\.form`) encoding-set.
+  /// Returns a copy of this string, encoded using the `application/x-www-form-urlencoded` (`\.form`) encoding-set.
   ///
   /// To create an `application/x-www-form-urlencoded` key-value pair string from a collection of keys and values, encode each key and value, and join
   /// the results using the format: `encoded-key-1=encoded-value-1&encoded-key-2=encoded-value-2...`. For example:
@@ -495,8 +496,8 @@ extension StringProtocol {
   /// print(form) // favourite+pet=%F0%9F%A6%86%2C+of+course&favourite+foods=%F0%9F%8D%8E+%26+%F0%9F%8D%A6
   /// ```
   ///
-  /// This encoding-set includes substitutions. Users should take care to also decode the resulting strings using the `application/x-www-form-urlencoded`
-  /// encoding-set.
+  /// This encoding-set performs substitutions. Users should take care to also decode the resulting strings using the `application/x-www-form-urlencoded`
+  /// decoding-set.
   ///
   @inlinable
   public var urlFormEncoded: String {
@@ -512,8 +513,9 @@ extension StringProtocol {
 
 extension LazyCollectionProtocol where Element == UInt8 {
 
-  /// Interprets this collection's elements as UTF8 code-units, and returns a collection of UTF8 code-units whose elements are formed lazily,
-  /// by decoding all percent-encoded code-unit sequences, and using `EncodeSet` to restore other code-units which may have been substituted.
+  /// Interprets this collection's elements as UTF-8 code-units, and returns a collection of bytes whose elements are computed lazily
+  /// by decoding all percent-encoded code-unit sequences and using `EncodeSet` to restore substituted code-units.
+  ///
   /// If no code-points were substituted when this collection's contents were encoded, `\.percentEncodedOnly` may be used to only remove percent-encoding.
   ///
   /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
@@ -528,12 +530,12 @@ extension LazyCollectionProtocol where Element == UInt8 {
     LazilyPercentDecodedUTF8(source: elements)
   }
 
-  /// Interprets this collection's elements as UTF8 code-units, and returns a collection of UTF8 code-units whose elements are formed lazily,
+  /// Interprets this collection's elements as UTF-8 code-units, and returns a collection of bytes whose elements are computed lazily
   /// by decoding all percent-encoded code-unit sequences.
   ///
   /// This is equivalent to calling `percentDecodedUTF8(from: \.percentEncodedOnly)`. If this collection's contents were encoded
-  /// with substitutions (e.g. `application/x-www-form-urlencoded`), use `percentDecodedUTF8(from:)` instead,
-  /// providing a `PercentDecodeSet` which is able to reverse those substitutions.
+  /// with substitutions (e.g. using form-encoding), use `percentDecodedUTF8(from:)` instead, providing a `PercentDecodeSet` which is able
+  /// to reverse those substitutions.
   ///
   /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
   ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
@@ -546,10 +548,10 @@ extension LazyCollectionProtocol where Element == UInt8 {
   }
 }
 
-/// A `Collection` which lazily replaces all percent-encoded UTF8 code-units from a `Source` collection with their decoded code-units.
+/// A `Collection` which lazily replaces all percent-encoded UTF8 code-units from its `Source` with their decoded code-units.
 /// It does not reverse any substitutions that may be a part of how `Source` is encoded.
 ///
-/// Percent decoding transforms certain ASCII sequences to arbitrary byte values ("%AB" to the byte value 0xAB).
+/// Percent decoding transforms certain sequences of ASCII code-points to arbitrary byte values ("%AB" to the byte 0xAB).
 ///
 /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
 ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
@@ -559,10 +561,10 @@ extension LazyCollectionProtocol where Element == UInt8 {
 public typealias LazilyPercentDecodedUTF8WithoutSubstitutions<Source> =
   LazilyPercentDecodedUTF8<Source, PercentEncodeSet._Passthrough> where Source: Collection, Source.Element == UInt8
 
-/// A `Collection` which lazily replaces all percent-encoded encoded UTF8 code-units from a `Source` collection with their decoded code-units,
+/// A `Collection` which lazily replaces all percent-encoded UTF8 code-units from its `Source` with their decoded code-units,
 /// and reverses substitutions of other code-units performed by `EncodeSet`.
 ///
-/// If the encode-set does not perform substitutions, `PercentEncodeSet._Passthrough` can be used to remove percent-encoding only.
+/// If the encode-set does not perform substitutions, `PercentEncodeSet._Passthrough` can be used to only remove percent-encoding.
 ///
 /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
 ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
@@ -686,9 +688,10 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
 
 extension Collection where Element == UInt8 {
 
-  /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences, and
-  /// using `EncodeSet` to restore other code-units which may have been substituted. If no code-points were substituted when this collection's contents were
-  /// encoded, `\.percentEncodedOnly` may be used to only remove percent-encoding.
+  /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences and
+  /// using `EncodeSet` to restore substituted code-units.
+  ///
+  /// If no code-points were substituted when this collection's contents were encoded, `\.percentEncodedOnly` may be used to only remove percent-encoding.
   ///
   /// - seealso: `StringProtocol.percentDecoded(from:)`
   /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
@@ -708,8 +711,8 @@ extension Collection where Element == UInt8 {
   /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences.
   ///
   /// This is equivalent to calling `percentDecodedString(from: \.percentEncodedOnly)`. If this collection's contents were encoded
-  /// with substitutions (e.g. `application/x-www-form-urlencoded`), use `percentDecodedString(from:)` instead,
-  /// providing a `PercentDecodeSet` which is able to reverse those substitutions.
+  /// with substitutions (e.g. form-encoding), use `percentDecodedString(from:)` instead, providing a `PercentDecodeSet` which is able to
+  /// reverse those substitutions.
   ///
   /// - seealso: `StringProtocol.percentDecoded`
   /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
@@ -722,8 +725,9 @@ extension Collection where Element == UInt8 {
     percentDecodedString(from: \.percentEncodedOnly)
   }
 
-  /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences, and
+  /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences and
   /// reversing substitutions made by the `application/x-www-form-urlencoded` encode-set.
+  ///
   /// This is equivalent to callling `percentDecodedString(from: \.form)`.
   ///
   /// - seealso: `StringProtocol.urlFormDecoded`
@@ -740,9 +744,9 @@ extension Collection where Element == UInt8 {
 
 extension StringProtocol {
 
-  /// Returns a string formed by decoding all percent-encoded code-units in this string's contents, and using `EncodeSet` to restore other code-units
-  /// which may have been substituted. If no code-points were substituted when this string was encoded, `\.percentEncodingOnly` may be used to
-  /// only remove percent-encoding.
+  /// Returns a string formed by decoding all percent-encoded code-units in this string, and using `EncodeSet` to restore substituted code-units.
+  ///
+  /// If no code-points were substituted when this string was encoded, `\.percentEncodingOnly` may be used to only remove percent-encoding.
   ///
   /// ```swift
   /// "hello,%20world!".percentDecoded(from: \.percentEncodingOnly) // "hello, world!"
@@ -763,7 +767,6 @@ extension StringProtocol {
   }
 
   /// Returns a string formed by decoding all percent-encoded code-units in the contents of this string.
-  /// Equivalent to JavaScript's `decodeURIComponent()` function.
   ///
   /// ```swift
   /// "hello%2C%20world!".percentDecoded // hello, world!
@@ -772,8 +775,10 @@ extension StringProtocol {
   /// ```
   ///
   /// This is equivalent to calling `percentDecodedString(from: \.percentEncodedOnly)`. If this collection's contents were encoded
-  /// with substitutions (e.g. `application/x-www-form-urlencoded`), use `percentDecoded(from:)` instead,
-  /// providing a `PercentDecodeSet` which is able to reverse those substitutions.
+  /// with substitutions (e.g. form-encoding), use `percentDecoded(from:)` instead, providing a `PercentDecodeSet` which is able to
+  /// reverse those substitutions.
+  ///
+  /// Equivalent to JavaScript's `decodeURIComponent()` function.
   ///
   /// - important: Users should beware that percent-encoding has frequently been used by attackers to smuggle malicious inputs
   ///              (e.g. extra path components which lead to sensitive data when used as a relative path, ASCII NULL bytes, or SQL injection),
@@ -785,8 +790,10 @@ extension StringProtocol {
     utf8.percentDecodedString
   }
 
-  /// Returns a string formed by decoding all percent-encoded code-units in this string's contents, and reversing substitutions made by
-  /// the `application/x-www-form-urlencoded` encode-set. This is equivalent to callling `percentDecoded(from: \.form)`.
+  /// Returns a string formed by decoding all percent-encoded code-units in this string and reversing substitutions made by
+  /// the `application/x-www-form-urlencoded` encode-set.
+  ///
+  /// This is equivalent to callling `percentDecoded(from: \.form)`.
   ///
   /// The following example decodes a form-encoded URL query by splitting a string in to key-value pairs at the "&" character, splitting the key from the value
   /// at the "=" character, and decoding each key and value from its encoded representation:
@@ -815,56 +822,75 @@ extension StringProtocol {
 // --------------------------------------------
 
 
+/// A namespace for percent-decode sets.
+///
+/// Decoding is thankfully much simpler than encoding; in almost all cases, simply removing percent-encoding is sufficient, as regular URL encode-sets do
+/// not substitute characters. Form-encoding is the only exception specified in the URL Standard.
+///
+/// Since percent-decode sets are not stateful, you only ever need to refer to their type, never an instance. The types are exposed as properties so you
+/// can use a convenient KeyPath syntax to refer to them.
+///
 public enum PercentDecodeSet {
 
-  public var percentEncodedOnly: PercentEncodeSet._Passthrough.Type { fatalError() }
-  public var form: PercentEncodeSet.FormEncoded.Type { fatalError() }
-}
-
-public enum PercentEncodeSet {
-
-  /// The [C0 control](https://url.spec.whatwg.org/#c0-control-percent-encode-set) percent-encode set.
+  /// A decoding set which only decodes percent-encoded characters and assumes that no substituted characters need to be restored.
   ///
-  public var c0Control: C0Control.Type { fatalError("Do not call") }
-
-  /// The [fragment](https://url.spec.whatwg.org/#fragment-percent-encode-set) percent-encode set.
-  ///
-  public var fragment: Fragment.Type { fatalError("Do not call") }
-
-  /// The [query](https://url.spec.whatwg.org/#query-percent-encode-set) percent-encode set.
-  ///
-  public var query_notSpecial: Query_NotSpecial.Type { fatalError("Do not call") }
-
-  /// The [special query](https://url.spec.whatwg.org/#special-query-percent-encode-set) percent-encode set.
-  ///
-  public var query_special: Query_Special.Type { fatalError("Do not call") }
-
-  /// The [path](https://url.spec.whatwg.org/#path-percent-encode-set) percent-encode set.
-  ///
-  public var path: Path.Type { fatalError("Do not call") }
-
-  /// The [userinfo](https://url.spec.whatwg.org/#userinfo-percent-encode-set) percent-encode set.
-  ///
-  public var userInfo: UserInfo.Type { fatalError("Do not call") }
-
-  /// The [component](https://url.spec.whatwg.org/#component-percent-encode-set) percent-encode set.
-  ///
-  public var component: Component.Type { fatalError("Do not call") }
+  public var percentEncodedOnly: PercentEncodeSet._Passthrough.Type { PercentEncodeSet._Passthrough.self }
 
   /// The [application/x-www-form-urlencoded](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set)
   /// percent-encode set.
   ///
-  public var form: FormEncoded.Type { fatalError("Do not call") }
+  public var form: PercentEncodeSet.FormEncoded.Type { PercentEncodeSet.FormEncoded.self }
+}
+
+/// A namespace for percent-encode sets.
+///
+/// Since percent-encode sets are not stateful, you only ever need to refer to their type, never an instance. The types are exposed as properties so you
+/// can use a convenient KeyPath syntax to refer to them.
+///
+public enum PercentEncodeSet {
+
+  /// The [C0 control](https://url.spec.whatwg.org/#c0-control-percent-encode-set) percent-encode set.
+  ///
+  public var c0Control: C0Control.Type { C0Control.self }
+
+  /// The [fragment](https://url.spec.whatwg.org/#fragment-percent-encode-set) percent-encode set.
+  ///
+  public var fragment: Fragment.Type { Fragment.self }
+
+  /// The [query](https://url.spec.whatwg.org/#query-percent-encode-set) percent-encode set.
+  ///
+  public var query_notSpecial: Query_NotSpecial.Type { Query_NotSpecial.self }
+
+  /// The [special query](https://url.spec.whatwg.org/#special-query-percent-encode-set) percent-encode set.
+  ///
+  public var query_special: Query_Special.Type { Query_Special.self }
+
+  /// The [path](https://url.spec.whatwg.org/#path-percent-encode-set) percent-encode set.
+  ///
+  public var path: Path.Type { Path.self }
+
+  /// The [userinfo](https://url.spec.whatwg.org/#userinfo-percent-encode-set) percent-encode set.
+  ///
+  public var userInfo: UserInfo.Type { UserInfo.self }
+
+  /// The [component](https://url.spec.whatwg.org/#component-percent-encode-set) percent-encode set.
+  ///
+  public var component: Component.Type { Component.self }
+
+  /// The [application/x-www-form-urlencoded](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set)
+  /// percent-encode set.
+  ///
+  public var form: FormEncoded.Type { FormEncoded.self }
 
   /// An internal percent-encode set for manipulating path components.
   ///
   @usableFromInline
-  internal var pathComponent: _PathComponent.Type { fatalError("Do not call") }
+  internal var pathComponent: _PathComponent.Type { _PathComponent.self }
 
   /// An internal percent-encode set for when content is already known to be correctly percent-encoded.
   ///
   @usableFromInline
-  internal var alreadyEncoded: _Passthrough.Type { fatalError("Do not call") }
+  internal var alreadyEncoded: _Passthrough.Type { _Passthrough.self }
 }
 
 // URL encode-set implementations.
