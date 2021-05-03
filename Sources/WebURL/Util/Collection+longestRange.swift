@@ -58,13 +58,16 @@ extension Collection where Element: Equatable {
   /// In the case of a tie, the range closest to the start of the Collection is returned.
   /// If no elements are equal to the given value, the returned range is empty and the returned length is 0.
   ///
+  /// - Note: This is a `WebURL` implementation detail and not necessarily part of its supported API.
+  ///         Do not use this function outside of the `WebURL` package.
+  ///
   /// - parameters:
   ///     - element:  The value to compare elements with.
   /// - returns:      A tuple containing the longest subrange equal to the given value,
   ///                 as well as how many elements are contained within that range.
   ///
   @inlinable
-  public func longestSubrange(equalTo value: Element) -> (subrange: Range<Index>, length: Int) {
+  public func _longestSubrange(equalTo value: Element) -> (subrange: Range<Index>, length: Int) {
     return longestSubrange { $0 == value }
   }
 }

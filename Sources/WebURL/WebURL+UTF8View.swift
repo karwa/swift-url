@@ -176,6 +176,29 @@ extension Slice where Base == WebURL.UTF8View {
 
 
 // --------------------------------------------
+// MARK: - Method variants for UTF8 code-units
+// --------------------------------------------
+
+
+extension WebURL.UTF8View {
+
+  /// Parses the given string, which is provided as a collection of UTF-8 code-units, with this URL as its base.
+  ///
+  /// This function supports a wide range of relative URL strings, producing the same result as an HTML `<a>` tag on the page given by this URL.
+  ///
+  /// It should be noted that this method accepts protocol-relative URLs, which are able to direct to a different hostname, as well as absolute URL strings,
+  /// which do not copy any information from their base URLs.
+  ///
+  @inlinable @inline(__always)
+  public func resolve<UTF8Bytes>(
+    _ utf8: UTF8Bytes
+  ) -> WebURL? where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
+    urlFromBytes(utf8, baseURL: WebURL(storage: storage))
+  }
+}
+
+
+// --------------------------------------------
 // MARK: - Components
 // --------------------------------------------
 

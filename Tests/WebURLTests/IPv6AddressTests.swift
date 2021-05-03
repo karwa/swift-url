@@ -270,7 +270,7 @@ final class IPv6AddressTests: XCTestCase {
         let expected = IPv6Address.Utils.randomAddress()
         let address = IPv6Address(pieces: expected, .binary)
         if address.serialized.contains("::") {
-          XCTAssertTrue(Array(ipv6Pieces: expected).longestSubrange(equalTo: 0).length > 0)
+          XCTAssertTrue(Array(ipv6Pieces: expected)._longestSubrange(equalTo: 0).length > 0)
         }
 
         // Serialize with libc. It should return the same String.

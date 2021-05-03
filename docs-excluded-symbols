@@ -14,4 +14,4 @@ PercentEncodeSet.FormEncoded
 PercentEncodeSet._Passthrough
 WebURL.FormEncodedQueryParameters.KeyValuePairs.Iterator
 WebURL.PathComponents.Index
-Collection.longestSubrange(equalTo:)
+Collection._longestSubrange(equalTo:)

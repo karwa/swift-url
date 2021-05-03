@@ -269,7 +269,7 @@ extension IPv6Address.Utils {
       let pieces = addressBytes.bindMemory(to: UInt16.self)
       let compressedRange: (subrange: Range<Int>, length: Int)
       if mayCompress && Bool.random(using: &rng) {
-        compressedRange = pieces.longestSubrange(equalTo: 0)
+        compressedRange = pieces._longestSubrange(equalTo: 0)
       } else {
         compressedRange = (subrange: 0..<0, length: 0)
       }

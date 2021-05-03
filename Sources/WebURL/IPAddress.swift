@@ -460,7 +460,7 @@ extension IPv6Address {
       withUnsafeBufferPointerToElements(tuple: self[pieces: .numeric]) { piecesBuffer -> Int in
         // Look for ranges of consecutive zeroes.
         let compressedPieces: Range<Int>
-        let compressedRangeResult = piecesBuffer.longestSubrange(equalTo: 0)
+        let compressedRangeResult = piecesBuffer._longestSubrange(equalTo: 0)
         if compressedRangeResult.length > 1 {
           compressedPieces = compressedRangeResult.subrange
         } else {
