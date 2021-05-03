@@ -840,66 +840,100 @@ extension WebURLTests {
   func testHost() {
 
     // Non-IP hostnames in special URLs are always domains.
-    let url1 = WebURL("http://example.com/aPath?aQuery#andFragment, too")!
-    if case .domain("example.com") = url1.host {
-      XCTAssertEqual(url1.host?.serialized, url1.hostname)
-    } else {
-      XCTFail("Unexpected host: \(String(describing: url1.host))")
+    do {
+      let url = WebURL("http://example.com/aPath?aQuery#andFragment, too")!
+      if case .domain("example.com") = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
     }
 
     // Non-IP hostnames in non-special URLs are always opaque hostnames.
-    let url2 = WebURL("foo://example.com/aPath?aQuery#andFragment, too")!
-    if case .opaque("example.com") = url2.host {
-      XCTAssertEqual(url2.host?.serialized, url2.hostname)
-    } else {
-      XCTFail("Unexpected host: \(String(describing: url2.host))")
+    do {
+      let url = WebURL("foo://example.com/aPath?aQuery#andFragment, too")!
+      if case .opaque("example.com") = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
     }
 
     // Special URLs detect IPv4 addresses.
-    let url3 = WebURL("http://0xbadf00d/aPath?aQuery#andFragment, too")!
-    if case .ipv4Address(.init(octets: (11, 173, 240, 13))) = url3.host {
-      XCTAssertEqual(url3.host?.serialized, url3.hostname)
-    } else {
-      XCTFail("Unexpected host: \(String(describing: url3.host))")
+    do {
+      let url = WebURL("http://0xbadf00d/aPath?aQuery#andFragment, too")!
+      if case .ipv4Address(.init(octets: (11, 173, 240, 13))) = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
     }
     // Non-special URLs do not.
-    let url4 = WebURL("foo://11.173.240.13/aPath?aQuery#andFragment, too")!
-    if case .opaque("11.173.240.13") = url4.host {
-      XCTAssertEqual(url4.host?.serialized, url4.hostname)
-    } else {
-      XCTFail("Unexpected host: \(String(describing: url4.host))")
+    do {
+      let url = WebURL("foo://11.173.240.13/aPath?aQuery#andFragment, too")!
+      if case .opaque("11.173.240.13") = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
     }
 
     // Both special and non-special URLs detect IPv6 addresses.
-    let url5 = WebURL("http://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
-    if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url5.host {
-      XCTAssertEqual(url5.host?.serialized, url5.hostname)
-    } else {
-      XCTFail("Unexpected host: \(String(describing: url5.host))")
+    do {
+      let url = WebURL("http://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
+      if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
+    }
+    do {
+      let url = WebURL("foo://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
+      if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
     }
 
-    let url6 = WebURL("foo://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
-    if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url6.host {
-      XCTAssertEqual(url6.host?.serialized, url6.hostname)
-    } else {
-      XCTFail("Unexpected host: \(String(describing: url6.host))")
+    // File and non-special URLs may have empty hostnames.
+    do {
+      let url = WebURL("file:///usr/bin/swift")!
+      if case .empty = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+        XCTAssertEqual(url.host?.serialized, "")
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
+    }
+    do {
+      let url = WebURL("foo:///some/path")!
+      if case .empty = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+        XCTAssertEqual(url.host?.serialized, "")
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
     }
 
     // Path-only and cannot-be-a-base-path URLs do not have hosts.
-    let url7 = WebURL("foo:/path/only")!
-    if case .none = url7.host {
-      XCTAssertEqual(url7.host?.serialized, url7.hostname)
-      XCTAssertFalse(url7.cannotBeABase)
-    } else {
-      XCTFail("Unexpected host: \(String(describing: url7.host))")
+    do {
+      let url = WebURL("foo:/path/only")!
+      if case .none = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+        XCTAssertFalse(url.cannotBeABase)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
     }
-
-    let url8 = WebURL("foo:some non-path")!
-    if case .none = url8.host {
-      XCTAssertEqual(url8.host?.serialized, url8.hostname)
-      XCTAssertTrue(url8.cannotBeABase)
-    } else {
-      XCTFail("Unexpected host: \(String(describing: url8.host))")
+    do {
+      let url = WebURL("foo:some non-path")!
+      if case .none = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+        XCTAssertTrue(url.cannotBeABase)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
     }
   }
 

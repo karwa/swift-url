@@ -106,6 +106,7 @@ public struct IPv6Address {
     UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8
   )
 
+  /// The octets of this address.
   public var octets: Octets
 
   /// Creates an address with the given octets.
@@ -122,9 +123,11 @@ public struct IPv6Address {
   /// - parameters:
   ///     - pieces:            The integer pieces of the address.
   ///     - octetArrangement:  How the octets in each integer of `pieces` are arranged:
-  ///                            - If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.
-  ///                            - If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
-  ///                              they are in.
+  ///                          <ul>
+  ///                          <li>If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.</li>
+  ///                          <li>If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
+  ///                              they are in.</li>
+  ///                          </ul>
   ///
   @inlinable
   public init(pieces: Pieces, _ octetArrangement: OctetArrangement) {
@@ -137,9 +140,11 @@ public struct IPv6Address {
   /// - seealso: `OctetArrangement`
   /// - parameters:
   ///     - octetArrangement:  How the octets in each integer of `pieces` are arranged:
-  ///                            - If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.
-  ///                            - If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
-  ///                              they are in.
+  ///                          <ul>
+  ///                          <li>If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.</li>
+  ///                          <li>If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
+  ///                              they are in.</li>
+  ///                          </ul>
   ///
   @inlinable
   public subscript(pieces octetArrangement: OctetArrangement) -> Pieces {
@@ -509,6 +514,7 @@ public struct IPv4Address {
 
   public typealias Octets = (UInt8, UInt8, UInt8, UInt8)
 
+  /// The octets of this address.
   public var octets: Octets
 
   /// Creates an address with the given octets.
@@ -522,9 +528,11 @@ public struct IPv4Address {
   /// - parameters:
   ///     - value:             The integer value of the address.
   ///     - octetArrangement:  How the octets of `value` are arranged:
-  ///                            - If `numeric`, the integer is assumed to be in "host byte order", and its octets will be rearranged if necessary.
-  ///                            - If `binary`, the integer is assumed to be in "network byte order", and its octets will be stored in the order
-  ///                              they are in.
+  ///                          <ul>
+  ///                          <li>If `numeric`, the integer is assumed to be in "host byte order", and its octets will be rearranged if necessary.</li>
+  ///                          <li>If `binary`, the integer is assumed to be in "network byte order", and its octets will be stored in the order
+  ///                              they are in.</li>
+  ///                          </ul>
   ///
   public init(value: UInt32, _ octetArrangement: OctetArrangement) {
     self.init()
@@ -536,9 +544,11 @@ public struct IPv4Address {
   /// - seealso: `OctetArrangement`
   /// - parameters:
   ///     - octetArrangement:  How the octets of `value` are arranged:
-  ///                            - If `numeric`, the integer is assumed to be in "host byte order", and its octets will be rearranged if necessary.
-  ///                            - If `binary`, the integer is assumed to be in "network byte order", and its octets will be stored in the order
-  ///                              they are in.
+  ///                          <ul>
+  ///                          <li>If `numeric`, the integer is assumed to be in "host byte order", and its octets will be rearranged if necessary.</li>
+  ///                          <li>If `binary`, the integer is assumed to be in "network byte order", and its octets will be stored in the order
+  ///                              they are in.</li>
+  ///                          </ul>
   ///
   public subscript(value octetArrangement: OctetArrangement) -> UInt32 {
     get {
@@ -621,7 +631,7 @@ extension IPv4Address {
   ///    the address' 3rd and 4th octets respectively.
   ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
   ///    significant.
-  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose octets define the octets of the address in order from most to least significant.
+  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose bytes define the octets of the address in order from most to least significant.
   ///
   /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
   /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
@@ -651,17 +661,17 @@ extension IPv4Address {
   ///    the address' 3rd and 4th octets respectively.
   ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
   ///    significant.
-  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose octets define the octets of the address in order from most to least significant.
+  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose bytes define the octets of the address in order from most to least significant.
   ///
   /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
   /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
   ///
   /// Examples:
   /// ```
-  /// IPv4Address("0x7f.0.0.1")!.octets == (0x7f, 0x00, 0x00, 0x01) == "127.0.0.1"
-  /// IPv4Address("10.1.0x12.")!.octets == (0x0a, 0x01, 0x00, 0x12) == "10.1.0.18"
-  /// IPv4Address("0300.0xa80032")!.octets == (0xc0, 0xa8, 0x00, 0x32) == "192.168.0.50"
-  /// IPv4Address("0x8Badf00d")!.octets == (0x8b, 0xad, 0xf0, 0x0d) == "139.173.240.13"
+  /// IPv4Address("0x7f.0.0.1".utf8)!.octets == (0x7f, 0x00, 0x00, 0x01) == "127.0.0.1"
+  /// IPv4Address("10.1.0x12.".utf8)!.octets == (0x0a, 0x01, 0x00, 0x12) == "10.1.0.18"
+  /// IPv4Address("0300.0xa80032".utf8)!.octets == (0xc0, 0xa8, 0x00, 0x32) == "192.168.0.50"
+  /// IPv4Address("0x8Badf00d".utf8)!.octets == (0x8b, 0xad, 0xf0, 0x0d) == "139.173.240.13"
   /// ```
   ///
   /// - parameters:
@@ -678,6 +688,9 @@ extension IPv4Address {
 
 extension IPv4Address {
 
+  /// A tri-state result which captures whether an IPv4 address failed to parse because it was invalid,
+  /// or whether it failed because the given string does not look like an IP address.
+  ///
   public enum ParserResult {
 
     /// The string was successfully parsed as an IPv4 address.
@@ -688,7 +701,7 @@ extension IPv4Address {
     ///
     case failure
 
-    /// The string cannot be recognized as an IPv4 address. This is not the same as being invalid - for example, the string "9999999999.com" fails
+    /// The string cannot be recognized as an IPv4 address. This is not the same as being an invalid IP address - for example, the string "9999999999.com" fails
     /// to parse because the non-numeric characters "com" mean it isn't even an IP address string, whereas the string "9999999999" _is_ a properly-formatted
     /// IP address string, but fails to parse because the value would overflow.
     ///
@@ -708,7 +721,7 @@ extension IPv4Address {
   ///    the address' 3rd and 4th octets respectively.
   ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
   ///    significant.
-  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose octets define the octets of the address in order from most to least significant.
+  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose bytes define the octets of the address in order from most to least significant.
   ///
   /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
   /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).

@@ -21,31 +21,47 @@ final class FormEncodedQueryParametersTests: XCTestCase {
   func testDocumentationExamples() {
 
     // From documentation for `WebURL.formParams`:
-    var url = WebURL("http://example.com/shopping/deals?category=food&limit=25")!
-    XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
-    XCTAssertEqual(url.formParams.category, "food")
+    do {
+      var url = WebURL("http://example.com/currency/convert?from=EUR&to=USD")!
+      XCTAssertEqual(url.formParams.from, "EUR")
+      XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
 
-    url.formParams.distance = "10km"
-    XCTAssertEqual(url.serialized, "http://example.com/shopping/deals?category=food&limit=25&distance=10km")
+      url.formParams.from = "GBP"
+      XCTAssertEqual(url.serialized, "http://example.com/currency/convert?from=GBP&to=USD")
 
-    url.formParams.limit = nil
-    XCTAssertEqual(url.serialized, "http://example.com/shopping/deals?category=food&distance=10km")
+      url.formParams.amount = "20"
+      XCTAssertEqual(url.serialized, "http://example.com/currency/convert?from=GBP&to=USD&amount=20")
 
-    url.formParams.set("cuisine", to: "🇮🇹")
-    XCTAssertEqual(
-      url.serialized, "http://example.com/shopping/deals?category=food&distance=10km&cuisine=%F0%9F%87%AE%F0%9F%87%B9"
-    )
-    XCTAssertURLIsIdempotent(url)
-    XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      url.formParams.to = "💵"
+      XCTAssertEqual(url.serialized, "http://example.com/currency/convert?from=GBP&to=%F0%9F%92%B5&amount=20")
 
-    let expected = [
-      ("category", "food"),
-      ("distance", "10km"),
-      ("cuisine", "🇮🇹"),
-    ]
-    for (i, (key, value)) in url.formParams.allKeyValuePairs.enumerated() {
-      XCTAssertEqual(key, expected[i].0)
-      XCTAssertEqual(value, expected[i].1)
+      XCTAssertURLIsIdempotent(url)
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+
+      let expected = [
+        ("from", "GBP"),
+        ("to", "💵"),
+        ("amount", "20"),
+      ]
+      for (i, (key, value)) in url.formParams.allKeyValuePairs.enumerated() {
+        XCTAssertEqual(key, expected[i].0)
+        XCTAssertEqual(value, expected[i].1)
+      }
+    }
+    // From documentation for 'contains', 'get':
+    do {
+      let url = WebURL("http://example.com?jalape\u{006E}\u{0303}os=2")!
+      XCTAssertEqual(url.serialized, "http://example.com/?jalapen%CC%83os=2")
+
+      XCTAssertTrue(url.formParams.contains("jalape\u{006E}\u{0303}os"))
+      XCTAssertEqual(url.formParams.get("jalape\u{006E}\u{0303}os"), "2")
+
+      XCTAssertFalse(url.formParams.contains("jalape\u{00F1}os"))
+      XCTAssertNil(url.formParams.get("jalape\u{00F1}os"))
+
+      XCTAssert(
+        url.formParams.allKeyValuePairs.first(where: { $0.0 == "jalape\u{00F1}os" }) ?? ("", "") == ("jalapeños", "2")
+      )
     }
   }
 

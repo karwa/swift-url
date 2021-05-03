@@ -14,10 +14,15 @@
 
 /// A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.
 ///
-/// Parsing and manipulation of URLs is compatible with the [WHATWG URL Specification][url-spec].
-/// The `WebURL` API differs slightly from the Javascript API described in the standard, which is available via the `.jsModel` property.
+/// URL parsing and serialization is compatible with the [WHATWG URL Standard][URL-spec].
 ///
-/// [url-spec]: https://url.spec.whatwg.org/
+/// The `WebURL` API is designed to meet the needs and expectations of Swift developers, expanding on the JavaScript API described in the standard
+/// to add path-component manipulation, host objects, and more. Some of the component values have been tweaked to not include their leading or
+/// trailing delimiters, and component setters are little stricter and more predictable, but in all other respects they should have the same behaviour.
+///
+/// For more information on the differences between this API and the JavaScript `URL` class, see the `WebURL.JSModel` type.
+///
+/// [URL-spec]: https://url.spec.whatwg.org/
 ///
 public struct WebURL {
 
@@ -29,22 +34,26 @@ public struct WebURL {
     self.storage = storage
   }
 
-  /// Attempt to construct a URL by parsing the given string.
+  /// Constructs a URL by parsing the given string.
   ///
-  /// The created URL is normalized in a number of ways - for instance, whitespace characters may be removed, other characters may be percent-encoded,
-  /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
-  /// resulting object's serialized string may look different to the original contents. These transformations are defined in the URL standard.
+  /// This parser is compatible with the [WHATWG URL Standard][URL-spec]; this means that whitespace characters may be removed from the given string,
+  /// other characters may be percent-encoded based on which component they belong to, IP addresses rewritten in canonical notation,
+  /// and paths lexically simplified, among other transformations defined by the standard.
+  ///
+  /// [URL-spec]: https://url.spec.whatwg.org/
   ///
   @inlinable @inline(__always)
   public init?<S>(_ string: S) where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     self.init(utf8: string.utf8)
   }
 
-  /// Attempt to construct a URL by parsing the given string, provided as a collection of UTF-8 code-units.
+  /// Constructs a URL by parsing the given string, which is provided as a collection of UTF-8 code-units.
   ///
-  /// The created URL is normalized in a number of ways - for instance, whitespace characters may be removed, other characters may be percent-encoded,
-  /// hostnames may be IDNA-encoded, or rewritten in a canonical notation if they are IP addresses, paths may be lexically simplified, etc. This means that the
-  /// resulting object's serialized string may look different to the original contents. These transformations are defined in the URL standard.
+  /// This parser is compatible with the [WHATWG URL Standard][URL-spec]; this means that whitespace characters may be removed from the given string,
+  /// other characters may be percent-encoded based on which component they belong to, IP addresses rewritten in canonical notation,
+  /// and paths lexically simplified, among other transformations defined by the standard.
+  ///
+  /// [URL-spec]: https://url.spec.whatwg.org/
   ///
   @inlinable @inline(__always)
   public init?<UTF8Bytes>(utf8: UTF8Bytes) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
@@ -52,31 +61,31 @@ public struct WebURL {
     self = url
   }
 
-  /// Attempt to create a URL by parsing the given string with this URL as its base.
+  /// Parses the given string with this URL as its base.
   ///
   /// This function supports a wide range of relative URL strings, producing the same result as an HTML `<a>` tag on the page given by this URL.
-  /// In particular, users should note that the resulting URL may have a different host to this one, and may even have a different scheme if the given string
-  /// is an absolute URL string.
   ///
   /// ```swift
   /// let base = WebURL("http://example.com/karl/index.html")!
   ///
-  /// base.resolve("img.jpg?size=200x200")! // "http://example.com/karl/img.jpg?size=200x200"
-  /// base.resolve("/mary/lambs/")! // "http://example.com/mary/lambs/"
-  /// base.resolve("//test.com")! // "http://test.com/"
-  /// base.resolve("ftp://test.com/some/file")! // "ftp://test.com/some/file"
+  /// base.resolve("photos/img.jpg?size=200x200")! // "http://example.com/karl/photos/img.jpg?size=200x200"
+  /// base.resolve("/mary/lambs/1/fleece.txt")! // "http://example.com/mary/lambs/1/fleece.txt"
   /// ```
+  ///
+  /// It should be noted that this method accepts protocol-relative URLs, which are able to direct to a different hostname, as well as absolute URL strings,
+  /// which do not copy any information from their base URLs.
   ///
   @inlinable @inline(__always)
   public func resolve<S>(_ string: S) -> WebURL? where S: StringProtocol, S.UTF8View: BidirectionalCollection {
     resolve(utf8: string.utf8)
   }
 
-  /// Attempt to create a URL by parsing the given string, provided as a collection of UTF-8 code-units, with this URL as its base.
+  /// Parses the given string, which is provided as a collection of UTF-8 code-units, with this URL as its base.
   ///
   /// This function supports a wide range of relative URL strings, producing the same result as an HTML `<a>` tag on the page given by this URL.
-  /// In particular, users should note that the resulting URL may have a different host to this one, and may even have a different scheme if the given string
-  /// is an absolute URL string.
+  ///
+  /// It should be noted that this method accepts protocol-relative URLs, which are able to direct to a different hostname, as well as absolute URL strings,
+  /// which do not copy any information from their base URLs.
   ///
   @inlinable @inline(__always)
   public func resolve<UTF8Bytes>(
@@ -112,7 +121,7 @@ extension WebURL: Equatable, Hashable, Comparable {
   public static func < (lhs: Self, rhs: Self) -> Bool {
     lhs.utf8.withUnsafeBufferPointer { lhsBuffer in
       rhs.utf8.withUnsafeBufferPointer { rhsBuffer in
-        return lhsBuffer.lexicographicallyPrecedes(rhsBuffer)
+        lhsBuffer.lexicographicallyPrecedes(rhsBuffer)
       }
     }
   }
@@ -128,16 +137,16 @@ extension WebURL: CustomStringConvertible, LosslessStringConvertible {
 extension WebURL: Codable {
 
   public init(from decoder: Decoder) throws {
-    let box = try decoder.singleValueContainer()
-    guard let decoded = WebURL(try box.decode(String.self)) else {
-      throw DecodingError.dataCorruptedError(in: box, debugDescription: "Invalid URL")
+    let container = try decoder.singleValueContainer()
+    guard let decoded = WebURL(try container.decode(String.self)) else {
+      throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid URL")
     }
     self = decoded
   }
 
   public func encode(to encoder: Encoder) throws {
-    var box = encoder.singleValueContainer()
-    try box.encode(serialized)
+    var container = encoder.singleValueContainer()
+    try container.encode(serialized)
   }
 }
 
@@ -173,10 +182,11 @@ extension WebURL {
   /// The scheme of this URL, for example `https` or `file`.
   ///
   /// A URL’s `scheme` is a non-empty ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing.
-  /// For example, software that speaks the HTTP protocol will know how to process requests for URLs with the "http" scheme. Every URL must have a scheme.
+  /// For example, a URL with the "http" scheme should be processed by software that understands the HTTP protocol. Every URL must have a scheme.
   ///
   /// Some schemes (http, https, ws, wss, ftp, and file) are referred to as being "special"; the components of URLs with these schemes may have unique
-  /// encoding requirements, or additional meaning. Scheme usage is co-ordinated by the [Internet Assigned Numbers Authority][iana-schemes].
+  /// encoding requirements, or the components may carry additional meaning.
+  /// Scheme usage is co-ordinated by the [Internet Assigned Numbers Authority][iana-schemes].
   ///
   /// Setting this property may fail if the new scheme is invalid, or if the URL cannot be adjusted to the new scheme.
   ///
@@ -189,7 +199,7 @@ extension WebURL {
 
   /// The username of this URL, if present, as a non-empty, percent-encoded ASCII string.
   ///
-  /// When setting this property, the new contents will be percent-encoded if necessary.
+  /// When setting this property, any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
   /// Setting this property may fail if the URL does not allow credentials.
   ///
   public var username: String? {
@@ -199,7 +209,7 @@ extension WebURL {
 
   /// The password of this URL, if present, as a non-empty, percent-encoded string.
   ///
-  /// When setting this property, the new contents will be percent-encoded if necessary.
+  /// When setting this property, any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
   /// Setting this property may fail if the URL does not allow credentials.
   ///
   public var password: String? {
@@ -209,11 +219,14 @@ extension WebURL {
 
   /// The string representation of this URL's host, if present.
   ///
-  /// A URL's host which can be a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+  /// A URL's host can be a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
   /// Typically a host serves as a network address, but is sometimes used as an opaque identifier in URLs where a network address is not necessary.
   ///
   /// When setting this property, the new contents will be parsed and normalized (e.g. domains will be percent-decoded and lowercased, and IP addresses
-  /// rewritten in a canonical format). Setting this property will fail if the new contents contain invalid host code-points or a malformed IP address.
+  /// will be rewritten in their canonical form). Unlike setting other components, not all code-points which are invalid for use in hostnames will be percent-encoded.
+  /// If the new content contains a [forbidden host code-point][URL-fhcp], the operation will fail.
+  ///
+  /// [URL-fhcp]: https://url.spec.whatwg.org/#forbidden-host-code-point
   ///
   public var hostname: String? {
     get { utf8.hostname.map { String(decoding: $0, as: UTF8.self) } }
@@ -238,31 +251,11 @@ extension WebURL {
 
   /// The string representation of this URL's path.
   ///
-  /// A URL's path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form. Hierarchical paths begin with a "/".
+  /// A URL's path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form.
+  /// Hierarchical paths are those that begin with a "/". Empty paths are assumed to be hierarchical if the URL has a `hostname`.
   ///
-  /// URLs with "special" schemes always have non-empty, hierarchical paths, and attempting to set the path to an empty string will instead set it to "/".
-  /// URLs with non-special schemes may have an empty path under certain circumstances.
-  /// URLs with non-hierarchical paths are referred to as `cannotBeABase` URLs.
-  ///
-  /// ```swift
-  /// let file = WebURL("file:///usr/bin/swift")!
-  /// print(file) // "file:///usr/bin/swift"
-  /// print(file.path) // "/usr/bin/swift"
-  /// print(file.cannotBeABase) // false
-  ///
-  /// let hasImplictPath = WebURL("http://example.com")!
-  /// print(hasImplictPath) // "http://example.com/"
-  /// print(hasImplictPath.path) // "/"
-  /// print(hasImplictPath.cannotBeABase) // false
-  ///
-  /// let mailURL = WebURL("mailto:bob@example.com")!
-  /// print(mailURL) // "mailto:bob@example.com"
-  /// print(mailURL.path) // "bob@example.com"
-  /// print(mailURL.cannotBeABase) // true
-  /// ```
-  ///
-  /// When setting this property, the new contents will be parsed, lexically simplified, and percent-encoded if necessary.
-  /// Setting this property will fail if the URL `cannotBeABase`.
+  /// When setting this property, the given path string will be lexically simplified, and any code-points in the path's components that are not valid
+  /// for use will be percent-encoded. Setting this property will fail if the URL is non-hierarchical (see `WebURL.cannotBeABase` for more information).
   ///
   public var path: String {
     get { String(decoding: utf8.path, as: UTF8.self) }
@@ -275,7 +268,8 @@ extension WebURL {
   /// standardized, but is often used to store a list of key-value pairs ("parameters").
   ///
   /// This string representation does not include the leading `?` delimiter.
-  /// When setting this property, the new contents will be percent-encoded if necessary. Setting this property does not fail.
+  /// When setting this property, any code-points which are not valid for use in the URL's query will be percent-encoded.
+  /// Note that the set of code-points which are valid depends on the URL's `scheme`.
   ///
   public var query: String? {
     get { utf8.query.map { String(decoding: $0, as: UTF8.self) } }
@@ -287,7 +281,7 @@ extension WebURL {
   /// A URL's `fragment` is an optional string which may be used for further processing on the resource identified by the other components.
   ///
   /// This string representation does not include the leading `#` delimiter.
-  /// When setting this property, the new contents will be percent-encoded if necessary. Setting this property does not fail.
+  /// When setting this property, any code-points which are not valid for use in the URL's fragment will be percent-encoded.
   ///
   public var fragment: String? {
     get { utf8.fragment.map { String(decoding: $0, as: UTF8.self) } }
@@ -296,10 +290,15 @@ extension WebURL {
 
   /// Whether this URL cannot be a base.
   ///
-  /// URLs which 'cannot be a base' do not have special schemes (such as http or file), authority components or hierarchical paths.
-  /// When parsing a relative URL string against such a URL, only strings which set the fragment are allowed, and any modifications which would change
-  /// a URL's structure to be a valid base URL (or vice versa) are not allowed.
-  /// Examples of URLs which cannot be a base are:
+  /// 'Cannot be a base' URLs are non-hierarchical; they do not have authority components, or hierarchical paths.
+  /// URLs with special schemes (such as http or file) are never non-hierarchical.
+  /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme.
+  ///
+  /// When parsing a relative URL string against such a URL, only replacing the fragment is allowed, and any modifications which would change
+  /// a URL's structure to become hierarchical (or non-hierarchical) will fail. This means the `username`, `password`, `hostname`, `port`, and
+  /// `path` setters always fail when performed on a non-hierarchical URL.
+  ///
+  /// Examples of non-hierarchical URLs are:
   ///
   /// - `mailto:bob@example.com`
   /// - `javascript:alert("hello");`
@@ -320,6 +319,8 @@ extension WebURL {
 
   /// Replaces this URL's `scheme` with the given string.
   ///
+  /// Setting this component may fail if the new scheme is invalid, or if the URL cannot be adjusted to the new scheme.
+  ///
   /// - seealso: `scheme`
   ///
   @inlinable
@@ -328,6 +329,9 @@ extension WebURL {
   }
 
   /// Replaces this URL's `username` with the given string.
+  ///
+  /// Any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
+  /// Setting this component may fail if the URL does not allow credentials.
   ///
   /// - seealso: `username`
   ///
@@ -338,6 +342,9 @@ extension WebURL {
 
   /// Replaces this URL's `password` with the given string.
   ///
+  /// Any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
+  /// Setting this component may fail if the URL does not allow credentials.
+  ///
   /// - seealso: `password`
   ///
   @inlinable
@@ -346,6 +353,12 @@ extension WebURL {
   }
 
   /// Replaces this URL's `hostname` with the given string.
+  ///
+  /// When setting this component, the new contents will be parsed and normalized (e.g. domains will be percent-decoded and lowercased, and IP addresses
+  /// will be rewritten in their canonical form). Unlike setting other components, not all code-points which are invalid for use in hostnames will be percent-encoded.
+  /// If the new content contains a [forbidden host code-point][URL-fhcp], the operation will fail.
+  ///
+  /// [URL-fhcp]: https://url.spec.whatwg.org/#forbidden-host-code-point
   ///
   /// - seealso: `hostname`
   ///
@@ -356,6 +369,9 @@ extension WebURL {
   }
 
   /// Replaces this URL's `port`.
+  ///
+  /// Setting this component may fail if the new value is out of range, or if the URL does not support port numbers.
+  /// If the URL has a "special" scheme, setting the port to its known default value will remove the port.
   ///
   /// - seealso: `port`
   ///
@@ -378,6 +394,9 @@ extension WebURL {
 
   /// Replaces this URL's `path` with the given string.
   ///
+  /// When setting this component, the given path string will be lexically simplified, and any code-points in the path's components that are not valid
+  /// for use will be percent-encoded. Setting this component will fail if the URL is non-hierarchical (see `WebURL.cannotBeABase` for more information).
+  ///
   /// - seealso: `path`
   ///
   @inlinable
@@ -387,6 +406,9 @@ extension WebURL {
 
   /// Replaces this URL's `query` with the given string.
   ///
+  /// When setting this property, any code-points which are not valid for use in the URL's query will be percent-encoded.
+  /// Note that the set of code-points which are valid depends on the URL's `scheme`.
+  ///
   /// - seealso: `query`
   ///
   @inlinable
@@ -395,6 +417,8 @@ extension WebURL {
   }
 
   /// Replaces this URL's `fragment` with the given string.
+  ///
+  /// When setting this property, any code-points which are not valid for use in the URL's fragment will be percent-encoded.
   ///
   /// - seealso: `fragment`
   ///

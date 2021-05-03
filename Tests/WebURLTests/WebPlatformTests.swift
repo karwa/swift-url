@@ -24,10 +24,10 @@ func loadTestResource(name: String) -> Data? {
   // I'm pretty massively disappointed that I need to do this.
   #if os(macOS)
     let url = Bundle.module.url(forResource: "Resources/\(name)", withExtension: "json")!
-    return try? Data(contentsOf: url)  
+    return try? Data(contentsOf: url)
   #else
     var path = #filePath
-    path.removeLast(22) // "WebPlatformTests.swift"
+    path.removeLast(22)  // "WebPlatformTests.swift"
     path += "Resources/\(name).json"
     return FileManager.default.contents(atPath: path)
   #endif
