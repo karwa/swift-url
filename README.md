@@ -23,7 +23,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "<target>", dependencies: [
-            .product(name: "WebURL", package: "WebURL"),
+            .product(name: "WebURL", package: "swift-url"),
         ]),
         // other targets
     ]
