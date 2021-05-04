@@ -7,7 +7,7 @@ This package contains a new URL type for Swift, written in Swift. Check out our 
 To use `WebURL` in a SwiftPM project, add the following line to the dependencies in your Package.swift file:
 
 ```swift
-.package(url: "https://github.com/karwa/swift-url", branch: "main"),
+.package(url: "https://github.com/karwa/swift-url", .branch("main")),
 ```
 
 `WebURL` isn't totally ready for a public release yet. In particular, I'm considering squashing the entire version history in to an "initial import"-style commit, so for now use a branch-based dependency and don't use it for anything super important.
@@ -18,7 +18,7 @@ Next, include "WebURL" as a dependency for your executable target:
 let package = Package(
     // name, platforms, products, etc.
     dependencies: [
-        .package(url: "https://github.com/karwa/swift-url", branch: "main"),
+        .package(url: "https://github.com/karwa/swift-url", .branch("main")),
         // other dependencies
     ],
     targets: [
