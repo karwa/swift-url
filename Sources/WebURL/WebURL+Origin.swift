@@ -21,7 +21,7 @@ extension WebURL {
   ///
   /// The origin is not an attribute or component of a URL; it is a value which may be computed from a URL.
   ///
-  /// The only URLs for which meaningul origins may be computed are:
+  /// The only URLs for which meaningful origins may be computed are:
   /// - Those with the http, https, ftp, ws, or wss schemes (i.e. the "special" schemes, excluding file), and
   /// - Those with the "blob" scheme, which do not have an authority (cannot-be-a-base), and whose path is another URL.
   ///
