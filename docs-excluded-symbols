@@ -1,0 +1,17 @@
+LazilyPercentEncodedGroups
+LazilyPercentEncodedGroups.index(before:)
+LazilyPercentEncodedGroups.formIndex(before:)
+_PercentEncodedByte
+LazilyPercentDecodedUTF8.Index
+PercentEncodeSet.C0Control
+PercentEncodeSet.Fragment
+PercentEncodeSet.Query_NotSpecial
+PercentEncodeSet.Query_Special
+PercentEncodeSet.Path
+PercentEncodeSet.UserInfo
+PercentEncodeSet.Component
+PercentEncodeSet.FormEncoded
+PercentEncodeSet._Passthrough
+WebURL.FormEncodedQueryParameters.KeyValuePairs.Iterator
+WebURL.PathComponents.Index
+Collection._longestSubrange(equalTo:)

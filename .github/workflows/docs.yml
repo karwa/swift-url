@@ -1,0 +1,29 @@
+name: Generate Documentation
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: Generate Documentation
+        uses: karwa/swift-doc@linux-fixes
+        with:
+          inputs: "Sources/WebURL"
+          module-name: WebURL
+          output: "Documentation"
+          base-url: "/swift-url/"
+          format: html
+          excluded-symbols: docs-excluded-symbols
+      - name: Fix permissions
+        run: 'sudo chown --recursive $USER Documentation'
+      - name: Publish documentation to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@4.1.1
+        with:
+          branch: gh-pages
+          folder: Documentation
+          single-commit: true
