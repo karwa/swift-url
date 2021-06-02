@@ -54,7 +54,7 @@ To use `WebURL` in a SwiftPM project, add the following line to the dependencies
   Performance is also very important to this project, but communicating comparisons is tricky. The obvious comparison would be against our existing
   URL type, `Foundation.URL`; but as mentioned above, it conforms to an entirely different standard. The new standard's parser is very permissive
   and components are normalized and percent-encoded during parsing in order to cast as wide a compatibility net as possible and harmonize their representation.
-  So it some sense comparing `WebURL` and `Foundation.URL` is apples-to-oranges, but it can be argued that parsing time is an important metric for developers,
+  So in some sense comparing `WebURL` and `Foundation.URL` is apples-to-oranges, but it can be argued that parsing time is an important metric for developers,
   regardless.
   
   Despite the extra processing, the "AverageURLs" benchmark in this repository demonstrates performance that is slightly faster than Foundation,
