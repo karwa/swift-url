@@ -189,20 +189,27 @@ final class IPv6AddressTests: XCTestCase {
 
 // Randomized testing.
 
-#if canImport(Glibc) || canImport(Darwin)
+#if canImport(Glibc) || canImport(Darwin) || canImport(WinSDK)
 
   #if canImport(Glibc)
     import Glibc
-    let in6_union_property = \in6_addr.__in6_u
+    let in6_addr_octets = \in6_addr.__in6_u.__u6_addr8
+    let in6_addr_pieces = \in6_addr.__in6_u.__u6_addr16
+  #elseif canImport(WinSDK)
+    import WinSDK
+    let in6_addr_octets = \in6_addr.u.Byte
+    let in6_addr_pieces = \in6_addr.u.Word
   #elseif canImport(Darwin)
     import Darwin
-    let in6_union_property = \in6_addr.__u6_addr
+    let in6_addr_octets = \in6_addr.__u6_addr.__u6_addr8
+    let in6_addr_pieces = \in6_addr.__u6_addr.__u6_addr16
   #endif
 
   fileprivate func pton_octets(_ input: String) -> [UInt8]? {
     var result = in6_addr()
+
     guard inet_pton(AF_INET6, input, &result) != 0 else { return nil }
-    return withUnsafeBytes(of: &result[keyPath: in6_union_property].__u6_addr8) { ptr in
+    return withUnsafeBytes(of: &result[keyPath: in6_addr_octets]) { ptr in
       let u16 = ptr.bindMemory(to: UInt8.self)
       return Array(u16)
     }
@@ -211,7 +218,7 @@ final class IPv6AddressTests: XCTestCase {
   fileprivate func pton_pieces(_ input: String) -> [UInt16]? {
     var result = in6_addr()
     guard inet_pton(AF_INET6, input, &result) != 0 else { return nil }
-    return withUnsafeBytes(of: &result[keyPath: in6_union_property].__u6_addr16) { ptr in
+    return withUnsafeBytes(of: &result[keyPath: in6_addr_pieces]) { ptr in
       let u16 = ptr.bindMemory(to: UInt16.self)
       return Array(u16)
     }
@@ -219,24 +226,28 @@ final class IPv6AddressTests: XCTestCase {
 
   fileprivate func ntop_octets(_ input: [UInt8]) -> String? {
     var src = in6_addr()
-    src[keyPath: in6_union_property].__u6_addr8.0 = input[0]
-    src[keyPath: in6_union_property].__u6_addr8.1 = input[1]
-    src[keyPath: in6_union_property].__u6_addr8.2 = input[2]
-    src[keyPath: in6_union_property].__u6_addr8.3 = input[3]
-    src[keyPath: in6_union_property].__u6_addr8.4 = input[4]
-    src[keyPath: in6_union_property].__u6_addr8.5 = input[5]
-    src[keyPath: in6_union_property].__u6_addr8.6 = input[6]
-    src[keyPath: in6_union_property].__u6_addr8.7 = input[7]
-    src[keyPath: in6_union_property].__u6_addr8.8 = input[8]
-    src[keyPath: in6_union_property].__u6_addr8.9 = input[9]
-    src[keyPath: in6_union_property].__u6_addr8.10 = input[10]
-    src[keyPath: in6_union_property].__u6_addr8.11 = input[11]
-    src[keyPath: in6_union_property].__u6_addr8.12 = input[12]
-    src[keyPath: in6_union_property].__u6_addr8.13 = input[13]
-    src[keyPath: in6_union_property].__u6_addr8.14 = input[14]
-    src[keyPath: in6_union_property].__u6_addr8.15 = input[15]
+    src[keyPath: in6_addr_octets].0 = input[0]
+    src[keyPath: in6_addr_octets].1 = input[1]
+    src[keyPath: in6_addr_octets].2 = input[2]
+    src[keyPath: in6_addr_octets].3 = input[3]
+    src[keyPath: in6_addr_octets].4 = input[4]
+    src[keyPath: in6_addr_octets].5 = input[5]
+    src[keyPath: in6_addr_octets].6 = input[6]
+    src[keyPath: in6_addr_octets].7 = input[7]
+    src[keyPath: in6_addr_octets].8 = input[8]
+    src[keyPath: in6_addr_octets].9 = input[9]
+    src[keyPath: in6_addr_octets].10 = input[10]
+    src[keyPath: in6_addr_octets].11 = input[11]
+    src[keyPath: in6_addr_octets].12 = input[12]
+    src[keyPath: in6_addr_octets].13 = input[13]
+    src[keyPath: in6_addr_octets].14 = input[14]
+    src[keyPath: in6_addr_octets].15 = input[15]
     let bytes = [CChar](unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) { buffer, count in
-      let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
+      #if canImport(WinSDK)
+        let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, buffer.count)
+      #else
+        let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
+      #endif
       count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
     }
     return bytes.isEmpty ? nil : String(cString: bytes)
@@ -244,16 +255,20 @@ final class IPv6AddressTests: XCTestCase {
 
   fileprivate func ntop_pieces(_ input: [UInt16]) -> String? {
     var src = in6_addr()
-    src[keyPath: in6_union_property].__u6_addr16.0 = input[0]
-    src[keyPath: in6_union_property].__u6_addr16.1 = input[1]
-    src[keyPath: in6_union_property].__u6_addr16.2 = input[2]
-    src[keyPath: in6_union_property].__u6_addr16.3 = input[3]
-    src[keyPath: in6_union_property].__u6_addr16.4 = input[4]
-    src[keyPath: in6_union_property].__u6_addr16.5 = input[5]
-    src[keyPath: in6_union_property].__u6_addr16.6 = input[6]
-    src[keyPath: in6_union_property].__u6_addr16.7 = input[7]
+    src[keyPath: in6_addr_pieces].0 = input[0]
+    src[keyPath: in6_addr_pieces].1 = input[1]
+    src[keyPath: in6_addr_pieces].2 = input[2]
+    src[keyPath: in6_addr_pieces].3 = input[3]
+    src[keyPath: in6_addr_pieces].4 = input[4]
+    src[keyPath: in6_addr_pieces].5 = input[5]
+    src[keyPath: in6_addr_pieces].6 = input[6]
+    src[keyPath: in6_addr_pieces].7 = input[7]
     let bytes = [CChar](unsafeUninitializedCapacity: Int(INET6_ADDRSTRLEN)) { buffer, count in
-      let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
+      #if canImport(WinSDK)
+        let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, buffer.count)
+      #else
+        let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
+      #endif
       count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
     }
     return bytes.isEmpty ? nil : String(cString: bytes)
