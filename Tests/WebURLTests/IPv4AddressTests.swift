@@ -218,6 +218,8 @@ final class IPv4AddressTests: XCTestCase {
   #else
     import Darwin
   #endif
+  // WinSDK doesn't appear to make `inet_ntoa` available.
+  // But for reference: the 32-bit address value on `in_addr` is exposed via `.S_un.S_addr` on Windows.
 
   func libc_aton(_ straddr: String) -> UInt32? {
     var addr = in_addr()
