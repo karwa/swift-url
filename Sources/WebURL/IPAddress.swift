@@ -258,7 +258,7 @@ extension IPv6Address {
     var callback = IgnoreIPAddressParserErrors()
     let _parsed =
       utf8.withContiguousStorageIfAvailable {
-        IPv6Address.parse(utf8: $0.withoutTrappingOnIndexOverflow, callback: &callback)
+        IPv6Address.parse(utf8: $0.boundsChecked, callback: &callback)
       } ?? IPv6Address.parse(utf8: utf8, callback: &callback)
     guard let parsed = _parsed else {
       return nil
@@ -745,7 +745,7 @@ extension IPv4Address {
   ) -> ParserResult where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
     var callback = IgnoreIPAddressParserErrors()
     return utf8.withContiguousStorageIfAvailable {
-      parse(utf8: $0.withoutTrappingOnIndexOverflow, callback: &callback)
+      parse(utf8: $0.boundsChecked, callback: &callback)
     } ?? parse(utf8: utf8, callback: &callback)
   }
 
@@ -914,7 +914,7 @@ extension IPv4Address {
   public init?<S>(dottedDecimal string: S) where S: StringProtocol {
     let _parsed =
       string.utf8.withContiguousStorageIfAvailable {
-        IPv4Address(dottedDecimalUTF8: $0.withoutTrappingOnIndexOverflow)
+        IPv4Address(dottedDecimalUTF8: $0.boundsChecked)
       } ?? IPv4Address(dottedDecimalUTF8: string.utf8)
     guard let parsed = _parsed else { return nil }
     self = parsed
