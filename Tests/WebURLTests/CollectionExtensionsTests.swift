@@ -12,18 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Checkit
 import XCTest
 
 @testable import WebURL
 
-class AlgorithmsTestCase: XCTestCase {}
+class CollectionExtensionsTests: XCTestCase {}
 
-// Collection+Trim.
+// Collection.longestSubrange
 
-extension AlgorithmsTestCase {
+extension CollectionExtensionsTests {
 
-  func testCollectionTrim() {
+  func testLongestSubrange() {
+
+    // Empty collection.
+    let results_empty = ([] as [Int]).longestSubrange { _ in true }
+    XCTAssertEqual(results_empty.subrange, 0..<0)
+    XCTAssertEqual(results_empty.length, 0)
+
+    let range_basic = [1, 2, 4, 3, 2, 2, 2, 4, 5, 2, 2, 2, 2, 6, 7, 8]
+
+    // No match (empty result).
+    let range_empty_result = range_basic.longestSubrange { $0 == 10 }
+    XCTAssertEqual(range_empty_result.subrange, 0..<0)
+    XCTAssertEqual(range_empty_result.length, 0)
+    // Single match.
+    let range_single_end_result = range_basic.longestSubrange { $0 == 8 }
+    XCTAssertEqual(range_single_end_result.subrange, 15..<16)
+    XCTAssertEqual(range_single_end_result.length, 1)
+    // Multiple matches, no length ties.
+    let range_basic_result = range_basic.longestSubrange { $0 == 2 }
+    XCTAssertEqual(range_basic_result.subrange, 9..<13)
+    XCTAssertEqual(range_basic_result.length, 4)
+    // Multiple matches, tied on length.
+    let range_tie_result = range_basic.longestSubrange { $0 == 4 }
+    XCTAssertEqual(range_tie_result.subrange, 2..<3)
+    XCTAssertEqual(range_tie_result.length, 1)
+  }
+}
+
+// BidirectionalCollection.trim
+
+extension CollectionExtensionsTests {
+
+  func testTrim() {
     // Empty collection.
     let results_empty = ([] as [Int]).trim { $0.isMultiple(of: 2) }
     XCTAssertEqual(results_empty, [])
@@ -50,34 +81,54 @@ extension AlgorithmsTestCase {
   }
 }
 
-// Collection+longestRange
+// BidirectionalCollection.suffix(while:)
 
-extension AlgorithmsTestCase {
+extension CollectionExtensionsTests {
 
-  func testCollectionLongestSubrange() {
+  func testSuffixWhile() {
 
     // Empty collection.
-    let results_empty = ([] as [Int]).longestSubrange { _ in true }
-    XCTAssertEqual(results_empty.subrange, 0..<0)
-    XCTAssertEqual(results_empty.length, 0)
+    do {
+      let matches = ([] as [Int]).suffix(while: { _ in true })
+      XCTAssert(matches.isEmpty)
+      XCTAssertEqual(matches.startIndex, 0)
+      XCTAssertEqual(matches.endIndex, 0)
+    }
 
-    let range_basic = [1, 2, 4, 3, 2, 2, 2, 4, 5, 2, 2, 2, 2, 6, 7, 8]
+    let elements = [1, 2, 4, 3, 2, 2, 2, 4, 5, 2, 2, 2, 2, 6, 7, 8]
+    XCTAssertEqual(elements.endIndex, 16)
 
     // No match (empty result).
-    let range_empty_result = range_basic.longestSubrange { $0 == 10 }
-    XCTAssertEqual(range_empty_result.subrange, 0..<0)
-    XCTAssertEqual(range_empty_result.length, 0)
+    do {
+      let matches = elements.suffix(while: { $0 > 10 })
+      XCTAssert(matches.isEmpty)
+      XCTAssertEqualElements(matches, [])
+      XCTAssertEqual(matches.startIndex, elements.endIndex)
+      XCTAssertEqual(matches.endIndex, elements.endIndex)
+    }
     // Single match.
-    let range_single_end_result = range_basic.longestSubrange { $0 == 8 }
-    XCTAssertEqual(range_single_end_result.subrange, 15..<16)
-    XCTAssertEqual(range_single_end_result.length, 1)
-    // Multiple matches, no length ties.
-    let range_basic_result = range_basic.longestSubrange { $0 == 2 }
-    XCTAssertEqual(range_basic_result.subrange, 9..<13)
-    XCTAssertEqual(range_basic_result.length, 4)
-    // Multiple matches, tied on length.
-    let range_tie_result = range_basic.longestSubrange { $0 == 4 }
-    XCTAssertEqual(range_tie_result.subrange, 2..<3)
-    XCTAssertEqual(range_tie_result.length, 1)
+    do {
+      let matches = elements.suffix(while: { $0 == 8 })
+      XCTAssertFalse(matches.isEmpty)
+      XCTAssertEqualElements(matches, [8])
+      XCTAssertEqual(matches.startIndex, 15)
+      XCTAssertEqual(matches.endIndex, 16)
+    }
+    // Multiple items match.
+    do {
+      let matches = elements.suffix(while: { $0 > 2 })
+      XCTAssertFalse(matches.isEmpty)
+      XCTAssertEqualElements(matches, [6, 7, 8])
+      XCTAssertEqual(matches.startIndex, 13)
+      XCTAssertEqual(matches.endIndex, 16)
+    }
+    // Everything matches.
+    do {
+      let matches = elements.suffix(while: { $0 < 10 })
+      XCTAssertFalse(matches.isEmpty)
+      XCTAssertEqualElements(matches, elements)
+      XCTAssertEqual(matches.startIndex, 0)
+      XCTAssertEqual(matches.endIndex, 16)
+    }
   }
 }
