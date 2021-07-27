@@ -108,6 +108,17 @@ extension SimpleTestReport.Reporter {
   }
 }
 
+extension SimpleTestReport.Reporter {
+
+  public mutating func reportTestResult<Suite>(_ result: TestResult<Suite>) {
+    capture(key: "Testcase", describe(result.testCase))
+    capture(key: "Captures", describe(result.captures))
+    for f in result.failures {
+      fail(describe(f))
+    }
+  }
+}
+
 extension SimpleTestReport {
 
   public func generateReport() -> String {
