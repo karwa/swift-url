@@ -19,7 +19,7 @@ import XCTest
 
 final class WebPlatformTests: ReportGeneratingTestCase {}
 
-func loadTestResource(name: String) -> Data? {
+fileprivate func loadTestResource(name: String) -> Data? {
   // Yeah. This is for real.
   // I'm pretty massively disappointed that I need to do this.
   #if os(macOS)
@@ -27,7 +27,7 @@ func loadTestResource(name: String) -> Data? {
     return try? Data(contentsOf: url)
   #else
     var path = #filePath
-    path.removeLast(22)  // "WebPlatformTests.swift"
+    path.removeLast("WebPlatformTests.swift".utf8.count)
     path += "Resources/\(name).json"
     return FileManager.default.contents(atPath: path)
   #endif
