@@ -759,7 +759,7 @@
             "comment": "Path with drive letter elsewhere in the path [with drive, no leading]",
             "file_path": "C:/foo/D:/bar.txt",
             "URL_posix": { "failure-reason": "relative-path" },
-            "URL_windows": "file:///C:/foo/D:/bar.txt"
+            "URL_windows": "file:///C:/foo/D%3A/bar.txt"
         },
         {
             "comment": "Path with URL-form drive letter elsewhere in the path [with drive, no leading]",
