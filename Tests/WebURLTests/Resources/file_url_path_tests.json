@@ -1,0 +1,2789 @@
+{
+    "file_path_to_url":
+    [
+
+        { "__section__": "------------------------------ Various kinds of 'root' paths ------------------------------" },
+
+
+
+        {
+            "comment": "Empty path",
+            "file_path": "",
+            "URL_posix": { "failure-reason": "empty-input" },
+            "URL_windows": { "failure-reason": "empty-input" }
+        },
+        {
+            "comment": "POSIX root path",
+            "file_path": "/",
+            "URL_posix": "file:///",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "POSIX root path (backslash)",
+            "file_path": "\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Windows drive [no leading, no trailing]. Windows path APIs consider this a relative path.",
+            "file_path": "C:",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Windows drive (alt) [no leading, no trailing]",
+            "file_path": "C|",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Windows drive [no leading, with trailing]",
+            "file_path": "C:/",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/"
+        },
+        {
+            "comment": "Windows drive [no leading, with trailing (alt)]",
+            "file_path": "C:\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/"
+        },
+        {
+            "comment": "Windows drive (alt) [no leading, with trailing]. Windows path APIs do not consider this to be a drive letter.",
+            "file_path": "C|/",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Windows drive [with leading, with trailing]. Windows path APIs consider this a relative path.",
+            "file_path": "/C:/",
+            "URL_posix": "file:///C%3A/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Windows drive (alt) [with leading, with trailing]",
+            "file_path": "/C|/",
+            "URL_posix": "file:///C%7C/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Windows drive [with leading (alt), with trailing]",
+            "file_path": "\\C:/",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "UNC server root [no trailing]",
+            "file_path": "\\\\mypc",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/"
+        },
+        {
+            "comment": "UNC server root, mixed separators [no trailing]",
+            "file_path": "/\\mypc",
+            "URL_posix": "file:///%5Cmypc",
+            "URL_windows": "file://mypc/"
+        },
+        {
+            "comment": "UNC server root [with trailing]",
+            "file_path": "\\\\mypc\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/"
+        },
+        {
+            "comment": "UNC server root, mixed separators [with trailing]",
+            "file_path": "/\\mypc\\",
+            "URL_posix": "file:///%5Cmypc%5C",
+            "URL_windows": "file://mypc/"
+        },
+        {
+            "comment": "UNC share root [no trailing]",
+            "file_path": "\\\\mypc\\share",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share"
+        },
+        {
+            "comment": "UNC share root, mixed separators [no trailing]",
+            "file_path": "/\\mypc/share",
+            "URL_posix": "file:///%5Cmypc/share",
+            "URL_windows": "file://mypc/share"
+        },
+        {
+            "comment": "UNC share root [with trailing]",
+            "file_path": "\\\\mypc\\share\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share/"
+        },
+        {
+            "comment": "UNC share root, mixed separators [with trailing]",
+            "file_path": "/\\mypc\\share/",
+            "URL_posix": "file:///%5Cmypc%5Cshare/",
+            "URL_windows": "file://mypc/share/"
+        },
+
+
+
+        { "__section__": "------------------------------ Basic directory paths ------------------------------" },
+
+
+
+        {
+            "comment": "Directory path [no drive, no leading]",
+            "file_path": "foo/BAR/baZ/",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Directory path [no drive, with leading]",
+            "file_path": "/foo/BAR/baZ/",
+            "URL_posix": "file:///foo/BAR/baZ/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Directory path [with drive, no leading]",
+            "file_path": "C:/foo/BAR/baZ/",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/BAR/baZ/"
+        },
+        {
+            "comment": "Directory path [with drive, with leading]",
+            "file_path": "/C:/foo/BAR/baZ/",
+            "URL_posix": "file:///C%3A/foo/BAR/baZ/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Directory path [with drive (alt), no leading]. Windows path APIs do not consider these to have drive letters.",
+            "file_path": "C|/foo/BAR/baZ/",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Directory path [with drive (alt), with leading]",
+            "file_path": "/C|/foo/BAR/baZ/",
+            "URL_posix": "file:///C%7C/foo/BAR/baZ/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Directory path, mixed separators [no drive, with leading]",
+            "file_path": "/foo\\BAR/baZ\\",
+            "URL_posix": "file:///foo%5CBAR/baZ%5C",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Directory path, mixed separators [with drive, no leading]",
+            "file_path": "C:\\foo/BAR\\baZ/",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/BAR/baZ/"
+        },
+        {
+            "comment": "UNC directory path",
+            "file_path": "\\\\my_pc\\foo\\BAR\\baZ\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/foo/BAR/baZ/"
+        },
+        {
+            "comment": "UNC directory path, mixed separators",
+            "file_path": "/\\my_pc/foo\\BAR/baZ\\",
+            "URL_posix": "file:///%5Cmy_pc/foo%5CBAR/baZ%5C",
+            "URL_windows": "file://my_pc/foo/BAR/baZ/"
+        },
+        {
+            "comment": "UNC directory path, forward slashes",
+            "file_path": "//my_pc/foo/BAR/baZ/",
+            "URL_posix": "file:////my_pc/foo/BAR/baZ/",
+            "URL_windows": "file://my_pc/foo/BAR/baZ/"
+        },
+
+
+
+        { "__section__": "------------------------------ Basic file paths ------------------------------" },
+
+
+
+        {
+            "comment": "File path [no drive, no leading]",
+            "file_path": "foo/BAR/baZ.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "File path [no drive, with leading]",
+            "file_path": "/foo/BAR/baZ.txt",
+            "URL_posix": "file:///foo/BAR/baZ.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "File path [with drive, no leading]",
+            "file_path": "C:/foo/BAR/baZ.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/BAR/baZ.txt"
+        },
+        {
+            "comment": "File path [with drive, with leading]",
+            "file_path": "/C:/foo/BAR/baZ.txt",
+            "URL_posix": "file:///C%3A/foo/BAR/baZ.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "File path [with drive (alt), no leading]. Windows path APIs do not consider these to have drive letters.",
+            "file_path": "C|/foo/BAR/baZ.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "File path [with drive (alt), with leading]",
+            "file_path": "/C|/foo/BAR/baZ.txt",
+            "URL_posix": "file:///C%7C/foo/BAR/baZ.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "File path, mixed separators [with drive, no leading]",
+            "file_path": "C:\\foo/BAR\\baZ.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/BAR/baZ.txt"
+        },
+        {
+            "comment": "File path, mixed separators [no drive, with leading]",
+            "file_path": "/foo\\BAR/baZ.txt",
+            "URL_posix": "file:///foo%5CBAR/baZ.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "UNC file path",
+            "file_path": "\\\\my_pc\\foo\\BAR\\baZ.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/foo/BAR/baZ.txt"
+        },
+        {
+            "comment": "UNC file path, mixed separators",
+            "file_path": "/\\my_pc/foo\\BAR/baZ.txt",
+            "URL_posix": "file:///%5Cmy_pc/foo%5CBAR/baZ.txt",
+            "URL_windows": "file://my_pc/foo/BAR/baZ.txt"
+        },
+        {
+            "comment": "UNC file path, forward slashes",
+            "file_path": "//my_pc/foo/BAR/baZ.txt",
+            "URL_posix": "file:////my_pc/foo/BAR/baZ.txt",
+            "URL_windows": "file://my_pc/foo/BAR/baZ.txt"
+        },
+
+
+
+        { "__section__": "------------------------------ Hostnames (UNC) ------------------------------" },
+
+
+
+        {
+            "comment": "UNC path with uppercase server name",
+            "file_path": "\\\\MY_PC\\foo\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/foo/bar.txt"
+        },
+        {
+            "comment": "UNC path with uppercase server name [forward slash]",
+            "file_path": "//MY_PC/foo/bar.txt",
+            "URL_posix": "file:////MY_PC/foo/bar.txt",
+            "URL_windows": "file://my_pc/foo/bar.txt"
+        },
+        {
+            "comment": "UNC path with uppercase server name [mixed separators]",
+            "file_path": "/\\MY_PC/foo\\bar.txt",
+            "URL_posix": "file:///%5CMY_PC/foo%5Cbar.txt",
+            "URL_windows": "file://my_pc/foo/bar.txt"
+        },
+        {
+            "comment": "UNC path with spaces in server name. Chrome allows this, but it isn't a valid hostname and cannot be escaped. https://github.com/whatwg/url/issues/599 ",
+            "file_path": "\\\\some computer\\foo\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with percent-encoded server name",
+            "file_path": "\\\\%61%62%63\\foo\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with invalid unicode in server name. U+FDD0 is disallowed.",
+            "file_path": "\\\\\ufdd0zyx\\foo\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path to localhost. Unfortunately, we need to do some fudging with this to preserve the hostname. '\\\\localhost\\someshare' is a valid UNC path, and Chrome, Edge, IE, etc are all able to locate it using 'file://localhost/someshare'. We need the hostname to be able to resolve the path '/someshare'; nothing on Windows seems able to resolve the host-less 'file:///someshare'. The most compatible option appears to be to use the IPv4 loopback address; '\\\\.\\UNC\\localhost\\someshare' (i.e. file://./UNC/localhost/someshare) would also be an option, but IE/Explorer can't handle those.",
+            "file_path": "\\\\localhost\\SomeShare\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://127.0.0.1/SomeShare/Windows/System32/notepad.exe"
+        },
+        {
+            "comment": "UNC path to localhost (mixed case). See above for the reason behind this unfortunate hack.",
+            "file_path": "\\\\LoCaLhOsT\\SomeShare\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://127.0.0.1/SomeShare/Windows/System32/notepad.exe"
+        },
+        {
+            "comment": "UNC path to localhost (percent-encoded)",
+            "file_path": "\\\\Lo%63aLhOsT\\SomeShare\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with IPv4 server address",
+            "file_path": "\\\\192.168.178.1\\c$\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://192.168.178.1/c$/Windows/System32/notepad.exe"
+        },
+        {
+            "comment": "UNC path with weird IPv4 server address",
+            "file_path": "\\\\0xBaDf00d\\c$\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://11.173.240.13/c$/Windows/System32/notepad.exe"
+        },
+        {
+            "comment": "UNC path with weird IPv4 server address [forward slash]",
+            "file_path": "//0xBaDf00d/c$/Windows/System32/notepad.exe",
+            "URL_posix": "file:////0xBaDf00d/c$/Windows/System32/notepad.exe",
+            "URL_windows": "file://11.173.240.13/c$/Windows/System32/notepad.exe"
+        },
+        {
+            "comment": "UNC path with URL-style IPv6 server address. Supposedly, this is not valid UNC, but Chrome/Edge support these paths anyway. IE/Windows Explorer don't.",
+            "file_path": "\\\\[2001:db8::]\\WebURL\\foo",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://[2001:db8::]/WebURL/foo"
+        },
+        {
+            "comment": "UNC path with undelimited IPv6 server address",
+            "file_path": "\\\\0:0:0::1\\c$\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with transcribed IPv6 server address",
+            "file_path": "\\\\2001-db8--.ipv6-literal.net\\WebURL\\foo",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://2001-db8--.ipv6-literal.net/WebURL/foo"
+        },
+        {
+            "comment": "UNC path with '.' server address. This is used for DOS device paths.",
+            "file_path": "\\\\.\\UNC\\VBOXSVR\\WebURL\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://./UNC/VBOXSVR/WebURL/"
+        },
+        {
+            "comment": "UNC path with '..' server address",
+            "file_path": "\\\\..\\UNC\\VBOXSVR\\WebURL\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://../UNC/VBOXSVR/WebURL/"
+        },
+        {
+            "comment": "UNC path with '...' server address",
+            "file_path": "\\\\...\\UNC\\VBOXSVR\\WebURL\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://.../UNC/VBOXSVR/WebURL/"
+        },
+        {
+            "comment": "UNC path with drive letter server address",
+            "file_path": "\\\\C:\\bar",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with drive letter server address [forward slash]",
+            "file_path": "//C:/bar",
+            "URL_posix": "file:////C%3A/bar",
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with drive letter (alt) server address",
+            "file_path": "\\\\C|\\bar",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with drive letter (alt) server address [forward slash]",
+            "file_path": "//C|/bar",
+            "URL_posix": "file:////C%7C/bar",
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with drive letter server address, 3 leading slashes [forward slash]",
+            "file_path": "///C:/bar",
+            "URL_posix": "file:///C%3A/bar",
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with drive letter (alt) server address, 3 leading slashes [forward slash]",
+            "file_path": "///C|/bar",
+            "URL_posix": "file:///C%7C/bar",
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with drive letter server address, 4 leading slashes [forward slash]",
+            "file_path": "////C:/bar",
+            "URL_posix": "file:///C%3A/bar",
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "UNC path with drive letter (alt) server address, 4 leading slashes [forward slash]",
+            "file_path": "////C|/bar",
+            "URL_posix": "file:///C%7C/bar",
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+
+
+
+        { "__section__": "------------------------------ UNC special share names ------------------------------" },
+
+
+
+        {
+            "comment": "UNC path, share looks like a drive letter. Even when UNC paths do contain drive letters (e.g. DOS device paths), they are not considered the root of the path, so should be escaped to avoid special handling by the URL standard.",
+            "file_path": "\\\\my_pc\\c:\\dir",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/c%3A/dir"
+        },
+        {
+            "comment": "UNC path, share looks like a drive letter (alt)",
+            "file_path": "\\\\my_pc\\c|\\dir",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/c%7C/dir"
+        },
+        {
+            "comment": "UNC path, share looks like a drive letter. Extra slashes before share name.",
+            "file_path": "\\\\my_pc\\\\\\c:\\dir",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/c%3A/dir"
+        },
+        {
+            "comment": "UNC path, share looks like a drive letter (alt). Extra slashes before share name.",
+            "file_path": "\\\\my_pc\\\\\\c|\\dir",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/c%7C/dir"
+        },
+        {
+            "comment": "UNC path with single dot share name        -------------------------------------------- TODO: Should this be banned?",
+            "file_path": "\\\\mypc\\.\\foo\\bar",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/foo/bar"
+        },
+        {
+            "comment": "UNC path with '..' share name. The share name is part of the path and '..' components cannot be escaped, so we can't prevent the URL parser from interpreting and simplifying this.",
+            "file_path": "\\\\mypc\\..\\foo\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "UNC path with '...' share name",
+            "file_path": "\\\\mypc\\...\\foo\\bar",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/.../foo/bar"
+        },
+
+
+
+        { "__section__": "------------------------------ Paths containing symbols ------------------------------" },
+
+
+
+        {
+            "comment": "File path with symbols, including space, tilde, '?' and '#' [no drive, no leading]",
+            "file_path": "~/foo/bar?/baz#.txt/Name;with%some symbols*#",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "File path with symbols, including space, tilde, '?' and '#' [no drive, with leading]",
+            "file_path": "/~/foo/bar?/baz#.txt/Name;with%some symbols*#",
+            "URL_posix": "file:///~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "File path with symbols, including space, tilde, '?' and '#' [with drive, no leading]",
+            "file_path": "C:\\~/foo\\bar?/baz#.txt\\Name;with%some symbols*#",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23"
+        },
+        {
+            "comment": "File path with symbols, including space, tilde, '?' and '#' [with drive, with leading]",
+            "file_path": "/C:/~/foo/bar?\\baz#.txt/Name;with%some symbols*#",
+            "URL_posix": "file:///C%3A/~/foo/bar%3F%5Cbaz%23.txt/Name;with%25some%20symbols*%23",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "UNC path, share name contains symbols",
+            "file_path": "\\\\my_pc\\c$?#;%some symbols*#\\dir",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/c$%3F%23;%25some%20symbols*%23/dir"
+        },
+        {
+            "comment": "UNC path with symbols in path section, including space, tilde, '?' and '#'",
+            "file_path": "\\\\my_pc\\share\\~\\foo\\bar?\\baz#.txt\\Name;with%some symbols*#",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/share/~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23"
+        },
+        {
+            "comment": "UNC path with symbols in path section, including space, tilde, '?' and '#' [forward slash]",
+            "file_path": "//my_pc/share/~/foo/bar?/baz#.txt/Name;with%some symbols*#",
+            "URL_posix": "file:////my_pc/share/~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23",
+            "URL_windows": "file://my_pc/share/~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23"
+        },
+        {
+            "comment": "UNC path with symbols in path section, including space, tilde, '?' and '#' [mixed separators]",
+            "file_path": "/\\my_pc/share\\~/foo\\bar?/baz#.txt\\Name;with%some symbols*#",
+            "URL_posix": "file:///%5Cmy_pc/share%5C~/foo%5Cbar%3F/baz%23.txt%5CName;with%25some%20symbols*%23",
+            "URL_windows": "file://my_pc/share/~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23"
+        },
+        {
+            "comment": "Path with C0, trailing space [no drive, with leading, no trailing]",
+            "file_path": "/foo /\u0007\u0009bar\u000A ",
+            "URL_posix": "file:///foo%20/%07%09bar%0A%20",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with C0, trailing space [no drive, with leading, with trailing]",
+            "file_path": "/foo /\u0007\u0009bar\u000A /",
+            "URL_posix": "file:///foo%20/%07%09bar%0A%20/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with C0, trailing space [with drive, no leading, no trailing]",
+            "file_path": "C:/foo /\u0007\u0009bar\u000A ",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo%20/%07%09bar%0A"
+        },
+        {
+            "comment": "Path with C0, trailing space [with drive, no leading, with trailing]",
+            "file_path": "C:/foo /\u0007\u0009bar\u000A /",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo%20/%07%09bar%0A%20/"
+        },
+        {
+            "comment": "UNC path, share contains C0, trailing space [no trailing]",
+            "file_path": "\\\\my_pc\\foo \u0007\u0009bar\u000A ",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/foo%20%07%09bar%0A%20"
+        },
+        {
+            "comment": "UNC path, share contains C0, trailing space [with trailing]",
+            "file_path": "\\\\my_pc\\foo \u0007\u0009bar\u000A \\dir",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/foo%20%07%09bar%0A%20/dir"
+        },
+        {
+            "comment": "UNC path, path with C0, trailing space [no trailing]",
+            "file_path": "\\\\my_pc\\share.\\foo \\\u0007\u0009bar\u000A ",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/share./foo%20/%07%09bar%0A"
+        },
+        {
+            "comment": "UNC path, path with C0, trailing space [with trailing]",
+            "file_path": "\\\\my_pc\\share.\\foo \\\u0007\u0009bar\u000A \\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/share./foo%20/%07%09bar%0A%20/"
+        },
+        {
+            "comment": "Path with percent-encoding [no drive, with leading]",
+            "file_path": "/foo/bar%23.txt",
+            "URL_posix": "file:///foo/bar%2523.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with percent-encoding [with drive, no leading]",
+            "file_path": "C:/foo/bar%23.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/bar%2523.txt"
+        },
+        {
+            "comment": "UNC path, share contains with percent-encoding",
+            "file_path": "\\\\mypc\\foo%23.\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/foo%2523./"
+        },
+        {
+            "comment": "UNC path, path with percent-encoding",
+            "file_path": "\\\\mypc\\foo.\\bar%23.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/foo./bar%2523.txt"
+        },
+        {
+            "comment": "Path with percent-encoded slash [no drive, with leading]",
+            "file_path": "/foo/%2Fbar.txt",
+            "URL_posix": "file:///foo/%252Fbar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with percent-encoded slash [with drive, no leading]",
+            "file_path": "C:/foo/%2Fbar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/%252Fbar.txt"
+        },
+        {
+            "comment": "UNC path, share contains with percent-encoded slash",
+            "file_path": "\\\\mypc\\%2Ffoo.\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/%252Ffoo./"
+        },
+        {
+            "comment": "UNC path, path with percent-encoded slash",
+            "file_path": "\\\\mypc\\foo.\\%2Fbar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/foo./%252Fbar.txt"
+        },
+        {
+            "comment": "Path with percent-encoded backslash [no drive, with leading]",
+            "file_path": "/foo/%5Cbar.txt",
+            "URL_posix": "file:///foo/%255Cbar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with percent-encoded backslash [with drive, no leading]",
+            "file_path": "C:/foo/%5Cbar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/%255Cbar.txt"
+        },
+        {
+            "comment": "UNC path, share contains with percent-encoded backslash",
+            "file_path": "\\\\mypc\\%5Cfoo.\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/%255Cfoo./"
+        },
+        {
+            "comment": "UNC path, path with percent-encoded backslash",
+            "file_path": "\\\\mypc\\foo.\\%5Cbar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/foo./%255Cbar.txt"
+        },
+        {
+            "comment": "Path with unicode [no drive, with leading]",
+            "file_path": "/foo/\u2001/Lock 🔒/🦆.txt",
+            "URL_posix": "file:///foo/%E2%80%81/Lock%20%F0%9F%94%92/%F0%9F%A6%86.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with unicode [with drive, no leading]",
+            "file_path": "C:/foo/\u2001/Lock 🔒/🦆.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/%E2%80%81/Lock%20%F0%9F%94%92/%F0%9F%A6%86.txt"
+        },
+        {
+            "comment": "UNC path with unicode share name",
+            "file_path": "\\\\my_pc\\🦆\\pond.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/%F0%9F%A6%86/pond.txt"
+        },
+        {
+            "comment": "UNC path with unicode in path section",
+            "file_path": "\\\\my_pc\\share.\\foo\\\u2001\\Lock 🔒\\🦆.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/share./foo/%E2%80%81/Lock%20%F0%9F%94%92/%F0%9F%A6%86.txt"
+        },
+        {
+            "comment": "Path with leading NULL byte [no drive, with leading]",
+            "file_path": "\u0000/foo/bar.txt",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "Path with leading NULL byte [with drive, no leading]",
+            "file_path": "\u0000C:/foo/bar.txt",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "Path with NULL byte in the middle [no drive, with leading]",
+            "file_path": "/foo/\u0000/bar.txt",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "Path with NULL byte in the middle [with drive, no leading]",
+            "file_path": "C:/foo/\u0000/bar.txt",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "Path with trailing NULL byte [no drive, with leading]",
+            "file_path": "/foo/bar/\u0000",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "Path with trailing NULL byte [with drive, no leading]",
+            "file_path": "C:/foo/bar.txt\u0000",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "UNC path with leading NULL byte",
+            "file_path": "\u0000\\\\my_pc\\foo\\bar.txt",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "UNC path with NULL byte in hostname",
+            "file_path": "\\\\my\u0000pc\\foo\\bar.txt",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "UNC path with NULL byte in share name",
+            "file_path": "\\\\my_pc\\foo\u0000bar\\baz.txt",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "UNC path with NULL byte in path section",
+            "file_path": "\\\\my_pc\\share.\\foo\\bar\u0000.txt",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "UNC path with trailing NULL byte",
+            "file_path": "\\\\my_pc\\foo\\bar.txt\u0000",
+            "URL_posix": { "failure-reason": "null-byte" },
+            "URL_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "Path with drive letter elsewhere in the path [no drive, with leading]",
+            "file_path": "/foo/D:/bar.txt",
+            "URL_posix": "file:///foo/D%3A/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with URL-form drive letter elsewhere in the path [no drive, with leading]",
+            "file_path": "/foo/D|/bar.txt",
+            "URL_posix": "file:///foo/D%7C/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with drive letter elsewhere in the path [with drive, no leading]",
+            "file_path": "C:/foo/D:/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/D:/bar.txt"
+        },
+        {
+            "comment": "Path with URL-form drive letter elsewhere in the path [with drive, no leading]",
+            "file_path": "C:/foo/D|/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/D%7C/bar.txt"
+        },
+
+
+
+        { "__section__": "------------------------------ Paths containing single-dot components ------------------------------" },
+
+
+
+        {
+            "comment": "Path with leading '.' component [no drive, no leading]",
+            "file_path": "./foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading '.' component [no drive, with leading]. This is *not* a UNC path (as '//foo/bar...' would be).",
+            "file_path": "/./foo/bar.txt",
+            "URL_posix": "file:///foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading '.' component [with drive, no leading]",
+            "file_path": "./C:/foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading '.' component [with drive, with leading]",
+            "file_path": "/./C:/foo/bar.txt",
+            "URL_posix": "file:///C%3A/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading '.' component [with drive(alt), with leading]",
+            "file_path": "/./C|/foo/bar.txt",
+            "URL_posix": "file:///C%7C/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading percent-encoded '.' component [no drive, no leading]",
+            "file_path": "%2E/foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading percent-encoded '.' component [with drive, with leading]",
+            "file_path": "/%2E/C:/foo/bar.txt",
+            "URL_posix": "file:///%252E/C%3A/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with many leading '.' components [no drive, no leading]",
+            "file_path": "././././foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with many leading '.' components [no drive, with leading]",
+            "file_path": "/././././foo/bar.txt",
+            "URL_posix": "file:///foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with many leading '.' components [with drive, no leading]",
+            "file_path": "././././C:/foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with many leading '.' components [with drive, with leading]",
+            "file_path": "/././././C:/foo/bar.txt",
+            "URL_posix": "file:///C%3A/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with many leading '.' components [with drive(alt), with leading]",
+            "file_path": "/././././C|/foo/bar.txt",
+            "URL_posix": "file:///C%7C/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '.' component in the middle [no drive, no leading]",
+            "file_path": "foo/./bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '.' component in the middle [no drive, with leading]",
+            "file_path": "/foo/./bar.txt",
+            "URL_posix": "file:///foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '.' component in the middle [with drive, no leading]",
+            "file_path": "C:/foo/./bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/bar.txt"
+        },
+        {
+            "comment": "Path with '.' component in the middle [with drive, with leading]",
+            "file_path": "/C:/foo/./bar.txt",
+            "URL_posix": "file:///C%3A/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with percent-encoded '.' component in the middle [no drive, with leading]",
+            "file_path": "/foo/%2E/bar.txt",
+            "URL_posix": "file:///foo/%252E/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with percent-encoded '.' component in the middle [with drive, no leading]",
+            "file_path": "C:/foo/%2E/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/%252E/bar.txt"
+        },
+        {
+            "comment": "Path with trailing '.' component [no drive, no leading]",
+            "file_path": "foo/bar/.",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing '.' component [no drive, with leading]",
+            "file_path": "/foo/bar/.",
+            "URL_posix": "file:///foo/bar/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing '.' component [with drive, no leading]",
+            "file_path": "C:/foo/bar/.",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/bar/"
+        },
+        {
+            "comment": "Path with trailing '.' component [with drive, with leading]",
+            "file_path": "/C:/foo/bar/.",
+            "URL_posix": "file:///C%3A/foo/bar/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing percent-encoded '.' component [no drive, with leading]",
+            "file_path": "/foo/bar/%2E",
+            "URL_posix": "file:///foo/bar/%252E",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing percent-encoded '.' component [with drive, no leading]",
+            "file_path": "C:/foo/bar/%2E",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/bar/%252E"
+        },
+        {
+            "comment": "UNC path with '.' component between share name and path",
+            "file_path": "\\\\mypc\\share\\.\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share/bar.txt"
+        },
+        {
+            "comment": "UNC path with '.' component between share name and path [forward slash]",
+            "file_path": "//mypc/share/./bar.txt",
+            "URL_posix": "file:////mypc/share/bar.txt",
+            "URL_windows": "file://mypc/share/bar.txt"
+        },
+        {
+            "comment": "UNC path with '.' component between share name and path [mixed separators]",
+            "file_path": "/\\mypc/share\\./bar.txt",
+            "URL_posix": "file:///%5Cmypc/share%5C./bar.txt",
+            "URL_windows": "file://mypc/share/bar.txt"
+        },
+        {
+            "comment": "UNC path with '.' component between share name and path [percent-encoded]",
+            "file_path": "\\\\mypc\\share\\%2E\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share/%252E/bar.txt"
+        },
+        {
+            "comment": "UNC path with single dot path",
+            "file_path": "\\\\mypc\\share\\.",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share/"
+        },
+        {
+            "comment": "UNC path with single dot path. [forward slash]",
+            "file_path": "//mypc/share/.",
+            "URL_posix": "file:////mypc/share/",
+            "URL_windows": "file://mypc/share/"
+        },
+        {
+            "comment": "UNC path with single dot path [percent-encoded]",
+            "file_path": "\\\\mypc\\share\\%2E",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share/%252E"
+        },
+
+
+
+        { "__section__": "------------------------------ Paths containing double-dot components ------------------------------" },
+
+
+
+        {
+            "comment": "Path with leading '..' component [no drive, no leading]",
+            "file_path": "../foo/bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "Path with leading '..' component [no drive, with leading]",
+            "file_path": "/../foo/bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading '..' component [with drive, no leading]",
+            "file_path": "../C:/foo/bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "Path with leading '..' component [with drive, with leading]",
+            "file_path": "/../C:/foo/bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading percent-encoded '..' component [no drive, no leading]",
+            "file_path": "%2E%2E/foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading percent-encoded '..' component [with drive, with leading]",
+            "file_path": "/%2E%2E/C:/foo/bar.txt",
+            "URL_posix": "file:///%252E%252E/C%3A/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '..' component in the middle [no drive, no leading]",
+            "file_path": "foo/../bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "Path with '..' component in the middle [no drive, with leading]",
+            "file_path": "/foo/../bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '..' component in the middle [with drive, no leading]",
+            "file_path": "C:/foo/../bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "Path with '..' component in the middle [with drive, with leading]",
+            "file_path": "/C:/foo/../bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with percent-encoded '..' component in the middle [no drive, with leading]",
+            "file_path": "/foo/%2E%2E/bar.txt",
+            "URL_posix": "file:///foo/%252E%252E/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with percent-encoded '..' component in the middle [with drive, no leading]",
+            "file_path": "C:/foo/%2E%2E/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/%252E%252E/bar.txt"
+        },
+        {
+            "comment": "Path with trailing '..' component [no drive, no leading]",
+            "file_path": "foo/bar/..",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "Path with trailing '..' component [no drive, with leading]",
+            "file_path": "/foo/bar/..",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing '..' component [with drive, no leading]",
+            "file_path": "C:/foo/bar/..",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "Path with trailing '..' component [with drive, with leading]",
+            "file_path": "/C:/foo/bar/..",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing percent-encoded '..' component [no drive, with leading]",
+            "file_path": "/foo/bar/%2E%2E",
+            "URL_posix": "file:///foo/bar/%252E%252E",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing percent-encoded '..' component [with drive, no leading]",
+            "file_path": "C:/foo/bar/%2E%2E",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/bar/%252E%252E"
+        },
+        {
+            "comment": "Path with '..' component delimited by leading backslash. Is not considered a full component on POSIX [no drive, with leading]",
+            "file_path": "/foo\\../bar",
+            "URL_posix": "file:///foo%5C../bar",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '..' component delimited by leading backslash. Is not considered a full component on POSIX [with drive, no leading]",
+            "file_path": "C:/foo\\../bar",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "Path with '..' component delimited by trailing backslash. Is not considered a full component on POSIX [no drive, with leading]",
+            "file_path": "/foo/..\\bar",
+            "URL_posix": "file:///foo/..%5Cbar",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '..' component delimited by trailing backslash. Is not considered a full component on POSIX [with drive, no leading]",
+            "file_path": "C:/foo/..\\bar",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "UNC path with '..' component between share name and path",
+            "file_path": "\\\\mypc\\share\\..\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "UNC path with '..' component between share name and path [forward slash]",
+            "file_path": "//mypc/share/../bar.txt",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "UNC path with '..' component between share name and path [mixed separators]",
+            "file_path": "/\\mypc/share\\../bar.txt",
+            "URL_posix": "file:///%5Cmypc/share%5C../bar.txt",
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "UNC path with '..' component between share name and path [percent-encoded]",
+            "file_path": "\\\\mypc\\share\\%2E%2E\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share/%252E%252E/bar.txt"
+        },
+        {
+            "comment": "UNC path with trailing '..' component",
+            "file_path": "\\\\mypc\\foo/bar/..",
+            "URL_posix": { "failure-reason": "upwards-traversal" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+
+
+
+        { "__section__": "------------------------------ Paths containing triple-dot components ------------------------------" },
+
+
+
+        {
+            "comment": "Path with leading '...' component [no drive, no leading]",
+            "file_path": ".../foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading '...' component [no drive, with leading]",
+            "file_path": "/.../foo/bar.txt",
+            "URL_posix": "file:///.../foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading '...' component [with drive, no leading]",
+            "file_path": ".../C:/foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with leading '...' component [with drive, with leading]",
+            "file_path": "/.../C:/foo/bar.txt",
+            "URL_posix": "file:///.../C%3A/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '...' component in the middle [no drive, no leading]",
+            "file_path": "foo/.../bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '...' component in the middle [no drive, with leading]",
+            "file_path": "/foo/.../bar.txt",
+            "URL_posix": "file:///foo/.../bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with '...' component in the middle [with drive, no leading]",
+            "file_path": "C:/foo/.../bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/.../bar.txt"
+        },
+        {
+            "comment": "Path with '..' component in the middle [with drive, with leading]",
+            "file_path": "/C:/foo/.../bar.txt",
+            "URL_posix": "file:///C%3A/foo/.../bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing '...' component [no drive, no leading]",
+            "file_path": "foo/bar/...",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing '...' component [no drive, with leading]",
+            "file_path": "/foo/bar/...",
+            "URL_posix": "file:///foo/bar/...",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with trailing '...' component [with drive, no leading]",
+            "file_path": "C:/foo/bar/...",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/bar/"
+        },
+        {
+            "comment": "Path with trailing '...' component [with drive, with leading]",
+            "file_path": "/C:/foo/bar/...",
+            "URL_posix": "file:///C%3A/foo/bar/...",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "UNC path with '...' component between share name and path",
+            "file_path": "\\\\mypc\\share\\...\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share/.../bar.txt"
+        },
+        {
+            "comment": "UNC path with '...' component between share name and path [forward slash]",
+            "file_path": "//mypc/share/.../bar.txt",
+            "URL_posix": "file:////mypc/share/.../bar.txt",
+            "URL_windows": "file://mypc/share/.../bar.txt"
+        },
+        {
+            "comment": "UNC path with '...' component between share name and path [mixed separators]",
+            "file_path": "/\\mypc/share\\.../bar.txt",
+            "URL_posix": "file:///%5Cmypc/share%5C.../bar.txt",
+            "URL_windows": "file://mypc/share/.../bar.txt"
+        },
+        {
+            "comment": "UNC path with trailing '...' component",
+            "file_path": "\\\\mypc\\foo/bar/...",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/foo/bar/"
+        },
+
+
+
+        { "__section__": "------------------------------ Windows path normalization (trimming) ------------------------------" },
+
+
+
+        {
+            "comment": "Path components with trailing dots and spaces [no drive, no trailing]",
+            "file_path": "/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. ",
+            "URL_posix": "file:///foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path components with trailing dots and spaces [with drive, no trailing]",
+            "file_path": "C:/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. ",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/bar.%20/bar2%20/baz/qux../qux2..%20/.../file.txt"
+        },
+        {
+            "comment": "Path components with trailing dots and spaces [no drive, with trailing]",
+            "file_path": "/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. /",
+            "URL_posix": "file:///foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path components with trailing dots and spaces [with drive, with trailing]",
+            "file_path": "C:/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. /",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/bar.%20/bar2%20/baz/qux../qux2..%20/.../file.txt..%20/"
+        },
+        {
+            "comment": "Path where final component is only dots and spaces [no drive, no trailing]",
+            "file_path": "/foo/. . . . .",
+            "URL_posix": "file:///foo/.%20.%20.%20.%20.",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path where final component is only dots and spaces [with drive, no trailing]. The Windows API 'GetFullPathName' trims it all away.",
+            "file_path": "C:/foo/. . . . .",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/"
+        },
+        {
+            "comment": "Path where final component is only dots and spaces [no drive, with trailing]",
+            "file_path": "/foo/. . . . ./",
+            "URL_posix": "file:///foo/.%20.%20.%20.%20./",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path where final component is only dots and spaces [with drive, with trailing]",
+            "file_path": "C:/foo/. . . . ./",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/foo/.%20.%20.%20.%20/"
+        },
+        {
+            "comment": "UNC path with trailing dot in share name (should not be trimmed)",
+            "file_path": "\\\\vboxsvr\\WebURL.\\Parser.\\Parser.swift..",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://vboxsvr/WebURL./Parser/Parser.swift"
+        },
+        {
+            "comment": "UNC path with trailing dot in share name (should not be trimmed)[forward slash]",
+            "file_path": "\\\\vboxsvr/WebURL./Parser.\\Parser.swift..",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://vboxsvr/WebURL./Parser/Parser.swift"
+        },
+        {
+            "comment": "UNC path with trailing space in share name (should not be trimmed)",
+            "file_path": "\\\\vboxsvr\\WebURL \\Parser.\\Parser.swift..",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://vboxsvr/WebURL%20/Parser/Parser.swift"
+        },
+        {
+            "comment": "UNC path with trailing dot in share name (should not be trimmed)[forward slash]",
+            "file_path": "\\\\vboxsvr/WebURL /Parser.\\Parser.swift..",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://vboxsvr/WebURL%20/Parser/Parser.swift"
+        },
+        {
+            "comment": "UNC path whose share name is only dots and spaces (should not be trimmed)",
+            "file_path": "\\\\vboxsvr\\. . . .\\Parser.\\Parser.swift..",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://vboxsvr/.%20.%20.%20./Parser/Parser.swift"
+        },
+        {
+            "comment": "UNC path whose share name is only dots and spaces (should not be trimmed)[no trailing]",
+            "file_path": "\\\\vboxsvr/. . . .",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://vboxsvr/.%20.%20.%20."
+        },
+        {
+            "comment": "UNC Path, path components with trailing dots and spaces [no trailing]",
+            "file_path": "\\\\my_pc\\share.\\foo\\bar. \\bar2 .\\baz.\\qux..\\qux2.. \\...\\file.txt.. ",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/share./foo/bar.%20/bar2%20/baz/qux../qux2..%20/.../file.txt"
+        },
+        {
+            "comment": "UNC Path, path components with trailing dots and spaces [with trailing]",
+            "file_path": "\\\\my_pc\\share.\\foo\\bar. \\bar2 .\\baz.\\qux..\\qux2.. \\...\\file.txt.. \\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/share./foo/bar.%20/bar2%20/baz/qux../qux2..%20/.../file.txt..%20/"
+        },
+        {
+            "comment": "UNC path whose final (non share) path component is only dots and spaces [no trailing]",
+            "file_path": "\\\\vboxsvr\\share.\\. . . .",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://vboxsvr/share./"
+        },
+        {
+            "comment": "UNC path whose final (non share) path component is only dots and spaces [with trailing]",
+            "file_path": "\\\\vboxsvr\\share.\\. . . .\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://vboxsvr/share./.%20.%20.%20/"
+        },
+
+
+
+        { "__section__": "------------------------------ Path normalization: leading separators ------------------------------" },
+
+
+
+        {
+            "comment": "Path with 2 leading slashes. Posix: should not be trimmed. Windows: UNC.",
+            "file_path": "//foo/bAr/BaZ/qux.txt",
+            "URL_posix": "file:////foo/bAr/BaZ/qux.txt",
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 2 leading backslashes. Posix: relative path. Windows: UNC.",
+            "file_path": "\\\\foo/bAr/BaZ\\qux.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 2 leading slashes. Mixed separators. Posix: percent-encoded. Windows: UNC.",
+            "file_path": "/\\foo\\bAr/BaZ\\qux.txt",
+            "URL_posix": "file:///%5Cfoo%5CbAr/BaZ%5Cqux.txt",
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 3 leading slashes. Posix: should be trimmed. Windows: UNC. Some Windows APIs treat this as an empty hostname, but we trim them.",
+            "file_path": "///foo/bAr/BaZ/qux.txt",
+            "URL_posix": "file:///foo/bAr/BaZ/qux.txt",
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 3 leading backslashes. Posix: relative path. Windows: UNC. Some Windows APIs treat this as an empty hostname, but we trim them.",
+            "file_path": "\\\\\\foo/bAr/BaZ/qux.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 3 leading slashes. Mixed separators. Posix: percent-encoded. Windows: UNC. Some Windows APIs treat this as an empty hostname, but we trim them.",
+            "file_path": "/\\\\foo/bAr/BaZ/qux.txt",
+            "URL_posix": "file:///%5C%5Cfoo/bAr/BaZ/qux.txt",
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 4 leading slashes. Posix: should be trimmed. Windows: UNC.",
+            "file_path": "////foo/bAr/BaZ/qux.txt",
+            "URL_posix": "file:///foo/bAr/BaZ/qux.txt",
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 4 leading backslashes. Posix: relative path. Windows: UNC.",
+            "file_path": "\\\\\\\\foo/bAr/BaZ/qux.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 4 leading slashes. Mixed separators. Posix: percent-encoded. Windows: UNC.",
+            "file_path": "///\\foo/bAr/BaZ/qux.txt",
+            "URL_posix": "file:///%5Cfoo/bAr/BaZ/qux.txt",
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 5 leading slashes. Posix: should be normalized to a single slash. Windows: UNC.",
+            "file_path": "/////foo/bAr/BaZ/qux.txt",
+            "URL_posix": "file:///foo/bAr/BaZ/qux.txt",
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "Path with 5 leading backslashes. Posix: relative path. Windows: UNC.",
+            "file_path": "\\\\\\\\\\foo/bAr/BaZ/qux.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://foo/bAr/BaZ/qux.txt"
+        },
+        {
+            "comment": "UNC path, share root, extra slashes before share",
+            "file_path": "\\\\my_pc\\\\\\\\share.",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/share."
+        },
+        {
+            "comment": "UNC path, share root, extra slashes before share [forward slash]",
+            "file_path": "//my_pc//////share.",
+            "URL_posix": "file:////my_pc/share.",
+            "URL_windows": "file://my_pc/share."
+        },
+        {
+            "comment": "UNC path, share root, extra slashes before share [mixed separators]",
+            "file_path": "/\\my_pc/\\/\\/\\share.",
+            "URL_posix": "file:///%5Cmy_pc/%5C/%5C/%5Cshare.",
+            "URL_windows": "file://my_pc/share."
+        },
+        {
+            "comment": "UNC path, extra slashes before share",
+            "file_path": "\\\\my_pc\\\\\\\\share.\\dir.\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://my_pc/share./dir/"
+        },
+        {
+            "comment": "UNC path, extra slashes before share [forward slash]",
+            "file_path": "//my_pc//////share./dir./",
+            "URL_posix": "file:////my_pc/share./dir./",
+            "URL_windows": "file://my_pc/share./dir/"
+        },
+        {
+            "comment": "UNC path, extra slashes before share [mixed separators]",
+            "file_path": "/\\my_pc/\\/\\/\\share./dir./",
+            "URL_posix": "file:///%5Cmy_pc/%5C/%5C/%5Cshare./dir./",
+            "URL_windows": "file://my_pc/share./dir/"
+        },
+        {
+            "comment": "UNC path with extra slashes between share/path",
+            "file_path": "\\\\mypc\\share.\\\\\\\\dir.\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share./dir/"
+        },
+        {
+            "comment": "UNC path with extra slashes between share/path [forward slash]",
+            "file_path": "//mypc/share.////dir./",
+            "URL_posix": "file:////mypc/share./dir./",
+            "URL_windows": "file://mypc/share./dir/"
+        },
+        {
+            "comment": "UNC path with extra slashes between share/path [mixed separators]",
+            "file_path": "/\\mypc/share.\\/\\/dir.\\",
+            "URL_posix": "file:///%5Cmypc/share.%5C/%5C/dir.%5C",
+            "URL_windows": "file://mypc/share./dir/"
+        },
+
+
+
+        { "__section__": "------------------------------ Path normalization: more collapsing separators ------------------------------" },
+
+
+
+        {
+            "comment": "Path with extra slashes after drive",
+            "file_path": "D:\\\\\\foo\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///D:/foo/bar.txt"
+        },
+        {
+            "comment": "Path with extra slashes after drive [forward slash]",
+            "file_path": "D:///foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///D:/foo/bar.txt"
+        },
+        {
+            "comment": "Path with extra slashes in the middle [no drive, no leading]",
+            "file_path": "abc////foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with extra slashes in the middle [no drive, with leading]",
+            "file_path": "/abc////foo/bar.txt",
+            "URL_posix": "file:///abc/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with extra slashes in the middle [with drive, no leading]",
+            "file_path": "C:/abc////foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/abc/foo/bar.txt"
+        },
+        {
+            "comment": "Path with extra slashes in the middle [with drive, with leading]",
+            "file_path": "/C:/abc////foo/bar.txt",
+            "URL_posix": "file:///C%3A/abc/foo/bar.txt",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with extra slashes in the middle [with drive, no leading][mixed separators]",
+            "file_path": "C:\\abc/\\/\\foo/bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/abc/foo/bar.txt"
+        },
+        {
+            "comment": "UNC path with extra slashes in the middle, in path section",
+            "file_path": "\\\\mypc\\share.\\foo.\\\\\\\\bar.txt",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share./foo/bar.txt"
+        },
+        {
+            "comment": "UNC path with extra slashes in the middle, in path section [forward slash]",
+            "file_path": "//mypc/share./foo.////bar.txt",
+            "URL_posix": "file:////mypc/share./foo./bar.txt",
+            "URL_windows": "file://mypc/share./foo/bar.txt"
+        },
+        {
+            "comment": "UNC path with extra slashes in the middle, in path section [mixed separators]",
+            "file_path": "/\\mypc/share.\\foo./\\/\\bar.txt",
+            "URL_posix": "file:///%5Cmypc/share.%5Cfoo./%5C/%5Cbar.txt",
+            "URL_windows": "file://mypc/share./foo/bar.txt"
+        },
+        {
+            "comment": "Path with extra trailing slashes [no drive, no leading]",
+            "file_path": "abc/foo/bar///",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with extra trailing slashes [no drive, with leading]",
+            "file_path": "/abc/foo/bar///",
+            "URL_posix": "file:///abc/foo/bar/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with extra trailing slashes [with drive, no leading]",
+            "file_path": "C:/abc/foo/bar///",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/abc/foo/bar/"
+        },
+        {
+            "comment": "Path with extra trailing slashes [with drive, with leading]",
+            "file_path": "/C:/abc/foo/bar///",
+            "URL_posix": "file:///C%3A/abc/foo/bar/",
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Path with extra trailing slashes [with drive, no leading][mixed separators]",
+            "file_path": "C:\\abc/foo\\bar/\\/\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file:///C:/abc/foo/bar/"
+        },
+        {
+            "comment": "UNC path with extra trailing slashes in path section",
+            "file_path": "\\\\mypc\\share.\\dir.\\\\\\\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://mypc/share./dir/"
+        },
+        {
+            "comment": "UNC path with extra trailing slashes in path section [forward slash]",
+            "file_path": "//mypc/share./dir.////",
+            "URL_posix": "file:////mypc/share./dir./",
+            "URL_windows": "file://mypc/share./dir/"
+        },
+        {
+            "comment": "UNC path with extra trailing slashes in path section [mixed separators]",
+            "file_path": "/\\mypc/share.\\dir./\\/\\",
+            "URL_posix": "file:///%5Cmypc/share.%5Cdir./%5C/%5C",
+            "URL_windows": "file://mypc/share./dir/"
+        },
+
+
+
+        { "__section__": "------------------------------ Special Windows Paths ------------------------------" },
+
+
+        {
+            "comment": "Windows drive-relative path",
+            "file_path": "C:foo\\bar",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "Windows drive-relative path with '..' component",
+            "file_path": "C:foo\\../bar",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "upwards-traversal" }
+        },
+        {
+            "comment": "Win32 file namespace paths. '?' isn't a valid hostname and can't be percent-encoded. We also can't honour the semantics that these paths never be normalized, since the URL standard will normalize '.' and '..' components for us anyway.",
+            "file_path": "\\\\?\\vol\\file",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": { "failure-reason": "invalid-hostname" }
+        },
+        {
+            "comment": "Windows DOS device path.",
+            "file_path": "\\\\.\\UNC\\VBOXSVR\\WebURL\\",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://./UNC/VBOXSVR/WebURL/"
+        },
+        {
+            "comment": "Windows DOS device path (Drive letter). According to Windows path normalization docs, the '\\\\.\\' is the root of the path, not the drive letter, and GetFullPathName indeed turns '\\\\.\\C:\\foo\\..\\..\\..' in to '\\\\.\\'. So the drive letter should be percent-encoded to stop URL operations interpreting it.",
+            "file_path": "\\\\.\\C:\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://./C%3A/Windows/System32/notepad.exe"
+        },
+        {
+            "comment": "Windows DOS device path (Drive letter, alt). Windows never interprets this as a drive letter, so it should be percent-encoded to stop URL operations interpreting it.",
+            "file_path": "\\\\.\\C|\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://./C%7C/Windows/System32/notepad.exe"
+        },
+        {
+            "comment": "Windows DOS device path (BootPartition).",
+            "file_path": "\\\\.\\BootPartition\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://./BootPartition/Windows/System32/notepad.exe"
+        },
+        {
+            "comment": "Windows DOS device path (Volume GUID).",
+            "file_path": "\\\\.\\Volume{b289d78f-d491-4f6b-a437-5c51a88fa48f}\\Windows\\System32\\notepad.exe",
+            "URL_posix": { "failure-reason": "relative-path" },
+            "URL_windows": "file://./Volume%7Bb289d78f-d491-4f6b-a437-5c51a88fa48f%7D/Windows/System32/notepad.exe"
+        },
+
+
+
+        { "__section__": "------------------------------ The End ------------------------------" }
+    ],
+
+    "url_to_file_path": [
+
+        { "__section__": "------------------------------ Non-file URLs ------------------------------" },
+
+
+
+        {
+            "comment": "Non-file URL, special scheme.",
+            "URL": "http://example.com/foo/bar/",
+            "file_path_posix": { "failure-reason": "not-a-file-url" },
+            "file_path_windows": { "failure-reason": "not-a-file-url" }
+        },
+        {
+            "comment": "Non-file URL, non-special scheme.",
+            "URL": "foo://example.com/foo/bar/",
+            "file_path_posix": { "failure-reason": "not-a-file-url" },
+            "file_path_windows": { "failure-reason": "not-a-file-url" }
+        },
+
+
+
+        { "__section__": "------------------------------ Hostnames ------------------------------" },
+
+
+
+        {
+            "comment": "URL with hostname.",
+            "URL": "file://mypc/foo/bar",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\foo\\bar"
+        },
+        {
+            "comment": "URL with '.' hostname.",
+            "URL": "file://./UNC/VBOXSVR/WebURL/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\UNC\\VBOXSVR\\WebURL\\"
+        },
+        {
+            "comment": "URL with '..' hostname.",
+            "URL": "file://../UNC/VBOXSVR/WebURL/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\..\\UNC\\VBOXSVR\\WebURL\\"
+        },
+        {
+            "comment": "URL with '...' hostname.",
+            "URL": "file://.../UNC/VBOXSVR/WebURL/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\...\\UNC\\VBOXSVR\\WebURL\\"
+        },
+        {
+            "comment": "URL with IPv4 hostname.",
+            "URL": "file://192.168.178.1/c$/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\192.168.178.1\\c$\\Windows\\System32\\notepad.exe"
+        },
+        {
+            "comment": "URL with IPv6 hostname.",
+            "URL": "file://[2001:db8::]/WebURL/foo",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\2001-db8--.ipv6-literal.net\\WebURL\\foo"
+        },
+        {
+            "comment": "URL with transcribed IPv6 hostname.",
+            "URL": "file://2001-db8--.ipv6-literal.net/WebURL/foo",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\2001-db8--.ipv6-literal.net\\WebURL\\foo"
+        },
+        {
+            "comment": "URL with IPv4 localhost hostname.",
+            "URL": "file://127.0.0.1/SomeShare/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\127.0.0.1\\SomeShare\\Windows\\System32\\notepad.exe"
+        },
+        {
+            "comment": "URL with IPv6 localhost hostname.",
+            "URL": "file://[::1]/SomeShare/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\--1.ipv6-literal.net\\SomeShare\\Windows\\System32\\notepad.exe"
+        },
+        {
+            "comment": "URL with transcribed IPv6 localhost hostname.",
+            "URL": "file://--1.ipv6-literal.net/SomeShare/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\--1.ipv6-literal.net\\SomeShare\\Windows\\System32\\notepad.exe"
+        },
+
+
+
+        { "__section__": "------------------------------ Paths: Basic ------------------------------" },
+
+
+
+        {
+            "comment": "URL with root path [no hostname].",
+            "URL": "file:///",
+            "file_path_posix": "/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL with root path [with hostname].",
+            "URL": "file://mypc/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\"
+        },
+        {
+            "comment": "URL with directory path [no drive, no hostname].",
+            "URL": "file:///foo/BAR/baZ/",
+            "file_path_posix": "/foo/BAR/baZ/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL with directory path [with drive, no hostname].",
+            "URL": "file:///C:/foo/BAR/baZ/",
+            "file_path_posix": "/C:/foo/BAR/baZ/",
+            "file_path_windows": "C:\\foo\\BAR\\baZ\\"
+        },
+        {
+            "comment": "URL with directory path [no drive, with hostname].",
+            "URL": "file://my_pc/foo/BAR/baZ/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\foo\\BAR\\baZ\\"
+        },
+        {
+            "comment": "URL with directory path [with drive, with hostname].",
+            "URL": "file://./C:/foo/BAR/baZ/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\C:\\foo\\BAR\\baZ\\"
+        },
+        {
+            "comment": "URL with file path [no drive, no hostname].",
+            "URL": "file:///foo/BAR/baZ.txt",
+            "file_path_posix": "/foo/BAR/baZ.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL with file path [with drive, no hostname].",
+            "URL": "file:///C:/foo/BAR/baZ.txt",
+            "file_path_posix": "/C:/foo/BAR/baZ.txt",
+            "file_path_windows": "C:\\foo\\BAR\\baZ.txt"
+        },
+        {
+            "comment": "URL with file path [no drive, with hostname].",
+            "URL": "file://my_pc/foo/BAR/baZ.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\foo\\BAR\\baZ.txt"
+        },
+        {
+            "comment": "URL with file path [with drive, with hostname].",
+            "URL": "file://./C:/foo/BAR/baZ.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\C:\\foo\\BAR\\baZ.txt"
+        },
+        {
+            "comment": "URL path with percent-encoded symbols, including space, tilde, '?' and '#' [no drive, no hostname]",
+            "URL": "file:///~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23",
+            "file_path_posix": "/~/foo/bar?/baz#.txt/Name;with%some symbols*#",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with percent-encoded symbols, including space, tilde, '?' and '#' [with drive, no hostname]",
+            "URL": "file:///C:/~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23",
+            "file_path_posix": "/C:/~/foo/bar?/baz#.txt/Name;with%some symbols*#",
+            "file_path_windows": "C:\\~\\foo\\bar?\\baz#.txt\\Name;with%some symbols*#"
+        },
+        {
+            "comment": "URL path with percent-encoded symbols, decodes to UNC with symbols in share name",
+            "URL": "file://my_pc/c$%3F%23;%25some%20symbols*%23/dir",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\c$?#;%some symbols*#\\dir"
+        },
+        {
+            "comment": "URL path with percent-encoded symbols, decodes to UNC with symbols in path",
+            "URL": "file://my_pc/share/~/foo/bar%3F/baz%23.txt/Name;with%25some%20symbols*%23",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share\\~\\foo\\bar?\\baz#.txt\\Name;with%some symbols*#"
+        },
+        {
+            "comment": "URL with DOS device path (BootPartition).",
+            "URL": "file://./BootPartition/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\BootPartition\\Windows\\System32\\notepad.exe"
+        },
+        {
+            "comment": "URL with DOS device path (Volume GUID).",
+            "URL": "file://./Volume%7Bb289d78f-d491-4f6b-a437-5c51a88fa48f%7D/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\Volume{b289d78f-d491-4f6b-a437-5c51a88fa48f}\\Windows\\System32\\notepad.exe"
+        },
+
+
+
+        { "__section__": "------------------------------ Paths: Encoded separators ------------------------------" },
+
+
+
+        {
+            "comment": "URL path with percent-encoded '/' [no drive, no hostname].",
+            "URL": "file:///foo/bar%2Fbaz",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with percent-encoded '/' [with drive, no hostname].",
+            "URL": "file:///C:/foo/bar%2Fbaz",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '/' [no drive, with hostname].",
+            "URL": "file://mypc/foo/bar%2Fbaz",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '/' [with drive, with hostname].",
+            "URL": "file://./C:/foo/bar%2Fbaz",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '/' (lowercase) [with drive, no hostname].",
+            "URL": "file:///C:/foo/bar%2fbaz",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '/' in UNC share name [no drive, with hostname].",
+            "URL": "file://mypc/foo%2Fbar/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '/.'",
+            "URL": "file:///C:/foo/bar%2F./baz",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '/..'",
+            "URL": "file:///C:/foo/bar%2F../baz",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\' [no drive, no hostname].",
+            "URL": "file:///foo/bar%5Cbaz",
+            "file_path_posix": "/foo/bar\\baz",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\' [with drive, no hostname].",
+            "URL": "file:///C:/foo/bar%5Cbaz",
+            "file_path_posix": "/C:/foo/bar\\baz",
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\' [no drive, with hostname].",
+            "URL": "file://mypc/foo/bar%5Cbaz",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\' [with drive, with hostname].",
+            "URL": "file://./C:/foo/bar%5Cbaz",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\' (lowercase) [with drive, no hostname].",
+            "URL": "file:///C:/foo/bar%5cbaz",
+            "file_path_posix": "/C:/foo/bar\\baz",
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\' in UNC share name [no drive, with hostname].",
+            "URL": "file://mypc/foo%5Cbar/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\.'",
+            "URL": "file:///C:/foo/bar%5C./baz",
+            "file_path_posix": "/C:/foo/bar\\./baz",
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\..'",
+            "URL": "file:///C:/foo/bar%5C../baz",
+            "file_path_posix": "/C:/foo/bar\\../baz",
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with leading percent-encoded '/' (should not be decoded/trimmed) [no drive, no hostname].",
+            "URL": "file:///%2Ffoo/bAr/BaZ/qux.txt",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with leading percent-encoded '\\' (should not be decoded/trimmed) [with drive, no hostname].",
+            "URL": "file:///%5CC:/bAr/BaZ/qux.txt",
+            "file_path_posix": "/\\C:/bAr/BaZ/qux.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 2 leading percent-encoded '\\' (alternate UNC encoding, should not be decoded/trimmed) [no drive, no hostname].",
+            "URL": "file:///%5C%5Cfoo/bAr/BaZ/qux.txt",
+            "file_path_posix": "/\\\\foo/bAr/BaZ/qux.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 3 leading percent-encoded '\\' (alternate UNC encoding, should not be decoded/trimmed) [no drive, no hostname].",
+            "URL": "file:///%5C%5C%5Cfoo/bAr/BaZ/qux.txt",
+            "file_path_posix": "/\\\\\\foo/bAr/BaZ/qux.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with double-percent-encoded slash [no drive, no hostname]",
+            "URL": "file:///foo/%252Fbar.txt",
+            "file_path_posix": "/foo/%2Fbar.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with double-percent-encoded slash [with drive, no hostname]",
+            "URL": "file:///C:/foo/%252Fbar.txt",
+            "file_path_posix": "/C:/foo/%2Fbar.txt",
+            "file_path_windows": "C:\\foo\\%2Fbar.txt"
+        },
+        {
+            "comment": "URL with UNC path, share contains with double-percent-encoded slash",
+            "URL": "file://mypc/%252Ffoo./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\%2Ffoo.\\"
+        },
+        {
+            "comment": "URL with UNC path, path with double-percent-encoded slash",
+            "URL": "file://mypc/foo./%252Fbar.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\foo.\\%2Fbar.txt"
+        },
+        {
+            "comment": "URL path with double-percent-encoded backslash [no drive, no hostname]",
+            "URL": "file:///foo/%255Cbar.txt",
+            "file_path_posix": "/foo/%5Cbar.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with double-percent-encoded backslash [with drive, no hostname]",
+            "URL": "file:///C:/foo/%255Cbar.txt",
+            "file_path_posix": "/C:/foo/%5Cbar.txt",
+            "file_path_windows": "C:\\foo\\%5Cbar.txt"
+        },
+        {
+            "comment": "UNC path, share contains with double-percent-encoded backslash",
+            "URL": "file://mypc/%255Cfoo./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\%5Cfoo.\\"
+        },
+        {
+            "comment": "UNC path, path with double-percent-encoded backslash",
+            "URL": "file://mypc/foo./%255Cbar.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\foo.\\%5Cbar.txt"
+        },
+
+
+
+        { "__section__": "------------------------------ Paths: Encoded C0, trailing spaces ------------------------------" },
+
+
+
+        {
+            "comment": "URL path with percent-encoded C0, trailing space [no drive, no hostname, no trailing]",
+            "URL": "file:///foo%20/%07%09bar%0A%20",
+            "file_path_posix": "/foo /\u0007\u0009bar\u000A ",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with percent-encoded C0, trailing space [no drive, no hostname, with trailing]",
+            "URL": "file:///foo%20/%07%09bar%0A%20/",
+            "file_path_posix": "/foo /\u0007\u0009bar\u000A /",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with percent-encoded C0, trailing space [with drive, no hostname, no trailing]",
+            "URL": "file:///C:/foo%20/%07%09bar%0A%20",
+            "file_path_posix": "/C:/foo /\u0007\u0009bar\u000A ",
+            "file_path_windows": "C:\\foo \\\u0007\u0009bar\u000A"
+        },
+        {
+            "comment": "URL path with percent-encoded C0, trailing space [with drive, no hostname, with trailing]",
+            "URL": "file:///C:/foo%20/%07%09bar%0A%20/",
+            "file_path_posix": "/C:/foo /\u0007\u0009bar\u000A /",
+            "file_path_windows": "C:\\foo \\\u0007\u0009bar\u000A \\"
+        },
+        {
+            "comment": "URL path with percent-encoded C0, trailing space in UNC share name [with hostname, no trailing].",
+            "URL": "file://my_pc/foo%20%07%09bar%0A%20",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\foo \u0007\u0009bar\u000A "
+        },
+        {
+            "comment": "URL path with percent-encoded C0, trailing space in UNC share name [with hostname, with trailing].",
+            "URL": "file://my_pc/foo%20%07%09bar%0A%20/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\foo \u0007\u0009bar\u000A \\"
+        },
+        {
+            "comment": "URL path with percent-encoded C0, trailing space [with hostname, no trailing]",
+            "URL": "file://my_pc/share./foo%20/%07%09bar%0A%20",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\foo \\\u0007\u0009bar\u000A"
+        },
+        {
+            "comment": "URL path with percent-encoded C0, trailing space [with hostname, with trailing]",
+            "URL": "file://my_pc/share./foo%20/%07%09bar%0A%20/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\foo \\\u0007\u0009bar\u000A \\"
+        },
+
+
+
+        { "__section__": "------------------------------ Paths: Other, non-drive encoded components ------------------------------" },
+
+
+
+        {
+            "comment": "URL path with percent-encoded file name [no drive, no hostname].",
+            "URL": "file:///foo/bar%2523.txt",
+            "file_path_posix": "/foo/bar%23.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with percent-encoded file name [with drive, no hostname].",
+            "URL": "file:///C:/foo/bar%2523.txt",
+            "file_path_posix": "/C:/foo/bar%23.txt",
+            "file_path_windows": "C:\\foo\\bar%23.txt"
+        },
+        {
+            "comment": "URL path with percent-encoded UNC share name [with hostname, no trailing].",
+            "URL": "file://mypc/foo%2523",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\foo%23"
+        },
+        {
+            "comment": "URL path with percent-encoded UNC share name [with hostname, with trailing].",
+            "URL": "file://mypc/foo%2523/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\foo%23\\"
+        },
+        {
+            "comment": "URL path with percent-encoded file name [no drive, with hostname].",
+            "URL": "file://mypc/foo/bar%2523.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\foo\\bar%23.txt"
+        },
+        {
+            "comment": "URL path with percent-encoded file name [with drive, with hostname].",
+            "URL": "file://./C:/foo/bar%2523.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\C:\\foo\\bar%23.txt"
+        },
+        {
+            "comment": "URL path with unicode [no drive, no hostname].",
+            "URL": "file:///foo/%E2%80%81/Lock%20%F0%9F%94%92/%F0%9F%A6%86.txt",
+            "file_path_posix": "/foo/\u2001/Lock 🔒/🦆.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with unicode [with drive, no hostname].",
+            "URL": "file:///C:/foo/%E2%80%81/Lock%20%F0%9F%94%92/%F0%9F%A6%86.txt",
+            "file_path_posix": "/C:/foo/\u2001/Lock 🔒/🦆.txt",
+            "file_path_windows": "C:\\foo\\\u2001\\Lock 🔒\\🦆.txt"
+        },
+        {
+            "comment": "URL path, decodes to UNC with unicode share name.",
+            "URL": "file://my_pc/%F0%9F%A6%86/pond.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\🦆\\pond.txt"
+        },
+        {
+            "comment": "URL path, decodes to UNC with unicode in path.",
+            "URL": "file://my_pc/share./foo/%E2%80%81/Lock%20%F0%9F%94%92/%F0%9F%A6%86.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\foo\\\u2001\\Lock 🔒\\🦆.txt"
+        },
+        {
+            "comment": "URL path with leading percent-encoded NULL byte [no hostname]",
+            "URL": "file:///%00foo/bar/",
+            "file_path_posix": { "failure-reason": "null-byte" },
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with percent-encoded NULL byte [no drive, no hostname]",
+            "URL": "file:///foo/bar%00.txt",
+            "file_path_posix": { "failure-reason": "null-byte" },
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with percent-encoded NULL byte [with drive, no hostname]",
+            "URL": "file:///C:/foo/bar%00.txt",
+            "file_path_posix": { "failure-reason": "null-byte" },
+            "file_path_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "URL path with trailing percent-encoded NULL byte [no drive, no hostname]",
+            "URL": "file:///foo%00",
+            "file_path_posix": { "failure-reason": "null-byte" },
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with trailing percent-encoded NULL byte [with drive, no hostname]",
+            "URL": "file:///C:/foo%00",
+            "file_path_posix": { "failure-reason": "null-byte" },
+            "file_path_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "URL path, UNC share has leading percent-encoded NULL byte [with hostname]",
+            "URL": "file://my_pc/%00share./foo/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "URL path, UNC with percent-encoded NULL byte [with hostname]",
+            "URL": "file://my_pc/share./foo%00.txt",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "null-byte" }
+        },
+        {
+            "comment": "URL path, UNC with trailing percent-encoded NULL byte [with hostname]",
+            "URL": "file://my_pc/share./foo%00",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "null-byte" }
+        },
+
+
+
+        { "__section__": "------------------------------ Paths: Drive Letters ------------------------------" },
+
+
+
+        {
+            "comment": "URL path with a Windows drive-letter [no hostname, no trailing]. Windows treats this as a relative path without the trailing slash.",
+            "URL": "file:///c:",
+            "file_path_posix": "/c:",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with a Windows drive-letter [no hostname, with trailing].",
+            "URL": "file:///c:/",
+            "file_path_posix": "/c:/",
+            "file_path_windows": "c:\\"
+        },
+        {
+            "comment": "URL path with a Windows drive-letter [with hostname ('.'), no trailing]. UNC paths are always fully-qualified, and don't really have 'drive letters' as such, so the trailing slash isn't important.",
+            "URL": "file://./c:",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\c:"
+        },
+        {
+            "comment": "URL path with a Windows drive-letter [with hostname ('.'), with trailing].",
+            "URL": "file://./c:/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\c:\\"
+        },
+        {
+            "comment": "URL path with a Windows drive-letter [with hostname, no trailing]. UNC paths are always fully-qualified, and don't really have 'drive letters' as such, so the trailing slash isn't important.",
+            "URL": "file://mypc/c:",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\c:"
+        },
+        {
+            "comment": "URL path with a Windows drive-letter [with hostname, with trailing].",
+            "URL": "file://mypc/c:/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\c:\\"
+        },
+        {
+            "comment": "URL path with a Windows drive-relative path [no hostname, no trailing].",
+            "URL": "file:///c:foo",
+            "file_path_posix": "/c:foo",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with a Windows drive-relative path [no hostname, with trailing].",
+            "URL": "file:///c:foo/bar/",
+            "file_path_posix": "/c:foo/bar/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+
+
+
+        { "__section__": "------------------------------ Paths: Escaped drive letters ------------------------------" },
+
+
+
+        {
+            "comment": "URL path with an escaped drive-letter [no hostname, no trailing]",
+            "URL": "file:///c%3A",
+            "file_path_posix": "/c:",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with an escaped drive-letter [no hostname, with trailing]. This is an interesting case - since the path component is escaped, there's an argument that it intentionally does not want to be interpreted as a drive letter. Indeed, the Windows API 'PathCreateFromUrl' treats this as a relative path, and IE won't resolve it. Chrome (hence Edge) will, though.",
+            "URL": "file:///c%3A/",
+            "file_path_posix": "/c:/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL with an escaped drive letter [no hostname] (2)",
+            "URL": "file:///C%3A/foo/BAR/baZ.txt",
+            "file_path_posix": "/C:/foo/BAR/baZ.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with a percent-encoded Windows drive-relative path [no hostname, no trailing].",
+            "URL": "file:///c%3Afoo",
+            "file_path_posix": "/c:foo",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with a Windows drive-relative path [no hostname, with trailing].",
+            "URL": "file:///c%3Afoo/bar/",
+            "file_path_posix": "/c:foo/bar/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with an escaped drive-letter [with hostname, no trailing]. UNC share names are not interpreted as drive letters; even in DOS device paths, where they are drive letters, they aren't treated as such (i.e. they are not the root of the path).",
+            "URL": "file://mypc/c%3A",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\c:"
+        },
+        {
+            "comment": "URL path with an escaped drive-letter [with hostname, with trailing]. UNC share names are not interpreted as drive letters.",
+            "URL": "file://mypc/c%3A/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\c:\\"
+        },
+        {
+            "comment": "URL path with an escaped drive-letter [no hostname, no trailing] (alt)",
+            "URL": "file:///c%7C",
+            "file_path_posix": "/c|",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with an escaped drive-letter [no hostname, with trailing] (alt)",
+            "URL": "file:///c%7C/",
+            "file_path_posix": "/c|/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL with an escaped drive letter [no hostname] (alt)(2)",
+            "URL": "file:///C%7C/foo/BAR/baZ.txt",
+            "file_path_posix": "/C|/foo/BAR/baZ.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with an escaped drive-letter [with hostname, no trailing] (alt)",
+            "URL": "file://mypc/c%7C",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\c|"
+        },
+        {
+            "comment": "URL path with an escaped drive-letter [with hostname, with trailing] (alt)",
+            "URL": "file://mypc/c%7C/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\c|\\"
+        },
+        {
+            "comment": "URL encoding DOS device path. See above notes about drive letters in UNC paths",
+            "URL": "file://./C%3A/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\C:\\Windows\\System32\\notepad.exe"
+        },
+        {
+            "comment": "URL encoding DOS device path (alt)",
+            "URL": "file://./C%7C/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\.\\C|\\Windows\\System32\\notepad.exe"
+        },
+        {
+            "comment": "URL encoding UNC path. Share name is an encoded a drive letter. Extra slashes before share name.",
+            "URL": "file://my_pc//////c%3A/dir",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\c:\\dir"
+        },
+        {
+            "comment": "UNC path, share looks like a drive letter (alt). Extra slashes before share name.",
+            "URL": "file://my_pc//////c%7C/dir",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\c|\\dir"
+        },
+
+
+
+        { "__section__": "------------------------------ Windows path normalization (trimming) ------------------------------" },
+
+
+
+        {
+            "comment": "URL path components with trailing dots [no hostname, no drive, no trailing]",
+            "URL": "file:///foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20",
+            "file_path_posix": "/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. ",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path components with trailing dots [no hostname, with drive, no trailing]",
+            "URL": "file:///C:/foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20",
+            "file_path_posix": "/C:/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. ",
+            "file_path_windows": "C:\\foo\\bar. \\bar2 \\baz\\qux..\\qux2.. \\...\\file.txt"
+        },
+        {
+            "comment": "URL path components with trailing dots [no hostname, no drive, with trailing]",
+            "URL": "file:///foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20/",
+            "file_path_posix": "/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. /",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path components with trailing dots [no hostname, with drive, with trailing]",
+            "URL": "file:///C:/foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20/",
+            "file_path_posix": "/C:/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. /",
+            "file_path_windows": "C:\\foo\\bar. \\bar2 \\baz\\qux..\\qux2.. \\...\\file.txt.. \\"
+        },
+        {
+            "comment": "URL path with trailing dot in UNC share name (should not be trimmed)",
+            "URL": "file://vboxsvr/WebURL./Parser./Parser.swift..",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\WebURL.\\Parser\\Parser.swift"
+        },
+        {
+            "comment": "URL path with trailing space in UNC share name (should not be trimmed)",
+            "URL": "file://vboxsvr/WebURL%20/Parser./Parser.swift..",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\WebURL \\Parser\\Parser.swift"
+        },
+        {
+            "comment": "URL path with extra slashes before UNC share name",
+            "URL": "file://my_pc//////share./dir./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\dir\\"
+        },
+        {
+            "comment": "URL path components with trailing dots [with hostname, no trailing]",
+            "URL": "file://my_pc/share./foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\foo\\bar. \\bar2 \\baz\\qux..\\qux2.. \\...\\file.txt"
+        },
+        {
+            "comment": "UNC Path, path components with trailing dots [with hostname, with trailing]",
+            "URL": "file://my_pc/share./foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\foo\\bar. \\bar2 \\baz\\qux..\\qux2.. \\...\\file.txt.. \\"
+        },
+        {
+            "comment": "URL with UNC share root [no trailing]",
+            "URL": "file://mypc/share.",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\share."
+        },
+        {
+            "comment": "URL with UNC share root [with trailing]",
+            "URL": "file://mypc/share./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\share.\\"
+        },
+        {
+            "comment": "URL path where final component is only dots and spaces [no drive, no trailing]",
+            "URL": "file:///foo/.%20.%20.%20.%20.",
+            "file_path_posix": "/foo/. . . . .",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path where final component is only dots and spaces [with drive, no trailing]. The Windows API 'GetFullPathName' trims it all away.",
+            "URL": "file:///C:/foo/.%20.%20.%20.%20.",
+            "file_path_posix": "/C:/foo/. . . . .",
+            "file_path_windows": "C:\\foo\\"
+        },
+        {
+            "comment": "URL path where final component is only dots and spaces [no drive, with trailing]",
+            "URL": "file:///foo/.%20.%20.%20.%20./",
+            "file_path_posix": "/foo/. . . . ./",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path where final component is only dots and spaces [with drive, with trailing]",
+            "URL": "file:///C:/foo/.%20.%20.%20.%20./",
+            "file_path_posix": "/C:/foo/. . . . ./",
+            "file_path_windows": "C:\\foo\\. . . . \\"
+        },
+        {
+            "comment": "URL with UNC path whose share name is only dots and spaces (should not be trimmed)",
+            "URL": "file://vboxsvr/.%20.%20.%20./Parser./Parser.swift..",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\. . . .\\Parser\\Parser.swift"
+        },
+        {
+            "comment": "URL with UNC path whose share name is only dots and spaces (should not be trimmed)[no trailing]",
+            "URL": "file://vboxsvr/.%20.%20.%20.",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\. . . ."
+        },
+        {
+            "comment": "URL with UNC path whose final (non share) path component is only dots and spaces [no trailing]",
+            "URL": "file://vboxsvr/share./.%20.%20.%20.",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\share.\\"
+        },
+        {
+            "comment": "URL with UNC path whose final (non share) path component is only dots and spaces [with trailing]",
+            "URL": "file://vboxsvr/share./.%20.%20.%20./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\share.\\. . . \\"
+        },
+        {
+            "comment": "URL path with trailing '...' component [no drive, no trailing]",
+            "URL": "file:///foo/...",
+            "file_path_posix": "/foo/...",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with trailing '...' component [with drive, no trailing]. The Windows API 'GetFullPathName' trims it all away.",
+            "URL": "file:///C:/foo/...",
+            "file_path_posix": "/C:/foo/...",
+            "file_path_windows": "C:\\foo\\"
+        },
+        {
+            "comment": "URL path with trailing '...' component [no drive, with trailing]",
+            "URL": "file:///foo/.../",
+            "file_path_posix": "/foo/.../",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with trailing '...' component [with drive, with trailing]",
+            "URL": "file:///C:/foo/.../",
+            "file_path_posix": "/C:/foo/.../",
+            "file_path_windows": "C:\\foo\\...\\"
+        },
+        {
+            "comment": "URL with UNC path with '...' share name (should not be trimmed)",
+            "URL": "file://vboxsvr/.../Parser./Parser.swift..",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\...\\Parser\\Parser.swift"
+        },
+        {
+            "comment": "URL with UNC path with '...' share name (should not be trimmed)[no trailing]",
+            "URL": "file://vboxsvr/...",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\..."
+        },
+        {
+            "comment": "URL with UNC path whose final (non share) path component is a '...' component [no trailing]",
+            "URL": "file://vboxsvr/share./...",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\share.\\"
+        },
+        {
+            "comment": "URL with UNC path whose final (non share) path component is a '...' component [with trailing]",
+            "URL": "file://vboxsvr/share./.../",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\vboxsvr\\share.\\...\\"
+        },
+
+
+
+        { "__section__": "------------------------------ Path normalization: leading separators ------------------------------" },
+
+
+
+        {
+            "comment": "URL path with 2 leading slashes [no hostname, no drive]. Posix: double slashes should be preserved in file path. Windows: unclear; some applications encode UNC paths this way (e.g. Java). For now it is rejected as a relative path on Windows.",
+            "URL": "file:////foo/bAr/BaZ/qux.txt",
+            "file_path_posix": "//foo/bAr/BaZ/qux.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 2 leading slashes [no hostname, with drive]. Posix: double slashes should be preserved in file path. Windows: invalid; 'GetFullPathName' never treats this as a local path, and 'C:' is not a valid hostname.",
+            "URL": "file:////C:/bar",
+            "file_path_posix": "//C:/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 2 leading slashes [no hostname, with drive(escaped)].",
+            "URL": "file:////C%3A/bar",
+            "file_path_posix": "//C:/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 2 leading slashes [no hostname, with drive(alt)].",
+            "URL": "file:////C|/bar",
+            "file_path_posix": "//C|/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 2 leading slashes [no hostname, with drive(alt, escaped)].",
+            "URL": "file:////C%7C/bar",
+            "file_path_posix": "//C|/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 2 leading slashes, between UNC host and share [with hostname]. 'GetFullPathName' on Windows trims slashes before the share name, but also trims the share name (probable bug).",
+            "URL": "file://my_pc//share./vol./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\vol\\"
+        },
+        {
+            "comment": "URL path with 2 leading slashes, between UNC host and share [with hostname]. One is a percent-encoded backslash, which should be rejected rather than trimmed away.",
+            "URL": "file://my_pc/%5Cshare./vol./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with 3 leading slashes [no hostname, no drive]. Should be collapsed to single slash.",
+            "URL": "file://///foo/bAr/BaZ/qux.txt",
+            "file_path_posix": "/foo/bAr/BaZ/qux.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 3 leading slashes [no hostname, no drive]. One is percent-encoded, which should be rejected rather than trimmed away.",
+            "URL": "file:////%2Ffoo/bAr/BaZ/qux.txt",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 3 leading slashes [no hostname, no drive]. One is a percent-encoded backslash, which is allowed on POSIX but rejected on Windows.",
+            "URL": "file:///%5C/a/b/c/d.txt",
+            "file_path_posix": "/\\/a/b/c/d.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 3 leading slashes [no hostname, with drive]. Should be collapsed to single slash.",
+            "URL": "file://///C:/bar",
+            "file_path_posix": "/C:/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 3 leading slashes [no hostname, with drive(escaped)].",
+            "URL": "file://///C%3A/bar",
+            "file_path_posix": "/C:/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 3 leading slashes [no hostname, with drive(alt)].",
+            "URL": "file://///C|/bar",
+            "file_path_posix": "/C|/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 3 leading slashes [no hostname, with drive(alt, escaped)].",
+            "URL": "file://///C%7C/bar",
+            "file_path_posix": "/C|/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 3 leading slashes, between UNC host and share. 'GetFullPathName' on Windows trims slashes before the share name.",
+            "URL": "file://my_pc///share./vol./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\vol\\"
+        },
+        {
+            "comment": "URL path with 3 leading slashes, between UNC host and share. One is a percent-encoded backslash, which should be rejected rather than trimmed away.",
+            "URL": "file://my_pc//%5Cshare./vol./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with 4 leading slashes [no hostname, no drive]. Should be collapsed to single slash.",
+            "URL": "file://////foo/bAr/BaZ/qux.txt",
+            "file_path_posix": "/foo/bAr/BaZ/qux.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 4 leading slashes [no hostname, no drive]. One is percent-encoded, which should be rejected rather than trimmed away.",
+            "URL": "file://///%2Ffoo/bAr/BaZ/qux.txt",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 4 leading slashes [no hostname, no drive]. Some are percent-encoded backslashes, which are allowed on POSIX but rejected on Windows.",
+            "URL": "file:///%5C/%5Ca/b/c/d.txt",
+            "file_path_posix": "/\\/\\a/b/c/d.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 4 leading slashes [no hostname, with drive]. Should be collapsed to single slash.",
+            "URL": "file://////C:/bar",
+            "file_path_posix": "/C:/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 4 leading slashes [no hostname, with drive(escaped)].",
+            "URL": "file://////C%3A/bar",
+            "file_path_posix": "/C:/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 4 leading slashes [no hostname, with drive(alt)].",
+            "URL": "file://////C|/bar",
+            "file_path_posix": "/C|/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 4 leading slashes [no hostname, with drive(alt, escaped)].",
+            "URL": "file://////C%7C/bar",
+            "file_path_posix": "/C|/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 4 leading slashes, between UNC host and share. 'GetFullPathName' on Windows trims slashes before the share name.",
+            "URL": "file://my_pc////share./vol./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\vol\\"
+        },
+        {
+            "comment": "URL path with 4 leading slashes, between UNC host and share. One is a percent-encoded backslash, which should be rejected rather than trimmed away.",
+            "URL": "file://my_pc///%5Cshare./vol./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with 5 leading slashes [no hostname, no drive]. Should be collapsed to single slash.",
+            "URL": "file:///////foo/bAr/BaZ/qux.txt",
+            "file_path_posix": "/foo/bAr/BaZ/qux.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 5 leading slashes [no hostname, no drive]. One is percent-encoded, which should be rejected rather than trimmed away.",
+            "URL": "file://///%2F/foo/bAr/BaZ/qux.txt",
+            "file_path_posix": { "failure-reason": "encoded-separator" },
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 5 leading slashes [no hostname, no drive]. Some are percent-encoded backslashes, which are allowed on POSIX but rejected on Windows.",
+            "URL": "file:///%5C/%5C/a/b/c/d.txt",
+            "file_path_posix": "/\\/\\/a/b/c/d.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 5 leading slashes [no hostname, with drive]. Should be collapsed to single slash.",
+            "URL": "file:///////C:/bar",
+            "file_path_posix": "/C:/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 5 leading slashes [no hostname, with drive(escaped)].",
+            "URL": "file:///////C%3A/bar",
+            "file_path_posix": "/C:/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 5 leading slashes [no hostname, with drive(alt)].",
+            "URL": "file:///////C|/bar",
+            "file_path_posix": "/C|/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 5 leading slashes [no hostname, with drive(alt, escaped)].",
+            "URL": "file:///////C%7C/bar",
+            "file_path_posix": "/C|/bar",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with 5 leading slashes, between UNC host and share. 'GetFullPathName' on Windows trims slashes before the share name.",
+            "URL": "file://my_pc/////share./vol./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\my_pc\\share.\\vol\\"
+        },
+        {
+            "comment": "URL path with 5 leading slashes, between UNC host and share. One is a percent-encoded backslash, which should be rejected rather than trimmed away.",
+            "URL": "file://my_pc///%5C/share./vol./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+
+
+
+        { "__section__": "------------------------------ Path normalization: more collapsing separators ------------------------------" },
+
+
+
+        {
+            "comment": "URL path with extra slashes in the middle. Should be normalized to a single slash. [no drive, no hostname]",
+            "URL": "file:///abc////foo/bar.txt",
+            "file_path_posix": "/abc/foo/bar.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with extra slashes in the middle. Should be normalized to a single slash. [with drive, no hostname]",
+            "URL": "file:///C:/abc////foo/bar.txt",
+            "file_path_posix": "/C:/abc/foo/bar.txt",
+            "file_path_windows": "C:\\abc\\foo\\bar.txt"
+        },
+        {
+            "comment": "URL path with extra slashes in the middle. Some are percent-encoded backslashes. [with drive, no hostname]",
+            "URL": "file:///C:/abc/%5C%5C%5C/foo/bar.txt",
+            "file_path_posix": "/C:/abc/\\\\\\/foo/bar.txt",
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with extra trailing slashes. Should be normalized to a single slash. [no drive, no hostname]",
+            "URL": "file:///abc/foo/bar///",
+            "file_path_posix": "/abc/foo/bar/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with extra trailing slashes. Should be normalized to a single slash. [with drive, no hostname]",
+            "URL": "file:///C:/abc/foo/bar///",
+            "file_path_posix": "/C:/abc/foo/bar/",
+            "file_path_windows": "C:\\abc\\foo\\bar\\"
+        },
+        {
+            "comment": "URL path with extra trailing slashes. Some are percent-encoded backslashes. [with drive, no hostname]",
+            "URL": "file:///C:/abc/foo/bar/%5C%5C/",
+            "file_path_posix": "/C:/abc/foo/bar/\\\\/",
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL with UNC path, extra slashes before share.",
+            "URL": "file://mypc////share./dir./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\share.\\dir\\"
+        },
+        {
+            "comment": "URL with UNC path, extra slashes between share/path.",
+            "URL": "file://mypc/share.////dir./",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\share.\\dir\\"
+        },
+        {
+            "comment": "URL with UNC path, extra trailing slashes.",
+            "URL": "file://mypc/share./dir.////",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\share.\\dir\\"
+        },
+
+
+
+        { "__section__": "------------------------------ The End ------------------------------" }
+    ]
+}
