@@ -24,7 +24,7 @@ func XCTAssertEqualElements<Left: Sequence, Right: Sequence>(
   XCTAssertTrue(left.elementsEqual(right), file: file, line: line)
 }
 
-/// Aseerts that a closure throws a particular error.
+/// Asserts that a closure throws a particular error.
 ///
 func XCTAssertThrowsSpecific<E>(
   _ expectedError: E, file: StaticString = #file, line: UInt = #line, _ body: () throws -> Void
@@ -35,7 +35,7 @@ func XCTAssertThrowsSpecific<E>(
   } catch let error as E {
     XCTAssertEqual(error, expectedError)
   } catch {
-    XCTFail("Unexpected error")
+    XCTFail("Unexpected error \(error)")
   }
 }
 
@@ -76,4 +76,20 @@ func XCTAssertURLIsIdempotent(_ url: WebURL) {
   XCTAssertEqualElements(url.utf8, reparsed.utf8)
   // Triple check: check that the serialized representations are the same.
   XCTAssertEqual(serialized, reparsed.serialized)
+}
+
+/// Checks the component values of the given URL. Any components not specified are checked to have a `nil` value.
+///
+func XCTAssertURLComponents(
+  _ url: WebURL, scheme: String, username: String? = nil, password: String? = nil, hostname: String? = nil,
+  port: Int? = nil, path: String, query: String? = nil, fragment: String? = nil
+) {
+  XCTAssertEqual(url.scheme, scheme)
+  XCTAssertEqual(url.username, username)
+  XCTAssertEqual(url.password, password)
+  XCTAssertEqual(url.hostname, hostname)
+  XCTAssertEqual(url.port, port)
+  XCTAssertEqual(url.path, path)
+  XCTAssertEqual(url.query, query)
+  XCTAssertEqual(url.fragment, fragment)
 }
