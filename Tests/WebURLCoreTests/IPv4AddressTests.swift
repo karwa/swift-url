@@ -15,7 +15,7 @@
 import WebURLTestSupport
 import XCTest
 
-@testable import WebURL
+@testable import WebURLCore
 
 extension UInt32 {
   fileprivate var octets: [UInt8] {

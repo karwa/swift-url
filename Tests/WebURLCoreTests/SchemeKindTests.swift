@@ -14,7 +14,7 @@
 
 import XCTest
 
-@testable import WebURL
+@testable import WebURLCore
 
 /// Tests for `WebURL.SchemeKind`.
 ///

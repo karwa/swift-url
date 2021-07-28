@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Benchmark
-import WebURL
+import WebURLCore
 
 /// Benchmarks the `StringProtocol.urlEncoded` and `StringProtocol.urlDecoded` properties.
 ///

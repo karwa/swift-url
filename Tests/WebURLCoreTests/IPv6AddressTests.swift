@@ -15,7 +15,7 @@
 import WebURLTestSupport
 import XCTest
 
-@testable import WebURL
+@testable import WebURLCore
 
 extension Array {
   fileprivate init(ipv6Octets addr: IPv6Address.Octets) where Element == UInt8 {

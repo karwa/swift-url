@@ -14,7 +14,7 @@
 
 import XCTest
 
-@testable import WebURL
+@testable import WebURLCore
 
 final class FormEncodedQueryParametersTests: XCTestCase {
 

@@ -19,7 +19,16 @@ import PackageDescription
 let package = Package(
   name: "swift-url",
   products: [
+    // The WebURL library.
+    // Includes everything.
     .library(name: "WebURL", targets: ["WebURL"]),
+
+    // The WebURL Core library.
+    // Includes the WebURL type, minus anything requiring external dependencies.
+    .library(name: "WebURLCore", targets: ["WebURLCore"]),
+
+    // Test support library. Used by WebURLCoreTests and swift-url-tools package.
+    // Useful for comparing results with other URL implementations (e.g. JSDOM reference impl).
     .library(name: "WebURLTestSupport", targets: ["WebURLTestSupport"]),
   ],
   dependencies: [
@@ -27,11 +36,22 @@ let package = Package(
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
   ],
   targets: [
-    .target(name: "WebURL"),
-    .target(name: "WebURLTestSupport", dependencies: ["WebURL"]),
+    // Products.
+    .target(
+      name: "WebURL",
+      dependencies: ["WebURLCore"]
+    ),
+    .target(
+      name: "WebURLCore"
+    ),
+    // Test targets and test support libraries.
+    .target(
+      name: "WebURLTestSupport",
+      dependencies: ["WebURLCore"]
+    ),
     .testTarget(
-      name: "WebURLTests",
-      dependencies: ["WebURL", "WebURLTestSupport", "Checkit"],
+      name: "WebURLCoreTests",
+      dependencies: ["WebURLCore", "WebURLTestSupport", "Checkit"],
       resources: [.copy("Resources")]
     ),
   ]

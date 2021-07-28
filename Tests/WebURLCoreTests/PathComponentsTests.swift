@@ -15,7 +15,7 @@
 import Checkit
 import XCTest
 
-@testable import WebURL
+@testable import WebURLCore
 
 final class PathComponentsTests: XCTestCase {}
 

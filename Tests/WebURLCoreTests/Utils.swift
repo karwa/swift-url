@@ -14,7 +14,7 @@
 
 import XCTest
 
-@testable import WebURL
+@testable import WebURLCore
 
 /// Asserts that two sequences contain the same elements in the same order.
 ///

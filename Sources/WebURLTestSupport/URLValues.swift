@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import WebURL
+import WebURLCore
 
 /// A property exposed by the WHATWG URL model.
 ///

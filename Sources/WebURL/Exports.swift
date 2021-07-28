@@ -12,21 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import WebURLCore
-
-@_cdecl("LLVMFuzzerTestOneInput")
-public func url_parse_reparse(_ start: UnsafePointer<UInt8>, _ count: Int) -> CInt {
-
-  let bytes = UnsafeBufferPointer(start: start, count: count)
-  if let url = WebURL(utf8: bytes) {
-    guard let reparsed = WebURL(utf8: url.utf8) else {
-      preconditionFailure("Failed to reparse URL")
-    }
-    guard reparsed.utf8.elementsEqual(url.utf8) else {
-      preconditionFailure("Reparsed URL was not equal to the original")
-    }
-    // TODO: Also check that `URLStructure` is the same.
-  }
-
-  return 0
-}
+@_exported import WebURLCore

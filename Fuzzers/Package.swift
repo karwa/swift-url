@@ -29,7 +29,7 @@ let package = Package(
   targets: [
     .target(
       name: "url-parse-reparse",
-      dependencies: [.product(name: "WebURL", package: "swift-url")],
+      dependencies: [.product(name: "WebURLCore", package: "swift-url")],
       swiftSettings: [.unsafeFlags(["-parse-as-library", "-sanitize=fuzzer,address"])]
     )
   ]

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Benchmark
-import WebURL
+import WebURLCore
 
 /// Benchmarks the `WebURL.init(String)` constructor for URLs with special schemes (except file).
 /// The same performance trends should apply across http, https, ftp, ws, wss, schemes.

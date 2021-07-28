@@ -30,7 +30,7 @@ let package = Package(
       .target(
         name: "WebURLBenchmark",
         dependencies: [
-          .product(name: "WebURL", package: "swift-url"),
+          .product(name: "WebURLCore", package: "swift-url"),
           .product(name: "Benchmark", package: "Benchmark")
         ]
       )

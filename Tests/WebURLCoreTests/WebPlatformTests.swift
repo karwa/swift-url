@@ -15,7 +15,7 @@
 import WebURLTestSupport
 import XCTest
 
-@testable import WebURL
+@testable import WebURLCore
 
 final class WebPlatformTests: ReportGeneratingTestCase {}
 
