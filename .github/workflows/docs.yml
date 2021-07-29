@@ -13,7 +13,7 @@ jobs:
       - name: Generate Documentation
         uses: karwa/swift-doc@linux-fixes
         with:
-          inputs: "Sources/WebURL"
+          inputs: "Sources/WebURLCore"
           module-name: WebURL
           output: "Documentation"
           base-url: "/swift-url/"
