@@ -19,20 +19,48 @@ import PackageDescription
 let package = Package(
   name: "swift-url",
   products: [
+    // Core functionality.
     .library(name: "WebURL", targets: ["WebURL"]),
+
+    // Integration with swift-system.
+    // FIXME: This should become a cross-import overlay once they exist and are supported by SwiftPM.
+    .library(name: "WebURLSystemExtras", targets: ["WebURLSystemExtras"]),
+
+    // Test support library.
+    // Various infrastructure components to run the URL web-platform-tests and other tests contained in JSON files.
+    // Used by https://github.com/karwa/swift-url-tools to provide a GUI test runner.
     .library(name: "WebURLTestSupport", targets: ["WebURLTestSupport"]),
   ],
   dependencies: [
-    // Swift-checkit for testing protocol conformances.
+    // swift-system for WebURLSystemExtras.
+    // FIXME: Move to a tagged release which includes https://github.com/apple/swift-system/pull/51
+    .package(url: "https://github.com/apple/swift-system.git", .branch("main")),
+
+    // swift-checkit for testing protocol conformances. Test-only dependency.
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
   ],
   targets: [
-    .target(name: "WebURL"),
-    .target(name: "WebURLTestSupport", dependencies: ["WebURL"]),
+    // Products.
+    .target(
+      name: "WebURL"
+    ),
+    .target(
+      name: "WebURLSystemExtras",
+      dependencies: ["WebURL", .product(name: "SystemPackage", package: "swift-system")]
+    ),
+    .target(
+      name: "WebURLTestSupport",
+      dependencies: ["WebURL"]
+    ),
+		// Tests.
     .testTarget(
       name: "WebURLTests",
       dependencies: ["WebURL", "WebURLTestSupport", "Checkit"],
       resources: [.copy("Resources")]
+    ),
+    .testTarget(
+      name: "WebURLSystemExtrasTests",
+      dependencies: ["WebURLSystemExtras", "WebURL", .product(name: "SystemPackage", package: "swift-system")]
     ),
   ]
 )
