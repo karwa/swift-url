@@ -68,6 +68,8 @@ public enum FilePathToURLTests: TestSuite {
     case unsupportedHostname = "invalid-hostname"
     case nullBytes = "null-byte"
     case upwardsTraversal = "upwards-traversal"
+    case invalidWin32NamespacedPath = "invalid-namespaced-path"
+    case unsupportedWin32NamespacedPath = "unsupported-namespaced-path"
   }
 
   public struct CapturedData: Hashable {

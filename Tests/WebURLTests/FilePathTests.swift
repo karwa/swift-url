@@ -39,13 +39,13 @@ extension FilePathTests {
     let data = loadTestResource(name: "file_url_path_tests")!
     let testFile = try JSONDecoder().decode(FilePathTestFile.self, from: data)
     assert(
-      testFile.file_path_to_url.count == 273,
+      testFile.file_path_to_url.count == 486,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
 
     var harness = FilePathToURLTests.WebURLReportHarness()
     harness.runTests(testFile.file_path_to_url)
-    XCTAssert(harness.entriesSeen == 259, "Unexpected number of tests executed.")
+    XCTAssert(harness.entriesSeen == 472, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "file_path_to_url.txt")
@@ -371,7 +371,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"\\caf��\hi\bye\"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.unsupportedHostname) {
+      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(latin1, format: .windows)
       }
     }
@@ -386,7 +386,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"\\ca���\hi\bye\"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.unsupportedHostname) {
+      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
       }
     }
@@ -394,7 +394,192 @@ extension FilePathTests {
     // Currently, all Unicode (including valid Unicode) is banned from UNC server names because we don't have IDNA.
     do {
       let unicode = #"\\🦆\share\bread\"#
-      XCTAssertThrowsSpecific(FilePathToURLError.unsupportedHostname) {
+      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+        let _ = try WebURL.fromFilePathBytes(unicode.utf8, format: .windows)
+      }
+    }
+  }
+
+  func testByteStringPath_windows_win32Namespaced() throws {
+
+    // As above, but using the "\\?\" long-path syntax.
+
+    // Null-terminated.
+    do {
+      let nullTerminated: [UInt8] = [
+        0x5C /* \ */, 0x5C /* \ */, 0x3F /* ? */, 0x5C /* \ */,
+        0x43 /* C */, 0x3A /* : */,
+        0x5C /* \ */, 0x68 /* h */, 0x69 /* i */,
+        0x00,
+      ]
+      XCTAssertEqual(String(cString: nullTerminated.map { CChar(bitPattern: $0) }), #"\\?\C:\hi"#)
+
+      XCTAssertThrowsSpecific(FilePathToURLError.nullBytes) {
+        let _ = try WebURL.fromFilePathBytes(nullTerminated, format: .windows)
+      }
+    }
+
+    // Nulls elsewhere.
+    do {
+      let includesNulls: [UInt8] = [
+        0x5C /* \ */, 0x5C /* \ */, 0x3F /* ? */, 0x5C /* \ */,
+        0x43 /* C */, 0x3A /* : */,
+        0x5C /* \ */, 0x68 /* h */, 0x69 /* i */,
+        0x00,
+        0x68 /* h */, 0x69 /* i */,
+      ]
+      XCTAssertEqual(String(cString: includesNulls.map { CChar(bitPattern: $0) }), #"\\?\C:\hi"#)
+
+      XCTAssertThrowsSpecific(FilePathToURLError.nullBytes) {
+        let _ = try WebURL.fromFilePathBytes(includesNulls, format: .windows)
+      }
+    }
+
+    // Unpaired surrogate.
+    do {
+      let unpairedSurrogate: [UInt8] = [
+        0x5C /* \ */, 0x5C /* \ */, 0x3F /* ? */, 0x5C /* \ */,
+        0x43 /* C */, 0x3A /* : */,
+        0x5C /* \ */, 0x66 /* f */, 0x6F /* o */, 0xED, 0xA0, 0x80, 0x6F /* o */,
+        0x5C /* \ */, 0x62 /* b */, 0x61 /* a */, 0x72 /* r */,
+      ]
+      XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"\\?\C:\fo���o\bar"#)
+
+      let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
+
+      XCTAssertEqual(fileURL.serialized, #"file:///C:/fo%ED%A0%80o/bar"#)
+      XCTAssertURLIsIdempotent(fileURL)
+      XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
+      XCTAssertEqual(fileURL.pathComponents.count, 3)
+
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      XCTAssertEqualElements(roundtripPath, unpairedSurrogate.dropFirst(4) /* \\?\ prefix */)
+    }
+
+    // ISO/IEC 8859-1 (Latin-1).
+    do {
+      let latin1: [UInt8] = [
+        0x5C /* \ */, 0x5C /* \ */, 0x3F /* ? */, 0x5C /* \ */,
+        0x43 /* C */, 0x3A /* : */,
+        0x5C /* \ */, 0x63 /* c */, 0x61 /* a */, 0x66 /* f */, 0xE9 /* é */, 0xDD /* Ý */,
+      ]
+      XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"\\?\C:\caf��"#)
+
+      let fileURL = try WebURL.fromFilePathBytes(latin1, format: .windows)
+
+      XCTAssertEqual(fileURL.serialized, "file:///C:/caf%E9%DD")
+      XCTAssertURLIsIdempotent(fileURL)
+      XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
+      XCTAssertEqual(fileURL.pathComponents.count, 2)
+
+      // FIXME: Perhaps don't automatically percent-decode path components?
+      XCTAssertEqual(fileURL.pathComponents.last, "caf��")
+
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      XCTAssertEqualElements(roundtripPath, latin1.dropFirst(4) /* \\?\ prefix */)
+    }
+
+    // ISO/IEC 8859-7 (Latin/Greek).
+    do {
+      let greek: [UInt8] = [
+        0x5C /* \ */, 0x5C /* \ */, 0x3F /* ? */, 0x5C /* \ */,
+        0x43 /* C */, 0x3A /* : */,
+        0x5C /* \ */, 0x68 /* h */, 0x69 /* i */, 0xE1 /* α */, 0xE2 /* β */, 0xE3 /* γ */,
+      ]
+      XCTAssertEqual(String(decoding: greek, as: UTF8.self), #"\\?\C:\hi���"#)
+
+      let fileURL = try WebURL.fromFilePathBytes(greek, format: .windows)
+
+      XCTAssertEqual(fileURL.serialized, "file:///C:/hi%E1%E2%E3")
+      XCTAssertURLIsIdempotent(fileURL)
+      XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
+      XCTAssertEqual(fileURL.pathComponents.count, 2)
+
+      // FIXME: Perhaps don't automatically percent-decode path components?
+      XCTAssertEqual(fileURL.pathComponents.last, "hi���")
+
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      XCTAssertEqualElements(roundtripPath, greek.dropFirst(4) /* \\?\ prefix */)
+    }
+
+    // All 8-bit values.
+    do {
+      var allBytes = Array(#"\\?\C:\foo\bar"#.utf8)
+      allBytes.insert(contentsOf: [1...0x2E, 0x30...UInt8.max].joined(), at: 9)  // NULL and 0x2F not allowed.
+      XCTAssert(String(decoding: allBytes, as: UTF8.self).contains("�"))
+
+      let fileURL = try WebURL.fromFilePathBytes(allBytes, format: .windows)
+
+      XCTAssertEqual(
+        fileURL.serialized,
+        #"file:///C:/fo%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F"#
+          //                                                        Backslash turned to forward slash in URL
+          //                                                                             V
+          + #"%20!%22%23$%25&'()*+,-.0123456789%3A;%3C=%3E%3F@ABCDEFGHIJKLMNOPQRSTUVWXYZ[/]^_%60abcdefghijklmnopqrstu"#
+          + #"vwxyz%7B%7C%7D~%7F%80%81%82%83%84%85%86%87%88%89%8A%8B%8C%8D%8E%8F%90%91%92%93%94%95%96%97%98%99%9A%9B"#
+          + #"%9C%9D%9E%9F%A0%A1%A2%A3%A4%A5%A6%A7%A8%A9%AA%AB%AC%AD%AE%AF%B0%B1%B2%B3%B4%B5%B6%B7%B8%B9%BA%BB%BC%BD"#
+          + #"%BE%BF%C0%C1%C2%C3%C4%C5%C6%C7%C8%C9%CA%CB%CC%CD%CE%CF%D0%D1%D2%D3%D4%D5%D6%D7%D8%D9%DA%DB%DC%DD%DE%DF"#
+          + #"%E0%E1%E2%E3%E4%E5%E6%E7%E8%E9%EA%EB%EC%ED%EE%EF%F0%F1%F2%F3%F4%F5%F6%F7%F8%F9%FA%FB%FC%FD%FE%FFo/bar"#
+      )
+      XCTAssertURLIsIdempotent(fileURL)
+      XCTAssertURLComponents(
+        fileURL,
+        scheme: "file",
+        hostname: "",
+        path: #"/C:/fo%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F"#
+          + #"%20!%22%23$%25&'()*+,-.0123456789%3A;%3C=%3E%3F@ABCDEFGHIJKLMNOPQRSTUVWXYZ[/]^_%60abcdefghijklmnopqrstu"#
+          + #"vwxyz%7B%7C%7D~%7F%80%81%82%83%84%85%86%87%88%89%8A%8B%8C%8D%8E%8F%90%91%92%93%94%95%96%97%98%99%9A%9B"#
+          + #"%9C%9D%9E%9F%A0%A1%A2%A3%A4%A5%A6%A7%A8%A9%AA%AB%AC%AD%AE%AF%B0%B1%B2%B3%B4%B5%B6%B7%B8%B9%BA%BB%BC%BD"#
+          + #"%BE%BF%C0%C1%C2%C3%C4%C5%C6%C7%C8%C9%CA%CB%CC%CD%CE%CF%D0%D1%D2%D3%D4%D5%D6%D7%D8%D9%DA%DB%DC%DD%DE%DF"#
+          + #"%E0%E1%E2%E3%E4%E5%E6%E7%E8%E9%EA%EB%EC%ED%EE%EF%F0%F1%F2%F3%F4%F5%F6%F7%F8%F9%FA%FB%FC%FD%FE%FFo/bar"#
+      )
+      XCTAssertEqual(fileURL.pathComponents.count, 4)
+
+      // Unlike the non-Win32 namespaced variant, no trimming is performed and forward-slashes aren't allowed.
+      // That means the path does actually round-trip! (I mean, besides the \\?\ prefix, which we can't preserve).
+
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      XCTAssertEqualElements(roundtripPath, allBytes.dropFirst(4) /* \\?\ prefix */)
+    }
+
+    // Latin-1 in UNC server name.
+    do {
+      let latin1: [UInt8] = [
+        0x5C /* \ */, 0x5C /* \ */, 0x3F /* ? */,
+        0x5C /* \ */, 0x55 /* U */, 0x4E /* N */, 0x43 /* C */,
+        0x5C /* \ */, 0x63 /* c */, 0x61 /* a */, 0x66 /* f */, 0xE9 /* é */, 0xDD /* Ý */,
+        0x5C /* \ */, 0x68 /* h */, 0x69 /* i */,
+        0x5C /* \ */, 0x62 /* b */, 0x79 /* y */, 0x65 /* e */,
+        0x5C /* \ */,
+      ]
+      XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"\\?\UNC\caf��\hi\bye\"#)
+
+      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+        let _ = try WebURL.fromFilePathBytes(latin1, format: .windows)
+      }
+    }
+
+    // Unpaired surrogate in server name.
+    do {
+      let unpairedSurrogate: [UInt8] = [
+        0x5C /* \ */, 0x5C /* \ */, 0x3F /* ? */,
+        0x5C /* \ */, 0x55 /* U */, 0x4E /* N */, 0x43 /* C */,
+        0x5C /* \ */, 0x63 /* c */, 0x61 /* a */, 0xED, 0xA0, 0x80,
+        0x5C /* \ */, 0x68 /* h */, 0x69 /* i */,
+        0x5C /* \ */, 0x62 /* b */, 0x79 /* y */, 0x65 /* e */,
+        0x5C /* \ */,
+      ]
+      XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"\\?\UNC\ca���\hi\bye\"#)
+
+      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+        let _ = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
+      }
+    }
+
+    // Currently, all Unicode (including valid Unicode) is banned from UNC server names because we don't have IDNA.
+    do {
+      let unicode = #"\\?\UNC\🦆\share\bread\"#
+      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(unicode.utf8, format: .windows)
       }
     }
