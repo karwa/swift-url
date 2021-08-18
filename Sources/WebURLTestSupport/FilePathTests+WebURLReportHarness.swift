@@ -45,9 +45,11 @@ extension FilePathToURLTests.WebURLReportHarness: FilePathToURLTests.Harness {
     switch error {
     case .emptyInput: return .emptyInput
     case .relativePath: return .relativePath
-    case .unsupportedHostname: return .unsupportedHostname
+    case .invalidHostname: return .unsupportedHostname
     case .nullBytes: return .nullBytes
     case .upwardsTraversal: return .upwardsTraversal
+    case .invalidWin32NamespacedPath: return .invalidWin32NamespacedPath
+    case .unsupportedWin32NamespacedPath: return .unsupportedWin32NamespacedPath
     case .transcodingFailure: fatalError("WebURL.fromFilePathBytes should not be transcoding anything")
     default: fatalError("Unknown error")
     }
