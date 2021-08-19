@@ -44,11 +44,11 @@ extension FilePathToURLTests.WebURLReportHarness: FilePathToURLTests.Harness {
   private static func errorToFailureReason(_ error: FilePathToURLError) -> FilePathToURLTests.FailureReason {
     switch error {
     case .emptyInput: return .emptyInput
-    case .relativePath: return .relativePath
-    case .invalidHostname: return .unsupportedHostname
     case .nullBytes: return .nullBytes
+    case .relativePath: return .relativePath
     case .upwardsTraversal: return .upwardsTraversal
-    case .invalidWin32NamespacedPath: return .invalidWin32NamespacedPath
+    case .invalidHostname: return .invalidHostname
+    case .invalidPath: return .invalidPath
     case .unsupportedWin32NamespacedPath: return .unsupportedWin32NamespacedPath
     case .transcodingFailure: fatalError("WebURL.fromFilePathBytes should not be transcoding anything")
     default: fatalError("Unknown error")

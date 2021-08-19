@@ -128,28 +128,27 @@ extension WebURL {
   /// Creates a `file:` URL representation of the given file path.
   ///
   /// This is a low-level API, which accepts a file path as a `Collection` of 8-bit code-units. Correct usage requires detailed knowledge
-  /// of character sets and text encodings, and how various operating systems and filesystems consider file paths internally.
-  /// It is useful for niche cases requiring specific control over the file path's representation (such as if you are on Windows and require a URL
-  /// containing percent-encoded Latin-1 code-units for compatibility with a legacy application), but users should generally prefer
-  /// `WebURL.init(filePath: FilePath/String)`.
+  /// of character sets and text encodings. It is useful for niche cases requiring specific control over the file path's representation
+  /// (such as if you are on Windows and require a URL containing percent-encoded Latin-1 code-units for compatibility with a legacy application),
+  /// but users should generally prefer `WebURL(filePath: FilePath/String)`.
   ///
   /// ## Supported paths
   ///
-  /// This function only supports non-relative paths (i.e. absolute POSIX paths, fully-qualified Windows paths), which do not contain any `..` components
-  /// or ASCII `NULL` bytes. The terminator of a null-terminated string should not be included in the given collection of octets.
+  /// This function supports non-relative paths (i.e. absolute POSIX paths, fully-qualified Windows paths), which do not contain any `..` components
+  /// or ASCII `NULL` bytes. The terminator of a null-terminated string should not be included in the given collection of code-units.
   ///
   /// These restrictions are considered a feature. URLs have no way of expressing relative paths, so such paths would first have to be resolved against
   /// a base path or working directory. Components which traverse upwards in the filesystem and unexpected NULL bytes are common sources of
   /// [security vulnerabilities][OWASP-PathTraversal]. Best practice is to first resolve and normalize such paths before turning them in to URLs,
   /// so you have an opportunity to check where the path actually points to.
   ///
-  /// ## Special Windows paths
+  /// ## Windows long paths
   ///
-  /// This function supports Win32 file namespace paths (a.k.a. "namespaced" or "long" paths) only if they contain a drive letter or point to a UNC location.
-  /// These paths are identified by the prefix `\\?\`.
+  /// This function supports Win32 file namespace paths (a.k.a. "long" paths) which start with a drive letter or point to a UNC location.
+  /// These paths are identified by the prefix `\\?\`. Note that this prefix is not preserved in the resulting URL or any paths created from that URL.
   ///
   /// In a deliberate departure from Microsoft's documentation, empty and `.` components will be resolved in these paths.
-  /// Other path components will not be trimmed or otherwise altered. This library considers this minimal structural normalization to be safe,
+  /// Other path components will not be trimmed or otherwise altered. This library considers this minimal structural normalization to be safe
   /// as empty components have no meaning on any filesystem, and all commonly-used filesystems on Windows (including FAT, exFAT, NTFS, and ReFS)
   /// forbid files and directories named `.`. SMB/CIFS and NFS (the most common protocols used with UNC) likewise define that `.` components
   /// refer to the current directory.
@@ -159,20 +158,19 @@ extension WebURL {
   /// This ambiguity means that accepting such components could lead to hidden directory traversal and other security vulnerabilities.
   /// Again, no commonly-used filesystem on Windows supports these file or directory names anyway, and the network protocols listed above also forbid them.
   ///
-  /// ## Encodings
+  /// ## Encoding
   ///
   /// While we may usually think of file and directory names strings of text, some operating systems do not treat them that way.
   /// Behaviours vary greatly between operating systems, from fully-defined code-units which are normalized by the system (Apple OSes),
   /// to fully-defined code-units which are not normalized (Windows), to opaque, numeric code-units with no defined interpretation (Linux, general POSIX).
   ///
-  /// In order to process a path, we need to at least understand its structure. This is determined by the provided `FilePathFormat`,
-  /// and informs the function how the given code-units should be interpreted - e.g. which values are reserved as path separators, which normalization rules apply,
-  /// and whether or not the code-units can be interpreted as textual code-points.
+  /// In order to process a path, we need to at least understand its structure. The provided `FilePathFormat` determines how the code-units will be interpreted -
+  /// e.g. which values are reserved as path separators, which normalization rules apply, and whether or not the code-units can be interpreted as textual code-points.
   ///
   /// POSIX paths generally cannot be transcoded and should be provided to the function in their native 8-bit encoding.
   /// Windows paths should be transcoded from their native UTF-16 to UTF-8.
-  /// Windows paths may also be provided in their per-system ANSI encoding, but this is discouraged and should only be used
-  /// when specific legacy considerations demand it.
+  /// Windows paths may also be provided in the system-specific ANSI encoding, but this is discouraged as the resulting URL will contain
+  /// percent-encoded ANSI code-points which are not portable. This should only be done when legacy considerations demand it.
   ///
   /// ## Normalization
   ///
@@ -212,7 +210,7 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
     case relativePath
     case upwardsTraversal
     case invalidHostname
-    case invalidWin32NamespacedPath
+    case invalidPath
     case unsupportedWin32NamespacedPath
     case transcodingFailure
   }
@@ -242,7 +240,7 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
 
   /// The given path is not absolute/fully-qualified.
   ///
-  /// Each path style has different kinds of relative paths. Use APIs provided by the platform, or the `swift-system` library, to resolve the input
+  /// Each path format has different kinds of relative paths. Use APIs provided by the platform, or the `swift-system` library, to resolve the input
   /// as an absolute path. Be advised that some kinds of relative path resolution may not be thread-safe; consult your chosen path API for details.
   ///
   @inlinable
@@ -260,7 +258,7 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
     FilePathToURLError(.upwardsTraversal)
   }
 
-  /// The given path is a Windows UNC path, but the hostname is not valid or cannot be represented in a URL.
+  /// The given path refers to a file on a remote host, but the hostname is not valid or cannot be represented in a URL.
   ///
   /// Note that currently, only ASCII domains, IPv4, and IPv6 addresses are supported. Domains may not include [forbidden host code-points][URL-FHCP].
   ///
@@ -271,18 +269,20 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
     FilePathToURLError(.invalidHostname)
   }
 
-  /// The given path has a Win32 file namespace path (a.k.a. "long" path) prefix, but contains invalid syntax which prohibits a URL representation
-  /// from being formed.
+  /// The given path is ill-formed, prohibiting a URL representation from being formed.
   ///
-  /// Examples of invalid syntax:
+  /// Some `FilePathFormat`s have sub-formats with particular requirements, which may be necessary in order to decide which kind of URL to form.
+  /// For instance, Win32 file namespace paths (a.k.a. "long" paths) require a device component following the `\\?\` prefix.
+  ///
+  /// Examples of invalid Win32 file namespace paths:
   /// - `\\?\` (no path following prefix)
   /// - `\\?\\` (device name is empty)
   /// - `\\?\C:` (no trailing slash after device name)
   /// - `\\?\UNC` (no trailing slash after device name)
   ///
   @inlinable
-  public static var invalidWin32NamespacedPath: FilePathToURLError {
-    FilePathToURLError(.invalidWin32NamespacedPath)
+  public static var invalidPath: FilePathToURLError {
+    FilePathToURLError(.invalidPath)
   }
 
   /// The given path is a Win32 file namespace path (a.k.a. "long" path), but references an object for which a URL representation cannot be formed.
@@ -320,7 +320,7 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
     case .relativePath: return "Path is relative"
     case .upwardsTraversal: return "Path contains upwards traversal"
     case .invalidHostname: return "Path references an invalid hostname"
-    case .invalidWin32NamespacedPath: return "Invalid Win32 namespaced path"
+    case .invalidPath: return "Path is ill-formed"
     case .unsupportedWin32NamespacedPath: return "Unsupported Win32 namespaced path"
     case .transcodingFailure: return "Transcoding failure"
     }
@@ -364,10 +364,6 @@ internal func _filePathToURL_posix<Bytes>(
     }
   }
 
-  // We've already encoded or rejected most things the URL path parser will interpret
-  // (backslashes, Windows drive delimiters, etc), with the notable exception of single-dot components.
-  // The path setter will encode anything else that URL semantics would interpret.
-
   var fileURL = _emptyFileURL
   try! fileURL.utf8.setPath(escapedPath)
   return .success(fileURL)
@@ -398,20 +394,20 @@ internal func _filePathToURL_windows<Bytes>(
     // Win32 file namespace path.
     let pathWithoutPrefix = path.dropFirst(4)
     guard !pathWithoutPrefix.isEmpty else {
-      return .failure(.invalidWin32NamespacedPath)
+      return .failure(.invalidPath)
     }
     guard !pathWithoutPrefix.contains(ASCII.forwardSlash.codePoint) else {
       return .failure(.unsupportedWin32NamespacedPath)
     }
     let device = pathWithoutPrefix.prefix(while: { $0 != ASCII.backslash.codePoint })
     guard !device.isEmpty, device.endIndex < pathWithoutPrefix.endIndex else {
-      return .failure(.invalidWin32NamespacedPath)
+      return .failure(.invalidPath)
     }
-    // Determine the kind of path from the device.
+    // Use the device to determine which kind of path this is.
     if ASCII.Lowercased(device).elementsEqual("unc".utf8) {
       let uncPathContents = pathWithoutPrefix[pathWithoutPrefix.index(after: device.endIndex)...]
       guard !uncPathContents.isEmpty else {
-        return .failure(.invalidWin32NamespacedPath)
+        return .failure(.invalidPath)
       }
       return _filePathToURL_windows_UNC(uncPathContents, trimComponents: false)
     }
@@ -474,15 +470,14 @@ internal func _filePathToURL_windows_UNC<Bytes>(
   var fileURL = _emptyFileURL
 
   // UNC hostname.
-  // This part must be valid UTF-8.
+  // This part must be valid UTF-8 due to IDNA.
 
   let rawHost = path.prefix { !isWindowsFilePathSeparator($0) }
   do {
-    // UNC paths must have a hostname.
     guard !rawHost.isEmpty else {
       return .failure(.invalidHostname)
     }
-    // For now, since we don't support unicode domains (due to IDNA),
+    // For now, since we don't support unicode domains,
     // check that the hostname is ASCII and doesn't include percent-encoding.
     guard rawHost.allSatisfy({ ASCII($0) != nil }), !rawHost.contains(ASCII.percentSign.codePoint) else {
       return .failure(.invalidHostname)
@@ -537,9 +532,7 @@ extension WebURL {
   /// Reconstructs a file path from its URL representation.
   ///
   /// This is a low-level function, which returns a file path as an array of 8-bit code-units. Correct usage requires detailed knowledge
-  /// of character sets and text encodings, and how various operating systems and file systems actually handle file paths internally.
-  /// Most users should prefer higher-level APIs, which return a file path as a `FilePath`, as many of these details will be
-  /// handled for you.
+  /// of character sets and text encodings, and users should generally prefer higher-level APIs, which provide the reconstructed path as a `FilePath`.
   ///
   /// ## Accepted URLs
   ///
@@ -746,13 +739,11 @@ internal func _urlToFilePath_posix(
     }
   }
 
-  // Null-termination (if requested).
+  assert(!filePath.isEmpty)
 
   if nullTerminated {
     filePath.append(0)
   }
-
-  assert(!filePath.isEmpty)
   return .success(filePath)
 }
 
@@ -858,12 +849,9 @@ internal func _urlToFilePath_windows(
     filePath.insert(contentsOf: #"\\"#.utf8, at: 0)
   }
 
-  // Null-termination (if requested).
-
   if nullTerminated {
     filePath.append(0)
   }
-
   return .success(filePath)
 }
 

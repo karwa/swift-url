@@ -64,11 +64,11 @@ public enum FilePathToURLTests: TestSuite {
 
   public enum FailureReason: String, Error, Codable {
     case emptyInput = "empty-input"
-    case relativePath = "relative-path"
-    case unsupportedHostname = "invalid-hostname"
     case nullBytes = "null-byte"
+    case relativePath = "relative-path"
     case upwardsTraversal = "upwards-traversal"
-    case invalidWin32NamespacedPath = "invalid-namespaced-path"
+    case invalidHostname = "invalid-hostname"
+    case invalidPath = "invalid-namespaced-path"
     case unsupportedWin32NamespacedPath = "unsupported-namespaced-path"
   }
 
