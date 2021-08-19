@@ -100,8 +100,9 @@ extension URLToFilePathTests.WebURLReportHarness: URLToFilePathTests.Harness {
   public func urlToFilePath(
     _ url: WebURL, format: FilePathFormat
   ) -> Result<String, URLToFilePathTests.FailureReason> {
-    Result { String(decoding: try WebURL.filePathBytes(from: url, format: format), as: UTF8.self) }
-      .mapError { Self.errorToFailureReason($0 as! URLToFilePathError) }
+    Result {
+      String(decoding: try WebURL.filePathBytes(from: url, format: format, nullTerminated: false), as: UTF8.self)
+    }.mapError { Self.errorToFailureReason($0 as! URLToFilePathError) }
   }
 
   private static func errorToFailureReason(_ error: URLToFilePathError) -> URLToFilePathTests.FailureReason {
@@ -109,7 +110,8 @@ extension URLToFilePathTests.WebURLReportHarness: URLToFilePathTests.Harness {
     case .notAFileURL: return .notAFileURL
     case .encodedNullBytes: return .encodedNullByte
     case .encodedPathSeparator: return .encodedSeparator
-    case .posixPathsCannotContainHosts: return .unsupportedNonLocalFile
+    case .unsupportedNonLocalFile: return .unsupportedNonLocalFile
+    case .unsupportedHostname: return .unsupportedHostname
     case .windowsPathIsNotFullyQualified: return .relativePath
     case .transcodingFailure: fatalError("WebURL.filePathBytes should not be transcoding anything")
     default: fatalError("Unknown error")

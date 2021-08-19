@@ -2959,10 +2959,40 @@
             "file_path_windows": "\\\\mypc\\foo\\bar"
         },
         {
-            "comment": "URL with '.' hostname.",
+            "comment": "URL with domain.",
+            "URL": "file://mypc.example.com/foo/bar",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc.example.com\\foo\\bar"
+        },
+        {
+            "comment": "URL with domain, trailing '.'.",
+            "URL": "file://mypc.example.com./foo/bar",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc.example.com.\\foo\\bar"
+        },
+        {
+            "comment": "URL with '.' hostname (UNC). Should *not* become a local device path.",
             "URL": "file://./UNC/VBOXSVR/WebURL/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\UNC\\VBOXSVR\\WebURL\\"
+            "file_path_windows": { "failure-reason": "unsupported-hostname" }
+        },
+        {
+            "comment": "URL with '.' hostname (Drive).",
+            "URL": "file://./C:/foo/BAR/baZ/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "unsupported-hostname"  }
+        },
+        {
+            "comment": "URL with '.' hostname (BootPartition).",
+            "URL": "file://./BootPartition/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "unsupported-hostname"  }
+        },
+        {
+            "comment": "URL with '.' hostname (Volume GUID).",
+            "URL": "file://./Volume%7Bb289d78f-d491-4f6b-a437-5c51a88fa48f%7D/Windows/System32/notepad.exe",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "unsupported-hostname"  }
         },
         {
             "comment": "URL with '..' hostname.",
@@ -3015,7 +3045,7 @@
 
 
 
-        { "__section__": "------------------------------ Paths: Basic ------------------------------" },
+        { "__section__": "------------------------------ Basic Paths ------------------------------" },
 
 
 
@@ -3050,10 +3080,10 @@
             "file_path_windows": "\\\\my_pc\\foo\\BAR\\baZ\\"
         },
         {
-            "comment": "URL with directory path [with drive, with hostname].",
-            "URL": "file://./C:/foo/BAR/baZ/",
+            "comment": "URL with directory path [with drive, with hostname]. UNC paths do not have drive letters, but this still shouldn't fail.",
+            "URL": "file://my_pc/C:/foo/BAR/baZ/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\C:\\foo\\BAR\\baZ\\"
+            "file_path_windows": "\\\\my_pc\\C:\\foo\\BAR\\baZ\\"
         },
         {
             "comment": "URL with file path [no drive, no hostname].",
@@ -3074,10 +3104,10 @@
             "file_path_windows": "\\\\my_pc\\foo\\BAR\\baZ.txt"
         },
         {
-            "comment": "URL with file path [with drive, with hostname].",
-            "URL": "file://./C:/foo/BAR/baZ.txt",
+            "comment": "URL with file path [with drive, with hostname]. UNC paths do not have drive letters, but this still shouldn't fail.",
+            "URL": "file://my_pc/C:/foo/BAR/baZ.txt",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\C:\\foo\\BAR\\baZ.txt"
+            "file_path_windows": "\\\\my_pc\\C:\\foo\\BAR\\baZ.txt"
         },
         {
             "comment": "URL path with percent-encoded symbols, including space, tilde, '?' and '#' [no drive, no hostname]",
@@ -3103,22 +3133,10 @@
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\my_pc\\share\\~\\foo\\bar?\\baz#.txt\\Name;with%some symbols*#"
         },
-        {
-            "comment": "URL with DOS device path (BootPartition).",
-            "URL": "file://./BootPartition/Windows/System32/notepad.exe",
-            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\BootPartition\\Windows\\System32\\notepad.exe"
-        },
-        {
-            "comment": "URL with DOS device path (Volume GUID).",
-            "URL": "file://./Volume%7Bb289d78f-d491-4f6b-a437-5c51a88fa48f%7D/Windows/System32/notepad.exe",
-            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\Volume{b289d78f-d491-4f6b-a437-5c51a88fa48f}\\Windows\\System32\\notepad.exe"
-        },
 
 
 
-        { "__section__": "------------------------------ Paths: Encoded separators ------------------------------" },
+        { "__section__": "------------------------------ Encoded path separators ------------------------------" },
 
 
 
@@ -3142,7 +3160,7 @@
         },
         {
             "comment": "URL path with percent-encoded '/' [with drive, with hostname].",
-            "URL": "file://./C:/foo/bar%2Fbaz",
+            "URL": "file://mypc/C:/foo/bar%2Fbaz",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": { "failure-reason": "encoded-separator" }
         },
@@ -3203,6 +3221,12 @@
         {
             "comment": "URL path with percent-encoded '\\' in UNC share name [no drive, with hostname].",
             "URL": "file://mypc/foo%5Cbar/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": { "failure-reason": "encoded-separator" }
+        },
+        {
+            "comment": "URL path with percent-encoded '\\' (lowercase) in UNC share name [no drive, with hostname].",
+            "URL": "file://mypc/foo%5cbar/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": { "failure-reason": "encoded-separator" }
         },
@@ -3293,7 +3317,7 @@
 
 
 
-        { "__section__": "------------------------------ Paths: Encoded C0, trailing spaces ------------------------------" },
+        { "__section__": "------------------------------ Percent-encoded C0, trailing spaces ------------------------------" },
 
 
 
@@ -3313,7 +3337,7 @@
             "comment": "URL path with percent-encoded C0, trailing space [with drive, no hostname, no trailing]",
             "URL": "file:///C:/foo%20/%07%09bar%0A%20",
             "file_path_posix": "/C:/foo /\u0007\u0009bar\u000A ",
-            "file_path_windows": "C:\\foo \\\u0007\u0009bar\u000A"
+            "file_path_windows": "C:\\foo \\\u0007\u0009bar\u000A "
         },
         {
             "comment": "URL path with percent-encoded C0, trailing space [with drive, no hostname, with trailing]",
@@ -3337,7 +3361,7 @@
             "comment": "URL path with percent-encoded C0, trailing space [with hostname, no trailing]",
             "URL": "file://my_pc/share./foo%20/%07%09bar%0A%20",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\my_pc\\share.\\foo \\\u0007\u0009bar\u000A"
+            "file_path_windows": "\\\\my_pc\\share.\\foo \\\u0007\u0009bar\u000A "
         },
         {
             "comment": "URL path with percent-encoded C0, trailing space [with hostname, with trailing]",
@@ -3384,9 +3408,9 @@
         },
         {
             "comment": "URL path with percent-encoded file name [with drive, with hostname].",
-            "URL": "file://./C:/foo/bar%2523.txt",
+            "URL": "file://mypc/C:/foo/bar%2523.txt",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\C:\\foo\\bar%23.txt"
+            "file_path_windows": "\\\\mypc\\C:\\foo\\bar%23.txt"
         },
         {
             "comment": "URL path with unicode [no drive, no hostname].",
@@ -3463,54 +3487,96 @@
 
 
 
-        { "__section__": "------------------------------ Paths: Drive Letters ------------------------------" },
+        { "__section__": "------------------------------ Windows drive letters ------------------------------" },
 
 
 
         {
             "comment": "URL path with a Windows drive-letter [no hostname, no trailing]. Windows treats this as a relative path without the trailing slash.",
+            "URL": "file:///C:",
+            "file_path_posix": "/C:",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with a Windows drive-letter [no hostname, no trailing] (lowercase)",
             "URL": "file:///c:",
             "file_path_posix": "/c:",
             "file_path_windows": { "failure-reason": "relative-path" }
         },
         {
             "comment": "URL path with a Windows drive-letter [no hostname, with trailing].",
+            "URL": "file:///C:/",
+            "file_path_posix": "/C:/",
+            "file_path_windows": "C:\\"
+        },
+        {
+            "comment": "URL path with a Windows drive-letter [no hostname, with trailing] (lowercase)",
             "URL": "file:///c:/",
             "file_path_posix": "/c:/",
             "file_path_windows": "c:\\"
         },
         {
-            "comment": "URL path with a Windows drive-letter [with hostname ('.'), no trailing]. UNC paths are always fully-qualified, and don't really have 'drive letters' as such, so the trailing slash isn't important.",
-            "URL": "file://./c:",
+            "comment": "URL path with a Windows drive-letter [with hostname, no trailing]. UNC paths are always fully-qualified, and don't really have 'drive letters' as such, so the trailing slash isn't required.",
+            "URL": "file://mypc/C:",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\c:"
+            "file_path_windows": "\\\\mypc\\C:"
         },
         {
-            "comment": "URL path with a Windows drive-letter [with hostname ('.'), with trailing].",
-            "URL": "file://./c:/",
-            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\c:\\"
-        },
-        {
-            "comment": "URL path with a Windows drive-letter [with hostname, no trailing]. UNC paths are always fully-qualified, and don't really have 'drive letters' as such, so the trailing slash isn't important.",
+            "comment": "URL path with a Windows drive-letter [with hostname, no trailing] (lowercase)",
             "URL": "file://mypc/c:",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\mypc\\c:"
         },
         {
             "comment": "URL path with a Windows drive-letter [with hostname, with trailing].",
+            "URL": "file://mypc/C:/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\C:\\"
+        },
+        {
+            "comment": "URL path with a Windows drive-letter [with hostname, with trailing] (lowercase)",
             "URL": "file://mypc/c:/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\mypc\\c:\\"
         },
         {
+            "comment": "URL path with a Windows drive-letter in $ notation [no hostname, with trailing]",
+            "URL": "file:///C$/",
+            "file_path_posix": "/C$/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with a Windows drive-letter in $ notation [with hostname, with trailing]",
+            "URL": "file://mypc/C$/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\C$\\"
+        },
+        {
+            "comment": "URL path with a Windows drive-letter in $ notation [with hostname, with trailing] (lowercase)",
+            "URL": "file://mypc/c$/",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\c$\\"
+        },
+        {
             "comment": "URL path with a Windows drive-relative path [no hostname, no trailing].",
+            "URL": "file:///C:foo",
+            "file_path_posix": "/C:foo",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with a Windows drive-relative path [no hostname, no trailing] (lowercase)",
             "URL": "file:///c:foo",
             "file_path_posix": "/c:foo",
             "file_path_windows": { "failure-reason": "relative-path" }
         },
         {
             "comment": "URL path with a Windows drive-relative path [no hostname, with trailing].",
+            "URL": "file:///C:foo/bar/",
+            "file_path_posix": "/C:foo/bar/",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL path with a Windows drive-relative path [no hostname, with trailing] (lowercase)",
             "URL": "file:///c:foo/bar/",
             "file_path_posix": "/c:foo/bar/",
             "file_path_windows": { "failure-reason": "relative-path" }
@@ -3518,7 +3584,7 @@
 
 
 
-        { "__section__": "------------------------------ Paths: Escaped drive letters ------------------------------" },
+        { "__section__": "------------------------------ Percent-encoded Windows drive letters ------------------------------" },
 
 
 
@@ -3529,7 +3595,7 @@
             "file_path_windows": { "failure-reason": "relative-path" }
         },
         {
-            "comment": "URL path with an escaped drive-letter [no hostname, with trailing]. This is an interesting case - since the path component is escaped, there's an argument that it intentionally does not want to be interpreted as a drive letter. Indeed, the Windows API 'PathCreateFromUrl' treats this as a relative path, and IE won't resolve it. Chrome (hence Edge) will, though.",
+            "comment": "URL path with an escaped drive-letter [no hostname, with trailing]. This is an interesting case - since the path component is escaped, there's an argument that it intentionally does not want to be interpreted as a drive letter. Indeed, the Windows API 'PathCreateFromUrl' treats this as a relative path, and IE won't resolve it. Chrome/Edge will, though.",
             "URL": "file:///c%3A/",
             "file_path_posix": "/c:/",
             "file_path_windows": { "failure-reason": "relative-path" }
@@ -3553,13 +3619,13 @@
             "file_path_windows": { "failure-reason": "relative-path" }
         },
         {
-            "comment": "URL path with an escaped drive-letter [with hostname, no trailing]. UNC share names are not interpreted as drive letters; even in DOS device paths, where they are drive letters, they aren't treated as such (i.e. they are not the root of the path).",
+            "comment": "URL path with an escaped drive-letter [with hostname, no trailing]",
             "URL": "file://mypc/c%3A",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\mypc\\c:"
         },
         {
-            "comment": "URL path with an escaped drive-letter [with hostname, with trailing]. UNC share names are not interpreted as drive letters.",
+            "comment": "URL path with an escaped drive-letter [with hostname, with trailing]",
             "URL": "file://mypc/c%3A/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\mypc\\c:\\"
@@ -3598,13 +3664,13 @@
             "comment": "URL encoding DOS device path. See above notes about drive letters in UNC paths",
             "URL": "file://./C%3A/Windows/System32/notepad.exe",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\C:\\Windows\\System32\\notepad.exe"
+            "file_path_windows": { "failure-reason": "unsupported-hostname" }
         },
         {
             "comment": "URL encoding DOS device path (alt)",
             "URL": "file://./C%7C/Windows/System32/notepad.exe",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\.\\C|\\Windows\\System32\\notepad.exe"
+            "file_path_windows": { "failure-reason": "unsupported-hostname" }
         },
         {
             "comment": "URL encoding UNC path. Share name is an encoded a drive letter. Extra slashes before share name.",
@@ -3635,7 +3701,7 @@
             "comment": "URL path components with trailing dots [no hostname, with drive, no trailing]",
             "URL": "file:///C:/foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20",
             "file_path_posix": "/C:/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. ",
-            "file_path_windows": "C:\\foo\\bar. \\bar2 \\baz\\qux..\\qux2.. \\...\\file.txt"
+            "file_path_windows": "C:\\foo\\bar. \\bar2 .\\baz.\\qux..\\qux2.. \\...\\file.txt.. "
         },
         {
             "comment": "URL path components with trailing dots [no hostname, no drive, with trailing]",
@@ -3647,23 +3713,23 @@
             "comment": "URL path components with trailing dots [no hostname, with drive, with trailing]",
             "URL": "file:///C:/foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20/",
             "file_path_posix": "/C:/foo/bar. /bar2 ./baz./qux../qux2.. /.../file.txt.. /",
-            "file_path_windows": "C:\\foo\\bar. \\bar2 \\baz\\qux..\\qux2.. \\...\\file.txt.. \\"
+            "file_path_windows": "C:\\foo\\bar. \\bar2 .\\baz.\\qux..\\qux2.. \\...\\file.txt.. \\"
         },
         {
-            "comment": "URL path with trailing dot in UNC share name (should not be trimmed)",
-            "URL": "file://vboxsvr/WebURL./Parser./Parser.swift..",
+            "comment": "URL path with trailing dot in UNC share name. Share names are never trimmed.",
+            "URL": "file://vboxsvr/WebURL./Parser/Parser.swift",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\vboxsvr\\WebURL.\\Parser\\Parser.swift"
         },
         {
-            "comment": "URL path with trailing space in UNC share name (should not be trimmed)",
-            "URL": "file://vboxsvr/WebURL%20/Parser./Parser.swift..",
+            "comment": "URL path with trailing space in UNC share name",
+            "URL": "file://vboxsvr/WebURL%20/Parser/Parser.swift",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\vboxsvr\\WebURL \\Parser\\Parser.swift"
         },
         {
             "comment": "URL path with extra slashes before UNC share name",
-            "URL": "file://my_pc//////share./dir./",
+            "URL": "file://my_pc//////share./dir/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\my_pc\\share.\\dir\\"
         },
@@ -3671,13 +3737,13 @@
             "comment": "URL path components with trailing dots [with hostname, no trailing]",
             "URL": "file://my_pc/share./foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\my_pc\\share.\\foo\\bar. \\bar2 \\baz\\qux..\\qux2.. \\...\\file.txt"
+            "file_path_windows": "\\\\my_pc\\share.\\foo\\bar. \\bar2 .\\baz.\\qux..\\qux2.. \\...\\file.txt.. "
         },
         {
             "comment": "UNC Path, path components with trailing dots [with hostname, with trailing]",
             "URL": "file://my_pc/share./foo/bar.%20/bar2%20./baz./qux../qux2..%20/.../file.txt..%20/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\my_pc\\share.\\foo\\bar. \\bar2 \\baz\\qux..\\qux2.. \\...\\file.txt.. \\"
+            "file_path_windows": "\\\\my_pc\\share.\\foo\\bar. \\bar2 .\\baz.\\qux..\\qux2.. \\...\\file.txt.. \\"
         },
         {
             "comment": "URL with UNC share root [no trailing]",
@@ -3701,7 +3767,7 @@
             "comment": "URL path where final component is only dots and spaces [with drive, no trailing]. The Windows API 'GetFullPathName' trims it all away.",
             "URL": "file:///C:/foo/.%20.%20.%20.%20.",
             "file_path_posix": "/C:/foo/. . . . .",
-            "file_path_windows": "C:\\foo\\"
+            "file_path_windows": "C:\\foo\\. . . . ."
         },
         {
             "comment": "URL path where final component is only dots and spaces [no drive, with trailing]",
@@ -3713,16 +3779,16 @@
             "comment": "URL path where final component is only dots and spaces [with drive, with trailing]",
             "URL": "file:///C:/foo/.%20.%20.%20.%20./",
             "file_path_posix": "/C:/foo/. . . . ./",
-            "file_path_windows": "C:\\foo\\. . . . \\"
+            "file_path_windows": "C:\\foo\\. . . . .\\"
         },
         {
-            "comment": "URL with UNC path whose share name is only dots and spaces (should not be trimmed)",
-            "URL": "file://vboxsvr/.%20.%20.%20./Parser./Parser.swift..",
+            "comment": "URL with UNC path whose share name is only dots and spaces",
+            "URL": "file://vboxsvr/.%20.%20.%20./Parser/Parser.swift",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\vboxsvr\\. . . .\\Parser\\Parser.swift"
         },
         {
-            "comment": "URL with UNC path whose share name is only dots and spaces (should not be trimmed)[no trailing]",
+            "comment": "URL with UNC path whose share name is only dots and spaces [no trailing]",
             "URL": "file://vboxsvr/.%20.%20.%20.",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\vboxsvr\\. . . ."
@@ -3731,13 +3797,13 @@
             "comment": "URL with UNC path whose final (non share) path component is only dots and spaces [no trailing]",
             "URL": "file://vboxsvr/share./.%20.%20.%20.",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\vboxsvr\\share.\\"
+            "file_path_windows": "\\\\vboxsvr\\share.\\. . . ."
         },
         {
             "comment": "URL with UNC path whose final (non share) path component is only dots and spaces [with trailing]",
             "URL": "file://vboxsvr/share./.%20.%20.%20./",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\vboxsvr\\share.\\. . . \\"
+            "file_path_windows": "\\\\vboxsvr\\share.\\. . . .\\"
         },
         {
             "comment": "URL path with trailing '...' component [no drive, no trailing]",
@@ -3749,7 +3815,7 @@
             "comment": "URL path with trailing '...' component [with drive, no trailing]. The Windows API 'GetFullPathName' trims it all away.",
             "URL": "file:///C:/foo/...",
             "file_path_posix": "/C:/foo/...",
-            "file_path_windows": "C:\\foo\\"
+            "file_path_windows": "C:\\foo\\..."
         },
         {
             "comment": "URL path with trailing '...' component [no drive, with trailing]",
@@ -3764,13 +3830,13 @@
             "file_path_windows": "C:\\foo\\...\\"
         },
         {
-            "comment": "URL with UNC path with '...' share name (should not be trimmed)",
-            "URL": "file://vboxsvr/.../Parser./Parser.swift..",
+            "comment": "URL with UNC path with '...' share name",
+            "URL": "file://vboxsvr/.../Parser/Parser.swift",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\vboxsvr\\...\\Parser\\Parser.swift"
         },
         {
-            "comment": "URL with UNC path with '...' share name (should not be trimmed)[no trailing]",
+            "comment": "URL with UNC path with '...' share name [no trailing]",
             "URL": "file://vboxsvr/...",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\vboxsvr\\..."
@@ -3779,7 +3845,7 @@
             "comment": "URL with UNC path whose final (non share) path component is a '...' component [no trailing]",
             "URL": "file://vboxsvr/share./...",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
-            "file_path_windows": "\\\\vboxsvr\\share.\\"
+            "file_path_windows": "\\\\vboxsvr\\share.\\..."
         },
         {
             "comment": "URL with UNC path whose final (non share) path component is a '...' component [with trailing]",
@@ -3826,13 +3892,13 @@
         },
         {
             "comment": "URL path with 2 leading slashes, between UNC host and share [with hostname]. 'GetFullPathName' on Windows trims slashes before the share name, but also trims the share name (probable bug).",
-            "URL": "file://my_pc//share./vol./",
+            "URL": "file://my_pc//share./vol/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\my_pc\\share.\\vol\\"
         },
         {
             "comment": "URL path with 2 leading slashes, between UNC host and share [with hostname]. One is a percent-encoded backslash, which should be rejected rather than trimmed away.",
-            "URL": "file://my_pc/%5Cshare./vol./",
+            "URL": "file://my_pc/%5Cshare./vol/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": { "failure-reason": "encoded-separator" }
         },
@@ -3880,13 +3946,13 @@
         },
         {
             "comment": "URL path with 3 leading slashes, between UNC host and share. 'GetFullPathName' on Windows trims slashes before the share name.",
-            "URL": "file://my_pc///share./vol./",
+            "URL": "file://my_pc///share./vol/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\my_pc\\share.\\vol\\"
         },
         {
             "comment": "URL path with 3 leading slashes, between UNC host and share. One is a percent-encoded backslash, which should be rejected rather than trimmed away.",
-            "URL": "file://my_pc//%5Cshare./vol./",
+            "URL": "file://my_pc//%5Cshare./vol/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": { "failure-reason": "encoded-separator" }
         },
@@ -3934,13 +4000,13 @@
         },
         {
             "comment": "URL path with 4 leading slashes, between UNC host and share. 'GetFullPathName' on Windows trims slashes before the share name.",
-            "URL": "file://my_pc////share./vol./",
+            "URL": "file://my_pc////share./vol/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\my_pc\\share.\\vol\\"
         },
         {
             "comment": "URL path with 4 leading slashes, between UNC host and share. One is a percent-encoded backslash, which should be rejected rather than trimmed away.",
-            "URL": "file://my_pc///%5Cshare./vol./",
+            "URL": "file://my_pc///%5Cshare./vol/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": { "failure-reason": "encoded-separator" }
         },
@@ -3988,13 +4054,13 @@
         },
         {
             "comment": "URL path with 5 leading slashes, between UNC host and share. 'GetFullPathName' on Windows trims slashes before the share name.",
-            "URL": "file://my_pc/////share./vol./",
+            "URL": "file://my_pc/////share./vol/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\my_pc\\share.\\vol\\"
         },
         {
             "comment": "URL path with 5 leading slashes, between UNC host and share. One is a percent-encoded backslash, which should be rejected rather than trimmed away.",
-            "URL": "file://my_pc///%5C/share./vol./",
+            "URL": "file://my_pc///%5C/share./vol/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": { "failure-reason": "encoded-separator" }
         },
@@ -4043,21 +4109,70 @@
         },
         {
             "comment": "URL with UNC path, extra slashes before share.",
-            "URL": "file://mypc////share./dir./",
+            "URL": "file://mypc////share./dir/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\mypc\\share.\\dir\\"
         },
         {
             "comment": "URL with UNC path, extra slashes between share/path.",
-            "URL": "file://mypc/share.////dir./",
+            "URL": "file://mypc/share.////dir/",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\mypc\\share.\\dir\\"
         },
         {
             "comment": "URL with UNC path, extra trailing slashes.",
-            "URL": "file://mypc/share./dir.////",
+            "URL": "file://mypc/share./dir////",
             "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
             "file_path_windows": "\\\\mypc\\share.\\dir\\"
+        },
+
+
+
+        { "__section__": "------------------------------ Query strings and fragments ------------------------------" },
+
+
+
+        {
+            "comment": "URL with query string. Should be ignored in the file path [no drive, no hostname]",
+            "URL": "file:///abc/foo/bar.txt?someQuery",
+            "file_path_posix": "/abc/foo/bar.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL with query string [with drive, no hostname]",
+            "URL": "file:///C:/abc/foo/bar.txt?someQuery",
+            "file_path_posix": "/C:/abc/foo/bar.txt",
+            "file_path_windows": "C:\\abc\\foo\\bar.txt"
+        },
+        {
+            "comment": "URL with query string [no drive, with hostname]",
+            "URL": "file://mypc/abc/foo/bar.txt?someQuery",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\abc\\foo\\bar.txt"
+        },
+        {
+            "comment": "URL with query string. Leading double-slashes make it look a bit like a Win32 file namespace path.",
+            "URL": "file:////?/abc/foo/bar.txt?notTheStartOfTheQuery",
+            "file_path_posix": "//",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL with fragment. Should be ignored in the file path [no drive, no hostname]",
+            "URL": "file:///abc/foo/bar.txt#someFragment",
+            "file_path_posix": "/abc/foo/bar.txt",
+            "file_path_windows": { "failure-reason": "relative-path" }
+        },
+        {
+            "comment": "URL with query string [with drive, no hostname]",
+            "URL": "file:///C:/abc/foo/bar.txt#someFragment",
+            "file_path_posix": "/C:/abc/foo/bar.txt",
+            "file_path_windows": "C:\\abc\\foo\\bar.txt"
+        },
+        {
+            "comment": "URL with query string [no drive, with hostname]",
+            "URL": "file://mypc/abc/foo/bar.txt#someFragment",
+            "file_path_posix": { "failure-reason": "unsupported-non-local-file" },
+            "file_path_windows": "\\\\mypc\\abc\\foo\\bar.txt"
         },
 
 
