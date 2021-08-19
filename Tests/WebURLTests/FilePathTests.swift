@@ -38,14 +38,10 @@ extension FilePathTests {
   func testFilePathToURL() throws {
     let data = loadTestResource(name: "file_url_path_tests")!
     let testFile = try JSONDecoder().decode(FilePathTestFile.self, from: data)
-    assert(
-      testFile.file_path_to_url.count == 486,
-      "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
-    )
 
     var harness = FilePathToURLTests.WebURLReportHarness()
     harness.runTests(testFile.file_path_to_url)
-    XCTAssert(harness.entriesSeen == 472, "Unexpected number of tests executed.")
+    XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "file_path_to_url.txt")
@@ -56,14 +52,10 @@ extension FilePathTests {
   func testURLToFilePath() throws {
     let data = loadTestResource(name: "file_url_path_tests")!
     let testFile = try JSONDecoder().decode(FilePathTestFile.self, from: data)
-    assert(
-      testFile.url_to_file_path.count == 188,
-      "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
-    )
 
     var harness = URLToFilePathTests.WebURLReportHarness()
     harness.runTests(testFile.url_to_file_path)
-    XCTAssert(harness.entriesSeen == 176, "Unexpected number of tests executed.")
+    XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "url_to_file_path.txt")
@@ -77,6 +69,25 @@ extension FilePathTests {
   func testEmptyFileURLIsValidURL() {
     XCTAssertEqual(_emptyFileURL.serialized, "file:///")
     XCTAssertURLIsIdempotent(_emptyFileURL)
+  }
+
+  func testFileURLsMayNotHavePortNumbers() {
+    // This test keeps track of whether the URL standard allows port numbers in file URL hosts.
+    // If it ever changes, we'll need to update our url-to-file-path function to add them to UNC paths.
+
+    // Cannot parse a file URL with a port.
+    XCTAssertNil(WebURL("file://example:99/foo/bar"))
+
+    // Cannot set a port on a file URL.
+    guard var fileURL = WebURL("file://example/foo/bar") else {
+      XCTFail()
+      return
+    }
+    XCTAssertEqual(fileURL.serialized, "file://example/foo/bar")
+    XCTAssertURLIsIdempotent(fileURL)
+    XCTAssertThrowsSpecific(URLSetterError.cannotHaveCredentialsOrPort) {
+      try fileURL.setPort(99)
+    }
   }
 
   func testByteStringPath_posix() throws {
@@ -131,7 +142,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, unpairedSurrogate)
     }
 
@@ -152,7 +163,7 @@ extension FilePathTests {
       // FIXME: Perhaps don't automatically percent-decode path components?
       XCTAssertEqual(fileURL.pathComponents.first, "caf��")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1)
     }
 
@@ -173,7 +184,7 @@ extension FilePathTests {
       // FIXME: Perhaps don't automatically percent-decode path components?
       XCTAssertEqual(fileURL.pathComponents.first, "hi���")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek)
     }
 
@@ -210,7 +221,7 @@ extension FilePathTests {
       )
       XCTAssertEqual(fileURL.pathComponents.count, 3)
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, allBytes)
     }
   }
@@ -271,7 +282,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, unpairedSurrogate)
     }
 
@@ -293,7 +304,7 @@ extension FilePathTests {
       // FIXME: Perhaps don't automatically percent-decode path components?
       XCTAssertEqual(fileURL.pathComponents.last, "caf��")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1)
     }
 
@@ -315,7 +326,7 @@ extension FilePathTests {
       // FIXME: Perhaps don't automatically percent-decode path components?
       XCTAssertEqual(fileURL.pathComponents.last, "hi���")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek)
     }
 
@@ -355,7 +366,7 @@ extension FilePathTests {
       // Unfortunately, this does not precisely round-trip due to trimming and Windows having 2 path separators,
       // but if we reverse those transformations, the round-trip result should then be the same as the original.
 
-      var roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      var roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       roundtripPath.insert(0x2E, at: 5 + 0x2E - 1)  // re-insert the trimmed '.'
       roundtripPath[5 + 0x2F - 1] = 0x2F  // URL paths have forward slashes, are turned to backslashes in path.
       XCTAssertEqualElements(roundtripPath, allBytes)
@@ -452,7 +463,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, unpairedSurrogate.dropFirst(4) /* \\?\ prefix */)
     }
 
@@ -475,7 +486,7 @@ extension FilePathTests {
       // FIXME: Perhaps don't automatically percent-decode path components?
       XCTAssertEqual(fileURL.pathComponents.last, "caf��")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1.dropFirst(4) /* \\?\ prefix */)
     }
 
@@ -498,7 +509,7 @@ extension FilePathTests {
       // FIXME: Perhaps don't automatically percent-decode path components?
       XCTAssertEqual(fileURL.pathComponents.last, "hi���")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek.dropFirst(4) /* \\?\ prefix */)
     }
 
@@ -538,7 +549,7 @@ extension FilePathTests {
       // Unlike the non-Win32 namespaced variant, no trimming is performed and forward-slashes aren't allowed.
       // That means the path does actually round-trip! (I mean, besides the \\?\ prefix, which we can't preserve).
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows)
+      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, allBytes.dropFirst(4) /* \\?\ prefix */)
     }
 

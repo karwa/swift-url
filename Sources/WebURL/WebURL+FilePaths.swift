@@ -534,53 +534,48 @@ internal func _filePathToURL_windows_UNC<Bytes>(
 
 extension WebURL {
 
-  /// Reconstructs a file path from a `file:` URL.
+  /// Reconstructs a file path from its URL representation.
   ///
-  /// This is a low-level function, which returns a file path as a `Collection` of 8-bit code-units. Correct usage requires detailed knowledge
+  /// This is a low-level function, which returns a file path as an array of 8-bit code-units. Correct usage requires detailed knowledge
   /// of character sets and text encodings, and how various operating systems and file systems actually handle file paths internally.
-  /// Most users should prefer higher-level APIs, which return a file path as a `String` or `FilePath`, as many of these details will be
+  /// Most users should prefer higher-level APIs, which return a file path as a `FilePath`, as many of these details will be
   /// handled for you.
   ///
   /// ## Accepted URLs
   ///
   /// This function only accepts URLs with a `file` scheme, whose paths do not contain percent-encoded path separators or `NULL` bytes.
-  /// Additionally, as there is no obvious interpretation of a POSIX path to a remote host, POSIX paths may only be constructed from URLs with empty hostnames.
-  /// Windows paths must be fully-qualified: either they have a hostname and are UNC paths, or they have an empty hostname and begin with a drive letter
-  /// component.
-  ///
-  /// Attempting to create a file path from an unsupported URL will throw a `URLToFilePathError`.
+  /// For the `windows` format, the reconstructed path must be fully-qualified - meaning that it is either a UNC path, or begins with a drive-letter.
+  /// Note that not all file URLs have an obvious interpretation for all path formats. For example, there is no obvious interpretation of a `posix` path
+  /// to a remote host.
   ///
   /// ## Encoding
   ///
-  /// This function returns an array of 8-bit code-units, formed by percent-decoding the URL's contents and applying format-specific path normalization.
-  /// Note that the encoding of these code-units is, in general, not known.
+  /// This function returns an array of 8-bit code-units, formed by percent-decoding the URL's contents.
   ///
-  /// - To use the returned path on a POSIX system, request a null-terminated file path, and map/reinterpret the array's contents as the platform's `CChar` type.
-  ///   POSIX requires that the C `char` type be 8 bits, so this is always safe. As POSIX systems generally do not assume any particular encoding for
-  ///   file or directory names, it is reasonable to use the path as-is.
+  /// - To use the returned path on a POSIX system, request null-terminated code-units and map/reinterpret them to the platform's `CChar` type.
+  ///   POSIX requires that the C `char` type be 8 bits, so this is safe. As paths on POSIX systems are opaque octets, the path should be used as-is.
   ///
   /// - To use the returned path on a Windows system, some transcoding may be necessary as the system natively uses 16-bit code-units.
-  ///   It is generally a good idea to assume that the path decoded from the URL is UTF-8, transcode it to UTF-16, add a null-terminator, and use it
-  ///   with the `-W` family of APIs. The exception is when you happen to know that the 8-bit code-units used to create the URL were not UTF-8.
+  ///   This can be difficult, as in general there is no way to know which encoding the returned code-units belong to, and hence which textual code-points
+  ///   they represent. A good strategy is to first interpret the bytes as UTF-8 and transcode to UTF-16. Should that fail, assume that code-units are from the
+  ///   system's active code-page and use the `MultiByteToWideChar` function to produce a UTF-16 file path.
   ///
   /// ## Normalization
   ///
-  /// Some basic normalization is applied to the path, according to the specific rules which govern how each path style is interpreted.
-  ///
-  /// For example, both POSIX- and Windows-style paths define that certain sequences of repeat path separators can be collapsed to a single separator
-  /// (e.g. `/usr//bin/swift` is the same as `/usr/bin/swift`), but there are also other kinds of normalization which are specific to Windows paths.
+  /// Some minimal normalization is applied to the path. In particular, empty path components are removed, and Windows UNC paths require
+  /// some hostnames to be transcribed. Unlike the `WebURL.fromFilePathBytes` function, Windows path components are never trimmed.
   ///
   /// - parameters:
   ///   - url:    The file URL.
   ///   - format: The path format which should be constructed; either `.posix`, `.windows`, or `.native`.
-  ///   - nullTerminated: Whether the returned file path should include a null-terminator. The default is `false`.
+  ///   - nullTerminated: Whether the reconstructed file path bytes should include a null-terminator.
   ///
-  /// - returns: A reconstruction of the file path encoded in the given URL, as an array of bytes.
+  /// - returns: The reconstructed file path bytes from `url`.
   /// - throws: `URLToFilePathError`
   ///
   @inlinable
   public static func filePathBytes(
-    from url: WebURL, format: FilePathFormat = .native, nullTerminated: Bool = false
+    from url: WebURL, format: FilePathFormat = .native, nullTerminated: Bool
   ) throws -> ContiguousArray<UInt8> {
     switch format._fmt {
     case .posix: return try _urlToFilePath_posix(url, nullTerminated: nullTerminated).get()
@@ -598,7 +593,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
     case notAFileURL
     case encodedPathSeparator
     case encodedNullBytes
-    case posixPathsCannotContainHosts
+    case unsupportedNonLocalFile
+    case unsupportedHostname
     case windowsPathIsNotFullyQualified
     case transcodingFailure
   }
@@ -621,8 +617,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   /// The given URL contains a percent-encoded path separator.
   ///
   /// Typically, percent-encoded bytes in a URL are decoded when generating a file path, as percent-encoding is a URL feature that has no meaning to
-  /// a filesystem. However, if the decoded byte would be interpreted by the system as a path separator, decoding it would pose a security risk as it could
-  /// be used by an attacker to smuggle extra path components, including ".." components.
+  /// a filesystem. However, if the decoded byte would be interpreted as a path separator in the given `FilePathFormat`,
+  /// decoding it would pose a security risk as it could be used to smuggle extra path components, including ".." components.
   ///
   @inlinable
   public static var encodedPathSeparator: URLToFilePathError {
@@ -633,26 +629,37 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   ///
   /// Typically, percent-encoded bytes in a URL are decoded when generating a file path, as percent-encoding is a URL feature that has no meaning to
   /// a filesystem. However, if the decoded byte is a `NULL` byte, many systems would interpret that as the end of the path, which poses a security risk
-  /// as an attacker could unexpectedly discard parts of the path.
+  /// as parts of the path could unexpectedly be discarded.
   ///
   @inlinable
   public static var encodedNullBytes: URLToFilePathError {
     URLToFilePathError(.encodedNullBytes)
   }
 
-  /// The given URL refers to a file on a remote host, which cannot be represented by a POSIX path.
+  /// The given URL refers to a file on a remote host, but they are not supported by the given `FilePathFormat`.
   ///
-  /// On POSIX systems, remote filesystems tend to be mounted at locations in the local filesystem.
-  /// There is no obvious interpretation of a URL with a remote host on a POSIX system.
+  /// For example, on POSIX systems, remote filesystems tend to be mounted at locations in the local filesystem, rather than using a special path format.
+  /// This means it is not obvious how to express a path to a remote filesystem using the `posix` path format.
   ///
   @inlinable
-  public static var posixPathsCannotContainHosts: URLToFilePathError {
-    URLToFilePathError(.posixPathsCannotContainHosts)
+  public static var unsupportedNonLocalFile: URLToFilePathError {
+    URLToFilePathError(.unsupportedNonLocalFile)
   }
 
-  /// The given URL does not resolve to a fully-qualified Windows path.
+  /// Creating a path with the given URL's hostname is not supported.
   ///
-  /// file URLs cannot contain relative paths; they always represent absolute locations on the filesystem.
+  /// `FilePathFormat`s which support remote hosts sometimes reserve particular hostnames.
+  /// For instance, Windows UNC paths with the hostname `.` are interpreted as referring to local devices (e.g. `\\.\COM1`).
+  /// For security reasons, URLs representing such paths are not decoded.
+  ///
+  @inlinable
+  public static var unsupportedHostname: URLToFilePathError {
+    URLToFilePathError(.unsupportedHostname)
+  }
+
+  /// The given URL does not represent a fully-qualified Windows path.
+  ///
+  /// file URLs should always represent absolute locations on the filesystem.
   /// For Windows platforms, this means it would be incorrect for a file URL to result in anything other than a fully-qualified path.
   /// Windows paths are fully-qualified if they are UNC paths (i.e. have hostnames), or if their first component is a drive letter with a trailing separator.
   ///
@@ -680,7 +687,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
     case .notAFileURL: return "Not a file URL"
     case .encodedPathSeparator: return "Percent-encoded path separator"
     case .encodedNullBytes: return "Percent-encoded NULL bytes"
-    case .posixPathsCannotContainHosts: return "Hostnames are unsupported by POSIX paths"
+    case .unsupportedNonLocalFile: return "Unsupported non-local file"
+    case .unsupportedHostname: return "Unsupported hostname"
     case .windowsPathIsNotFullyQualified: return "Not a fully-qualified Windows path"
     case .transcodingFailure: return "Transcoding failure"
     }
@@ -700,7 +708,7 @@ internal func _urlToFilePath_posix(
     return .failure(.notAFileURL)
   }
   guard url.utf8.hostname!.isEmpty else {
-    return .failure(.posixPathsCannotContainHosts)
+    return .failure(.unsupportedNonLocalFile)
   }
 
   var filePath = ContiguousArray<UInt8>()
@@ -807,11 +815,11 @@ internal func _urlToFilePath_windows(
   // Normalization.
   // At this point, we should only be using forward slashes since the path came from the URL,
   // so collapse them and replace with back slashes.
+  // Note: Do not trim path segments because we don't know if this represents a 'verbatim' path.
 
   assert(!filePath.contains(ASCII.backslash.codePoint))
 
   filePath.collapseForwardSlashes(from: 0)
-  filePath.trimPathSegmentsForWindows(from: 0, isUNC: isUNC)
   for i in 0..<filePath.count {
     if filePath[i] == ASCII.forwardSlash.codePoint {
       filePath[i] = ASCII.backslash.codePoint
@@ -823,13 +831,17 @@ internal func _urlToFilePath_windows(
 
   // Prepend the UNC server name.
 
-  if isUNC {
+  prependHostname: if isUNC {
     let hostname = url.utf8.hostname!
     assert(!hostname.contains(ASCII.percentSign.codePoint), "file URL hostnames cannot contain percent-encoding")
 
+    // Do not create local device paths from file URLs.
+    if hostname.elementsEqual(CollectionOfOne(ASCII.period.codePoint)) {
+      return .failure(.unsupportedHostname)
+    }
+    // IPv6 hostnames must be transcribed for UNC:
+    // https://en.wikipedia.org/wiki/IPv6_address#Literal_IPv6_addresses_in_UNC_path_names
     if hostname.first == ASCII.leftSquareBracket.codePoint {
-      // IPv6 hostnames must be transcribed for UNC:
-      // https://en.wikipedia.org/wiki/IPv6_address#Literal_IPv6_addresses_in_UNC_path_names
       assert(hostname.last == ASCII.rightSquareBracket.codePoint, "Invalid hostname")
       assert(IPv6Address(utf8: hostname.dropFirst().dropLast()) != nil, "Invalid IPv6 hostname")
 
@@ -839,10 +851,11 @@ internal func _urlToFilePath_windows(
       }
       transcribedHostAndPrefix += ".ipv6-literal.net".utf8
       filePath.insert(contentsOf: transcribedHostAndPrefix, at: 0)
-    } else {
-      filePath.insert(contentsOf: hostname, at: 0)
-      filePath.insert(contentsOf: #"\\"#.utf8, at: 0)
+      break prependHostname
     }
+    // Hostname is a domain or IPv4 address. Can be added as-is.
+    filePath.insert(contentsOf: hostname, at: 0)
+    filePath.insert(contentsOf: #"\\"#.utf8, at: 0)
   }
 
   // Null-termination (if requested).

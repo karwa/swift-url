@@ -220,10 +220,11 @@ public enum URLToFilePathTests: TestSuite {
 
   public enum FailureReason: String, Error, Codable {
     case notAFileURL = "not-a-file-url"
-    case relativePath = "relative-path"
-    case encodedSeparator = "encoded-separator"
     case encodedNullByte = "null-byte"
+    case encodedSeparator = "encoded-separator"
     case unsupportedNonLocalFile = "unsupported-non-local-file"
+    case unsupportedHostname = "unsupported-hostname"
+    case relativePath = "relative-path"
   }
 
   public struct CapturedData: Hashable {
