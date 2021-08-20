@@ -46,7 +46,9 @@ let package = Package(
     ),
     .target(
       name: "WebURLSystemExtras",
-      dependencies: ["WebURL", .product(name: "SystemPackage", package: "swift-system")]
+      dependencies: ["WebURL", .product(name: "SystemPackage", package: "swift-system", condition: .when(platforms: [
+        .android, .linux, .wasi, .windows
+      ]))]
     ),
     .target(
       name: "WebURLTestSupport",
