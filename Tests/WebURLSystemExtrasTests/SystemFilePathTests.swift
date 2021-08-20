@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import SystemPackage
 import WebURL
 import XCTest
 
@@ -20,7 +19,14 @@ import XCTest
 
 final class SystemFilePathTests: XCTestCase {}
 
+
+// --------------------------------------------
+// MARK: - Windows
+// --------------------------------------------
+
+
 #if os(Windows)
+  import SystemPackage
 
   extension SystemFilePathTests {
 
@@ -301,15 +307,39 @@ final class SystemFilePathTests: XCTestCase {}
     }
   }
 
-#else
+#else  // os(Windows)
+
+
+  // --------------------------------------------
+  // MARK: - POSIX: Test specifications
+  // --------------------------------------------
+
+
+  protocol POSIXFilePathProtocol: ExpressibleByStringLiteral {
+
+    var length: Int { get }
+
+    init(cString: UnsafePointer<CChar>)
+    func withCString<T>(_ body: (UnsafePointer<CChar>) throws -> T) rethrows -> T
+
+    init(url: WebURL) throws
+    func toURL() throws -> WebURL
+
+    func toStringLossy() -> String
+  }
+
+  protocol POSIXFilePathProtocolV2: POSIXFilePathProtocol {
+    var isAbsolute: Bool { get }
+    var isRelative: Bool { get }
+  }
 
   extension SystemFilePathTests {
 
-    func testASCII() throws {
+    func _testASCII<T: POSIXFilePathProtocol>(_: T.Type) throws {
 
       // Start with an ASCII file path.
-      let filePath: FilePath = "/tmp/foo/bar.txt"
-      filePath.withPlatformString {
+      let filePath: T = "/tmp/foo/bar.txt"
+      filePath.withCString {
         XCTAssertEqualElements(
           UnsafeBufferPointer(start: $0, count: filePath.length),
           [
@@ -320,38 +350,38 @@ final class SystemFilePathTests: XCTestCase {}
           ]
         )
       }
-      XCTAssertEqual(String(decoding: filePath), "/tmp/foo/bar.txt")
+      XCTAssertEqual(filePath.toStringLossy(), "/tmp/foo/bar.txt")
 
       // Use WebURL.init(FilePath) to create a file URL.
-      let fileURL = try WebURL(filePath: filePath)
+      let fileURL = try filePath.toURL()
       XCTAssertEqual(fileURL.serialized, "file:///tmp/foo/bar.txt")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/tmp/foo/bar.txt")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
 
       // Use FilePath.init(WebURL) to reconstruct the file path exactly.
-      let filePath2 = try FilePath(url: fileURL)
-      filePath.withPlatformString {
+      let filePath2 = try T(url: fileURL)
+      filePath.withCString {
         let filePath1Chars = UnsafeBufferPointer(start: $0, count: filePath.length)
-        filePath2.withPlatformString {
+        filePath2.withCString {
           let filePath2Chars = UnsafeBufferPointer(start: $0, count: filePath2.length)
           XCTAssertEqualElements(filePath1Chars, filePath2Chars)
         }
       }
 
       // Use WebURL.init(FilePath) to create another file URL which should exactly match the first one.
-      let fileURL2 = try WebURL(filePath: filePath2)
+      let fileURL2 = try filePath2.toURL()
       XCTAssertEqual(fileURL2.serialized, "file:///tmp/foo/bar.txt")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/tmp/foo/bar.txt")
       XCTAssertEqual(fileURL, fileURL2)
     }
 
-    func testUnicode() throws {
+    func _testUnicode<T: POSIXFilePathProtocol>(_: T.Type) throws {
 
       // Start with a Unicode file path.
-      let filePath: FilePath = "/tmp/f🦆o/b🏆🏎r.💩"
-      filePath.withPlatformString {
+      let filePath: T = "/tmp/f🦆o/b🏆🏎r.💩"
+      filePath.withCString {
         // swift-format-ignore
         XCTAssertEqualElements(
           UnsafeBufferPointer(start: $0, count: filePath.length),
@@ -363,10 +393,10 @@ final class SystemFilePathTests: XCTestCase {}
           ].map { CChar(bitPattern: $0) }
         )
       }
-      XCTAssertEqual(String(decoding: filePath), "/tmp/f🦆o/b🏆🏎r.💩")
+      XCTAssertEqual(filePath.toStringLossy(), "/tmp/f🦆o/b🏆🏎r.💩")
 
       // Use WebURL.init(FilePath) to create a file URL.
-      let fileURL = try WebURL(filePath: filePath)
+      let fileURL = try filePath.toURL()
       XCTAssertEqual(fileURL.serialized, "file:///tmp/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(
@@ -375,17 +405,17 @@ final class SystemFilePathTests: XCTestCase {}
       XCTAssertEqual(fileURL.pathComponents.count, 3)
 
       // Use FilePath.init(WebURL) to reconstruct the file path exactly.
-      let filePath2 = try FilePath(url: fileURL)
-      filePath.withPlatformString {
+      let filePath2 = try T(url: fileURL)
+      filePath.withCString {
         let filePath1Chars = UnsafeBufferPointer(start: $0, count: filePath.length)
-        filePath2.withPlatformString {
+        filePath2.withCString {
           let filePath2Chars = UnsafeBufferPointer(start: $0, count: filePath2.length)
           XCTAssertEqualElements(filePath1Chars, filePath2Chars)
         }
       }
 
       // Use WebURL.init(FilePath) to create another file URL which should exactly match the first one.
-      let fileURL2 = try WebURL(filePath: filePath2)
+      let fileURL2 = try filePath2.toURL()
       XCTAssertEqual(fileURL2.serialized, "file:///tmp/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(
@@ -395,7 +425,7 @@ final class SystemFilePathTests: XCTestCase {}
       XCTAssertEqual(fileURL, fileURL2)
     }
 
-    func testUnpairedSurrogateInURL() throws {
+    func _testUnpairedSurrogateInURL<T: POSIXFilePathProtocol>(_: T.Type) throws {
 
       let unpairedSurrogate: [UInt8] = [
         0x2F /* / */, 0x66 /* f */, 0x6F /* o */, 0xED, 0xA0, 0x80, 0x6F /* o */,
@@ -410,22 +440,22 @@ final class SystemFilePathTests: XCTestCase {}
       XCTAssertEqual(fileURL.pathComponents.count, 2)
 
       // Create a file path from the URL. Should preserve the bytes exactly.
-      let filePath = try FilePath(url: fileURL)
-      filePath.withPlatformString {
+      let filePath = try T(url: fileURL)
+      filePath.withCString {
         UnsafeBufferPointer(start: $0, count: filePath.length).withMemoryRebound(to: UInt8.self) { filePathChars in
           XCTAssertEqualElements(filePathChars, unpairedSurrogate)
         }
       }
 
       // Create another file URL from the path. Should exactly match the first one.
-      let fileURL2 = try WebURL(filePath: filePath)
+      let fileURL2 = try filePath.toURL()
       XCTAssertEqual(fileURL2.serialized, "file:///fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL, fileURL2)
     }
 
-    func testUnpairedSurrogateInFilePath() throws {
+    func _testUnpairedSurrogateInFilePath<T: POSIXFilePathProtocol>(_: T.Type) throws {
 
       let unpairedSurrogate: [CChar] = [
         0x2F /* / */, 0x66 /* f */, 0x6F /* o */, 0xED, 0xA0, 0x80, 0x6F /* o */,
@@ -434,34 +464,34 @@ final class SystemFilePathTests: XCTestCase {}
       ].map { CChar(bitPattern: $0) }
 
       // Start with a file path containing a UTF-8-encoded unpaired surrogate.
-      let filePath = FilePath(platformString: unpairedSurrogate)
+      let filePath = T(cString: unpairedSurrogate)
 
       // Use WebURL.init(FilePath) to create a file URL.
-      let fileURL = try WebURL(filePath: filePath)
+      let fileURL = try filePath.toURL()
       XCTAssertEqual(fileURL.serialized, "file:///fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
 
       // Use FilePath.init(WebURL) to reconstruct the file path exactly.
-      let filePath2 = try FilePath(url: fileURL)
-      filePath.withPlatformString {
+      let filePath2 = try T(url: fileURL)
+      filePath.withCString {
         let filePath1Chars = UnsafeBufferPointer(start: $0, count: filePath.length)
-        filePath2.withPlatformString {
+        filePath2.withCString {
           let filePath2Chars = UnsafeBufferPointer(start: $0, count: filePath2.length)
           XCTAssertEqualElements(filePath1Chars, filePath2Chars)
         }
       }
 
       // Create another file URL from the path. Should exactly match the first one.
-      let fileURL2 = try WebURL(filePath: filePath)
+      let fileURL2 = try filePath.toURL()
       XCTAssertEqual(fileURL2.serialized, "file:///fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL, fileURL2)
     }
 
-    func testLatin1() throws {
+    func _testLatin1<T: POSIXFilePathProtocol>(_: T.Type) throws {
 
       let latin1: [UInt8] = [
         0x2F /* / */, 0x63 /* c */, 0x61 /* a */, 0x66 /* f */, 0xE9 /* é */, 0xDD /* Ý */,
@@ -476,22 +506,22 @@ final class SystemFilePathTests: XCTestCase {}
       XCTAssertEqual(fileURL.pathComponents.count, 1)
 
       // Create a file path from the URL. Should preserve the bytes exactly.
-      let filePath = try FilePath(url: fileURL)
-      filePath.withPlatformString {
+      let filePath = try T(url: fileURL)
+      filePath.withCString {
         UnsafeBufferPointer(start: $0, count: filePath.length).withMemoryRebound(to: UInt8.self) { filePathChars in
           XCTAssertEqualElements(filePathChars, latin1)
         }
       }
 
       // Create another file URL from the path. Should exactly match the first one.
-      let fileURL2 = try WebURL(filePath: filePath)
+      let fileURL2 = try filePath.toURL()
       XCTAssertEqual(fileURL2.serialized, "file:///caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/caf%E9%DD")
       XCTAssertEqual(fileURL, fileURL2)
     }
 
-    func testGreek() throws {
+    func _testGreek<T: POSIXFilePathProtocol>(_: T.Type) throws {
 
       let greek: [UInt8] = [
         0x2F /* / */, 0x68 /* h */, 0x69 /* i */, 0xE1 /* α */, 0xE2 /* β */, 0xE3 /* γ */,
@@ -506,15 +536,15 @@ final class SystemFilePathTests: XCTestCase {}
       XCTAssertEqual(fileURL.pathComponents.count, 1)
 
       // Create a file path from the URL. Should preserve the bytes exactly.
-      let filePath = try FilePath(url: fileURL)
-      filePath.withPlatformString {
+      let filePath = try T(url: fileURL)
+      filePath.withCString {
         UnsafeBufferPointer(start: $0, count: filePath.length).withMemoryRebound(to: UInt8.self) { filePathChars in
           XCTAssertEqualElements(filePathChars, greek)
         }
       }
 
       // Create another file URL from the path. Should exactly match the first one.
-      let fileURL2 = try WebURL(filePath: filePath)
+      let fileURL2 = try filePath.toURL()
       XCTAssertEqual(fileURL2.serialized, "file:///hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/hi%E1%E2%E3")
@@ -522,25 +552,155 @@ final class SystemFilePathTests: XCTestCase {}
     }
 
     /// Make sure we agree with FilePath about which paths are absolute vs. relative.
-    func testRelativePaths() {
+    func _testRelativePaths<T: POSIXFilePathProtocolV2>(_: T.Type) {
 
       do {
-        let path: FilePath = "foo"
+        let path: T = "foo"
         XCTAssertTrue(path.isRelative)
         XCTAssertFalse(path.isAbsolute)
         XCTAssertThrowsSpecific(FilePathToURLError.relativePath) {
-          let _ = try WebURL(filePath: path)
+          let _ = try path.toURL()
         }
       }
       do {
-        let path: FilePath = "/foo"
+        let path: T = "/foo"
         XCTAssertFalse(path.isRelative)
         XCTAssertTrue(path.isAbsolute)
         XCTAssertNoThrow {
-          let _ = try WebURL(filePath: path)
+          let _ = try path.toURL()
         }
       }
     }
   }
 
-#endif
+
+  // --------------------------------------------
+  // MARK: - POSIX: SystemPackage tests
+  // --------------------------------------------
+
+
+  #if canImport(SystemPackage)
+    import SystemPackage
+
+    extension SystemPackage.FilePath: POSIXFilePathProtocol {
+
+      func toURL() throws -> WebURL {
+        try WebURL(filePath: self)
+      }
+      func toStringLossy() -> String {
+        String(decoding: self)
+      }
+    }
+
+    extension SystemPackage.FilePath: POSIXFilePathProtocolV2 {
+    }
+
+    extension SystemFilePathTests {
+
+      func testASCII_package() throws {
+        try _testASCII(SystemPackage.FilePath.self)
+      }
+
+      func testUnicode_package() throws {
+        try _testUnicode(SystemPackage.FilePath.self)
+      }
+
+      func testUnpairedSurrogateInURL_package() throws {
+        try _testUnpairedSurrogateInURL(SystemPackage.FilePath.self)
+      }
+
+      func testUnpairedSurrogateInFilePath_package() throws {
+        try _testUnpairedSurrogateInFilePath(SystemPackage.FilePath.self)
+      }
+
+      func testLatin1_package() throws {
+        try _testLatin1(SystemPackage.FilePath.self)
+      }
+
+      func testGreek_package() throws {
+        try _testGreek(SystemPackage.FilePath.self)
+      }
+
+      func testRelativePaths_package() {
+        _testRelativePaths(SystemPackage.FilePath.self)
+      }
+    }
+  #endif  // canImport(SystemPackage)
+
+
+  // --------------------------------------------
+  // MARK: - POSIX: System.framework tests
+  // --------------------------------------------
+
+
+  #if canImport(System)
+    import System
+
+    @available(macOS 11, iOS 14, tvOS 14, watchOS 7, *)
+    extension System.FilePath: POSIXFilePathProtocol {
+
+      func toURL() throws -> WebURL {
+        try WebURL(filePath: self)
+      }
+      func toStringLossy() -> String {
+        String(decoding: self)
+      }
+    }
+
+    // Requires beta SDK.
+    //    @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+    //    extension System.FilePath: POSIXFilePathProtocolV2 {}
+
+    extension SystemFilePathTests {
+
+      func testASCII_framework() throws {
+        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+          try _testASCII(System.FilePath.self)
+        } else {
+          try XCTSkipIf(true)
+        }
+      }
+
+      func testUnicode_framework() throws {
+        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+          try _testUnicode(System.FilePath.self)
+        } else {
+          try XCTSkipIf(true)
+        }
+      }
+
+      func testUnpairedSurrogateInURL_framework() throws {
+        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+          try _testUnpairedSurrogateInURL(System.FilePath.self)
+        } else {
+          try XCTSkipIf(true)
+        }
+      }
+
+      func testUnpairedSurrogateInFilePath_framework() throws {
+        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+          try _testUnpairedSurrogateInFilePath(System.FilePath.self)
+        } else {
+          try XCTSkipIf(true)
+        }
+      }
+
+      func testLatin1_framework() throws {
+        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+          try _testLatin1(System.FilePath.self)
+        } else {
+          try XCTSkipIf(true)
+        }
+      }
+
+      func testGreek_framework() throws {
+        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+          try _testGreek(System.FilePath.self)
+        } else {
+          try XCTSkipIf(true)
+        }
+      }
+    }
+  #endif  // canImport(System)
+
+#endif  // 'else' branch of os(Windows)

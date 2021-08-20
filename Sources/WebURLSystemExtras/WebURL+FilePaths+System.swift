@@ -11,8 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+// --------------------------------------------
+// FilePath -> WebURL and WebURL -> FilePath conversions, for both SystemPackage and System.framework.
+// This file is written in such a way that all implementations of 'swift-system' discoverable via canImport
+// will be supported, and at least one must be present.
+//
+// Technically, this means that software targeting newer Darwin platforms could omit SystemPackage and rely on
+// System.framework instead. That is difficult (perhaps impossible) to express with SwiftPM currently,
+// and toolchain versions behave differently.
+//
+// For now, the 'WebURLSystemExtras' module depends on SystemPackage unconditionally.
+// If that is a problem, commenting out the dependency in 'Package.swift' should allow you to depend only
+// on System.framework, without any other changes to the library source.
+// --------------------------------------------
 
-import SystemPackage
 import WebURL
 
 // --------------------------------------------
@@ -20,66 +32,63 @@ import WebURL
 // --------------------------------------------
 
 
-extension WebURL {
+#if canImport(SystemPackage)
+  import SystemPackage
 
-  /// Creates a `file:` URL representation of the given `FilePath`.
-  ///
-  /// The given path must be absolute and must not contain any components which traverse to their parent directories (`..` components).
-  /// Use the `FilePath.isAbsolute` property to check that the path is absolute, and resolve it against a base path if it is not.
-  /// Use the `FilePath.lexicallyNormalize` or `.lexicallyResolving` methods to resolve any `..` components.
-  ///
-  /// - parameters:
-  ///   - filePath: The file path from which to create the file URL.
-  ///
-  /// - throws: `FilePathToURLError`
-  ///
-  public init(filePath: SystemPackage.FilePath) throws {
-    self = try filePath.withPlatformString { platformStr in
-      try PlatformStringConversions.toMultiByte(UnsafeBufferPointer(start: platformStr, count: filePath.length + 1)) {
-        guard let mbStr = $0 else { throw FilePathToURLError.transcodingFailure }
-        precondition(mbStr.last == 0, "Expected a null-terminated string")
-        return try WebURL.fromFilePathBytes(UnsafeBufferPointer(rebasing: mbStr.dropLast()), format: .native)
+  extension WebURL {
+
+    /// Creates a `file:` URL representation of the given `FilePath`.
+    ///
+    /// The given path must be absolute and must not contain any components which traverse to their parent directories (`..` components).
+    /// Use the `FilePath.isAbsolute` property to check that the path is absolute, and resolve it against a base path if it is not.
+    /// Use the `FilePath.lexicallyNormalize` or `.lexicallyResolving` methods to resolve any `..` components.
+    ///
+    /// - parameters:
+    ///   - filePath: The file path from which to create the file URL.
+    ///
+    /// - throws: `FilePathToURLError`
+    ///
+    public init(filePath: SystemPackage.FilePath) throws {
+      self = try filePath.withPlatformString { platformStr in
+        try PlatformStringConversions.toMultiByte(UnsafeBufferPointer(start: platformStr, count: filePath.length + 1)) {
+          guard let mbStr = $0 else { throw FilePathToURLError.transcodingFailure }
+          precondition(mbStr.last == 0, "Expected a null-terminated string")
+          return try WebURL.fromFilePathBytes(UnsafeBufferPointer(rebasing: mbStr.dropLast()), format: .native)
+        }
       }
     }
   }
-}
 
-extension SystemPackage.FilePath {
+  extension SystemPackage.FilePath {
 
-  /// Reconstructs a `FilePath` from its URL representation.
-  ///
-  /// The given URL must be a `file:` URL representation of an absolute path according to this system's path format.
-  /// The resulting `FilePath` is both absolute and lexically normalized.
-  ///
-  /// On Windows, the reconstructed path is first interpreted as UTF-8. Should it not contain valid UTF-8, it will be interpreted
-  /// using the system's active code-page and converted to its Unicode representation.
-  ///
-  /// - parameters:
-  ///   - url: The file URL from which to reconstruct the file path.
-  ///
-  /// - throws: `URLToFilePathError`
-  ///
-  public init(url: WebURL) throws {
-    self = try WebURL.filePathBytes(from: url, format: .native, nullTerminated: true).withUnsafeBufferPointer {
-      try PlatformStringConversions.fromMultiByte($0) {
-        guard let platformString = $0 else { throw URLToFilePathError.transcodingFailure }
-        return FilePath(platformString: platformString.baseAddress!)
+    /// Reconstructs a `FilePath` from its URL representation.
+    ///
+    /// The given URL must be a `file:` URL representation of an absolute path according to this system's path format.
+    /// The resulting `FilePath` is both absolute and lexically normalized.
+    ///
+    /// On Windows, the reconstructed path is first interpreted as UTF-8. Should it not contain valid UTF-8, it will be interpreted
+    /// using the system's active code-page and converted to its Unicode representation.
+    ///
+    /// - parameters:
+    ///   - url: The file URL from which to reconstruct the file path.
+    ///
+    /// - throws: `URLToFilePathError`
+    ///
+    public init(url: WebURL) throws {
+      self = try WebURL.filePathBytes(from: url, format: .native, nullTerminated: true).withUnsafeBufferPointer {
+        try PlatformStringConversions.fromMultiByte($0) {
+          guard let platformString = $0 else { throw URLToFilePathError.transcodingFailure }
+          return FilePath(platformString: platformString.baseAddress!)
+        }
       }
     }
   }
-}
+#endif
 
 
 // --------------------------------------------
 // MARK: - System.framework interface
 // --------------------------------------------
-// The same API as for SystemPackage, but using C strings rather than 'platform strings'.
-// On Darwin, which is the only platform family with binary 'System' modules, they are the same thing.
-//
-// This technically means that SystemPackage is an entirely optional dependency on Darwin platforms,
-// depending on deployment target, but SwiftPM has some difficulty with that. We can't make dependencies
-// conditional based on deployment target _version_, and even if we drop older systems,
-// we can't make it optional for WebURLSystemExtras but required for WebURLSystemExtrasTests.
 
 
 #if (os(macOS) || os(iOS) || os(tvOS) || os(watchOS)) && canImport(System)
@@ -143,6 +152,13 @@ extension SystemPackage.FilePath {
 // --------------------------------------------
 
 
+#if canImport(SystemPackage)
+  import SystemPackage
+  typealias CInterop_PlatformChar = CInterop.PlatformChar
+#elseif (os(macOS) || os(iOS) || os(tvOS) || os(watchOS)) && canImport(System)
+  typealias CInterop_PlatformChar = CChar
+#endif
+
 private protocol PlatformStringConversionsProtocol {
 
   /// Converts a null-terminated buffer of platform characters to a null-terminated buffer of bytes.
@@ -150,7 +166,7 @@ private protocol PlatformStringConversionsProtocol {
   /// If the platform string is known to contain textual code-points, the buffer passed to `body` will be encoded with UTF-8.
   ///
   static func toMultiByte<ResultType>(
-    _ platformString: UnsafeBufferPointer<CInterop.PlatformChar>,
+    _ platformString: UnsafeBufferPointer<CInterop_PlatformChar>,
     _ body: (UnsafeBufferPointer<UInt8>?) throws -> ResultType
   ) rethrows -> ResultType
 
@@ -160,7 +176,7 @@ private protocol PlatformStringConversionsProtocol {
   ///
   static func fromMultiByte<ResultType>(
     _ mbString: UnsafeBufferPointer<UInt8>,
-    _ body: (UnsafeBufferPointer<CInterop.PlatformChar>?) throws -> ResultType
+    _ body: (UnsafeBufferPointer<CInterop_PlatformChar>?) throws -> ResultType
   ) rethrows -> ResultType
 }
 
@@ -195,7 +211,7 @@ private protocol PlatformStringConversionsProtocol {
   internal enum PlatformStringConversions: PlatformStringConversionsProtocol {
 
     fileprivate static func toMultiByte<ResultType>(
-      _ plString: UnsafeBufferPointer<CInterop.PlatformChar>,
+      _ plString: UnsafeBufferPointer<UInt16>,
       _ body: (UnsafeBufferPointer<UInt8>?) throws -> ResultType
     ) rethrows -> ResultType {
 
@@ -215,12 +231,12 @@ private protocol PlatformStringConversionsProtocol {
 
     fileprivate static func fromMultiByte<ResultType>(
       _ mbString: UnsafeBufferPointer<UInt8>,
-      _ body: (UnsafeBufferPointer<CInterop.PlatformChar>?) throws -> ResultType
+      _ body: (UnsafeBufferPointer<UInt16>?) throws -> ResultType
     ) rethrows -> ResultType {
 
       precondition(mbString.last == 0, "Expected a null-terminated string")
 
-      var transcoded = ContiguousArray<CInterop.PlatformChar>()
+      var transcoded = ContiguousArray<UInt16>()
       transcoded.reserveCapacity(mbString.count)
       let invalidUnicode = transcode(mbString.makeIterator(), from: UTF8.self, to: UTF16.self, stoppingOnError: true) {
         codeUnit in transcoded.append(codeUnit)
@@ -312,7 +328,7 @@ private protocol PlatformStringConversionsProtocol {
   enum PlatformStringConversions: PlatformStringConversionsProtocol {
 
     static func toMultiByte<ResultType>(
-      _ platformString: UnsafeBufferPointer<CInterop.PlatformChar>,
+      _ platformString: UnsafeBufferPointer<CChar>,
       _ body: (UnsafeBufferPointer<UInt8>?) throws -> ResultType
     ) rethrows -> ResultType {
 
@@ -322,11 +338,11 @@ private protocol PlatformStringConversionsProtocol {
 
     static func fromMultiByte<ResultType>(
       _ mbString: UnsafeBufferPointer<UInt8>,
-      _ body: (UnsafeBufferPointer<CInterop.PlatformChar>?) throws -> ResultType
+      _ body: (UnsafeBufferPointer<CChar>?) throws -> ResultType
     ) rethrows -> ResultType {
 
       precondition(mbString.last == 0, "Expected a null-terminated string")
-      return try mbString.withMemoryRebound(to: CInterop.PlatformChar.self, body)
+      return try mbString.withMemoryRebound(to: CChar.self, body)
     }
   }
 
