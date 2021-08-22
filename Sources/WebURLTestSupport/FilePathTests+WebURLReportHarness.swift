@@ -37,7 +37,7 @@ extension FilePathToURLTests.WebURLReportHarness: FilePathToURLTests.Harness {
   public func filePathToURL(
     _ path: String, format: FilePathFormat
   ) -> Result<String, FilePathToURLTests.FailureReason> {
-    Result { try WebURL.fromFilePathBytes(path.utf8, format: format).serialized }
+    Result { try WebURL(filePath: path, format: format).serialized }
       .mapError { Self.errorToFailureReason($0 as! FilePathToURLError) }
   }
 
