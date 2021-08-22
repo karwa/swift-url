@@ -125,17 +125,45 @@ public struct FilePathFormat: Equatable, Hashable, CustomStringConvertible {
 
 extension WebURL {
 
+  /// Creates a `file:` URL representation of a file path.
+  ///
+  /// The given path must be absolute according to the given `FilePathFormat`, and not contain any components
+  /// which traverse to their parent directories (`..` components). Some minimal normalization is applied, according to the path format.
+  ///
+  /// Note that even though a `String` may be a valid _source_ of a file path, some paths may be corrupted when storing or manipulating them as a `String`.
+  /// Therefore, this library does not offer a corresponding API to reconstruct a file path as a `String`.
+  ///
+  /// Instead, developers are encouraged to use the `FilePath` type from the `swift-system` package.
+  /// The `FilePath(url: WebURL)` initializer available in the `WebURLSystemExtras` module is the best way to reconstruct a file path
+  /// from its URL representation.
+  ///
+  /// - parameters:
+  ///   - filePath: The file path from which to create the file URL.
+  ///   - format: The way in which `filePath` should be interpreted; either `.posix`, `.windows`, or `.native` (default).
+  ///
+  /// - throws: `FilePathToURLError`
+  ///
+  public init<S>(
+    filePath: S, format: FilePathFormat = .native
+  ) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+    self = try WebURL.fromFilePathBytes(filePath.utf8, format: format)
+  }
+}
+
+extension WebURL {
+
   /// Creates a `file:` URL representation of the given file path.
   ///
-  /// This is a low-level API, which accepts a file path as a `Collection` of 8-bit code-units. Correct usage requires detailed knowledge
-  /// of character sets and text encodings. It is useful for niche cases requiring specific control over the file path's representation
-  /// (such as if you are on Windows and require a URL containing percent-encoded Latin-1 code-units for compatibility with a legacy application),
-  /// but users should generally prefer `WebURL(filePath: FilePath/String)`.
+  /// This is a low-level API, which accepts a file path as a collection of 8-bit code-units and paths to be represented which
+  /// are not valid UTF-8 text. Generally, users should prefer `swift-system`'s `FilePath` type to store file paths rather than storing
+  /// them as collections of code-units, and the `WebURL(filePath: FilePath)` initializer in the `WebURLSystemExtras` module
+  /// is the preferred interface to this function.
   ///
   /// ## Supported paths
   ///
-  /// This function supports non-relative paths (i.e. absolute POSIX paths, fully-qualified Windows paths), which do not contain any `..` components
-  /// or ASCII `NULL` bytes. The terminator of a null-terminated string should not be included in the given collection of code-units.
+  /// The given path must be absolute (fully-qualified) according to the given `FilePathFormat`, and not contain any components
+  /// which traverse to their parent directories (`..` components). It also may not include `NULL` bytes, so the terminator of null-terminated
+  /// string should not be included in the given collection of code-units.
   ///
   /// These restrictions are considered a feature. URLs have no way of expressing relative paths, so such paths would first have to be resolved against
   /// a base path or working directory. Components which traverse upwards in the filesystem and unexpected NULL bytes are common sources of
@@ -148,10 +176,10 @@ extension WebURL {
   /// These paths are identified by the prefix `\\?\`. Note that this prefix is not preserved in the resulting URL or any paths created from that URL.
   ///
   /// In a deliberate departure from Microsoft's documentation, empty and `.` components will be resolved in these paths.
-  /// Other path components will not be trimmed or otherwise altered. This library considers this minimal structural normalization to be safe
-  /// as empty components have no meaning on any filesystem, and all commonly-used filesystems on Windows (including FAT, exFAT, NTFS, and ReFS)
-  /// forbid files and directories named `.`. SMB/CIFS and NFS (the most common protocols used with UNC) likewise define that `.` components
-  /// refer to the current directory.
+  /// Other path components will not be trimmed or otherwise altered. This library considers this minimal structural normalization to be safe,
+  /// given that support is restricted to paths with drive letters or UNC locations. Empty components have no meaning on any filesystem,
+  /// and all commonly-used filesystems on Windows (including FAT, exFAT, NTFS, and ReFS) forbid files and directories named `.`.
+  /// SMB/CIFS and NFS (the most common protocols used with UNC) likewise define that `.` components refer to the current directory.
   ///
   /// Additionally, `..` components and forward slashes are forbidden, as they represent components literally named `..` or with forward slashes in
   /// their name. However, Windows APIs are not consistent, and will sometimes interpret these as traversal instructions or path separators regardless.
@@ -183,7 +211,7 @@ extension WebURL {
   ///
   /// - parameters:
   ///   - path:   The file path, as a `Collection` of 8-bit code-units.
-  ///   - format: The way in which `path` should be interpreted; either `.posix`, `.windows`, or `.native`.
+  ///   - format: The way in which `path` should be interpreted; either `.posix`, `.windows`, or `.native` (default).
   ///
   /// - returns: A URL with the `file` scheme which can be used to reconstruct the given path.
   /// - throws: `FilePathToURLError`
@@ -532,14 +560,14 @@ extension WebURL {
   /// Reconstructs a file path from its URL representation.
   ///
   /// This is a low-level function, which returns a file path as an array of 8-bit code-units. Correct usage requires detailed knowledge
-  /// of character sets and text encodings, and users should generally prefer higher-level APIs, which provide the reconstructed path as a `FilePath`.
+  /// of character sets and text encodings, and users should generally prefer higher-level APIs, such as `FilePath(url: WebURL)`
+  /// from the `WebURLSystemExtras` module.
   ///
   /// ## Accepted URLs
   ///
   /// This function only accepts URLs with a `file` scheme, whose paths do not contain percent-encoded path separators or `NULL` bytes.
   /// For the `windows` format, the reconstructed path must be fully-qualified - meaning that it is either a UNC path, or begins with a drive-letter.
-  /// Note that not all file URLs have an obvious interpretation for all path formats. For example, there is no obvious interpretation of a `posix` path
-  /// to a remote host.
+  /// Note that not all URLs are compatible with all path formats. For example, there is no obvious way to construct a `posix` path to a remote host.
   ///
   /// ## Encoding
   ///
@@ -549,18 +577,18 @@ extension WebURL {
   ///   POSIX requires that the C `char` type be 8 bits, so this is safe. As paths on POSIX systems are opaque octets, the path should be used as-is.
   ///
   /// - To use the returned path on a Windows system, some transcoding may be necessary as the system natively uses 16-bit code-units.
-  ///   This can be difficult, as in general there is no way to know which encoding the returned code-units belong to, and hence which textual code-points
-  ///   they represent. A good strategy is to first interpret the bytes as UTF-8 and transcode to UTF-16. Should that fail, assume that code-units are from the
+  ///   This can be difficult, as in general there is no way to know how the file path was encoded, or how to interpret the bytes as textual code-points.
+  ///   A good strategy is to first interpret the bytes as UTF-8 and transcode to UTF-16. Should that fail, assume that code-units are from the
   ///   system's active code-page and use the `MultiByteToWideChar` function to produce a UTF-16 file path.
   ///
   /// ## Normalization
   ///
-  /// Some minimal normalization is applied to the path. In particular, empty path components are removed, and Windows UNC paths require
-  /// some hostnames to be transcribed. Unlike the `WebURL.fromFilePathBytes` function, Windows path components are never trimmed.
+  /// Some minimal normalization is applied to the path, such as removing empty path components.
+  /// Unlike the `WebURL.fromFilePathBytes` function, Windows path components are never trimmed.
   ///
   /// - parameters:
   ///   - url:    The file URL.
-  ///   - format: The path format which should be constructed; either `.posix`, `.windows`, or `.native`.
+  ///   - format: The path format which should be constructed; either `.posix`, `.windows`, or `.native` (default).
   ///   - nullTerminated: Whether the reconstructed file path bytes should include a null-terminator.
   ///
   /// - returns: The reconstructed file path bytes from `url`.
