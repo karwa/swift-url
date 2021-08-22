@@ -62,6 +62,8 @@ extension WPTConstructorTest {
     }
   }
 
+  // Note: 'base' is NOT always present since https://github.com/web-platform-tests/wpt/pull/29579
+  //       WPT README needs to be updated.
   /// A data structure containing information for a WPT URL constructor test.
   ///
   /// Details from https://github.com/web-platform-tests/wpt/blob/master/url/README.md as of `09d8830`:
@@ -81,14 +83,14 @@ extension WPTConstructorTest {
   ///
   public struct Testcase: Equatable, Hashable, Codable {
     public var input: String
-    public var base: String
+    public var base: String?
     public var expectedValues: URLValues? = nil
 
     public var failure: Bool {
       return expectedValues == nil
     }
 
-    public init(input: String, base: String, expectedValues: URLValues?) {
+    public init(input: String, base: String?, expectedValues: URLValues?) {
       self.input = input
       self.base = base
       self.expectedValues = expectedValues
@@ -116,7 +118,7 @@ extension WPTConstructorTest {
     public init(from decoder: Decoder) throws {
       let container = try decoder.container(keyedBy: CodingKeys.self)
       self.input = try container.decode(String.self, forKey: .input)
-      self.base = try container.decode(String.self, forKey: .base)
+      self.base = try container.decode(String?.self, forKey: .base)
 
       if let xfail = try? container.decode(Bool.self, forKey: .failure) {
         assert(xfail, "A failure key means the test is expected to fail; is always 'true' if present")
@@ -168,7 +170,7 @@ extension WPTConstructorTest.Testcase: CustomStringConvertible {
       return """
         {
           .input:    \(input)
-          .base:     \(base)
+          .base:     \(base ?? "<nil>")
             -- expected failure --
         }
         """
@@ -176,7 +178,7 @@ extension WPTConstructorTest.Testcase: CustomStringConvertible {
     return """
       {
         .input:    \(input)
-        .base:     \(base)
+        .base:     \(base ?? "<nil>")
 
         .href:     \(expectedValues[.href]!)
         .origin:   \(expectedValues.origin ?? "<not present>")
@@ -317,8 +319,8 @@ extension WPTConstructorTest.Harness {
           reportTestResult(result)
           index += 1
         }
-        // Parsing the base URL must always succeed.
-        if parseURL(testcase.base, base: nil) == nil {
+        // If a base URL is given, parsing it must always succeed.
+        if let base = testcase.base, parseURL(base, base: nil) == nil {
           result.failures.insert(.baseURLFailedToParse)
         }
         // If failure = true, parsing "about:blank" against input must fail.
