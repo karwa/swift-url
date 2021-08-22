@@ -480,20 +480,31 @@ extension WebURLTests {
     XCTAssertURLIsIdempotent(url)
 
     // [Throw] Invalid hostnames.
-    url = WebURL("foo://example.com/")!
-    XCTAssertEqual(url.hostname, "example.com")
-    XCTAssertEqual(url.serialized, "foo://example.com/")
-    XCTAssertThrowsSpecific(URLSetterError.invalidHostname) { try url.setHostname("@") }
-    XCTAssertEqual(url.serialized, "foo://example.com/")
-    XCTAssertURLIsIdempotent(url)
-
-    XCTAssertThrowsSpecific(URLSetterError.invalidHostname) { try url.setHostname("/a/b/c") }
-    XCTAssertEqual(url.serialized, "foo://example.com/")
-    XCTAssertURLIsIdempotent(url)
-
-    XCTAssertThrowsSpecific(URLSetterError.invalidHostname) { try url.setHostname("[:::]") }
-    XCTAssertEqual(url.serialized, "foo://example.com/")
-    XCTAssertURLIsIdempotent(url)
+    let invalidHostnames = [
+      "@",
+      "/a/b/c",
+      "a/b/c",
+      "[:::]",
+      "example:.net",
+      "example.net:",
+      "example.net:99",
+      "example.net?something",
+      "example.net#something",
+    ]
+    let urlStrings = [
+      "foo://example.com/",
+      "https://example.com/",
+    ]
+    for urlString in urlStrings {
+      url = WebURL(urlString)!
+      for hostname in invalidHostnames {
+        XCTAssertEqual(url.hostname, "example.com")
+        XCTAssertEqual(url.serialized, urlString)
+        XCTAssertThrowsSpecific(URLSetterError.invalidHostname) { try url.setHostname(hostname) }
+        XCTAssertEqual(url.serialized, urlString)
+        XCTAssertURLIsIdempotent(url)
+      }
+    }
   }
 
   /// Tests the Swift model 'port' property.

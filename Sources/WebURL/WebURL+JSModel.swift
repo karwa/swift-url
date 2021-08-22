@@ -262,6 +262,10 @@ extension WebURL.JSModel {
       guard let hostnameEnd = findEndOfHostnamePrefix(filtered, scheme: schemeKind, callback: &callback) else {
         return
       }
+      // Unlike other delimiters, including a port causes the entire operation to fail.
+      if hostnameEnd < filtered.endIndex, filtered[hostnameEnd] == ASCII.colon.codePoint {
+        return
+      }
       try? swiftModel.utf8.setHostname(filtered[..<hostnameEnd])
     }
   }
