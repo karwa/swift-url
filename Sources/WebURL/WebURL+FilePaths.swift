@@ -119,7 +119,7 @@ public struct FilePathFormat: Equatable, Hashable, CustomStringConvertible {
 
 
 // --------------------------------------------
-// MARK: - File path to URL
+// MARK: - URL From File Path
 // --------------------------------------------
 
 
@@ -141,7 +141,7 @@ extension WebURL {
   ///   - filePath: The file path from which to create the file URL.
   ///   - format: The way in which `filePath` should be interpreted; either `.posix`, `.windows`, or `.native` (default).
   ///
-  /// - throws: `FilePathToURLError`
+  /// - throws: `URLFromFilePathError`
   ///
   public init<S>(
     filePath: S, format: FilePathFormat = .native
@@ -214,22 +214,22 @@ extension WebURL {
   ///   - format: The way in which `path` should be interpreted; either `.posix`, `.windows`, or `.native` (default).
   ///
   /// - returns: A URL with the `file` scheme which can be used to reconstruct the given path.
-  /// - throws: `FilePathToURLError`
+  /// - throws: `URLFromFilePathError`
   ///
   @inlinable
   public static func fromFilePathBytes<Bytes>(
     _ path: Bytes, format: FilePathFormat = .native
   ) throws -> WebURL where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
     switch format._fmt {
-    case .posix: return try _filePathToURL_posix(path).get()
-    case .windows: return try _filePathToURL_windows(path).get()
+    case .posix: return try _urlFromFilePath_posix(path).get()
+    case .windows: return try _urlFromFilePath_windows(path).get()
     }
   }
 }
 
 /// The reason why a file URL could not be created from a given file path.
 ///
-public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConvertible {
+public struct URLFromFilePathError: Error, Equatable, Hashable, CustomStringConvertible {
 
   @usableFromInline
   internal enum _Err {
@@ -253,8 +253,8 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
   /// The given path is empty.
   ///
   @inlinable
-  public static var emptyInput: FilePathToURLError {
-    FilePathToURLError(.emptyInput)
+  public static var emptyInput: URLFromFilePathError {
+    URLFromFilePathError(.emptyInput)
   }
 
   /// The given path contains ASCII `NULL` bytes.
@@ -262,8 +262,8 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
   /// `NULL` bytes are forbidden, to protect against injected truncation.
   ///
   @inlinable
-  public static var nullBytes: FilePathToURLError {
-    FilePathToURLError(.nullBytes)
+  public static var nullBytes: URLFromFilePathError {
+    URLFromFilePathError(.nullBytes)
   }
 
   /// The given path is not absolute/fully-qualified.
@@ -272,8 +272,8 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
   /// as an absolute path. Be advised that some kinds of relative path resolution may not be thread-safe; consult your chosen path API for details.
   ///
   @inlinable
-  public static var relativePath: FilePathToURLError {
-    FilePathToURLError(.relativePath)
+  public static var relativePath: URLFromFilePathError {
+    URLFromFilePathError(.relativePath)
   }
 
   /// The given path contains one or more `..` components.
@@ -282,8 +282,8 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
   /// to resolve the path. Users are advised to check that the path has not escaped the expected area of the filesystem after it has been resolved.
   ///
   @inlinable
-  public static var upwardsTraversal: FilePathToURLError {
-    FilePathToURLError(.upwardsTraversal)
+  public static var upwardsTraversal: URLFromFilePathError {
+    URLFromFilePathError(.upwardsTraversal)
   }
 
   /// The given path refers to a file on a remote host, but the hostname is not valid or cannot be represented in a URL.
@@ -293,8 +293,8 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
   /// [URL-FHCP]: https://url.spec.whatwg.org/#forbidden-host-code-point
   ///
   @inlinable
-  public static var invalidHostname: FilePathToURLError {
-    FilePathToURLError(.invalidHostname)
+  public static var invalidHostname: URLFromFilePathError {
+    URLFromFilePathError(.invalidHostname)
   }
 
   /// The given path is ill-formed, prohibiting a URL representation from being formed.
@@ -309,8 +309,8 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
   /// - `\\?\UNC` (no trailing slash after device name)
   ///
   @inlinable
-  public static var invalidPath: FilePathToURLError {
-    FilePathToURLError(.invalidPath)
+  public static var invalidPath: URLFromFilePathError {
+    URLFromFilePathError(.invalidPath)
   }
 
   /// The given path is a Win32 file namespace path (a.k.a. "long" path), but references an object for which a URL representation cannot be formed.
@@ -323,12 +323,12 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
   /// and can potentially lead to security vulnerabilities via smuggled path components. For this reason, they are not supported.
   ///
   @inlinable
-  public static var unsupportedWin32NamespacedPath: FilePathToURLError {
-    FilePathToURLError(.unsupportedWin32NamespacedPath)
+  public static var unsupportedWin32NamespacedPath: URLFromFilePathError {
+    URLFromFilePathError(.unsupportedWin32NamespacedPath)
   }
 
   // '.transcodingFailure' is thrown by higher-level functions (e.g. System.FilePath -> WebURL),
-  // but defined as part of FilePathToURLError.
+  // but defined as part of URLFromFilePathError.
 
   /// Transcoding the given path for inclusion in a URL failed.
   ///
@@ -337,8 +337,8 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
   /// to an 8-bit encoding suitable for percent-encoding.
   ///
   @inlinable
-  public static var transcodingFailure: FilePathToURLError {
-    FilePathToURLError(.transcodingFailure)
+  public static var transcodingFailure: URLFromFilePathError {
+    URLFromFilePathError(.transcodingFailure)
   }
 
   public var description: String {
@@ -360,9 +360,9 @@ public struct FilePathToURLError: Error, Equatable, Hashable, CustomStringConver
 /// The bytes must be in a 'filesystem-safe' encoding, but are otherwise just opaque bytes.
 ///
 @inlinable @inline(never)
-internal func _filePathToURL_posix<Bytes>(
+internal func _urlFromFilePath_posix<Bytes>(
   _ path: Bytes
-) -> Result<WebURL, FilePathToURLError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+) -> Result<WebURL, URLFromFilePathError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
   guard !path.isEmpty else {
     return .failure(.emptyInput)
@@ -402,9 +402,9 @@ internal func _filePathToURL_posix<Bytes>(
 /// The bytes must be some kind of extended ASCII (either UTF-8 or any ANSI codepage). If a UNC server name is included, it must be UTF-8.
 ///
 @inlinable @inline(never)
-internal func _filePathToURL_windows<Bytes>(
+internal func _urlFromFilePath_windows<Bytes>(
   _ path: Bytes
-) -> Result<WebURL, FilePathToURLError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+) -> Result<WebURL, URLFromFilePathError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
   guard !path.isEmpty else {
     return .failure(.emptyInput)
@@ -415,7 +415,7 @@ internal func _filePathToURL_windows<Bytes>(
 
   if !isWindowsFilePathSeparator(path.first!) {
     // No prefix; parse as a regular DOS path.
-    return _filePathToURL_windows_DOS(path, trimComponents: true)
+    return _urlFromFilePath_windows_DOS(path, trimComponents: true)
   }
 
   if path.starts(with: #"\\?\"#.utf8) {
@@ -437,10 +437,10 @@ internal func _filePathToURL_windows<Bytes>(
       guard !uncPathContents.isEmpty else {
         return .failure(.invalidPath)
       }
-      return _filePathToURL_windows_UNC(uncPathContents, trimComponents: false)
+      return _urlFromFilePath_windows_UNC(uncPathContents, trimComponents: false)
     }
     if PathComponentParser.isNormalizedWindowsDriveLetter(device) {
-      return _filePathToURL_windows_DOS(pathWithoutPrefix, trimComponents: false)
+      return _urlFromFilePath_windows_DOS(pathWithoutPrefix, trimComponents: false)
     }
     return .failure(.unsupportedWin32NamespacedPath)
   }
@@ -451,13 +451,13 @@ internal func _filePathToURL_windows<Bytes>(
     return .failure(.relativePath)
   }
   // 2+ leading separators: UNC.
-  return _filePathToURL_windows_UNC(pathWithoutLeadingSeparators, trimComponents: true)
+  return _urlFromFilePath_windows_UNC(pathWithoutLeadingSeparators, trimComponents: true)
 }
 
 @inlinable @inline(never)
-internal func _filePathToURL_windows_DOS<Bytes>(
+internal func _urlFromFilePath_windows_DOS<Bytes>(
   _ path: Bytes, trimComponents: Bool
-) -> Result<WebURL, FilePathToURLError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+) -> Result<WebURL, URLFromFilePathError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
   // DOS-path = <alpha><":"><separator><...> ; e.g. "C:\Windows\", "D:/foo".
 
@@ -489,9 +489,9 @@ internal func _filePathToURL_windows_DOS<Bytes>(
 }
 
 @inlinable @inline(never)
-internal func _filePathToURL_windows_UNC<Bytes>(
+internal func _urlFromFilePath_windows_UNC<Bytes>(
   _ path: Bytes, trimComponents: Bool
-) -> Result<WebURL, FilePathToURLError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+) -> Result<WebURL, URLFromFilePathError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
   // UNC-postprefix = <hostname><separator share>?<separator path>?
 
@@ -551,7 +551,7 @@ internal func _filePathToURL_windows_UNC<Bytes>(
 
 
 // --------------------------------------------
-// MARK: - File URL to path
+// MARK: - File path from URL
 // --------------------------------------------
 
 
@@ -592,22 +592,22 @@ extension WebURL {
   ///   - nullTerminated: Whether the reconstructed file path bytes should include a null-terminator.
   ///
   /// - returns: The reconstructed file path bytes from `url`.
-  /// - throws: `URLToFilePathError`
+  /// - throws: `FilePathFromURLError`
   ///
   @inlinable
   public static func filePathBytes(
     from url: WebURL, format: FilePathFormat = .native, nullTerminated: Bool
   ) throws -> ContiguousArray<UInt8> {
     switch format._fmt {
-    case .posix: return try _urlToFilePath_posix(url, nullTerminated: nullTerminated).get()
-    case .windows: return try _urlToFilePath_windows(url, nullTerminated: nullTerminated).get()
+    case .posix: return try _filePathFromURL_posix(url, nullTerminated: nullTerminated).get()
+    case .windows: return try _filePathFromURL_windows(url, nullTerminated: nullTerminated).get()
     }
   }
 }
 
 /// The reason why a file path could not be created from a given URL.
 ///
-public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConvertible {
+public struct FilePathFromURLError: Error, Equatable, Hashable, CustomStringConvertible {
 
   @usableFromInline
   internal enum _Err {
@@ -631,8 +631,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   /// The given URL is not a `file:` URL.
   ///
   @inlinable
-  public static var notAFileURL: URLToFilePathError {
-    URLToFilePathError(.notAFileURL)
+  public static var notAFileURL: FilePathFromURLError {
+    FilePathFromURLError(.notAFileURL)
   }
 
   /// The given URL contains a percent-encoded path separator.
@@ -642,8 +642,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   /// decoding it would pose a security risk as it could be used to smuggle extra path components, including ".." components.
   ///
   @inlinable
-  public static var encodedPathSeparator: URLToFilePathError {
-    URLToFilePathError(.encodedPathSeparator)
+  public static var encodedPathSeparator: FilePathFromURLError {
+    FilePathFromURLError(.encodedPathSeparator)
   }
 
   /// The given URL contains a percent-encoded `NULL` byte.
@@ -653,8 +653,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   /// as parts of the path could unexpectedly be discarded.
   ///
   @inlinable
-  public static var encodedNullBytes: URLToFilePathError {
-    URLToFilePathError(.encodedNullBytes)
+  public static var encodedNullBytes: FilePathFromURLError {
+    FilePathFromURLError(.encodedNullBytes)
   }
 
   /// The given URL refers to a file on a remote host, but they are not supported by the given `FilePathFormat`.
@@ -663,8 +663,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   /// This means it is not obvious how to express a path to a remote filesystem using the `posix` path format.
   ///
   @inlinable
-  public static var unsupportedNonLocalFile: URLToFilePathError {
-    URLToFilePathError(.unsupportedNonLocalFile)
+  public static var unsupportedNonLocalFile: FilePathFromURLError {
+    FilePathFromURLError(.unsupportedNonLocalFile)
   }
 
   /// Creating a path with the given URL's hostname is not supported.
@@ -674,8 +674,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   /// For security reasons, URLs representing such paths are not decoded.
   ///
   @inlinable
-  public static var unsupportedHostname: URLToFilePathError {
-    URLToFilePathError(.unsupportedHostname)
+  public static var unsupportedHostname: FilePathFromURLError {
+    FilePathFromURLError(.unsupportedHostname)
   }
 
   /// The given URL does not represent a fully-qualified Windows path.
@@ -685,12 +685,12 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   /// Windows paths are fully-qualified if they are UNC paths (i.e. have hostnames), or if their first component is a drive letter with a trailing separator.
   ///
   @inlinable
-  public static var windowsPathIsNotFullyQualified: URLToFilePathError {
-    URLToFilePathError(.windowsPathIsNotFullyQualified)
+  public static var windowsPathIsNotFullyQualified: FilePathFromURLError {
+    FilePathFromURLError(.windowsPathIsNotFullyQualified)
   }
 
   // '.transcodingFailure' is thrown by higher-level functions (e.g. URL -> System.FilePath),
-  // but defined as part of URLToFilePathError.
+  // but defined as part of FilePathFromURLError.
 
   /// The path created from the URL could not be transcoded to the system's encoding.
   ///
@@ -699,8 +699,8 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
   /// from the percent-encoded 8-bit values to the system's native encoding.
   ///
   @inlinable
-  public static var transcodingFailure: URLToFilePathError {
-    URLToFilePathError(.transcodingFailure)
+  public static var transcodingFailure: FilePathFromURLError {
+    FilePathFromURLError(.transcodingFailure)
   }
 
   public var description: String {
@@ -721,9 +721,9 @@ public struct URLToFilePathError: Error, Equatable, Hashable, CustomStringConver
 /// The result is a string of opaque bytes, reflecting the bytes encoded in the URL. The returned bytes are not null-terminated.
 ///
 @usableFromInline
-internal func _urlToFilePath_posix(
+internal func _filePathFromURL_posix(
   _ url: WebURL, nullTerminated: Bool
-) -> Result<ContiguousArray<UInt8>, URLToFilePathError> {
+) -> Result<ContiguousArray<UInt8>, FilePathFromURLError> {
 
   guard case .file = url.schemeKind else {
     return .failure(.notAFileURL)
@@ -782,9 +782,9 @@ internal func _urlToFilePath_posix(
 /// The returned bytes are not null-terminated.
 ///
 @usableFromInline
-internal func _urlToFilePath_windows(
+internal func _filePathFromURL_windows(
   _ url: WebURL, nullTerminated: Bool
-) -> Result<ContiguousArray<UInt8>, URLToFilePathError> {
+) -> Result<ContiguousArray<UInt8>, FilePathFromURLError> {
 
   guard case .file = url.schemeKind else {
     return .failure(.notAFileURL)
