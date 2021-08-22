@@ -108,7 +108,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(cString: nullTerminated.map { CChar(bitPattern: $0) }), "/hi")
 
-      XCTAssertThrowsSpecific(FilePathToURLError.nullBytes) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
         let _ = try WebURL.fromFilePathBytes(nullTerminated, format: .posix)
       }
     }
@@ -122,7 +122,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(cString: includesNulls.map { CChar(bitPattern: $0) }), "/hi")
 
-      XCTAssertThrowsSpecific(FilePathToURLError.nullBytes) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
         let _ = try WebURL.fromFilePathBytes(includesNulls, format: .posix)
       }
     }
@@ -246,7 +246,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(cString: nullTerminated.map { CChar(bitPattern: $0) }), #"C:\hi"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.nullBytes) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
         let _ = try WebURL.fromFilePathBytes(nullTerminated, format: .windows)
       }
     }
@@ -261,7 +261,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(cString: includesNulls.map { CChar(bitPattern: $0) }), #"C:\hi"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.nullBytes) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
         let _ = try WebURL.fromFilePathBytes(includesNulls, format: .windows)
       }
     }
@@ -382,7 +382,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"\\caf��\hi\bye\"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(latin1, format: .windows)
       }
     }
@@ -397,7 +397,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"\\ca���\hi\bye\"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
       }
     }
@@ -405,7 +405,7 @@ extension FilePathTests {
     // Currently, all Unicode (including valid Unicode) is banned from UNC server names because we don't have IDNA.
     do {
       let unicode = #"\\🦆\share\bread\"#
-      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(unicode.utf8, format: .windows)
       }
     }
@@ -425,7 +425,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(cString: nullTerminated.map { CChar(bitPattern: $0) }), #"\\?\C:\hi"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.nullBytes) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
         let _ = try WebURL.fromFilePathBytes(nullTerminated, format: .windows)
       }
     }
@@ -441,7 +441,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(cString: includesNulls.map { CChar(bitPattern: $0) }), #"\\?\C:\hi"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.nullBytes) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
         let _ = try WebURL.fromFilePathBytes(includesNulls, format: .windows)
       }
     }
@@ -565,7 +565,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"\\?\UNC\caf��\hi\bye\"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(latin1, format: .windows)
       }
     }
@@ -582,7 +582,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"\\?\UNC\ca���\hi\bye\"#)
 
-      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
       }
     }
@@ -590,7 +590,7 @@ extension FilePathTests {
     // Currently, all Unicode (including valid Unicode) is banned from UNC server names because we don't have IDNA.
     do {
       let unicode = #"\\?\UNC\🦆\share\bread\"#
-      XCTAssertThrowsSpecific(FilePathToURLError.invalidHostname) {
+      XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
         let _ = try WebURL.fromFilePathBytes(unicode.utf8, format: .windows)
       }
     }

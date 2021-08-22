@@ -38,10 +38,10 @@ extension FilePathToURLTests.WebURLReportHarness: FilePathToURLTests.Harness {
     _ path: String, format: FilePathFormat
   ) -> Result<String, FilePathToURLTests.FailureReason> {
     Result { try WebURL(filePath: path, format: format).serialized }
-      .mapError { Self.errorToFailureReason($0 as! FilePathToURLError) }
+      .mapError { Self.errorToFailureReason($0 as! URLFromFilePathError) }
   }
 
-  private static func errorToFailureReason(_ error: FilePathToURLError) -> FilePathToURLTests.FailureReason {
+  private static func errorToFailureReason(_ error: URLFromFilePathError) -> FilePathToURLTests.FailureReason {
     switch error {
     case .emptyInput: return .emptyInput
     case .nullBytes: return .nullBytes
@@ -102,10 +102,10 @@ extension URLToFilePathTests.WebURLReportHarness: URLToFilePathTests.Harness {
   ) -> Result<String, URLToFilePathTests.FailureReason> {
     Result {
       String(decoding: try WebURL.filePathBytes(from: url, format: format, nullTerminated: false), as: UTF8.self)
-    }.mapError { Self.errorToFailureReason($0 as! URLToFilePathError) }
+    }.mapError { Self.errorToFailureReason($0 as! FilePathFromURLError) }
   }
 
-  private static func errorToFailureReason(_ error: URLToFilePathError) -> URLToFilePathTests.FailureReason {
+  private static func errorToFailureReason(_ error: FilePathFromURLError) -> URLToFilePathTests.FailureReason {
     switch error {
     case .notAFileURL: return .notAFileURL
     case .encodedNullBytes: return .encodedNullByte
