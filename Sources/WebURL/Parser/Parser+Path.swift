@@ -216,7 +216,8 @@ extension _PathParser {
   ///
   @inlinable
   internal mutating func _flushForFinalization(
-    _ deferred: inout _DeferredPathComponent<InputString.SubSequence>?, _ state: inout _PathParserState
+    _ deferred: inout _DeferredPathComponent<InputString.SubSequence>?,
+    _ state: inout _PathParserState, _ hasAuthority: Bool
   ) {
     switch deferred {
     case .potentialWindowsDrive(let firstComponent, _):
@@ -238,7 +239,7 @@ extension _PathParser {
     }
     let needsPathSigil = deferred?.needsPathSigilWhenFlushing(state) ?? false
     _flushEmptiesAssertNotWindowsDrive(&deferred, &state)
-    if needsPathSigil {
+    if needsPathSigil, !hasAuthority {
       visitPathSigil()
     }
   }
@@ -453,7 +454,7 @@ extension _PathParser {
     }
 
     guard isInputAbsolute == false, let basePath = _basePath, basePath.startIndex < basePath.endIndex else {
-      _flushForFinalization(&deferredComponent, &state)
+      _flushForFinalization(&deferredComponent, &state, hasAuthority)
       return  // Absolute paths, and relative paths with no base URL, are finished now.
     }
     assert(basePath.first == ASCII.forwardSlash.codePoint, "Normalized non-empty base paths must start with a /")
@@ -502,7 +503,7 @@ extension _PathParser {
     }
 
     assert(remainingBasePath.isEmpty, "Normalized non-empty base paths must start with a /")
-    _flushForFinalization(&deferredComponent, &state)
+    _flushForFinalization(&deferredComponent, &state, hasAuthority)
     // Finally done!
   }
 }

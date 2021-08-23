@@ -444,7 +444,8 @@ extension ParsedURLString.ProcessedMapping {
       writer.writePathMetricsHint(pathMetrics)
       writer.writeHint(.path, maySkipPercentEncoding: !pathMetrics.needsPercentEncoding)
 
-      if pathMetrics.requiresPathSigil, hasAuthority == false {
+      if pathMetrics.requiresPathSigil {
+        assert(!hasAuthority, "Must not write path sigil if the URL has an authority sigil already")
         writer.writePathSigil()
       }
       writer.writePresizedPathUnsafely(
@@ -475,7 +476,7 @@ extension ParsedURLString.ProcessedMapping {
       writer.writePath(firstComponentLength: 1) { writer in writer(CollectionOfOne(ASCII.forwardSlash.codePoint)) }
 
     default:
-      break
+      assert(info.cannotBeABaseURL || hasAuthority, "URLs must have a path, authority, or be flagged cannot-be-a-base")
     }
 
     // 5: Query.
