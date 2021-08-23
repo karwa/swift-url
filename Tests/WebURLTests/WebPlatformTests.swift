@@ -96,7 +96,7 @@ extension WebPlatformTests {
 // MARK: - Setters
 // --------------------------------------------
 // https://github.com/web-platform-tests/wpt/blob/master/url/resources/setters_tests.json
-// at version 2cfdb63014d1158fd15eb1f798f6b1610c275271
+// at version 77d54aa9e0405f737987b59331f3584e3e1c26f9
 
 
 extension WebPlatformTests {

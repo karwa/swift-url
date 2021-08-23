@@ -254,16 +254,16 @@ extension _PathParser {
   /// This method yields the components `["", "c", "a"]`, and path construction by prepending proceeds as follows: `"/" -> "/c/" -> "/a/c/"`.
   ///
   /// - Note:
-  /// If the input string is empty, and the scheme **is not** special, no callbacks will be called (the path is `nil`).
-  /// If the input string is empty, and the scheme **is** special, the result is an implicit root path (`/`).
-  /// If the input string is not empty, this function will always yield a non-empty path.
+  /// The only case in which this function does not yield a path is when the scheme is not special and the URL has an authority.
+  /// All other inputs, including empty strings, produce a non-empty path.
   ///
   /// - parameters:
   ///  - input: The path string to parse, as a collection of UTF-8 code-units.
   ///  - schemeKind: The scheme of the URL which the path will be part of.
+  ///  - hasAuthority: Whether the URL this path will be part of has an authority component.
   ///  - baseURL: The URL whose path serves as the "base" for the input string, if it is a relative path.
-  ///             Note that there are some edge-cases related to Windows drive letters which require the base URL be provided (if present),
-  ///             even for absolute paths.
+  ///             Note that there are some edge-cases related to Windows drive letters which require
+  ///             the base URL be provided (if present), even for absolute paths.
   ///  - absolutePathsCopyWindowsDriveFromBase: A flag set by the URL parser to enable special behaviours for absolute paths in path-only file
   ///                                           URLs, forcing them to be relative to the base URL's Windows drive, even if the given path contains
   ///                                           its own Windows drive. For example, the path-only URL "file:/hello" parsed against the base URL
@@ -276,13 +276,16 @@ extension _PathParser {
   internal mutating func walkPathComponents(
     pathString input: InputString,
     schemeKind: WebURL.SchemeKind,
+    hasAuthority: Bool,
     baseURL: WebURL?,
     absolutePathsCopyWindowsDriveFromBase: Bool
   ) {
 
     guard input.isEmpty == false else {
-      // Special URLs have an implicit path, non-special URLs may have an empty path.
-      if schemeKind.isSpecial {
+      // Special URLs have an implicit path.
+      // Non-special URLs may only have an empty path if they have an authority
+      // (otherwise they would be non-hierarchical/cannot-be-a-base URLs).
+      if schemeKind.isSpecial || !hasAuthority {
         visitEmptyPathComponent()
       }
       return
@@ -546,6 +549,7 @@ extension PathMetrics {
   internal init<UTF8Bytes>(
     parsing utf8: UTF8Bytes,
     schemeKind: WebURL.SchemeKind,
+    hasAuthority: Bool,
     baseURL: WebURL?,
     absolutePathsCopyWindowsDriveFromBase: Bool
   ) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
@@ -558,7 +562,7 @@ extension PathMetrics {
 
     var parser = _Parser<UTF8Bytes>(_emptyMetrics: self)
     parser.walkPathComponents(
-      pathString: utf8, schemeKind: schemeKind, baseURL: baseURL,
+      pathString: utf8, schemeKind: schemeKind, hasAuthority: hasAuthority, baseURL: baseURL,
       absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase)
 
     self = parser.metrics
@@ -625,12 +629,13 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
   internal func writeNormalizedPath<UTF8Bytes>(
     parsing utf8: UTF8Bytes,
     schemeKind: WebURL.SchemeKind,
+    hasAuthority: Bool,
     baseURL: WebURL?,
     absolutePathsCopyWindowsDriveFromBase: Bool,
     needsPercentEncoding: Bool = true
   ) -> Int where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
     return _PathWriter.writePath(
-      to: self, pathString: utf8, schemeKind: schemeKind, baseURL: baseURL,
+      to: self, pathString: utf8, schemeKind: schemeKind, hasAuthority: hasAuthority, baseURL: baseURL,
       absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase,
       needsPercentEncoding: needsPercentEncoding
     )
@@ -657,6 +662,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       to buffer: UnsafeMutableBufferPointer<UInt8>,
       pathString input: UTF8Bytes,
       schemeKind: WebURL.SchemeKind,
+      hasAuthority: Bool,
       baseURL: WebURL?,
       absolutePathsCopyWindowsDriveFromBase: Bool,
       needsPercentEncoding: Bool = true
@@ -667,6 +673,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       writer.walkPathComponents(
         pathString: input,
         schemeKind: schemeKind,
+        hasAuthority: hasAuthority,
         baseURL: baseURL,
         absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase
       )
@@ -792,6 +799,7 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
   internal static func validate(
     pathString input: UTF8Bytes,
     schemeKind: WebURL.SchemeKind,
+    hasAuthority: Bool,
     callback: inout Callback
   ) {
     // The compiler has a tough time optimizing this function away when we ignore validation errors.
@@ -800,7 +808,7 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
     }
     var visitor = PathStringValidator(_doNotUse: input, callback: &callback)
     visitor.walkPathComponents(
-      pathString: input, schemeKind: schemeKind, baseURL: nil,
+      pathString: input, schemeKind: schemeKind, hasAuthority: hasAuthority, baseURL: nil,
       absolutePathsCopyWindowsDriveFromBase: false)
   }
 

@@ -746,44 +746,93 @@ extension WebURLTests {
   func testDoesNotCreateCannotBeABaseURLs() {
 
     // Check that we require a path in order to remove a host.
-    var url = WebURL("foo://somehost")!
-    XCTAssertEqual(url.serialized, "foo://somehost")
-    XCTAssertEqual(url.path, "")
-    XCTAssertNotNil(url.hostname)
-    XCTAssertThrowsSpecific(URLSetterError.cannotRemoveHostnameWithoutPath) {
-      try url.setHostname(String?.none)
+
+    do {  // Remove hostname with no path present. Must fail.
+      var url = WebURL("foo://somehost")!
+      XCTAssertEqual(url.serialized, "foo://somehost")
+      XCTAssertEqual(url.path, "")
+      XCTAssertEqual(url.hostname, "somehost")
+      XCTAssertFalse(url.cannotBeABase)
+
+      XCTAssertThrowsSpecific(URLSetterError.cannotRemoveHostnameWithoutPath) {
+        try url.setHostname(String?.none)
+      }
+
+      XCTAssertEqual(url.serialized, "foo://somehost")
+      XCTAssertURLIsIdempotent(url)
     }
-    XCTAssertEqual(url.serialized, "foo://somehost")
-    XCTAssertURLIsIdempotent(url)
+    do {  // Remove hostname with path present. Succeeds.
+      var url = WebURL("foo://somehost/bar")!
+      XCTAssertEqual(url.serialized, "foo://somehost/bar")
+      XCTAssertEqual(url.path, "/bar")
+      XCTAssertEqual(url.hostname, "somehost")
+      XCTAssertFalse(url.cannotBeABase)
+
+      XCTAssertNoThrow(try url.setHostname(String?.none))
+
+      XCTAssertEqual(url.serialized, "foo:/bar")
+      XCTAssertEqual(url.path, "/bar")
+      XCTAssertNil(url.hostname)
+      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertURLIsIdempotent(url)
+    }
 
     // Check that we require a host in order to remove a path.
+    // Rather than throw an error, removing a path from a host-less URL sets a root path.
 
-    // [Bug] This seems to be a bug in the standard, which our implementation also exhibits (yay for accuracy?).
-    //       The path of non-special URLs can be set to empty, even if they don't have a host (path-only URLs).
-    //       This makes them 'cannot-be-a-base' URLs, but without the flag. Re-parsing the URL sets the flag,
-    //       but it means the set of operations which are allowed depends on how you got the URL (not idempotent).
-    //       See: https://github.com/whatwg/url/issues/581
+    do {  // Set empty path via setter with no hostname present. Sets root path.
+      var url = WebURL("foo:/hello/world?someQuery")!
+      XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
+      XCTAssertEqual(url.path, "/hello/world")
+      XCTAssertNil(url.hostname)
+      XCTAssertFalse(url.cannotBeABase)
 
-    url = WebURL("foo:/hello/world?someQuery")!
-    XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
-    XCTAssertEqual(url.path, "/hello/world")
-    XCTAssertNil(url.hostname)
-    XCTAssertFalse(url.cannotBeABase)
+      XCTAssertNoThrow(try url.setPath(""))
 
-    url.path = ""
-    XCTAssertEqual(url.serialized, "foo:?someQuery")
-    XCTAssertEqual(url.path, "")
-    XCTAssertNil(url.hostname)
-    XCTAssertFalse(url.cannotBeABase)
-    XCTAssertTrue(WebURL(url.serialized)!.cannotBeABase)
-    // XCTAssertURLIsIdempotent(url) - see comment above.
+      XCTAssertEqual(url.serialized, "foo:/?someQuery")
+      XCTAssertEqual(url.path, "/")
+      XCTAssertNil(url.hostname)
+      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertURLIsIdempotent(url)
+    }
+    do {  // Set empty path via .pathComponents with no hostname present. Sets root path.
+      var url = WebURL("foo:/hello/world?someQuery")!
+      XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
+      XCTAssertEqual(url.path, "/hello/world")
+      XCTAssertNil(url.hostname)
+      XCTAssertFalse(url.cannotBeABase)
 
-    url.path = "test"
-    XCTAssertEqual(url.serialized, "foo:/test?someQuery")
-    XCTAssertEqual(url.path, "/test")
-    XCTAssertNil(url.hostname)
-    XCTAssertFalse(url.cannotBeABase)
-    XCTAssertURLIsIdempotent(url)
+      let urlWithNoPath = WebURL("bar://somehost?anotherQuery")!
+      XCTAssertEqual(urlWithNoPath.serialized, "bar://somehost?anotherQuery")
+      XCTAssertEqual(urlWithNoPath.path, "")
+      XCTAssertEqual(urlWithNoPath.hostname, "somehost")
+      XCTAssertFalse(urlWithNoPath.cannotBeABase)
+      XCTAssertEqualElements(urlWithNoPath.pathComponents, [])
+      XCTAssertEqual(urlWithNoPath.pathComponents.count, 0)
+
+      url.pathComponents = urlWithNoPath.pathComponents
+
+      XCTAssertEqual(url.serialized, "foo:/?someQuery")
+      XCTAssertEqual(url.path, "/")
+      XCTAssertNil(url.hostname)
+      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertURLIsIdempotent(url)
+    }
+    do {  // Set empty path with hostname present. Sets empty path.
+      var url = WebURL("foo://somehost/bar?someQuery")!
+      XCTAssertEqual(url.serialized, "foo://somehost/bar?someQuery")
+      XCTAssertEqual(url.path, "/bar")
+      XCTAssertEqual(url.hostname, "somehost")
+      XCTAssertFalse(url.cannotBeABase)
+
+      XCTAssertNoThrow(try url.setPath(""))
+
+      XCTAssertEqual(url.serialized, "foo://somehost?someQuery")
+      XCTAssertEqual(url.path, "")
+      XCTAssertEqual(url.hostname, "somehost")
+      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertURLIsIdempotent(url)
+    }
   }
 
   func testJSModelSetters() {

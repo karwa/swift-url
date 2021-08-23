@@ -609,22 +609,6 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
-    // If the URL has a path sigil, it is removed.
-    do {
-      var url = WebURL("foo:/.//a/b/c/d?aQuery#someFragment")!
-      XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c", "d"])
-
-      let range = url.pathComponents.replaceSubrange(
-        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [String]()
-      )
-      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
-      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
-      XCTAssertEqualElements(url.pathComponents, [""])
-      XCTAssertEqualElements(url.pathComponents[range], [""])
-
-      XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
-      XCTAssertURLIsIdempotent(url)
-    }
     // Non-special URLs with an authority support empty paths.
     do {
       var url = WebURL("foo://example.com/a/b/c/d?aQuery#someFragment")!
@@ -640,6 +624,22 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents[range], [])
 
       XCTAssertEqual(url.serialized, "foo://example.com?aQuery#someFragment")
+      XCTAssertURLIsIdempotent(url)
+    }
+    // If the URL has a path sigil, it is removed when setting an empty path.
+    do {
+      var url = WebURL("foo:/.//a/b/c/d?aQuery#someFragment")!
+      XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c", "d"])
+
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [String]()
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[range], [""])
+
+      XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -2073,6 +2073,32 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 1)
 
       XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertURLIsIdempotent(url)
+    }
+    // Remove all components, non-special URL with hostname.
+    do {
+      var url = WebURL("foo://example.com/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      url.pathComponents.removeLast(3)
+      XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertEqual(url.path, "")
+      XCTAssertEqual(url.pathComponents.count, 0)
+
+      XCTAssertEqual(url.serialized, "foo://example.com")
+      XCTAssertURLIsIdempotent(url)
+    }
+    // Remove all components, non-special URL without hostname.
+    do {
+      var url = WebURL("foo:/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      url.pathComponents.removeLast(3)
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqual(url.path, "/")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      XCTAssertEqual(url.serialized, "foo:/")
       XCTAssertURLIsIdempotent(url)
     }
     // Remove 1, empty component.

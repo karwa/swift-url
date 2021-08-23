@@ -403,7 +403,7 @@ extension URLStorage {
     //       The 'pathname' setter defined in the standard always goes through the "path start" state,
     //       which never reaches "file slash" and does not include this quirk. Therefore APCWDFB should be 'false'.
     let pathInfo = PathMetrics(
-      parsing: newPath, schemeKind: oldStructure.schemeKind, baseURL: nil,
+      parsing: newPath, schemeKind: oldStructure.schemeKind, hasAuthority: oldStructure.hasAuthority, baseURL: nil,
       absolutePathsCopyWindowsDriveFromBase: false)
 
     var newStructure = oldStructure
@@ -426,6 +426,8 @@ extension URLStorage {
           writer: Sigil.path.unsafeWrite)
       )
     }
+    assert(newStructure.hasAuthority == oldStructure.hasAuthority)
+
     commands.append(
       .replace(
         subrange: oldStructure.rangeForReplacingCodeUnits(of: .path),
@@ -433,7 +435,7 @@ extension URLStorage {
         writer: { dest in
           dest.writeNormalizedPath(
             parsing: newPath, schemeKind: newStructure.schemeKind,
-            baseURL: nil,
+            hasAuthority: newStructure.hasAuthority, baseURL: nil,
             absolutePathsCopyWindowsDriveFromBase: false,
             needsPercentEncoding: pathInfo.needsPercentEncoding
           )
