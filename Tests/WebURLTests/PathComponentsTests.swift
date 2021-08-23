@@ -642,6 +642,22 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
+    // We can add components to a hierarchical URL with an empty path.
+    do {
+      var url = WebURL("foo://somehost?someQuery")!
+      XCTAssertEqualElements(url.pathComponents, [])
+
+      let range = url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.endIndex, with: ["a", "b", "c"]
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
+      XCTAssertEqualElements(url.pathComponents[range], ["a", "b", "c"])
+
+      XCTAssertEqual(url.serialized, "foo://somehost/a/b/c?someQuery")
+      XCTAssertURLIsIdempotent(url)
+    }
   }
 
   func testReplaceSubrange_DirectoryPath() {
@@ -1551,6 +1567,23 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
 
+    // Insert to a hierarchical URL with an empty path.
+    do {
+      var url = WebURL("foo://example.com")!
+      XCTAssertEqualElements(url.pathComponents, [])
+
+      let range = url.pathComponents.insert(contentsOf: ["hello", "world"], at: url.pathComponents.endIndex)
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["hello", "world"])
+      XCTAssertEqualElements(url.pathComponents[range], ["hello", "world"])
+      XCTAssertEqual(url.path, "/hello/world")
+      XCTAssertEqual(url.pathComponents.count, 2)
+
+      XCTAssertEqual(url.serialized, "foo://example.com/hello/world")
+      XCTAssertURLIsIdempotent(url)
+    }
+
     // Insert after directory path.
     do {
       var url = WebURL("http://example.com/foo/bar/")!
@@ -1670,6 +1703,23 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "http://example.com/hello/world")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending to a hierarchical URL with an empty path.
+    do {
+      var url = WebURL("foo://example.com")!
+      XCTAssertEqualElements(url.pathComponents, [])
+
+      let range = url.pathComponents.append(contentsOf: ["hello", "world"])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["hello", "world"])
+      XCTAssertEqualElements(url.pathComponents[range], ["hello", "world"])
+      XCTAssertEqual(url.path, "/hello/world")
+      XCTAssertEqual(url.pathComponents.count, 2)
+
+      XCTAssertEqual(url.serialized, "foo://example.com/hello/world")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1830,6 +1880,22 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
 
+    // Removal from a hierarchical URL with an empty path.
+    do {
+      var url = WebURL("foo://example.com")!
+      XCTAssertEqualElements(url.pathComponents, [])
+
+      let idx = url.pathComponents.removeSubrange(url.pathComponents.startIndex..<url.pathComponents.endIndex)
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqual(idx, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertEqual(url.path, "")
+      XCTAssertEqual(url.pathComponents.count, 0)
+
+      XCTAssertEqual(url.serialized, "foo://example.com")
+      XCTAssertURLIsIdempotent(url)
+    }
+
     // Removal which introduces path sigil.
     do {
       var url = WebURL("foo:/a/b//c/d")!
@@ -1863,6 +1929,37 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 2)
 
       XCTAssertEqual(url.serialized, "file:///C:/d")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Removal which erases the entire path (non-special URL, with hostname).
+    do {
+      var url = WebURL("foo://example.com/a/b/c")!
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
+
+      let idx = url.pathComponents.removeSubrange(url.pathComponents.startIndex..<url.pathComponents.endIndex)
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqual(idx, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertEqual(url.path, "")
+      XCTAssertEqual(url.pathComponents.count, 0)
+
+      XCTAssertEqual(url.serialized, "foo://example.com")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Removal which erases the entire path (non-special URL, no hostname).
+    do {
+      var url = WebURL("foo:/a/b/c")!
+      XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
+
+      let idx = url.pathComponents.removeSubrange(url.pathComponents.startIndex..<url.pathComponents.endIndex)
+      XCTAssertEqual(idx, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqual(url.path, "/")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      XCTAssertEqual(url.serialized, "foo:/")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -2168,6 +2265,19 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 1)
 
       XCTAssertEqual(url.serialized, "file:///")
+      XCTAssertURLIsIdempotent(url)
+    }
+    // Appends an empty component if the URL is hierarchical and path is empty.
+    do {
+      var url = WebURL("foo://example")!
+      XCTAssertEqualElements(url.pathComponents, [])
+
+      url.pathComponents.ensureDirectoryPath()
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqual(url.path, "/")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      XCTAssertEqual(url.serialized, "foo://example/")
       XCTAssertURLIsIdempotent(url)
     }
   }
