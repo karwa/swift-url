@@ -436,6 +436,7 @@ extension ParsedURLString.ProcessedMapping {
         ?? PathMetrics(
           parsing: inputString[path],
           schemeKind: schemeKind,
+          hasAuthority: hasAuthority,
           baseURL: info.componentsToCopyFromBase.contains(.path) ? baseURL.unsafelyUnwrapped : nil,
           absolutePathsCopyWindowsDriveFromBase: info.absolutePathsCopyWindowsDriveFromBase
         )
@@ -453,6 +454,7 @@ extension ParsedURLString.ProcessedMapping {
         return buffer.writeNormalizedPath(
           parsing: inputString[path],
           schemeKind: schemeKind,
+          hasAuthority: hasAuthority,
           baseURL: info.componentsToCopyFromBase.contains(.path) ? baseURL.unsafelyUnwrapped : nil,
           absolutePathsCopyWindowsDriveFromBase: info.absolutePathsCopyWindowsDriveFromBase,
           needsPercentEncoding: pathMetrics.needsPercentEncoding
@@ -933,7 +935,11 @@ extension URLScanner {
     let path = input[..<(startOfNextComponent ?? input.endIndex)]
 
     // 3. Validate the path's contents.
-    PathStringValidator.validate(pathString: path, schemeKind: scheme, callback: &callback)
+    PathStringValidator.validate(
+      pathString: path, schemeKind: scheme,
+      hasAuthority: mapping.authorityRange != nil || mapping.componentsToCopyFromBase.contains(.authority),
+      callback: &callback
+    )
 
     // 4. Return the next component.
     if !(path.startIndex < path.endIndex), !scheme.isSpecial {
