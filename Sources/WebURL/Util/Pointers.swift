@@ -387,7 +387,7 @@ extension UnsafeBoundsCheckedBufferPointer: RandomAccessCollection {
 
   @inlinable
   internal func index(_ i: UInt, offsetBy n: Int, limitedBy limit: UInt) -> UInt? {
-    let l = limit &- i
+    let l = distance(from: i, to: limit)
     if n > 0 ? l >= 0 && l < n : l <= 0 && n < l {
       return nil
     }
