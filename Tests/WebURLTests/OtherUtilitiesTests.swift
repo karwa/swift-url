@@ -158,4 +158,33 @@ extension OtherUtilitiesTests {
     XCTAssertEqual(buffer.fastInitialize(from: Array(512..<4096)), buffer.endIndex)
     XCTAssertEqualElements(buffer, 512..<768)
   }
+
+  func testBoundsCheckedBufferCollectionConformance() {
+    // TODO: This needs to be improved.
+    // CheckIt does not test using BidirectionalCollection to offset an index by more than -count.
+
+    // Empty buffer.
+    do {
+      let empty = UnsafeBufferPointer<Int>(start: nil, count: 0).boundsChecked
+      CollectionChecker.check(empty)
+      XCTAssertEqualElements(empty.prefix(20), [])
+      XCTAssertEqualElements(empty.suffix(20), [])
+    }
+    // Single element.
+    do {
+      [1].withUnsafeBufferPointer {
+        CollectionChecker.check($0.boundsChecked)
+        XCTAssertEqualElements($0.boundsChecked.prefix(20), [1])
+        XCTAssertEqualElements($0.boundsChecked.suffix(20), [1])
+      }
+    }
+    // Multiple elements.
+    do {
+      [1, 2, 3, 4].withUnsafeBufferPointer {
+        CollectionChecker.check($0.boundsChecked)
+        XCTAssertEqualElements($0.boundsChecked.prefix(20), [1, 2, 3, 4])
+        XCTAssertEqualElements($0.boundsChecked.suffix(20), [1, 2, 3, 4])
+      }
+    }
+  }
 }
