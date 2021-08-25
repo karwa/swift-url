@@ -638,23 +638,35 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
       self.decodedValue = 0
     }
 
-    /// Decodes the UTF8 code-unit starting at the given index in the given `source` collection.
-    /// This index's successor may be obtained by creating another index starting at the index's `range.upperBound`.
+    @inlinable @inline(__always)
+    internal init(_unsubstituting value: UInt8, range: Range<Source.Index>) {
+      self.range = range
+      if let unsub = ASCII(value).flatMap({ EncodeSet.unsubstitute(ascii: $0.codePoint) }) {
+        self.isDecoded = true
+        self.decodedValue = unsub
+      } else {
+        self.isDecoded = false
+        self.decodedValue = value
+      }
+    }
+
+    /// Decodes the octet starting at the given index in the given `source` collection.
+    /// The index's successor may be obtained by creating another index starting at the index's `range.upperBound`.
     ///
     /// The index which starts at `source.endIndex` is also given by `Index(endIndexOf:)`.
     ///
     @inlinable
     internal init(at i: Source.Index, in source: Source) {
-      guard i != source.endIndex else {
+      // The successor of endIndex is endIndex.
+      guard i < source.endIndex else {
         self = .init(endIndexOf: source)
         return
       }
+
       let byte0 = source[i]
       let byte1Index = source.index(after: i)
       guard byte0 == ASCII.percentSign.codePoint else {
-        self.range = Range(uncheckedBounds: (i, byte1Index))
-        self.isDecoded = false
-        self.decodedValue = ASCII(byte0).flatMap { EncodeSet.unsubstitute(ascii: $0.codePoint) } ?? byte0
+        self = Self(_unsubstituting: byte0, range: Range(uncheckedBounds: (i, byte1Index)))
         return
       }
       var tail = source.suffix(from: byte1Index)
@@ -681,6 +693,62 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
     public static func < (lhs: Self, rhs: Self) -> Bool {
       return lhs.range.lowerBound < rhs.range.lowerBound
     }
+
+    @inlinable
+    public static func > (lhs: Self, rhs: Self) -> Bool {
+      return lhs.range.lowerBound > rhs.range.lowerBound
+    }
+  }
+}
+
+extension LazilyPercentDecodedUTF8.Index where Source: BidirectionalCollection {
+
+  /// Decodes the octet whose final code-unit precedes the given index in the given `source` collection.
+  /// The index's predeccessor may be obtained by creating another index ending at the index's `range.lowerBound`.
+  ///
+  @inlinable
+  internal init(endingAt i: Source.Index, in source: Source, startIndex: Self) {
+    // The predecessor of startIndex is startIndex.
+    guard i > source.startIndex else {
+      self = startIndex
+      return
+    }
+
+    let byte2Index = source.index(before: i)
+    let byte2 = source[byte2Index]
+
+    let slice = source[Range(uncheckedBounds: (source.startIndex, byte2Index))].suffix(2)
+    guard slice.first == ASCII.percentSign.codePoint else {
+      self = Self(_unsubstituting: byte2, range: Range(uncheckedBounds: (byte2Index, i)))
+      return
+    }
+    guard
+      let decodedByte1 = ASCII(flatMap: slice.last)?.hexNumberValue,
+      let decodedByte2 = ASCII(flatMap: byte2)?.hexNumberValue
+    else {
+      self = Self(_unsubstituting: byte2, range: Range(uncheckedBounds: (byte2Index, i)))
+      return
+    }
+    self.decodedValue = (decodedByte1 &* 16) &+ (decodedByte2)
+    self.isDecoded = true
+    self.range = Range(uncheckedBounds: (slice.startIndex, i))
+  }
+}
+
+extension LazilyPercentDecodedUTF8: BidirectionalCollection where Source: BidirectionalCollection {
+
+  @inlinable
+  public func index(before i: Index) -> Index {
+    assert(i != startIndex, "Cannot decrement startIndex")
+    // Does not trap in release mode - just keeps returning 'startIndex'.
+    return Index(endingAt: i.range.lowerBound, in: source, startIndex: startIndex)
+  }
+
+  @inlinable
+  public func formIndex(before i: inout Index) {
+    assert(i != startIndex, "Cannot decrement startIndex")
+    // Does not trap in release mode - just keeps returning 'startIndex'.
+    i = Index(endingAt: i.range.lowerBound, in: source, startIndex: startIndex)
   }
 }
 
