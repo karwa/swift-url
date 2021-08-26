@@ -83,28 +83,24 @@ extension ParsedHost {
     // Which should leave us with pure ASCII domains, which don't depend on Unicode at all.
     // For these, IDNA normalization/encoding is just lowercasing. At least that's something we can do...
 
-    let (_, _asciiDomainInfo) = ParsedHost._tryParseASCIIDomain(domain, callback: &callback)
-    guard let asciiDomainInfo = _asciiDomainInfo else {
+    switch ParsedHost._tryParseDomain(domain, callback: &callback) {
+    case .containsUnicodeOrIDNA:
       return nil
-    }
-    let asciiDomain = domain
-
-    switch IPv4Address.parse(utf8: asciiDomain) {
-    case .success(let address):
+    case .forbiddenHostCodePoint:
+      return nil
+    case .endsInANumber:
+      guard case .success(let address) = IPv4Address.parse(utf8: domain) else {
+        return nil
+      }
       self = .ipv4Address(address)
       return
-    case .failure:
-      callback.validationError(.invalidIPv4Address)
-      return nil
-    case .notAnIPAddress:
-      break
+    case .asciiDomain(let asciiDomainInfo):
+      if schemeKind == .file, ASCII.Lowercased(domain).elementsEqual("localhost".utf8) {
+        self = .empty
+        return
+      }
+      self = .asciiDomain(asciiDomainInfo)
     }
-
-    if schemeKind == .file, ASCII.Lowercased(asciiDomain).elementsEqual("localhost".utf8) {
-      self = .empty
-      return
-    }
-    self = .asciiDomain(asciiDomainInfo)
   }
 
   /// Parses the given opaque hostname, returning an `_OpaqueHostnameInfo` if the hostname is valid.
@@ -138,33 +134,33 @@ extension ParsedHost {
     return hostnameInfo
   }
 
-  /// Parses the given domain, returning an `_ASCIIDomainInfo` if the domain is a valid, ASCII domain.
-  ///
-  /// If the returned value's `domainInfo` is `nil`, parsing may have failed because the domain contained non-ASCII codepoints, or
-  /// some of its labels were IDNA-encoded. In this case, the returned value's `mayBeValidIDNA` flag will be set to `true`, and the host-parser
-  /// should try to parse the domain using IDNA.
+  /// Parses the given domain, returning information about which kind of domain it is, and some details which are useful to write a normalized version
+  /// of the domain.
   ///
   @inlinable
-  internal static func _tryParseASCIIDomain<UTF8Bytes, Callback>(
+  internal static func _tryParseDomain<UTF8Bytes, Callback>(
     _ domain: LazilyPercentDecodedUTF8WithoutSubstitutions<UTF8Bytes>, callback: inout Callback
-  ) -> (mayBeValidIDNA: Bool, domainInfo: _ASCIIDomainInfo?)
-  where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
+  ) -> _DomainParseResult
+  where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
     var domainInfo = _ASCIIDomainInfo(decodedCount: 0, needsDecodeOrLowercasing: false)
 
     guard hasIDNAPrefix(utf8: domain) == false else {
       callback.validationError(.domainToASCIIFailure)
-      return (true, nil)
+      return .containsUnicodeOrIDNA
     }
+
     var i = domain.startIndex
+    var startOfLastLabel = i
+
     while i < domain.endIndex {
       guard let char = ASCII(domain[i]) else {
         callback.validationError(.domainToASCIIFailure)
-        return (true, nil)
+        return .containsUnicodeOrIDNA
       }
       if char.isForbiddenHostCodePoint {
         callback.validationError(.hostForbiddenCodePoint)
-        return (false, nil)
+        return .forbiddenHostCodePoint
       }
       domainInfo.needsDecodeOrLowercasing = domainInfo.needsDecodeOrLowercasing || i.isDecoded || char.isUppercaseAlpha
       domainInfo.decodedCount &+= 1
@@ -172,12 +168,53 @@ extension ParsedHost {
       if char == .period {
         guard hasIDNAPrefix(utf8: domain[i...]) == false else {
           callback.validationError(.domainToASCIIFailure)
-          return (true, nil)
+          return .containsUnicodeOrIDNA
+        }
+        if i != domain.endIndex {
+          startOfLastLabel = i
         }
       }
     }
-    return (false, domainInfo)
+
+    var lastLabel = domain[startOfLastLabel...]
+    if lastLabel.last == ASCII.period.codePoint {
+      lastLabel.removeLast()
+    }
+    if !lastLabel.isEmpty {
+      if lastLabel.allSatisfy({ ASCII($0)?.isDigit == true }) {
+        return .endsInANumber
+      } else if lastLabel.popFirst() == ASCII.n0.codePoint,
+        lastLabel.popFirst().flatMap({ ASCII($0)?.lowercased }) == .x,
+        lastLabel.allSatisfy({ ASCII($0)?.isHexDigit == true })
+      {
+        return .endsInANumber
+      }
+    }
+
+    return .asciiDomain(domainInfo)
   }
+}
+
+@usableFromInline
+internal enum _DomainParseResult {
+
+  /// The given domain contains non-ASCII code-points or IDNA labels.
+  /// Currently, these are not supported.
+  ///
+  case containsUnicodeOrIDNA
+
+  /// The given domain contains forbidden host code-points.
+  ///
+  case forbiddenHostCodePoint
+
+  /// The given domain's final label is a number, according to https://url.spec.whatwg.org/#ends-in-a-number-checker
+  /// It should be parsed as an IPv4 address, rather than a domain.
+  ///
+  case endsInANumber
+
+  /// The given domain appears to be valid, containing only ASCII characters and no IDNA.
+  ///
+  case asciiDomain(_ASCIIDomainInfo)
 }
 
 @usableFromInline
