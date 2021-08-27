@@ -52,11 +52,11 @@ extension ParsedHost {
         callback.validationError(.unclosedIPv6Address)
         return nil
       }
-      guard let result = IPv6Address(utf8: ipv6Slice) else {
+      guard let address = IPv6Address(utf8: ipv6Slice) else {
         callback.validationError(.invalidIPv6Address)
         return nil
       }
-      self = .ipv6Address(result)
+      self = .ipv6Address(address)
       return
     }
 
@@ -89,7 +89,7 @@ extension ParsedHost {
     case .forbiddenHostCodePoint:
       return nil
     case .endsInANumber:
-      guard case .success(let address) = IPv4Address.parse(utf8: domain) else {
+      guard let address = IPv4Address(utf8: domain) else {
         return nil
       }
       self = .ipv4Address(address)

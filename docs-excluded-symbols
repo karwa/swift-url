@@ -15,3 +15,6 @@ PercentEncodeSet._Passthrough
 WebURL.FormEncodedQueryParameters.KeyValuePairs.Iterator
 WebURL.PathComponents.Index
 Collection._longestSubrange(equalTo:)
+
+IPv4Address.ParserResult
+IPv4Address.parse(utf8:)
