@@ -679,7 +679,12 @@ extension IPv4Address {
   ///
   @inlinable @inline(__always)
   public init?<UTF8Bytes>(utf8: UTF8Bytes) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
-    guard case .success(let parsed) = IPv4Address.parse(utf8: utf8) else {
+    var callback = IgnoreIPAddressParserErrors()
+    let _parsed =
+      utf8.withContiguousStorageIfAvailable {
+        IPv4Address.parse(utf8: $0.boundsChecked, callback: &callback)
+      } ?? IPv4Address.parse(utf8: utf8, callback: &callback)
+    guard let parsed = _parsed else {
       return nil
     }
     self = parsed
@@ -688,79 +693,18 @@ extension IPv4Address {
 
 extension IPv4Address {
 
-  /// A tri-state result which captures whether an IPv4 address failed to parse because it was invalid,
-  /// or whether it failed because the given string does not look like an IP address.
-  ///
-  public enum ParserResult {
-
-    /// The string was successfully parsed as an IPv4 address.
-    ///
-    case success(IPv4Address)
-
-    /// The string was recognized as probably being an IPv4 address, but was invalid and could not be parsed (e.g. because the value would overflow).
-    ///
-    case failure
-
-    /// The string cannot be recognized as an IPv4 address. This is not the same as being an invalid IP address - for example, the string "9999999999.com" fails
-    /// to parse because the non-numeric characters "com" mean it isn't even an IP address string, whereas the string "9999999999" _is_ a properly-formatted
-    /// IP address string, but fails to parse because the value would overflow.
-    ///
-    /// When parsing "9999999999.com" as a hostname, it should be treated as a domain or opaque hostname rather than an invalid IP address.
-    /// The string "9999999999" should be treated as a invalid IP address.
-    ///
-    case notAnIPAddress
-  }
-
-  /// Parses an IPv4 address from a buffer of UTF-8 codeunits, returning a tri-state `ParserResult` which is useful for parsing content which _might_ be
-  /// an IPv4 address.
-  ///
-  /// The following formats are recognized:
-  ///
-  ///  - _a.b.c.d_, where each numeric part defines the value of the address' octet at that position.
-  ///  - _a.b.c_, where _a_ and _b_ define the address' first 2 octets, and _c_ is interpreted as a 16-bit integer whose most and least significant bytes define
-  ///    the address' 3rd and 4th octets respectively.
-  ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
-  ///    significant.
-  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose bytes define the octets of the address in order from most to least significant.
-  ///
-  /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
-  /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
-  ///
-  /// Examples:
-  /// ```
-  /// IPv4Address("0x7f.0.0.1")!.octets == (0x7f, 0x00, 0x00, 0x01) == "127.0.0.1"
-  /// IPv4Address("10.1.0x12.")!.octets == (0x0a, 0x01, 0x00, 0x12) == "10.1.0.18"
-  /// IPv4Address("0300.0xa80032")!.octets == (0xc0, 0xa8, 0x00, 0x32) == "192.168.0.50"
-  /// IPv4Address("0x8Badf00d")!.octets == (0x8b, 0xad, 0xf0, 0x0d) == "139.173.240.13"
-  /// ```
-  ///
-  /// - parameters:
-  ///     - utf8: The string to parse, as a collection of UTF-8 code-units.
-  /// - returns: A tri-state result which captures whether the string should even be interpreted as an IPv4 address.
-  ///            See `ParserResult` for more information.
-  ///
-  @inlinable
-  public static func parse<UTF8Bytes>(
-    utf8: UTF8Bytes
-  ) -> ParserResult where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
-    var callback = IgnoreIPAddressParserErrors()
-    return utf8.withContiguousStorageIfAvailable {
-      parse(utf8: $0.boundsChecked, callback: &callback)
-    } ?? parse(utf8: utf8, callback: &callback)
-  }
-
   @inlinable
   internal static func parse<UTF8Bytes, Callback>(
     utf8: UTF8Bytes, callback: inout Callback
-  ) -> ParserResult where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: IPAddressParserCallback {
+  ) -> IPv4Address? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: IPAddressParserCallback {
 
     guard utf8.isEmpty == false else {
       callback.validationError(ipv4: .emptyInput)
-      return .failure
+      return nil
     }
 
     var _parsedPieces: (UInt32, UInt32, UInt32, UInt32) = (0, 0, 0, 0)
-    return withUnsafeMutableBufferPointerToElements(tuple: &_parsedPieces) { parsedPieces -> ParserResult in
+    return withUnsafeMutableBufferPointerToElements(tuple: &_parsedPieces) { parsedPieces -> IPv4Address? in
       var pieceIndex = -1
       var idx = utf8.startIndex
 
@@ -778,7 +722,7 @@ extension IPv4Address {
 
         guard let firstCharInPiece = ASCII(utf8[idx]), ASCII.ranges.digits.contains(firstCharInPiece) else {
           callback.validationError(ipv4: .pieceBeginsWithInvalidCharacter)
-          return .notAnIPAddress
+          return nil
         }
         if firstCharInPiece == ASCII.n0 {
           idx = utf8.index(after: idx)
@@ -795,7 +739,7 @@ extension IPv4Address {
         while idx < utf8.endIndex, let numericValue = ASCII(utf8[idx])?.hexNumberValue {
           guard numericValue < radix else {
             callback.validationError(ipv4: .pieceContainsInvalidCharacterForRadix)
-            return .notAnIPAddress
+            return nil
           }
           var (overflowM, overflowA) = (false, false)
           (value, overflowM) = value.multipliedReportingOverflow(by: radix)
@@ -809,7 +753,7 @@ extension IPv4Address {
         // Note that we do not flip to network byte order as we still want to process these numerically.
         guard pieceIndex < 3 else {
           callback.validationError(ipv4: .tooManyPieces)
-          return .notAnIPAddress
+          return nil
         }
         pieceIndex &+= 1
         parsedPieces[pieceIndex] = value
@@ -822,11 +766,11 @@ extension IPv4Address {
 
       guard idx == utf8.endIndex else {
         callback.validationError(ipv4: .unexpectedTrailingCharacter)
-        return .notAnIPAddress
+        return nil
       }
       guard pieceDidOverflow == false else {
         callback.validationError(ipv4: .pieceOverflows)
-        return .failure
+        return nil
       }
 
       var numericAddress: UInt32 = 0
@@ -839,7 +783,7 @@ extension IPv4Address {
         hasInvalid    |= parsedPieces[1] & ~0x00FF_FFFF
         guard hasInvalid == 0 else {
           callback.validationError(ipv4: .addressOverflows)
-          return .failure
+          return nil
         }
         numericAddress = (parsedPieces[0] << 24) | parsedPieces[1]
       case 2:  // 'a.b.c'   - 8-bits/8-bits/16-bits.
@@ -848,7 +792,7 @@ extension IPv4Address {
         hasInvalid    |= parsedPieces[2] & ~0x0000_FFFF
         guard hasInvalid == 0 else {
           callback.validationError(ipv4: .addressOverflows)
-          return .failure
+          return nil
         }
         numericAddress = (parsedPieces[0] << 24) | (parsedPieces[1] << 16) | parsedPieces[2]
       case 3:  // 'a.b.c.d' - 8-bits/8-bits/8-bits/8-bits.
@@ -858,14 +802,14 @@ extension IPv4Address {
         hasInvalid    |= parsedPieces[3] & ~0x0000_00FF
         guard hasInvalid == 0 else {
           callback.validationError(ipv4: .addressOverflows)
-          return .failure
+          return nil
         }
         numericAddress = (parsedPieces[0] << 24) | (parsedPieces[1] << 16) | (parsedPieces[2] << 8) | parsedPieces[3]
       default:
         fatalError("Internal error. pieceIndex not in 0...3")
       }
       // Parsing successful.
-      return .success(IPv4Address(value: numericAddress, .numeric))
+      return IPv4Address(value: numericAddress, .numeric)
     }
   }
 
