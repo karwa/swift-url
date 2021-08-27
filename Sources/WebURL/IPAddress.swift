@@ -698,28 +698,21 @@ extension IPv4Address {
     utf8: UTF8Bytes, callback: inout Callback
   ) -> IPv4Address? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: IPAddressParserCallback {
 
-    guard utf8.isEmpty == false else {
+    var idx = utf8.startIndex
+    guard idx < utf8.endIndex else {
       callback.validationError(ipv4: .emptyInput)
       return nil
     }
 
     var _parsedPieces: (UInt32, UInt32, UInt32, UInt32) = (0, 0, 0, 0)
     return withUnsafeMutableBufferPointerToElements(tuple: &_parsedPieces) { parsedPieces -> IPv4Address? in
-      var pieceIndex = -1
-      var idx = utf8.startIndex
-
-      // We need to track and continue processing numeric digits even if a piece overflows,
-      // because the standard works in terms of mathematical integers, not fixed-size binary integers.
-      // A piece overflow in a well-formatted IP-address string should return a `.failure`,
-      // but in a non-IP-address string, it should be ignored in favour of a `.notAnIPAddress` result.
-      // For example, the string "10000000000.com" should return `.notAnIPAddress` due to the `.com`,
-      // not a `.failure` due to overflow.
-      var pieceDidOverflow = false
+      var pieceIndex = 0
 
       while idx < utf8.endIndex {
         var value: UInt32 = 0
         var radix: UInt32 = 10
 
+        // Parse the radix.
         guard let firstCharInPiece = ASCII(utf8[idx]), ASCII.ranges.digits.contains(firstCharInPiece) else {
           callback.validationError(ipv4: .pieceBeginsWithInvalidCharacter)
           return nil
@@ -727,15 +720,15 @@ extension IPv4Address {
         if firstCharInPiece == ASCII.n0 {
           idx = utf8.index(after: idx)
           if idx < utf8.endIndex {
-            switch utf8[idx] {
-            case ASCII.x.codePoint, ASCII.X.codePoint:
+            if ASCII(utf8[idx])?.lowercased == .x {
               radix = 16
               idx = utf8.index(after: idx)
-            default:
+            } else {
               radix = 8
             }
           }
         }
+        // Parse the piece value.
         while idx < utf8.endIndex, let numericValue = ASCII(utf8[idx])?.hexNumberValue {
           guard numericValue < radix else {
             callback.validationError(ipv4: .pieceContainsInvalidCharacterForRadix)
@@ -745,19 +738,20 @@ extension IPv4Address {
           (value, overflowM) = value.multipliedReportingOverflow(by: radix)
           (value, overflowA) = value.addingReportingOverflow(UInt32(numericValue))
           if overflowM || overflowA {
-            pieceDidOverflow = true
+            callback.validationError(ipv4: .pieceOverflows)
+            return nil
           }
           idx = utf8.index(after: idx)
         }
-        // Set value for piece.
-        // Note that we do not flip to network byte order as we still want to process these numerically.
-        guard pieceIndex < 3 else {
+        // Set the piece to its numeric value.
+        guard pieceIndex < 4 else {
           callback.validationError(ipv4: .tooManyPieces)
           return nil
         }
-        pieceIndex &+= 1
         parsedPieces[pieceIndex] = value
-        // Allow one trailing '.' after the piece, even if it's the last piece.
+        pieceIndex &+= 1
+        // The piece must be followed by a '.' unless we're at endIndex.
+        // Even the last piece may have a trailing dot.
         guard idx < utf8.endIndex, utf8[idx] == ASCII.period.codePoint else {
           break
         }
@@ -768,17 +762,13 @@ extension IPv4Address {
         callback.validationError(ipv4: .unexpectedTrailingCharacter)
         return nil
       }
-      guard pieceDidOverflow == false else {
-        callback.validationError(ipv4: .pieceOverflows)
-        return nil
-      }
 
-      var numericAddress: UInt32 = 0
+      var numericAddress: UInt32
       // swift-format-ignore
       switch pieceIndex {
-      case 0:  // 'a'       - 32-bits.
+      case 1:  // 'a'       - 32-bits.
         numericAddress = parsedPieces[0]
-      case 1:  // 'a.b'     - 8-bits/24-bits.
+      case 2:  // 'a.b'     - 8-bits/24-bits.
         var hasInvalid = parsedPieces[0] & ~0x0000_00FF
         hasInvalid    |= parsedPieces[1] & ~0x00FF_FFFF
         guard hasInvalid == 0 else {
@@ -786,7 +776,7 @@ extension IPv4Address {
           return nil
         }
         numericAddress = (parsedPieces[0] << 24) | parsedPieces[1]
-      case 2:  // 'a.b.c'   - 8-bits/8-bits/16-bits.
+      case 3:  // 'a.b.c'   - 8-bits/8-bits/16-bits.
         var hasInvalid = parsedPieces[0] & ~0x0000_00FF
         hasInvalid    |= parsedPieces[1] & ~0x0000_00FF
         hasInvalid    |= parsedPieces[2] & ~0x0000_FFFF
@@ -795,7 +785,7 @@ extension IPv4Address {
           return nil
         }
         numericAddress = (parsedPieces[0] << 24) | (parsedPieces[1] << 16) | parsedPieces[2]
-      case 3:  // 'a.b.c.d' - 8-bits/8-bits/8-bits/8-bits.
+      case 4:  // 'a.b.c.d' - 8-bits/8-bits/8-bits/8-bits.
         var hasInvalid = parsedPieces[0] & ~0x0000_00FF
         hasInvalid    |= parsedPieces[1] & ~0x0000_00FF
         hasInvalid    |= parsedPieces[2] & ~0x0000_00FF
@@ -806,7 +796,7 @@ extension IPv4Address {
         }
         numericAddress = (parsedPieces[0] << 24) | (parsedPieces[1] << 16) | (parsedPieces[2] << 8) | parsedPieces[3]
       default:
-        fatalError("Internal error. pieceIndex not in 0...3")
+        fatalError("Internal error. pieceIndex not in 1...4")
       }
       // Parsing successful.
       return IPv4Address(value: numericAddress, .numeric)
