@@ -22,7 +22,7 @@ internal protocol URLWriter: HostnameWriter {
 
   /// Notes the given information about the URL. This is always the first function to be called.
   ///
-  mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool)
+  mutating func writeFlags(schemeKind: WebURL.SchemeKind, isHierarchical: Bool)
 
   /// A function which writes a piece of a component.
   ///
@@ -279,9 +279,9 @@ internal struct StructureAndMetricsCollector: URLWriter {
   }
 
   @inlinable
-  internal mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
+  internal mutating func writeFlags(schemeKind: WebURL.SchemeKind, isHierarchical: Bool) {
     structure.schemeKind = schemeKind
-    structure.cannotBeABaseURL = cannotBeABaseURL
+    structure.cannotBeABaseURL = !isHierarchical
   }
 
   @inlinable
@@ -501,7 +501,7 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
   // URLWriter.
 
   @inlinable
-  internal mutating func writeFlags(schemeKind: WebURL.SchemeKind, cannotBeABaseURL: Bool) {
+  internal mutating func writeFlags(schemeKind: WebURL.SchemeKind, isHierarchical: Bool) {
     // This writer does not calculate a URLStructure.
   }
 
