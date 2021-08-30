@@ -291,7 +291,7 @@ extension WebURL {
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
   public var isHierarchical: Bool {
-    !storage.cannotBeABaseURL
+    storage.isHierarchical
   }
 }
 

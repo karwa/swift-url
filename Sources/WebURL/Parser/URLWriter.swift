@@ -281,7 +281,7 @@ internal struct StructureAndMetricsCollector: URLWriter {
   @inlinable
   internal mutating func writeFlags(schemeKind: WebURL.SchemeKind, isHierarchical: Bool) {
     structure.schemeKind = schemeKind
-    structure.cannotBeABaseURL = !isHierarchical
+    structure.isHierarchical = isHierarchical
   }
 
   @inlinable

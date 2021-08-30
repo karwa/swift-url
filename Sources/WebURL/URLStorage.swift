@@ -116,13 +116,13 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
   @usableFromInline
   internal var schemeKind: WebURL.SchemeKind
 
-  /// Whether this is a 'cannot-be-a-base' URL.
+  /// Whether this is a hierarchical URL.
   ///
-  /// Parsing a relative URL string against 'cannot-be-a-base' URLs will fail. This is the case for non-special URLs without an authority and whose path
-  /// does not begin with a `/` (e.g. `mailto:somebody@somehost.com` or `javascript:alert("hello")`.
+  /// A non-hierarchical URL essentially means the URL does not contain an authority and, if it has a path, that path does not begin with a `/`.
+  /// (e.g. `mailto:somebody@somehost.com` or `javascript:alert("hello")`.
   ///
   @usableFromInline
-  internal var cannotBeABaseURL: Bool
+  internal var isHierarchical: Bool
 
   /// Whether this URL's query string is known to be `application/x-www-form-urlencoded`.
   ///
@@ -144,7 +144,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     firstPathComponentLength: SizeType,
     sigil: Sigil?,
     schemeKind: WebURL.SchemeKind,
-    cannotBeABaseURL: Bool,
+    isHierarchical: Bool,
     queryIsKnownFormEncoded: Bool
   ) {
     self.schemeLength = schemeLength
@@ -158,7 +158,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     self.firstPathComponentLength = firstPathComponentLength
     self.sigil = sigil
     self.schemeKind = schemeKind
-    self.cannotBeABaseURL = cannotBeABaseURL
+    self.isHierarchical = isHierarchical
     self.queryIsKnownFormEncoded = queryIsKnownFormEncoded
   }
 }
@@ -399,7 +399,7 @@ extension URLStructure {
   ///
   @inlinable
   internal var cannotHaveCredentialsOrPort: Bool {
-    schemeKind == .file || cannotBeABaseURL || hostnameLength == 0
+    schemeKind == .file || isHierarchical == false || hostnameLength == 0
   }
 }
 
@@ -426,7 +426,7 @@ extension URLStructure {
       firstPathComponentLength: SizeType(other.firstPathComponentLength),
       sigil: other.sigil,
       schemeKind: other.schemeKind,
-      cannotBeABaseURL: other.cannotBeABaseURL,
+      isHierarchical: other.isHierarchical,
       queryIsKnownFormEncoded: other.queryIsKnownFormEncoded
     )
     checkInvariants()
@@ -451,7 +451,7 @@ extension URLStructure {
       firstPathComponentLength: 0,
       sigil: nil,
       schemeKind: .other,
-      cannotBeABaseURL: false,
+      isHierarchical: false,
       queryIsKnownFormEncoded: false
     )
   }
@@ -466,7 +466,7 @@ extension URLStructure {
       && portLength == other.portLength && pathLength == other.pathLength
       && firstPathComponentLength == other.firstPathComponentLength && queryLength == other.queryLength
       && fragmentLength == other.fragmentLength && sigil == other.sigil && schemeKind == other.schemeKind
-      && cannotBeABaseURL == other.cannotBeABaseURL
+      && isHierarchical == other.isHierarchical
   }
 
   /// Performs debug-mode checks to ensure that this URL structure does not contain invalid combinations of values.
@@ -507,13 +507,13 @@ extension URLStructure {
         assert(portLength == 0, "A URL without authority cannot have a port")
       }
 
-      if cannotBeABaseURL {
-        assert(sigil == nil, "cannot-be-a-base URLs cannot have an authority or path sigil")
+      if !isHierarchical {
+        assert(sigil == nil, "Non-hierarchical URLs cannot have an authority or path sigil")
       }
       if schemeKind.isSpecial {
         assert(sigil == .authority, "URLs with special schemes must have an authority")
         assert(pathLength != 0, "URLs with special schemes must have a path")
-        assert(!cannotBeABaseURL, "URLs with special schemes are never cannot-be-a-base")
+        assert(isHierarchical, "URLs with special schemes must always be hierarchical")
       }
 
       if cannotHaveCredentialsOrPort {
@@ -526,13 +526,13 @@ extension URLStructure {
         assert(queryIsKnownFormEncoded, "Empty and nil queries must always be flagged as being form-encoded")
       }
 
-      if cannotBeABaseURL {
-        assert(firstPathComponentLength == 0, "cannot-be-a-base URLs do not have path components")
-      } else {
+      if isHierarchical {
         assert(firstPathComponentLength <= pathLength, "First path component is longer than the entire path")
         if pathLength != 0 {
           assert(firstPathComponentLength != 0, "First path component length not set")
         }
+      } else {
+        assert(firstPathComponentLength == 0, "Non-hierarchical URLs do not have path components")
       }
     }
   #else
@@ -762,8 +762,8 @@ extension AnyURLStorage {
   }
 
   @inlinable
-  internal var cannotBeABaseURL: Bool {
-    structure.cannotBeABaseURL
+  internal var isHierarchical: Bool {
+    structure.isHierarchical
   }
 
   @inlinable
@@ -795,7 +795,7 @@ internal let _tempStorage = AnyURLStorage(
     structure: URLStructure(
       schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
       portLength: 0, pathLength: 0, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 0,
-      sigil: nil, schemeKind: .other, cannotBeABaseURL: true, queryIsKnownFormEncoded: true),
+      sigil: nil, schemeKind: .other, isHierarchical: false, queryIsKnownFormEncoded: true),
     initializingCodeUnitsWith: { buffer in
       buffer[0] = ASCII.a.codePoint
       buffer[1] = ASCII.colon.codePoint

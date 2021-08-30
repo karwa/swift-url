@@ -214,7 +214,7 @@ extension URLStorage {
     let oldStructure = header.structure
 
     // Check that the operation is semantically valid for the existing structure.
-    if oldStructure.cannotBeABaseURL {
+    guard oldStructure.isHierarchical else {
       return (AnyURLStorage(self), .cannotSetHostOnCannotBeABaseURL)
     }
 
@@ -389,7 +389,7 @@ extension URLStorage {
     let oldStructure = header.structure
 
     // Check that the operation is semantically valid for the existing structure.
-    guard oldStructure.cannotBeABaseURL == false else {
+    guard oldStructure.isHierarchical else {
       return (AnyURLStorage(self), .cannotSetPathOnCannotBeABaseURL)
     }
 
