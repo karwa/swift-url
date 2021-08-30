@@ -135,6 +135,6 @@ extension WebURL {
   ///
   @available(*, deprecated, message: "Use `!isHierarchical` instead")
   public var cannotBeABase: Bool {
-    storage.cannotBeABaseURL
+    !storage.isHierarchical
   }
 }

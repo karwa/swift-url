@@ -736,7 +736,7 @@ extension URLStorage {
 
     let oldStructure = header.structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
-    precondition(!oldStructure.cannotBeABaseURL, "Cannot replace components of a non-hierarchical URL")
+    precondition(oldStructure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
 
     // We can only set an empty path if this is a non-special scheme with authority ("foo://host?query").
     // Everything else (special, path-only) requires at least a lone "/".
@@ -786,7 +786,7 @@ extension URLStorage {
 
     let oldStructure = header.structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
-    precondition(!oldStructure.cannotBeABaseURL, "Cannot replace components of a non-hierarchical URL")
+    precondition(oldStructure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
 
     // If 'firstNewComponentLength' is nil, we infer that the components are empty (i.e. removal operation).
     let components = components.lazy.filter { utf8 in
