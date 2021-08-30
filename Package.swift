@@ -59,6 +59,10 @@ let package = Package(
       resources: [.copy("Resources")]
     ),
     .testTarget(
+      name: "WebURLDeprecatedAPITests",
+      dependencies: ["WebURL"]
+    ),
+    .testTarget(
       name: "WebURLSystemExtrasTests",
       dependencies: ["WebURLSystemExtras", "WebURL", .product(name: "SystemPackage", package: "swift-system")]
     ),
