@@ -442,7 +442,7 @@ extension WebURLTests {
     XCTAssertNil(url.hostname)
     XCTAssertFalse(url.isHierarchical)
     XCTAssertEqual(url.serialized, "mailto:bob")
-    XCTAssertThrowsSpecific(URLSetterError.cannotSetHostOnCannotBeABaseURL) {
+    XCTAssertThrowsSpecific(URLSetterError.cannotSetHostOnNonHierarchicalURL) {
       try url.setHostname("somehost")
     }
     XCTAssertEqual(url.serialized, "mailto:bob")
@@ -541,7 +541,7 @@ extension WebURLTests {
     var url = WebURL("mailto:bob")!
     XCTAssertEqual(url.path, "bob")
     XCTAssertFalse(url.isHierarchical)
-    XCTAssertThrowsSpecific(URLSetterError.cannotSetPathOnCannotBeABaseURL) { try url.setPath("frank") }
+    XCTAssertThrowsSpecific(URLSetterError.cannotSetPathOnNonHierarchicalURL) { try url.setPath("frank") }
     XCTAssertEqual(url.serialized, "mailto:bob")
     XCTAssertURLIsIdempotent(url)
 
@@ -1009,7 +1009,7 @@ extension WebURLTests {
       XCTFail("Failed to parse valid URL")
     }
 
-    // Cannot-be-a-base 'blob:' URLs have the same origin as the URL parsed from their path.
+    // Non-hierarchical 'blob:' URLs have the same origin as the URL parsed from their path.
     if let origin = WebURL("blob:https://example.com:443/index.html")?.origin {
       XCTAssertEqual(origin.serialized, "https://example.com")
       XCTAssertFalse(origin.isOpaque)
@@ -1018,7 +1018,7 @@ extension WebURLTests {
       XCTFail("Failed to parse valid URL")
     }
 
-    // Non-cannot-be-a-base 'blob:' URLs are always opaque.
+    // Hierarchical 'blob:' URLs are always opaque.
     if let origin = WebURL("blob:///https://example.com:443/index.html")?.origin {
       XCTAssertEqual(origin.serialized, "null")
       XCTAssertTrue(origin.isOpaque)
@@ -1028,7 +1028,7 @@ extension WebURLTests {
       XCTFail("Failed to parse valid URL")
     }
 
-    // Cannot-be-a-base 'blob:' URLs have opaque origins if their path is not a valid URL string.
+    // Non-hierarchical 'blob:' URLs have opaque origins if their path is not a valid URL string.
     if let origin = WebURL("blob:this is not a URL")?.origin {
       XCTAssertEqual(origin.serialized, "null")
       XCTAssertTrue(origin.isOpaque)

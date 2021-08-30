@@ -23,7 +23,7 @@ extension WebURL {
   ///
   /// The only URLs for which meaningful origins may be computed are:
   /// - Those with the http, https, ftp, ws, or wss schemes (i.e. the "special" schemes, excluding file), and
-  /// - Those with the "blob" scheme, which do not have an authority (cannot-be-a-base), and whose path is another URL.
+  /// - Those with the "blob" scheme, which are non-hierarchical, and whose path is another URL.
   ///
   /// Computing an origin using any other URL results in an _opaque origin_, which is defined to be an "internal value, with no serialization it can be recreated from,
   /// [...] and for which the only meaningful operation is testing for equality." ([HTML Standard][HTML-origin]).
