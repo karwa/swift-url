@@ -611,7 +611,7 @@ extension URLScanner {
     }
     var relative = input[...]
 
-    if base.cannotBeABase {
+    if !base.isHierarchical {
       guard ASCII(flatMap: relative.popFirst()) == .numberSign else {
         callback.validationError(.missingSchemeNonRelativeURL)
         return nil

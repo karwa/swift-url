@@ -82,7 +82,7 @@ extension WebURL {
     case .http, .https, .ws, .wss, .ftp:
       let serializedTuple = "\(scheme)://\(hostname!)\(port.map { ":\($0)" } ?? "")"
       return Origin(kind: .tuple(serializedTuple))
-    case .other where cannotBeABase && utf8.scheme.elementsEqual("blob".utf8):
+    case .other where !isHierarchical && utf8.scheme.elementsEqual("blob".utf8):
       return WebURL(path)?.origin ?? Origin(kind: .opaque)
     default:
       return Origin(kind: .opaque)

@@ -437,10 +437,10 @@ extension WebURLTests {
       check_has_path_sigil(url: test_url)
     }
 
-    // [Throw] Cannot set hostname on cannot-be-a-base URLs.
+    // [Throw] Cannot set hostname on non-hierarchical URLs.
     url = WebURL("mailto:bob")!
     XCTAssertNil(url.hostname)
-    XCTAssertTrue(url.cannotBeABase)
+    XCTAssertFalse(url.isHierarchical)
     XCTAssertEqual(url.serialized, "mailto:bob")
     XCTAssertThrowsSpecific(URLSetterError.cannotSetHostOnCannotBeABaseURL) {
       try url.setHostname("somehost")
@@ -537,10 +537,10 @@ extension WebURLTests {
   ///
   func testPath() {
 
-    // [Throw] Cannot set path on cannot-be-a-base URLs.
+    // [Throw] Cannot set path on non-hierarchical URLs.
     var url = WebURL("mailto:bob")!
     XCTAssertEqual(url.path, "bob")
-    XCTAssertTrue(url.cannotBeABase)
+    XCTAssertFalse(url.isHierarchical)
     XCTAssertThrowsSpecific(URLSetterError.cannotSetPathOnCannotBeABaseURL) { try url.setPath("frank") }
     XCTAssertEqual(url.serialized, "mailto:bob")
     XCTAssertURLIsIdempotent(url)
@@ -736,14 +736,14 @@ extension WebURLTests {
 
 extension WebURLTests {
 
-  /// Tests that URL setters do not inadvertently create strings that would be re-parsed as 'cannot-be-a-base' URLs.
+  /// Tests that URL setters do not inadvertently create strings that would be re-parsed as non-hierarchical URLs.
   ///
   /// There are 2 situations where this could happen:
   ///
   /// 1. Setting a `nil` host when there is no path
   /// 2. Setting an empty path when there is no host
   ///
-  func testDoesNotCreateCannotBeABaseURLs() {
+  func testDoesNotCreateNonHierarchicalURLs() {
 
     // Check that we require a path in order to remove a host.
 
@@ -752,7 +752,7 @@ extension WebURLTests {
       XCTAssertEqual(url.serialized, "foo://somehost")
       XCTAssertEqual(url.path, "")
       XCTAssertEqual(url.hostname, "somehost")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertThrowsSpecific(URLSetterError.cannotRemoveHostnameWithoutPath) {
         try url.setHostname(String?.none)
@@ -766,14 +766,14 @@ extension WebURLTests {
       XCTAssertEqual(url.serialized, "foo://somehost/bar")
       XCTAssertEqual(url.path, "/bar")
       XCTAssertEqual(url.hostname, "somehost")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertNoThrow(try url.setHostname(String?.none))
 
       XCTAssertEqual(url.serialized, "foo:/bar")
       XCTAssertEqual(url.path, "/bar")
       XCTAssertNil(url.hostname)
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -785,14 +785,14 @@ extension WebURLTests {
       XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
       XCTAssertEqual(url.path, "/hello/world")
       XCTAssertNil(url.hostname)
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertNoThrow(try url.setPath(""))
 
       XCTAssertEqual(url.serialized, "foo:/?someQuery")
       XCTAssertEqual(url.path, "/")
       XCTAssertNil(url.hostname)
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
       XCTAssertURLIsIdempotent(url)
     }
     do {  // Set empty path via .pathComponents with no hostname present. Sets root path.
@@ -800,13 +800,13 @@ extension WebURLTests {
       XCTAssertEqual(url.serialized, "foo:/hello/world?someQuery")
       XCTAssertEqual(url.path, "/hello/world")
       XCTAssertNil(url.hostname)
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       let urlWithNoPath = WebURL("bar://somehost?anotherQuery")!
       XCTAssertEqual(urlWithNoPath.serialized, "bar://somehost?anotherQuery")
       XCTAssertEqual(urlWithNoPath.path, "")
       XCTAssertEqual(urlWithNoPath.hostname, "somehost")
-      XCTAssertFalse(urlWithNoPath.cannotBeABase)
+      XCTAssertTrue(urlWithNoPath.isHierarchical)
       XCTAssertEqualElements(urlWithNoPath.pathComponents, [])
       XCTAssertEqual(urlWithNoPath.pathComponents.count, 0)
 
@@ -815,7 +815,7 @@ extension WebURLTests {
       XCTAssertEqual(url.serialized, "foo:/?someQuery")
       XCTAssertEqual(url.path, "/")
       XCTAssertNil(url.hostname)
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
       XCTAssertURLIsIdempotent(url)
     }
     do {  // Set empty path with hostname present. Sets empty path.
@@ -823,14 +823,14 @@ extension WebURLTests {
       XCTAssertEqual(url.serialized, "foo://somehost/bar?someQuery")
       XCTAssertEqual(url.path, "/bar")
       XCTAssertEqual(url.hostname, "somehost")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertNoThrow(try url.setPath(""))
 
       XCTAssertEqual(url.serialized, "foo://somehost?someQuery")
       XCTAssertEqual(url.path, "")
       XCTAssertEqual(url.hostname, "somehost")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -965,12 +965,12 @@ extension WebURLTests {
       }
     }
 
-    // Path-only and cannot-be-a-base-path URLs do not have hosts.
+    // Path-only and non-hierarchical URLs do not have hosts.
     do {
       let url = WebURL("foo:/path/only")!
       if case .none = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
-        XCTAssertFalse(url.cannotBeABase)
+        XCTAssertTrue(url.isHierarchical)
       } else {
         XCTFail("Unexpected host: \(String(describing: url.host))")
       }
@@ -979,7 +979,7 @@ extension WebURLTests {
       let url = WebURL("foo:some non-path")!
       if case .none = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
-        XCTAssertTrue(url.cannotBeABase)
+        XCTAssertFalse(url.isHierarchical)
       } else {
         XCTFail("Unexpected host: \(String(describing: url.host))")
       }

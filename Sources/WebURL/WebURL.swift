@@ -241,7 +241,7 @@ extension WebURL {
   /// Hierarchical paths are those that begin with a "/". Empty paths are assumed to be hierarchical if the URL has a `hostname`.
   ///
   /// When setting this property, the given path string will be lexically simplified, and any code-points in the path's components that are not valid
-  /// for use will be percent-encoded. Setting this property will fail if the URL is non-hierarchical (see `WebURL.cannotBeABase` for more information).
+  /// for use will be percent-encoded. Setting this property will fail if the URL is non-hierarchical (see `WebURL.isHierarchical` for more information).
   ///
   public var path: String {
     get { String(decoding: utf8.path, as: UTF8.self) }
@@ -274,15 +274,15 @@ extension WebURL {
     set { setFragment(newValue) }
   }
 
-  /// Whether this URL cannot be a base.
+  /// Returns `true` if this is a hierarchical URL.
   ///
-  /// 'Cannot be a base' URLs are non-hierarchical; they do not have authority components, or hierarchical paths.
-  /// URLs with special schemes (such as http or file) are never non-hierarchical.
-  /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme.
+  /// Hierarchical URLs have an authority component or hierarchical path.
+  /// URLs with special schemes (such as http or file) are always hierarchical.
   ///
-  /// When parsing a relative URL string against such a URL, only replacing the fragment is allowed, and any modifications which would change
-  /// a URL's structure to become hierarchical (or non-hierarchical) will fail. This means the `username`, `password`, `hostname`, `port`, and
-  /// `path` setters always fail when performed on a non-hierarchical URL.
+  /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme, and support only a very
+  /// limited subset of URL operations. Attempting to set any authority components, such as `username`, `password`, `hostname` or `port`,
+  /// will fail, as will attempts to set the `path`. Non-hierarchical URLs do not have path components, so accessing the `pathComponents` property
+  /// will trigger a runtime error. When resolving a relative URL string against a non-hierarchical URL, only replacing the fragment is allowed.
   ///
   /// Examples of non-hierarchical URLs are:
   ///
@@ -290,8 +290,8 @@ extension WebURL {
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  public var cannotBeABase: Bool {
-    storage.cannotBeABaseURL
+  public var isHierarchical: Bool {
+    !storage.cannotBeABaseURL
   }
 }
 
@@ -381,7 +381,7 @@ extension WebURL {
   /// Replaces this URL's `path` with the given string.
   ///
   /// When setting this component, the given path string will be lexically simplified, and any code-points in the path's components that are not valid
-  /// for use will be percent-encoded. Setting this component will fail if the URL is non-hierarchical (see `WebURL.cannotBeABase` for more information).
+  /// for use will be percent-encoded. Setting this component will fail if the URL is non-hierarchical (see `WebURL.isHierarchical` for more information).
   ///
   /// - seealso: `path`
   ///
