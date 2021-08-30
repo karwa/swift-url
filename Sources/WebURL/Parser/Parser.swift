@@ -213,9 +213,9 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
   @usableFromInline
   internal var schemeKind: WebURL.SchemeKind?
 
-  /// Whether this URL 'cannot be a base'.
+  /// Whether this URL is hierarchical ("cannot-be-a-base" is false).
   @usableFromInline
-  internal var cannotBeABaseURL: Bool
+  internal var isHierarchical: Bool
 
   /// A flag for a quirk in the standard, which means that absolute paths in particular URL strings should copy the Windows drive from their base URL.
   @usableFromInline
@@ -239,7 +239,7 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
     queryRange: Range<InputString.Index>?,
     fragmentRange: Range<InputString.Index>?,
     schemeKind: WebURL.SchemeKind?,
-    cannotBeABaseURL: Bool,
+    isHierarchical: Bool,
     absolutePathsCopyWindowsDriveFromBase: Bool,
     componentsToCopyFromBase: _CopyableURLComponentSet
   ) {
@@ -253,7 +253,7 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
     self.queryRange = queryRange
     self.fragmentRange = fragmentRange
     self.schemeKind = schemeKind
-    self.cannotBeABaseURL = cannotBeABaseURL
+    self.isHierarchical = isHierarchical
     self.absolutePathsCopyWindowsDriveFromBase = absolutePathsCopyWindowsDriveFromBase
     self.componentsToCopyFromBase = componentsToCopyFromBase
   }
@@ -262,7 +262,7 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
     self.init(
       schemeRange: nil, authorityRange: nil, usernameRange: nil, passwordRange: nil,
       hostnameRange: nil, portRange: nil, pathRange: nil, queryRange: nil, fragmentRange: nil,
-      schemeKind: nil, cannotBeABaseURL: false, absolutePathsCopyWindowsDriveFromBase: false,
+      schemeKind: nil, isHierarchical: true, absolutePathsCopyWindowsDriveFromBase: false,
       componentsToCopyFromBase: []
     )
   }
@@ -351,7 +351,7 @@ extension ParsedURLString.ProcessedMapping {
     }
 
     // 1: Flags
-    writer.writeFlags(schemeKind: schemeKind, cannotBeABaseURL: info.cannotBeABaseURL)
+    writer.writeFlags(schemeKind: schemeKind, isHierarchical: info.isHierarchical)
 
     // 2: Scheme.
     if let inputScheme = info.schemeRange {
@@ -419,7 +419,7 @@ extension ParsedURLString.ProcessedMapping {
 
     // 4: Path.
     switch info.pathRange {
-    case .some(let path) where info.cannotBeABaseURL:
+    case .some(let path) where !info.isHierarchical:
       if writer.getHint(maySkipPercentEncoding: .path) {
         writer.writePath(firstComponentLength: 0) { writer in writer(inputString[path]) }
       } else {
@@ -476,7 +476,7 @@ extension ParsedURLString.ProcessedMapping {
       writer.writePath(firstComponentLength: 1) { writer in writer(CollectionOfOne(ASCII.forwardSlash.codePoint)) }
 
     default:
-      assert(info.cannotBeABaseURL || hasAuthority, "URLs must have a path, authority, or be flagged cannot-be-a-base")
+      assert(!info.isHierarchical || hasAuthority, "Hierarchical URLs must have an authority or path")
     }
 
     // 5: Query.
@@ -617,7 +617,7 @@ extension URLScanner {
         return nil
       }
       scanResults.componentsToCopyFromBase = [.scheme, .path, .query]
-      scanResults.cannotBeABaseURL = true
+      scanResults.isHierarchical = false
       _ = scanFragment(relative, &scanResults, callback: &callback)
       return scanResults
     }
@@ -659,8 +659,8 @@ extension URLScanner {
     case .other:
       var authority = input
       guard ASCII(flatMap: authority.popFirst()) == .forwardSlash else {
-        mapping.cannotBeABaseURL = true
-        return scanAllCannotBeABaseURLComponents(input, scheme: scheme, &mapping, callback: &callback)
+        mapping.isHierarchical = false
+        return scanAllNonHierarchicalURLComponents(input, scheme: scheme, &mapping, callback: &callback)
       }
       // [URL Standard: "path or authority" state].
       guard ASCII(flatMap: authority.popFirst()) == .forwardSlash else {
@@ -1165,7 +1165,7 @@ extension URLScanner {
 
 
 // --------------------------------------------
-// MARK: - "cannot-base-a-base" URLs
+// MARK: - Non-Hierarchical URLs
 // --------------------------------------------
 
 
@@ -1174,12 +1174,12 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   @inlinable
-  internal static func scanAllCannotBeABaseURLComponents(
+  internal static func scanAllNonHierarchicalURLComponents(
     _ input: InputSlice, scheme: WebURL.SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> Bool {
 
-    var nextLocation = scanCannotBeABaseURLPath(input, &mapping, callback: &callback)
+    var nextLocation = scanNonHierarchicalPath(input, &mapping, callback: &callback)
     guard case .scan(_, let firstComponentStartIndex) = nextLocation else {
       return true
     }
@@ -1193,14 +1193,14 @@ extension URLScanner {
       case .fragment:
         nextLocation = scanFragment(remaining, &mapping, callback: &callback)
       case .pathStart, .path, .host, .port, .authority:
-        fatalError("Tried to scan invalid component for cannot-be-a-base URL")
+        fatalError("Tried to scan invalid component for non-hierarchical URL")
       }
     }
     return true
   }
 
   @inlinable
-  internal static func scanCannotBeABaseURLPath(
+  internal static func scanNonHierarchicalPath(
     _ input: InputSlice,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> ScanComponentResult {
@@ -1370,7 +1370,7 @@ extension ScannedRangesAndFlags where InputString: BidirectionalCollection, Inpu
       if usernameRange != nil || passwordRange != nil || hostnameRange != nil || portRange != nil {
         assert(hostnameRange != nil, "A scanned authority component implies a scanned hostname")
         assert(authorityRange != nil, "A scanned authority component implies a scanned authority")
-        assert(!cannotBeABaseURL, "A URL with an authority cannot be a cannot-be-a-base URL")
+        assert(isHierarchical, "A URL with an authority is hierarchical")
         if passwordRange != nil {
           assert(usernameRange != nil, "Can't have a password without a username (even if empty)")
         }
