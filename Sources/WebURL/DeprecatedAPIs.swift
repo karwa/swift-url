@@ -112,3 +112,29 @@ extension IPv4Address {
     return .success(address)
   }
 }
+
+extension WebURL {
+
+  /// Whether this URL cannot be a base.
+  ///
+  /// **This API is deprecated and will be removed in a future version.**
+  ///
+  /// 'Cannot be a base' URLs are non-hierarchical; they do not have authority components, or hierarchical paths.
+  /// URLs with special schemes (such as http or file) are never non-hierarchical.
+  /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme.
+  ///
+  /// When parsing a relative URL string against such a URL, only replacing the fragment is allowed, and any modifications which would change
+  /// a URL's structure to become hierarchical (or non-hierarchical) will fail. This means the `username`, `password`, `hostname`, `port`, and
+  /// `path` setters always fail when performed on a non-hierarchical URL.
+  ///
+  /// Examples of non-hierarchical URLs are:
+  ///
+  /// - `mailto:bob@example.com`
+  /// - `javascript:alert("hello");`
+  /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
+  ///
+  @available(*, deprecated, message: "Use `!isHierarchical` instead")
+  public var cannotBeABase: Bool {
+    storage.cannotBeABaseURL
+  }
+}

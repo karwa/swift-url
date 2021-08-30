@@ -214,7 +214,7 @@ extension PathComponentsTests {
     let url = WebURL("foo://somehost?someQuery")!
     XCTAssertEqual(url.serialized, "foo://somehost?someQuery")
     XCTAssertEqual(url.path, "")
-    XCTAssertFalse(url.cannotBeABase)
+    XCTAssertTrue(url.isHierarchical)
 
     XCTAssertEqualElements(url.pathComponents, [])
     XCTAssertEqual(url.pathComponents.count, 0)
@@ -227,7 +227,7 @@ extension PathComponentsTests {
     let url = WebURL("http://example.com/?someQuery")!
     XCTAssertEqual(url.serialized, "http://example.com/?someQuery")
     XCTAssertEqual(url.path, "/")
-    XCTAssertFalse(url.cannotBeABase)
+    XCTAssertTrue(url.isHierarchical)
 
     XCTAssertEqualElements(url.pathComponents, [""])
     XCTAssertEqual(url.pathComponents.count, 1)
@@ -240,7 +240,7 @@ extension PathComponentsTests {
     let url = WebURL("foo:/a/b/c")!
     XCTAssertEqual(url.serialized, "foo:/a/b/c")
     XCTAssertEqual(url.path, "/a/b/c")
-    XCTAssertFalse(url.cannotBeABase)
+    XCTAssertTrue(url.isHierarchical)
 
     XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
     XCTAssertEqual(url.pathComponents.count, 3)
@@ -255,7 +255,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com//?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com//?someQuery")
       XCTAssertEqual(url.path, "//")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertEqualElements(url.pathComponents, ["", ""])
       XCTAssertEqual(url.pathComponents.count, 2)
@@ -267,7 +267,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com///?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com///?someQuery")
       XCTAssertEqual(url.path, "///")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertEqualElements(url.pathComponents, ["", "", ""])
       XCTAssertEqual(url.pathComponents.count, 3)
@@ -279,7 +279,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com////?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com////?someQuery")
       XCTAssertEqual(url.path, "////")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertEqualElements(url.pathComponents, ["", "", "", ""])
       XCTAssertEqual(url.pathComponents.count, 4)
@@ -291,7 +291,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com//p///?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com//p///?someQuery")
       XCTAssertEqual(url.path, "//p///")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertEqualElements(url.pathComponents, ["", "p", "", "", ""])
       XCTAssertEqual(url.pathComponents.count, 5)
@@ -307,7 +307,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com/a/b/c?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c?someQuery")
       XCTAssertEqual(url.path, "/a/b/c")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
       XCTAssertEqual(url.pathComponents.count, 3)
@@ -319,7 +319,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com/a/b/c/?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
       XCTAssertEqual(url.path, "/a/b/c/")
-      XCTAssertFalse(url.cannotBeABase)
+      XCTAssertTrue(url.isHierarchical)
 
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
       XCTAssertEqual(url.pathComponents.count, 4)
@@ -333,7 +333,7 @@ extension PathComponentsTests {
     let url = WebURL("file:///C:/Windows/🦆/System 32/somefile.dll")!
     XCTAssertEqual(url.serialized, "file:///C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
     XCTAssertEqual(url.path, "/C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
-    XCTAssertFalse(url.cannotBeABase)
+    XCTAssertTrue(url.isHierarchical)
 
     XCTAssertEqualElements(url.pathComponents, ["C:", "Windows", "🦆", "System 32", "somefile.dll"])
     XCTAssertEqual(url.pathComponents.count, 5)
@@ -357,7 +357,7 @@ extension PathComponentsTests {
     let url = WebURL("http://example.com/a/b/c/?someQuery")!
     XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
     XCTAssertEqual(url.path, "/a/b/c/")
-    XCTAssertFalse(url.cannotBeABase)
+    XCTAssertTrue(url.isHierarchical)
 
     XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
     XCTAssertEqual(url.pathComponents.count, 4)
@@ -382,7 +382,7 @@ extension PathComponentsTests {
     let url = WebURL("http://example.com/a/b/c/?someQuery")!
     XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
     XCTAssertEqual(url.path, "/a/b/c/")
-    XCTAssertFalse(url.cannotBeABase)
+    XCTAssertTrue(url.isHierarchical)
 
     XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
     XCTAssertEqual(url.pathComponents.count, 4)

@@ -16,23 +16,23 @@ extension WebURL {
 
   /// A mutable view of this URL's path components.
   ///
-  /// Use of this view requires that the URL is hierarchical (`cannotBeABase` is `false`).
+  /// Use of this view requires that the URL is hierarchical (see `WebURL.isHierarchical`).
   /// Using this view with a non-hierachical URL will trigger a runtime error.
   ///
   public var pathComponents: PathComponents {
     get {
-      precondition(!cannotBeABase, "cannot-be-a-base URLs do not have path components")
+      precondition(isHierarchical, "Non-hierarchical URLs do not have path components")
       return PathComponents(storage: storage)
     }
     _modify {
-      precondition(!cannotBeABase, "cannot-be-a-base URLs do not have path components")
+      precondition(isHierarchical, "Non-hierarchical URLs do not have path components")
       var view = PathComponents(storage: storage)
       storage = _tempStorage
       defer { storage = view.storage }
       yield &view
     }
     set {
-      precondition(!cannotBeABase, "cannot-be-a-base URLs do not have path components")
+      precondition(isHierarchical, "Non-hierarchical URLs do not have path components")
       try! utf8.setPath(newValue.storage.utf8.path)
     }
   }
@@ -81,7 +81,7 @@ extension WebURL {
   /// components described above, URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
   /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
-  /// This view does not support non-hierarchical URLs (`cannotBeABase` is `true`), and triggers a runtime error if it is accessed on such a URL.
+  /// This view does not support non-hierarchical URLs (`isHierarchical` is `false`), and triggers a runtime error if it is accessed on such a URL.
   /// Almost all URLs are hierarchical (in particular, URLs with special schemes, such as http, https, and file, are always hierarchical).
   /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme. Examples of such URLs are:
   ///
@@ -89,7 +89,7 @@ extension WebURL {
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  /// See the `WebURL.cannotBeABase` property for more information about these URLs.
+  /// See the `WebURL.isHierarchical` property for more information about these URLs.
   ///
   public struct PathComponents {
 
@@ -729,14 +729,14 @@ extension URLStorage {
 
   /// Removes all components from the path, to the extent that is allowed. URLs which cannot have an empty path will have their path set to "/".
   ///
-  /// If this URL `cannotBeABase`, a runtime error is triggered.
+  /// If this URL is non-hierarchical, a runtime error is triggered.
   ///
   @inlinable
   internal mutating func _clearPath() -> (AnyURLStorage, Range<WebURL.PathComponents.Index>) {
 
     let oldStructure = header.structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
-    precondition(!oldStructure.cannotBeABaseURL, "Cannot replace components of a cannot-be-a-base URL")
+    precondition(!oldStructure.cannotBeABaseURL, "Cannot replace components of a non-hierarchical URL")
 
     // We can only set an empty path if this is a non-special scheme with authority ("foo://host?query").
     // Everything else (special, path-only) requires at least a lone "/".
@@ -775,7 +775,7 @@ extension URLStorage {
   /// Replaces the path components in the given range with the given new components.
   /// Analogous to `replaceSubrange` from `RangeReplaceableCollection`.
   ///
-  /// If this URL `cannotBeABase`, a runtime error is triggered.
+  /// If this URL is non-hierarchical, a runtime error is triggered.
   ///
   @inlinable
   internal mutating func replacePathComponents<Components>(
@@ -786,7 +786,7 @@ extension URLStorage {
 
     let oldStructure = header.structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
-    precondition(!oldStructure.cannotBeABaseURL, "Cannot replace components of a cannot-be-a-base URL")
+    precondition(!oldStructure.cannotBeABaseURL, "Cannot replace components of a non-hierarchical URL")
 
     // If 'firstNewComponentLength' is nil, we infer that the components are empty (i.e. removal operation).
     let components = components.lazy.filter { utf8 in
