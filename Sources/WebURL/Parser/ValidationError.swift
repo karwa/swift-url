@@ -147,12 +147,12 @@ extension ValidationError: CustomStringConvertible {
       return #"""
         The input is missing a scheme, because it does not begin with an ASCII alpha,
         and either no base URL was provided or the base URL cannot be used as a base URL
-        because its cannot-be-a-base-URL flag is set.
+        because it is non-hierarchical.
 
         Example (Input’s scheme is missing and no base URL is given):
         (url, base) = ("💩", nil)
 
-        Example (Input’s scheme is missing, but the base URL’s cannot-be-a-base-URL flag is set):
+        Example (Input’s scheme is missing, but the base URL is non-hierarchical):
         (url, base) = ("💩", "mailto:user@example.org")
         """#
     case .relativeURLMissingBeginningSolidus:

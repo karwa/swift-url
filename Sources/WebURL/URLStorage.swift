@@ -95,7 +95,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
   @usableFromInline
   internal var fragmentLength: SizeType
 
-  /// The length of the first path component. If zero, the path does not contain any components (e.g. it may not have a path, or may be a 'cannot-be-a-base' URL).
+  /// The length of the first path component. If zero, the path does not contain any components (e.g. it may not have a path, or may be a non-hierarchical URL).
   ///
   @usableFromInline
   internal var firstPathComponentLength: SizeType

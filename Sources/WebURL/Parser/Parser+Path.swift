@@ -285,7 +285,7 @@ extension _PathParser {
     guard input.isEmpty == false else {
       // Special URLs have an implicit path.
       // Non-special URLs may only have an empty path if they have an authority
-      // (otherwise they would be non-hierarchical/cannot-be-a-base URLs).
+      // (otherwise they would be non-hierarchical URLs).
       if schemeKind.isSpecial || !hasAuthority {
         visitEmptyPathComponent()
       }

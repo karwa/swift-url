@@ -18,3 +18,4 @@ Collection._longestSubrange(equalTo:)
 
 IPv4Address.ParserResult
 IPv4Address.parse(utf8:)
+WebURL.cannotBeABase
