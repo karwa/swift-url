@@ -33,8 +33,7 @@ let package = Package(
   ],
   dependencies: [
     // swift-system for WebURLSystemExtras.
-    // FIXME: Move to a tagged release which includes https://github.com/apple/swift-system/pull/51
-    .package(url: "https://github.com/apple/swift-system.git", .branch("main")),
+    .package(url: "https://github.com/apple/swift-system.git", .upToNextMinor(from: "0.0.3")),
 
     // swift-checkit for testing protocol conformances. Test-only dependency.
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
