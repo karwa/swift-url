@@ -16,6 +16,7 @@ import XCTest
 
 @testable import WebURL
 
+@available(*, deprecated)
 final class IPv4AddressTests_Deprecated: XCTestCase {
 
   func testParseWithParseResult() {
