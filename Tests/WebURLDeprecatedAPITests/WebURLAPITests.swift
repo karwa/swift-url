@@ -16,6 +16,7 @@ import XCTest
 
 @testable import WebURL
 
+@available(*, deprecated)
 final class WebURLAPITests_Deprecated: XCTestCase {
 
   func testCannotBeABase() {
