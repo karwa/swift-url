@@ -159,9 +159,7 @@ extension FilePathTests {
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 1)
-
-      // FIXME: Perhaps don't automatically percent-decode path components?
-      XCTAssertEqual(fileURL.pathComponents.first, "caf��")
+      XCTAssertEqual(fileURL.pathComponents.first, "caf%E9%DD")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1)
@@ -180,9 +178,7 @@ extension FilePathTests {
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 1)
-
-      // FIXME: Perhaps don't automatically percent-decode path components?
-      XCTAssertEqual(fileURL.pathComponents.first, "hi���")
+      XCTAssertEqual(fileURL.pathComponents.first, "hi%E1%E2%E3")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek)
@@ -300,9 +296,7 @@ extension FilePathTests {
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
-
-      // FIXME: Perhaps don't automatically percent-decode path components?
-      XCTAssertEqual(fileURL.pathComponents.last, "caf��")
+      XCTAssertEqual(fileURL.pathComponents.last, "caf%E9%DD")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1)
@@ -322,9 +316,7 @@ extension FilePathTests {
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
-
-      // FIXME: Perhaps don't automatically percent-decode path components?
-      XCTAssertEqual(fileURL.pathComponents.last, "hi���")
+      XCTAssertEqual(fileURL.pathComponents.last, "hi%E1%E2%E3")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek)
@@ -482,9 +474,7 @@ extension FilePathTests {
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
-
-      // FIXME: Perhaps don't automatically percent-decode path components?
-      XCTAssertEqual(fileURL.pathComponents.last, "caf��")
+      XCTAssertEqual(fileURL.pathComponents.last, "caf%E9%DD")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1.dropFirst(4) /* \\?\ prefix */)
@@ -505,9 +495,7 @@ extension FilePathTests {
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
-
-      // FIXME: Perhaps don't automatically percent-decode path components?
-      XCTAssertEqual(fileURL.pathComponents.last, "hi���")
+      XCTAssertEqual(fileURL.pathComponents.last, "hi%E1%E2%E3")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek.dropFirst(4) /* \\?\ prefix */)

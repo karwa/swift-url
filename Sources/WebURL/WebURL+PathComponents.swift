@@ -40,16 +40,18 @@ extension WebURL {
   /// A view of the components in a hierarchical URL's path.
   ///
   /// This collection provides efficient, bidirectional, read-write access to the URL's path components.
-  /// Components are percent-decoded when they are returned and percent-encoded when they are replaced.
+  /// Components read via this view are returned as they appear in the URL string, including any percent-encoding.
+  /// Percent-encoding is added to inserted components as necessary.
   ///
   /// ```swift
-  /// var url = WebURL("http://example.com/swift/packages/%F0%9F%A6%86%20tracker")!
-  /// url.pathComponents.first! // "swift"
-  /// url.pathComponents.last! // "🦆 tracker"
+  /// var url = WebURL("http://example.com/packages/swift-url/documentation")!
+  /// url.pathComponents.first! // "packages"
+  /// url.pathComponents.last! // "documentation"
   ///
   /// url.pathComponents.removeLast()
-  /// url.pathComponents.append("swift-url")
-  /// print(url) // Prints "http://example.com/swift/packages/swift-url"
+  /// url.pathComponents.append("📚")
+  /// print(url) // Prints "http://example.com/packages/swift-url/%F0%9F%93%9A"
+  /// url.pathComponents.last!.percentDecoded "📚"
   /// ```
   ///
   /// Path components extend from their leading slash until the leading slash of the next component (or the end of the path). That means that a URL whose
@@ -155,7 +157,7 @@ extension WebURL.PathComponents: BidirectionalCollection {
   }
 
   public subscript(position: Index) -> String {
-    storage.utf8.pathComponent(position).percentDecodedString
+    String(decoding: storage.utf8.pathComponent(position), as: UTF8.self)
   }
 
   public func distance(from start: Index, to end: Index) -> Int {
