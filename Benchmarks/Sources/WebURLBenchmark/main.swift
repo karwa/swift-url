@@ -30,5 +30,7 @@ internal func blackHole<T>(_ x: T) {
 
 Benchmark.main([
   constructor_specialNonFile,
-  urlEncoded_Decoded
+  urlEncoded_Decoded,
+  componentSetters,
+  pathComponents
 ])
