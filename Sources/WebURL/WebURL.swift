@@ -241,7 +241,7 @@ extension WebURL {
   /// Hierarchical paths are those that begin with a "/". Empty paths are assumed to be hierarchical if the URL has a `hostname`.
   ///
   /// When setting this property, the given path string will be lexically simplified, and any code-points in the path's components that are not valid
-  /// for use will be percent-encoded. Setting this property will fail if the URL is non-hierarchical (see `WebURL.isHierarchical` for more information).
+  /// for use will be percent-encoded. Setting this property may fail if the URL is non-hierarchical (see `WebURL.isHierarchical`).
   ///
   public var path: String {
     get { String(decoding: utf8.path, as: UTF8.self) }
@@ -274,7 +274,7 @@ extension WebURL {
     set { setFragment(newValue) }
   }
 
-  /// Returns `true` if this is a hierarchical URL.
+  /// Whether this is a hierarchical URL.
   ///
   /// Hierarchical URLs have an authority component or hierarchical path.
   /// URLs with special schemes (such as http or file) are always hierarchical.
