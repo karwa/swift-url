@@ -81,15 +81,15 @@ extension WebURL {
   /// components described above, URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
   /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
-  /// This view does not support non-hierarchical URLs (`isHierarchical` is `false`), and triggers a runtime error if it is accessed on such a URL.
-  /// Almost all URLs are hierarchical (in particular, URLs with special schemes, such as http, https, and file, are always hierarchical).
+  /// Accessing this view triggers a runtime error if the URL is non-hierarchical.
+  /// Almost all URLs _are_ hierarchical (in particular, URLs with special schemes, such as http(s) and file, are always hierarchical).
   /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme. Examples of such URLs are:
   ///
   /// - `mailto:bob@example.com`
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  /// See the `WebURL.isHierarchical` property for more information about these URLs.
+  /// See the `WebURL.isHierarchical` property for more information.
   ///
   public struct PathComponents {
 

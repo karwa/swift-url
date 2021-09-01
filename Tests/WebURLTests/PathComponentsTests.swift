@@ -540,10 +540,9 @@ extension PathComponentsTests {
         XCTAssertEqualElements(url.pathComponents, ["a", "path"])
 
         url.pathComponents = emptyComponents
-        // https://github.com/whatwg/url/issues/581
-        //        XCTAssertEqual(url.serialized, "bar:/")
-        //        XCTAssertEqualElements(url.pathComponents!, [""])
-        //        XCTAssertURLIsIdempotent(url)
+        XCTAssertEqual(url.serialized, "bar:/")
+        XCTAssertEqualElements(url.pathComponents, [""])
+        XCTAssertURLIsIdempotent(url)
       }
       // Empty components not allowed for special schemes.
       do {
