@@ -55,20 +55,17 @@ extension URLStorage {
     newStructure.schemeLength = newSchemeBytes.count + 1
 
     var commands: [ReplaceSubrangeOperation] = [
-      .replace(subrange: oldStructure.rangeForReplacingCodeUnits(of: .scheme), withCount: newStructure.schemeLength) {
+      .replace(oldStructure.rangeForReplacingCodeUnits(of: .scheme), withCount: newStructure.schemeLength) {
         dest in
         let bytesWritten = dest.fastInitialize(from: ASCII.Lowercased(newSchemeBytes))
         dest[bytesWritten] = ASCII.colon.codePoint
         return bytesWritten + 1
       }
     ]
-    // If the current port is the default for the new scheme, it must be removed.
     if let portRange = oldStructure.range(of: .port) {
-      let portBytes = codeUnits[portRange]
-      assert(portBytes.count > 1, "invalid URLStructure: port must either be nil or >1 character")
-      if newStructure.schemeKind.isDefaultPort(utf8: portBytes.dropFirst()) {
+      if newStructure.schemeKind.isDefaultPort(utf8: codeUnits[portRange.dropFirst()]) {
         newStructure.portLength = 0
-        commands.append(.remove(subrange: portRange))
+        commands.append(.remove(portRange))
       }
     }
     return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
@@ -104,7 +101,7 @@ extension URLStorage {
     var newStructure = oldStructure
     newStructure.usernameLength = 0
 
-    guard let newValue = newValue, newValue.isEmpty == false else {
+    guard let newValue = newValue, !newValue.isEmpty else {
       guard let oldUsername = oldStructure.range(of: .username) else {
         return (AnyURLStorage(self), nil)
       }
@@ -116,19 +113,19 @@ extension URLStorage {
     newStructure.usernameLength = newLength
 
     let oldRange = oldStructure.rangeForReplacingCodeUnits(of: .username)
-    let addSeparator = (oldStructure.hasCredentialSeparator == false)
+    let addSeparator = !oldStructure.hasCredentialSeparator
     let bytesToWrite = newLength + (addSeparator ? 1 : 0)
 
     let result = replaceSubrange(oldRange, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
-      var bytesWritten = 0
+      var bytesWritten: Int
       if needsEncoding {
-        bytesWritten += dest.fastInitialize(from: newValue.lazy.percentEncoded(as: \.userInfo))
+        bytesWritten = dest.fastInitialize(from: newValue.lazy.percentEncoded(as: \.userInfo))
       } else {
-        bytesWritten += dest.fastInitialize(from: newValue)
+        bytesWritten = dest.fastInitialize(from: newValue)
       }
       if addSeparator {
         dest[bytesWritten] = ASCII.commercialAt.codePoint
-        bytesWritten += 1
+        bytesWritten &+= 1
       }
       return bytesWritten
     }
@@ -156,7 +153,7 @@ extension URLStorage {
     var newStructure = oldStructure
     newStructure.passwordLength = 0
 
-    guard let newValue = newValue, newValue.isEmpty == false else {
+    guard let newValue = newValue, !newValue.isEmpty else {
       guard let oldPassword = oldStructure.range(of: .password) else {
         return (AnyURLStorage(self), nil)
       }
@@ -182,10 +179,10 @@ extension URLStorage {
       } else {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .fastInitialize(from: newValue.lazy.percentEncoded(as: \.userInfo))
+          .fastInitialize(from: newValue)
       }
       dest[bytesWritten] = ASCII.commercialAt.codePoint
-      bytesWritten += 1
+      bytesWritten &+= 1
       return bytesWritten
     }
     return (result.newStorage, nil)
@@ -218,7 +215,7 @@ extension URLStorage {
       return (AnyURLStorage(self), .cannotSetHostOnNonHierarchicalURL)
     }
 
-    guard let newHostnameBytes = newValue, newHostnameBytes.isEmpty == false else {
+    guard let newHostnameBytes = newValue, !newHostnameBytes.isEmpty else {
 
       if oldStructure.schemeKind.isSpecial, oldStructure.schemeKind != .file {
         return (AnyURLStorage(self), .schemeDoesNotSupportNilOrEmptyHostnames)
@@ -251,7 +248,7 @@ extension URLStorage {
           oldStructure.rangeForReplacingSigil,
           withUninitializedSpace: Sigil.authority.length,
           newStructure: newStructure,
-          initializer: Sigil.authority.unsafeWrite
+          initializer: Sigil.unsafeWrite(.authority)
         )
         return (result.newStorage, nil)
 
@@ -270,10 +267,10 @@ extension URLStorage {
         newStructure.sigil = needsPathSigil ? .path : .none
         let commands: [ReplaceSubrangeOperation] = [
           .replace(
-            subrange: oldStructure.rangeForReplacingSigil,
+            oldStructure.rangeForReplacingSigil,
             withCount: needsPathSigil ? Sigil.path.length : 0,
-            writer: needsPathSigil ? Sigil.path.unsafeWrite : { _ in 0 }),
-          .remove(subrange: hostnameRange),
+            writer: needsPathSigil ? Sigil.unsafeWrite(.path) : { _ in 0 }),
+          .remove(hostnameRange),
         ]
         return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
       }
@@ -297,11 +294,11 @@ extension URLStorage {
 
     let commands: [ReplaceSubrangeOperation] = [
       .replace(
-        subrange: oldStructure.rangeForReplacingSigil,
+        oldStructure.rangeForReplacingSigil,
         withCount: Sigil.authority.length,
-        writer: Sigil.authority.unsafeWrite),
+        writer: Sigil.unsafeWrite(.authority)),
       .replace(
-        subrange: oldStructure.rangeForReplacingCodeUnits(of: .hostname),
+        oldStructure.rangeForReplacingCodeUnits(of: .hostname),
         withCount: newStructure.hostnameLength
       ) { dest in
         var writer = UnsafeBufferHostnameWriter(buffer: dest)
@@ -332,7 +329,7 @@ extension URLStorage {
     let oldStructure = header.structure
 
     // Check that the operation is semantically valid for the existing structure.
-    guard oldStructure.cannotHaveCredentialsOrPort == false else {
+    guard !oldStructure.cannotHaveCredentialsOrPort else {
       return (AnyURLStorage(self), .cannotHaveCredentialsOrPort)
     }
 
@@ -361,7 +358,7 @@ extension URLStorage {
     } else {
       let result = setSimpleComponent(
         .port,
-        to: UnsafeBufferPointer?.none,
+        to: UnsafeRawBufferPointer?.none,
         prefix: .colon,
         lengthKey: \.portLength,
         encodeSet: \.alreadyEncoded
@@ -416,21 +413,21 @@ extension URLStorage {
       break
     case (.path, false):
       newStructure.sigil = .none
-      commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
+      commands.append(.remove(oldStructure.rangeForReplacingSigil))
     case (.none, true):
       newStructure.sigil = .path
       commands.append(
         .replace(
-          subrange: oldStructure.rangeForReplacingSigil,
+          oldStructure.rangeForReplacingSigil,
           withCount: Sigil.path.length,
-          writer: Sigil.path.unsafeWrite)
+          writer: Sigil.unsafeWrite(.path))
       )
     }
     assert(newStructure.hasAuthority == oldStructure.hasAuthority)
 
     commands.append(
       .replace(
-        subrange: oldStructure.rangeForReplacingCodeUnits(of: .path),
+        oldStructure.rangeForReplacingCodeUnits(of: .path),
         withCount: pathInfo.requiredCapacity,
         writer: { dest in
           dest.writeNormalizedPath(
@@ -678,14 +675,14 @@ internal struct ReplaceSubrangeOperation {
   /// - seealso: `URLStorage.replaceSubrange`
   @inlinable
   internal static func replace(
-    subrange: Range<Int>, withCount: Int, writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+    _ subrange: Range<Int>, withCount: Int, writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) -> Self {
     ReplaceSubrangeOperation(subrange: subrange, newElementCount: withCount, writer: writer)
   }
 
   /// - seealso: `URLStorage.removeSubrange`
   @inlinable
-  internal static func remove(subrange: Range<Int>) -> Self {
+  internal static func remove(_ subrange: Range<Int>) -> Self {
     ReplaceSubrangeOperation(subrange: subrange, newElementCount: 0, writer: { _ in return 0 })
   }
 }
@@ -902,7 +899,7 @@ extension URLStorage {
       } else {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .fastInitialize(from: newBytes.lazy.percentEncoded(as: encodeSet))
+          .fastInitialize(from: newBytes)
       }
       return bytesWritten
     }

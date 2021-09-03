@@ -750,14 +750,14 @@ extension URLStorage {
       var commands = [ReplaceSubrangeOperation]()
       var newStructure = oldStructure
       if case .path = oldStructure.sigil {
-        commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
+        commands.append(.remove(oldStructure.rangeForReplacingSigil))
         newStructure.sigil = .none
       }
       newStructure.pathLength = 1
       newStructure.firstPathComponentLength = 1
       commands.append(
         .replace(
-          subrange: oldPathRange, withCount: 1,
+          oldPathRange, withCount: 1,
           writer: { buffer in
             buffer.baseAddress.unsafelyUnwrapped.initialize(to: ASCII.forwardSlash.codePoint)
             return 1
@@ -861,14 +861,14 @@ extension URLStorage {
     case (.none, true):
       commands.append(
         .replace(
-          subrange: oldStructure.rangeForReplacingSigil,
+          oldStructure.rangeForReplacingSigil,
           withCount: Sigil.path.length,
-          writer: Sigil.path.unsafeWrite)
+          writer: Sigil.unsafeWrite(.path))
       )
       newStructure.sigil = .path
       pathOffsetFromModifiedSigil = 2
     case (.path, false):
-      commands.append(.remove(subrange: oldStructure.rangeForReplacingSigil))
+      commands.append(.remove(oldStructure.rangeForReplacingSigil))
       newStructure.sigil = .none
       pathOffsetFromModifiedSigil = -2
     }
@@ -879,7 +879,7 @@ extension URLStorage {
 
     commands.append(
       .replace(
-        subrange: replacedRange, withCount: insertedPathLength,
+        replacedRange, withCount: insertedPathLength,
         writer: { buffer in
           var bytesWritten = 0
           for component in components {
