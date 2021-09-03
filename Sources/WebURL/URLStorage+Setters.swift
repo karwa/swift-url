@@ -23,7 +23,7 @@ extension URLStorage {
   /// Attempts to set the scheme component to the given UTF8-encoded string.
   /// The new value may contain a trailing colon (e.g. `http`, `http:`). Colons are only allowed as the last character of the string.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setScheme<UTF8Bytes>(
     to newValue: UTF8Bytes
   ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -85,7 +85,7 @@ extension URLStorage {
   /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setUsername<UTF8Bytes>(
     to newValue: UTF8Bytes?
   ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -137,7 +137,7 @@ extension URLStorage {
   /// - Note: Usernames and Passwords are never filtered of ASCII tab or newline characters.
   ///         If the given `newValue` contains any such characters, they will be percent-encoded in to the result.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setPassword<UTF8Bytes>(
     to newValue: UTF8Bytes?
   ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -203,7 +203,7 @@ extension URLStorage {
   /// An empty hostname preserves the `//` separator after the scheme, but the authority component will be empty (e.g. `unix://oldhost/some/path` -> `unix:///some/path`).
   /// A `nil` hostname removes the `//` separator after the scheme, resulting in a so-called "path-only" URL (e.g. `unix://oldhost/some/path` -> `unix:/some/path`).
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setHostname<UTF8Bytes>(
     to newValue: UTF8Bytes?
   ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
@@ -320,7 +320,7 @@ extension URLStorage {
 
   /// Attempts to set the port component to the given value. A value of `nil` removes the port.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setPort(
     to newValue: UInt16?
   ) -> (AnyURLStorage, URLSetterError?) {
@@ -378,7 +378,7 @@ extension URLStorage {
 
   /// Attempts to set the path component to the given UTF8-encoded string.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setPath<UTF8Bytes>(
     to newPath: UTF8Bytes
   ) -> (AnyURLStorage, URLSetterError?) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
@@ -454,7 +454,7 @@ extension URLStorage {
   ///
   /// A value of `nil` removes the query.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setQuery<UTF8Bytes>(
     to newValue: UTF8Bytes?
   ) -> AnyURLStorage where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -487,7 +487,7 @@ extension URLStorage {
 
   /// Set the query component to the given UTF8-encoded string, assuming that the string is already `application/x-www-form-urlencoded`.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setQuery<UTF8Bytes>(
     toKnownFormEncoded newValue: UTF8Bytes?
   ) -> AnyURLStorage where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -508,7 +508,7 @@ extension URLStorage {
   ///
   /// A value of `nil` removes the query.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func setFragment<UTF8Bytes>(
     to newValue: UTF8Bytes?
   ) -> AnyURLStorage where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
