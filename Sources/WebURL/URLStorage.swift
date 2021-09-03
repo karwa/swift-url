@@ -555,16 +555,22 @@ extension Sigil {
   /// - returns: The actual number of bytes written (always 2, unless the buffer is `nil`).
   ///
   @inlinable
-  internal func unsafeWrite(to buffer: inout UnsafeMutableBufferPointer<UInt8>) -> Int {
-    guard let ptr = buffer.baseAddress else { return 0 }
-    switch self {
+  internal static func unsafeWrite(_ sigil: Sigil) -> (_ buffer: inout UnsafeMutableBufferPointer<UInt8>) -> Int {
+    switch sigil {
     case .authority:
-      ptr.initialize(repeating: ASCII.forwardSlash.codePoint, count: 2)
+      return { buffer in
+        guard let ptr = buffer.baseAddress else { return 0 }
+        ptr.initialize(repeating: ASCII.forwardSlash.codePoint, count: 2)
+        return 2
+      }
     case .path:
-      ptr[0] = ASCII.forwardSlash.codePoint
-      ptr[1] = ASCII.period.codePoint
+      return { buffer in
+        guard let ptr = buffer.baseAddress else { return 0 }
+        ptr.initialize(to: ASCII.forwardSlash.codePoint)
+        (ptr + 1).initialize(to: ASCII.period.codePoint)
+        return 2
+      }
     }
-    return 2
   }
 }
 
