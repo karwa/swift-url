@@ -54,21 +54,21 @@ extension URLStorage {
     newStructure.schemeKind = newSchemeKind
     newStructure.schemeLength = newSchemeBytes.count + 1
 
-    var commands: [ReplaceSubrangeOperation] = [
-      .replace(oldStructure.rangeForReplacingCodeUnits(of: .scheme), withCount: newStructure.schemeLength) {
+    return withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
+      commands += .replace(oldStructure.rangeForReplacingCodeUnits(of: .scheme), withCount: newStructure.schemeLength) {
         dest in
         let bytesWritten = dest.fastInitialize(from: ASCII.Lowercased(newSchemeBytes))
         dest[bytesWritten] = ASCII.colon.codePoint
         return bytesWritten + 1
       }
-    ]
-    if let portRange = oldStructure.range(of: .port) {
-      if newStructure.schemeKind.isDefaultPort(utf8: codeUnits[portRange.dropFirst()]) {
-        newStructure.portLength = 0
-        commands.append(.remove(portRange))
+      if let portRange = oldStructure.range(of: .port) {
+        if newStructure.schemeKind.isDefaultPort(utf8: codeUnits[portRange.dropFirst()]) {
+          newStructure.portLength = 0
+          commands += .remove(portRange)
+        }
       }
+      return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
     }
-    return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
   }
 }
 
@@ -265,14 +265,14 @@ extension URLStorage {
             PathComponentParser.doesNormalizedPathRequirePathSigil(codeUnits[$0])
           } ?? false
         newStructure.sigil = needsPathSigil ? .path : .none
-        let commands: [ReplaceSubrangeOperation] = [
-          .replace(
+        return withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
+          commands += .replace(
             oldStructure.rangeForReplacingSigil,
             withCount: needsPathSigil ? Sigil.path.length : 0,
-            writer: needsPathSigil ? Sigil.unsafeWrite(.path) : { _ in 0 }),
-          .remove(hostnameRange),
-        ]
-        return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
+            writer: needsPathSigil ? Sigil.unsafeWrite(.path) : { _ in 0 })
+          commands += .remove(hostnameRange)
+          return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
+        }
       }
     }
 
@@ -292,21 +292,21 @@ extension URLStorage {
     // Always insert/overwrite the existing sigil.
     newStructure.sigil = .authority
 
-    let commands: [ReplaceSubrangeOperation] = [
-      .replace(
+    return withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
+      commands += .replace(
         oldStructure.rangeForReplacingSigil,
         withCount: Sigil.authority.length,
-        writer: Sigil.unsafeWrite(.authority)),
-      .replace(
+        writer: Sigil.unsafeWrite(.authority))
+      commands += .replace(
         oldStructure.rangeForReplacingCodeUnits(of: .hostname),
         withCount: newStructure.hostnameLength
       ) { dest in
         var writer = UnsafeBufferHostnameWriter(buffer: dest)
         newHost.write(bytes: newHostnameBytes, using: &writer)
         return dest.baseAddress?.distance(to: writer.buffer.baseAddress!) ?? 0
-      },
-    ]
-    return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
+      }
+      return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
+    }
   }
 }
 
@@ -407,26 +407,23 @@ extension URLStorage {
     newStructure.pathLength = pathInfo.requiredCapacity
     newStructure.firstPathComponentLength = pathInfo.firstComponentLength
 
-    var commands: [ReplaceSubrangeOperation] = []
-    switch (oldStructure.sigil, pathInfo.requiresPathSigil) {
-    case (.authority, _), (.path, true), (.none, false):
-      break
-    case (.path, false):
-      newStructure.sigil = .none
-      commands.append(.remove(oldStructure.rangeForReplacingSigil))
-    case (.none, true):
-      newStructure.sigil = .path
-      commands.append(
-        .replace(
+    return withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
+      switch (oldStructure.sigil, pathInfo.requiresPathSigil) {
+      case (.authority, _), (.path, true), (.none, false):
+        break
+      case (.path, false):
+        newStructure.sigil = .none
+        commands += .remove(oldStructure.rangeForReplacingSigil)
+      case (.none, true):
+        newStructure.sigil = .path
+        commands += .replace(
           oldStructure.rangeForReplacingSigil,
           withCount: Sigil.path.length,
           writer: Sigil.unsafeWrite(.path))
-      )
-    }
-    assert(newStructure.hasAuthority == oldStructure.hasAuthority)
+      }
+      assert(newStructure.hasAuthority == oldStructure.hasAuthority)
 
-    commands.append(
-      .replace(
+      commands += .replace(
         oldStructure.rangeForReplacingCodeUnits(of: .path),
         withCount: pathInfo.requiredCapacity,
         writer: { dest in
@@ -437,8 +434,8 @@ extension URLStorage {
             needsPercentEncoding: pathInfo.needsPercentEncoding
           )
         })
-    )
-    return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
+      return (multiReplaceSubrange(commands, newStructure: newStructure), nil)
+    }
   }
 }
 
@@ -766,10 +763,9 @@ extension URLStorage {
   ///            of supporting the new structure, this will wrap `self`. Otherwise, it will wrap a new storage object.
   ///
   @inlinable
-  internal mutating func multiReplaceSubrange(
-    _ operations: [ReplaceSubrangeOperation],
-    newStructure: URLStructure<Int>
-  ) -> AnyURLStorage {
+  internal mutating func multiReplaceSubrange<Operations>(
+    _ operations: __shared /* caller-owned */ Operations, newStructure: URLStructure<Int>
+  ) -> AnyURLStorage where Operations: BidirectionalCollection, Operations.Element == ReplaceSubrangeOperation {
 
     #if DEBUG
       do {
