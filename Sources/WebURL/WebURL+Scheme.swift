@@ -48,10 +48,8 @@ extension WebURL.SchemeKind {
   internal init<UTF8Bytes>(parsing schemeContent: UTF8Bytes) where UTF8Bytes: Sequence, UTF8Bytes.Element == UInt8 {
 
     if let contiguouslyParsed = schemeContent.withContiguousStorageIfAvailable({ buffer -> Self in
-      guard buffer.count != 0 else { return .other }
-      return WebURL.SchemeKind(
-        ptr: UnsafeRawPointer(buffer.baseAddress.unsafelyUnwrapped), count: UInt8(truncatingIfNeeded: buffer.count)
-      )
+      guard let count = UInt8(exactly: buffer.count), count > 0 else { return .other }
+      return WebURL.SchemeKind(ptr: UnsafeRawPointer(buffer.baseAddress.unsafelyUnwrapped), count: count)
     }) {
       self = contiguouslyParsed
       return
