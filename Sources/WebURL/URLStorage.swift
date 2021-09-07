@@ -14,14 +14,10 @@
 // --------------------------------------------
 // This file contains the primary types relating to storage and manipulation of URL strings.
 //
-// - URLStructure: The basic description of where the components are.
-//
-// - URLHeader [protocol]: A type which stores a particular kind of URLStructure.
-// - URLStorage<Header>: A type which owns a ManagedBuffer containing the header and URL code-units.
-// - AnyURLStorage: A wrapper around URLStorage which erases its header type so you can use the URL without
-//                  caring about that detail.
-//
-// - BasicURLHeader<SizeType>: A basic URLHeader which stores a URLStructure in its entirety.
+// - URLStructure<SizeType>: The basic description of where the components are.
+// - URLHeader<SizeType>: A ManagedBufferHeader which stores a URLStructure.
+// - URLStorage: The main storage type. Defines a particular SizeType to be used for all URL strings and components,
+//               and wraps a ManagedArrayBuffer<URLHeader> containing the structure and URL code-units.
 // --------------------------------------------
 
 
@@ -576,66 +572,100 @@ extension Sigil {
 
 
 // --------------------------------------------
+// MARK: - URLHeader
+// --------------------------------------------
+
+
+/// A `ManagedBufferHeader` containing a complete `URLStructure` and size-appropriate `count` and `capacity` fields.
+///
+@usableFromInline
+internal struct URLHeader<SizeType: FixedWidthInteger> {
+
+  @usableFromInline
+  internal var _count: SizeType
+
+  @usableFromInline
+  internal var _capacity: SizeType
+
+  @usableFromInline
+  internal var _structure: URLStructure<SizeType>
+
+  @inlinable
+  internal init(_count: SizeType, _capacity: SizeType, _structure: URLStructure<SizeType>) {
+    self._count = _count
+    self._capacity = _capacity
+    self._structure = _structure
+  }
+}
+
+extension URLHeader: ManagedBufferHeader {
+
+  @inlinable
+  internal var count: Int {
+    get { return Int(_count) }
+    set { _count = SizeType(newValue) }
+  }
+
+  @inlinable
+  internal var capacity: Int {
+    return Int(_capacity)
+  }
+
+  @inlinable
+  internal func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self? {
+    let newCapacity = SizeType(clamping: maximumCapacity)
+    guard newCapacity >= minimumCapacity else {
+      return nil
+    }
+    return Self(_count: _count, _capacity: newCapacity, _structure: _structure)
+  }
+}
+
+extension URLHeader {
+
+  @inlinable
+  internal init(structure: URLStructure<Int>) {
+    self = .init(_count: 0, _capacity: 0, _structure: URLStructure<SizeType>(copying: structure))
+  }
+
+  @inlinable
+  internal var structure: URLStructure<Int> {
+    return URLStructure(copying: _structure)
+  }
+
+  @inlinable
+  internal mutating func copyStructure(from newStructure: URLStructure<Int>) {
+    self._structure = URLStructure(copying: newStructure)
+  }
+}
+
+
+// --------------------------------------------
 // MARK: - URLStorage
 // --------------------------------------------
 
 
-/// A `ManagedBufferHeader` which stores a URL's structure.
-///
-/// When a URL is constructed or mutated, the parser or setter function first calculates the structure and required capacity of the resulting normalized URL string.
-///
-/// For mutations, `AnyURLStorage.isOptimalStorageType(_:requiredCapacity:structure:)` is consulted to check if the existing
-/// header type is appropriate for the resulting string. If it is, the existing capacity is sufficient, and the storage is uniquely referenced, the modification occurs in-place.
-/// Otherwise, `AnyURLStorage(optimalStorageForCapacity:structure:initializingCodeUnitsWith:)` is used to create storage with
-/// the appropriate header type.
-///
-@usableFromInline
-internal protocol URLHeader: ManagedBufferHeader {
-
-  /// Returns an `AnyURLStorage` which wraps the given storage object.
-  ///
-  /// - Important: This means the only types that may conform to `URLHeader` are those supported by `AnyURLStorage`.
-  ///
-  static func eraseToAnyURLStorage(_ storage: URLStorage<Self>) -> AnyURLStorage
-
-  /// Creates a new header with the given structure. The header's `capacity` and `count` are not specified, and through the `ManagedBufferHeader`
-  /// interface when the header is attached to storage and that storage populated with code-units.
-  ///
-  /// The header must be capable of exactly reproducing the given structure. Otherwise, this initializer must trigger a runtime error.
-  ///
-  init(structure: URLStructure<Int>)
-
-  /// Updates the URL structure stored by this header to reflect some prior change to the associated code-units.
-  ///
-  /// This method only updates the description of the URL's structure; it **does not** alter the header's `count` or `capacity`,
-  /// which the operations modifying the code-units are expected to keep accurate.
-  ///
-  /// The header must be capable of exactly reproducing the given structure. Otherwise, this initializer must trigger a runtime error.
-  ///
-  mutating func copyStructure(from newStructure: URLStructure<Int>)
-
-  /// The structure of the URL string stored in the code-units associated with this header.
-  ///
-  var structure: URLStructure<Int> { get }
-}
-
 /// The primary type responsible for URL storage.
 ///
 /// An `URLStorage` object wraps a `ManagedArrayBuffer`, containing the normalized URL string's contiguous code-units, together
-/// with a header describing the structure of the URL components within those code-units. Headers may store that description in different ways,
-/// and may not support all possible URL strings; mutating functions must make sure to allocate storage with an appropriate header type for the
-/// resulting URL string. The `AnyURLStorage` type is able to advise, create, and abstract over variations in header type.
-///
-/// `URLStorage` has value semantics via `ManagedArrayBuffer`, with modifications to multiply-referenced storage copying on write.
+/// with a header describing the structure of the URL components within those code-units. `URLStorage` has value semantics
+/// via `ManagedArrayBuffer`, with modifications to multiply-referenced storage copying on write.
 ///
 @usableFromInline
-internal struct URLStorage<Header: URLHeader> {
+internal struct URLStorage {
+
+  /// The type used to represent dimensions of the URL string and its components.
+  ///
+  /// The URL string, and any of its components, may not be larger than `SizeType.max`.
+  ///
+  @usableFromInline
+  internal typealias SizeType = UInt32
 
   @usableFromInline
-  internal var codeUnits: ManagedArrayBuffer<Header, UInt8>
+  internal var codeUnits: ManagedArrayBuffer<URLHeader<SizeType>, UInt8>
 
   @inlinable
-  internal var header: Header {
+  internal var header: URLHeader<SizeType> {
     get { return codeUnits.header }
     _modify { yield &codeUnits.header }
   }
@@ -659,7 +689,7 @@ internal struct URLStorage<Header: URLHeader> {
     structure: URLStructure<Int>,
     initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
-    self.codeUnits = ManagedArrayBuffer(minimumCapacity: count, initialHeader: Header(structure: structure))
+    self.codeUnits = ManagedArrayBuffer(minimumCapacity: count, initialHeader: URLHeader(structure: structure))
     assert(self.codeUnits.count == 0)
     assert(self.codeUnits.header.capacity >= count)
     self.codeUnits.unsafeAppend(uninitializedCapacity: count) { buffer in initializer(&buffer) }
@@ -668,6 +698,21 @@ internal struct URLStorage<Header: URLHeader> {
 }
 
 extension URLStorage {
+
+  @inlinable
+  internal var structure: URLStructure<Int> {
+    header.structure
+  }
+
+  @inlinable
+  internal var schemeKind: WebURL.SchemeKind {
+    header._structure.schemeKind
+  }
+
+  @inlinable
+  internal var isHierarchical: Bool {
+    header._structure.isHierarchical
+  }
 
   @inlinable
   internal func withUTF8OfAllAuthorityComponents<T>(
@@ -688,286 +733,21 @@ extension URLStorage {
   }
 }
 
-
-// --------------------------------------------
-// MARK: - AnyURLStorage
-// --------------------------------------------
-
-
-/// This enum serves like an existential for `URLStorage` with a limited set of supported header types.
-/// It is also able to determine the optimal header type for a `URLStructure`.
-///
-@usableFromInline
-internal enum AnyURLStorage {
-  case small(URLStorage<BasicURLHeader<UInt8>>)
-  case large(URLStorage<BasicURLHeader<Int>>)
-
-  @inlinable
-  internal init<T>(_ storage: URLStorage<T>) {
-    self = T.eraseToAnyURLStorage(storage)
-  }
-}
-
-extension AnyURLStorage {
-
-  /// Allocates a new storage object, with the header type best-suited for a normalized URL string with the given size and structure.
-  /// The `initializer` closure is invoked to write the code-units, and must return the number of code-units initialized.
-  ///
-  /// - parameters:
-  ///   - count:       The number of UTF8 code-units contained in the normalized URL string that `initializer` will write to the new storage.
-  ///   - structure:   The structure of the normalized URL string that `initializer` will write to the new storage.
-  ///   - initializer: A closure which must initialize exactly `count` code-units in the buffer pointer it is given, matching the normalized URL string
-  ///                  described by `structure`. The closure returns the number of bytes actually written to storage, which should be
-  ///                  calculated by the closure independently as it writes the contents, which serves as a safety check to avoid exposing uninitialized storage.
-  ///
-  @inlinable
-  internal init(
-    optimalStorageForCapacity count: Int,
-    structure: URLStructure<Int>,
-    initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
-  ) {
-    if count <= UInt8.max {
-      self = .small(
-        URLStorage<BasicURLHeader<UInt8>>(count: count, structure: structure, initializingCodeUnitsWith: initializer)
-      )
-    } else {
-      self = .large(
-        URLStorage<BasicURLHeader<Int>>(count: count, structure: structure, initializingCodeUnitsWith: initializer)
-      )
-    }
-  }
-
-  /// Whether or not `type` is the optimal storage type for a normalized URL string of the given size and structure.
-  /// It should be assumed that types which return `false` cannot store a URL with the given structure at all,
-  /// and that attempting to do so will trigger a runtime error.
-  ///
-  @inlinable
-  internal static func isOptimalStorageType<T>(
-    _ type: URLStorage<T>.Type, requiredCapacity: Int, structure: URLStructure<Int>
-  ) -> Bool {
-    if requiredCapacity <= UInt8.max {
-      return type == URLStorage<BasicURLHeader<UInt8>>.self
-    }
-    return type == URLStorage<BasicURLHeader<Int>>.self
-  }
-}
-
-extension AnyURLStorage {
-
-  @inlinable
-  internal var structure: URLStructure<Int> {
-    switch self {
-    case .small(let storage): return storage.header.structure
-    case .large(let storage): return storage.header.structure
-    }
-  }
-
-  @inlinable
-  internal var schemeKind: WebURL.SchemeKind {
-    structure.schemeKind
-  }
-
-  @inlinable
-  internal var isHierarchical: Bool {
-    structure.isHierarchical
-  }
-
-  @inlinable
-  internal func withUTF8OfAllAuthorityComponents<R>(
-    _ body: (
-      _ authorityString: UnsafeBufferPointer<UInt8>?,
-      _ usernameLength: Int,
-      _ passwordLength: Int,
-      _ hostnameLength: Int,
-      _ portLength: Int
-    ) -> R
-  ) -> R {
-    switch self {
-    case .small(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
-    case .large(let storage): return storage.withUTF8OfAllAuthorityComponents(body)
-    }
-  }
-}
-
 /// The URL `a:` - essentially the smallest valid URL string. This is a used to temporarily occupy an `AnyURLStorage`,
 /// so that its _actual_ storage can be moved to a uniquely-referenced local variable.
 ///
 /// It should not be possible to observe a URL whose storage is set to this object.
 ///
 @usableFromInline
-internal let _tempStorage = AnyURLStorage(
-  URLStorage<BasicURLHeader<UInt8>>(
-    count: 2,
-    structure: URLStructure(
-      schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
-      portLength: 0, pathLength: 0, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 0,
-      sigil: nil, schemeKind: .other, isHierarchical: false, queryIsKnownFormEncoded: true),
-    initializingCodeUnitsWith: { buffer in
-      buffer[0] = ASCII.a.codePoint
-      buffer[1] = ASCII.colon.codePoint
-      return 2
-    }
-  )
+internal let _tempStorage = URLStorage(
+  count: 2,
+  structure: URLStructure(
+    schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
+    portLength: 0, pathLength: 0, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 0,
+    sigil: nil, schemeKind: .other, isHierarchical: false, queryIsKnownFormEncoded: true),
+  initializingCodeUnitsWith: { buffer in
+    buffer[0] = ASCII.a.codePoint
+    buffer[1] = ASCII.colon.codePoint
+    return 2
+  }
 )
-
-extension AnyURLStorage {
-
-  @inlinable
-  internal mutating func withUnwrappedMutableStorage(
-    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage),
-    _ large: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage)
-  ) {
-    // We need to go through a bit of a dance in order to get a unique reference to the storage.
-    // It's like if you have something stuck to one hand and try to remove it with the other hand.
-    //
-    // Basically:
-    // 1. Swap our storage to temporarily point to some read-only global, so our only storage reference is
-    //    via a local variable.
-    // 2. Extract the URLStorage (which is a COW value type) from local variable's enum payload, and set
-    //    the local to also point that read-only global.
-    // 3. Hand that extracted storage off to closure `inout`, which does what it wants and
-    //    returns a storage object back (possibly the same storage object).
-    // 4. We round it all off by assigning that value as our new storage. Phew.
-    var localRef = self
-    self = _tempStorage
-    switch localRef {
-    case .large(var extracted_storage):
-      localRef = _tempStorage
-      self = large(&extracted_storage)
-    case .small(var extracted_storage):
-      localRef = _tempStorage
-      self = small(&extracted_storage)
-    }
-  }
-
-  @inlinable
-  internal mutating func withUnwrappedMutableStorage(
-    _ small: (inout URLStorage<BasicURLHeader<UInt8>>) -> (AnyURLStorage, URLSetterError?),
-    _ large: (inout URLStorage<BasicURLHeader<Int>>) -> (AnyURLStorage, URLSetterError?)
-  ) throws {
-    // As above, but allows the closure to return a URLSetterError.
-    var error: URLSetterError?
-    var localRef = self
-    self = _tempStorage
-    switch localRef {
-    case .large(var extracted_storage):
-      localRef = _tempStorage
-      (self, error) = large(&extracted_storage)
-    case .small(var extracted_storage):
-      localRef = _tempStorage
-      (self, error) = small(&extracted_storage)
-    }
-    if let error = error {
-      throw error
-    }
-  }
-}
-
-
-// --------------------------------------------
-// MARK: - BasicURLHeader
-// --------------------------------------------
-
-
-/// A marker protocol for integer types supported by `AnyURLStorage` when wrapping a `URLStorage<BasicURLHeader<T>>`.
-///
-@usableFromInline
-internal protocol AnyURLStorageSupportedBasicHeaderSize: FixedWidthInteger {
-
-  /// Wraps the given `storage` in the appropriate `AnyURLStorage`.
-  ///
-  static func _eraseToAnyURLStorage(_ storage: URLStorage<BasicURLHeader<Self>>) -> AnyURLStorage
-}
-
-extension Int: AnyURLStorageSupportedBasicHeaderSize {
-
-  @inlinable
-  internal static func _eraseToAnyURLStorage(_ storage: URLStorage<BasicURLHeader<Int>>) -> AnyURLStorage {
-    return .large(storage)
-  }
-}
-
-extension UInt8: AnyURLStorageSupportedBasicHeaderSize {
-
-  @inlinable
-  internal static func _eraseToAnyURLStorage(_ storage: URLStorage<BasicURLHeader<UInt8>>) -> AnyURLStorage {
-    return .small(storage)
-  }
-}
-
-/// A `ManagedBufferHeader` containing a complete `URLStructure` and size-appropriate `count` and `capacity` fields.
-///
-@usableFromInline
-internal struct BasicURLHeader<SizeType: FixedWidthInteger> {
-
-  @usableFromInline
-  internal var _count: SizeType
-
-  @usableFromInline
-  internal var _capacity: SizeType
-
-  @usableFromInline
-  internal var _structure: URLStructure<SizeType>
-
-  @inlinable
-  internal init(_count: SizeType, _capacity: SizeType, structure: URLStructure<SizeType>) {
-    self._count = _count
-    self._capacity = _capacity
-    self._structure = structure
-  }
-
-  @inlinable
-  internal static func _closestAddressableCapacity(to idealCapacity: Int) -> SizeType {
-    if idealCapacity <= Int(SizeType.max) {
-      return SizeType(idealCapacity)
-    } else {
-      return SizeType.max
-    }
-  }
-}
-
-extension BasicURLHeader: ManagedBufferHeader {
-
-  @inlinable
-  internal var count: Int {
-    get { return Int(_count) }
-    set { _count = SizeType(newValue) }
-  }
-
-  @inlinable
-  internal var capacity: Int {
-    return Int(_capacity)
-  }
-
-  @inlinable
-  internal func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self? {
-    let newCapacity = Self._closestAddressableCapacity(to: maximumCapacity)
-    guard newCapacity >= minimumCapacity else {
-      return nil
-    }
-    return Self(_count: _count, _capacity: newCapacity, structure: _structure)
-  }
-}
-
-extension BasicURLHeader: URLHeader where SizeType: AnyURLStorageSupportedBasicHeaderSize {
-
-  @inlinable
-  internal static func eraseToAnyURLStorage(_ storage: URLStorage<Self>) -> AnyURLStorage {
-    return SizeType._eraseToAnyURLStorage(storage)
-  }
-
-  @inlinable
-  internal init(structure: URLStructure<Int>) {
-    self = .init(_count: 0, _capacity: 0, structure: URLStructure<SizeType>(copying: structure))
-  }
-
-  @inlinable
-  internal mutating func copyStructure(from newStructure: URLStructure<Int>) {
-    self._structure = URLStructure(copying: newStructure)
-  }
-
-  @inlinable
-  internal var structure: URLStructure<Int> {
-    return URLStructure(copying: _structure)
-  }
-}

@@ -94,9 +94,9 @@ extension WebURL {
   public struct PathComponents {
 
     @usableFromInline
-    internal var storage: AnyURLStorage
+    internal var storage: URLStorage
 
-    internal init(storage: AnyURLStorage) {
+    internal init(storage: URLStorage) {
       self.storage = storage
     }
   }
@@ -283,21 +283,7 @@ extension WebURL.PathComponents {
     _ range: Range<Index>, withUTF8 newComponents: Components
   ) -> Range<Index>
   where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
-
-    var newSubrange: Range<Index>?
-    storage.withUnwrappedMutableStorage(
-      { small -> AnyURLStorage in
-        let result = small.replacePathComponents(range, with: newComponents)
-        newSubrange = result.1
-        return result.0
-      },
-      { large -> AnyURLStorage in
-        let result = large.replacePathComponents(range, with: newComponents)
-        newSubrange = result.1
-        return result.0
-      }
-    )
-    return newSubrange!
+    storage.replacePathComponents(range, with: newComponents)
   }
 }
 
@@ -642,41 +628,6 @@ extension WebURL.PathComponents {
 // --------------------------------------------
 
 
-extension AnyURLStorage {
-
-  @inlinable
-  internal var pathComponentsStartIndex: WebURL.PathComponents.Index {
-    switch self {
-    case .small(let storage): return storage.pathComponentsStartIndex
-    case .large(let storage): return storage.pathComponentsStartIndex
-    }
-  }
-
-  @inlinable
-  internal var pathComponentsEndIndex: WebURL.PathComponents.Index {
-    switch self {
-    case .small(let storage): return storage.pathComponentsEndIndex
-    case .large(let storage): return storage.pathComponentsEndIndex
-    }
-  }
-
-  @inlinable
-  internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int? {
-    switch self {
-    case .small(let storage): return storage.endOfPathComponent(startingAt: componentStartOffset)
-    case .large(let storage): return storage.endOfPathComponent(startingAt: componentStartOffset)
-    }
-  }
-
-  @inlinable
-  internal func startOfPathComponent(endingAt componentEndOffset: Int) -> Int? {
-    switch self {
-    case .small(let storage): return storage.startOfPathComponent(endingAt: componentEndOffset)
-    case .large(let storage): return storage.startOfPathComponent(endingAt: componentEndOffset)
-    }
-  }
-}
-
 extension URLStorage {
 
   @inlinable
@@ -732,7 +683,7 @@ extension URLStorage {
   /// If this URL is non-hierarchical, a runtime error is triggered.
   ///
   @inlinable
-  internal mutating func _clearPath() -> (AnyURLStorage, Range<WebURL.PathComponents.Index>) {
+  internal mutating func _clearPath() -> Range<WebURL.PathComponents.Index> {
 
     let oldStructure = header.structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
@@ -740,36 +691,32 @@ extension URLStorage {
 
     // We can only set an empty path if this is a non-special scheme with authority ("foo://host?query").
     // Everything else (special, path-only) requires at least a lone "/".
-    let replaced: AnyURLStorage
     if !oldStructure.schemeKind.isSpecial, oldStructure.hasAuthority {
       var newStructure = oldStructure
       newStructure.pathLength = 0
       newStructure.firstPathComponentLength = 0
-      replaced = removeSubrange(oldPathRange, newStructure: newStructure).newStorage
+      removeSubrange(oldPathRange, newStructure: newStructure)
     } else {
-      var commands = [ReplaceSubrangeOperation]()
-      var newStructure = oldStructure
-      if case .path = oldStructure.sigil {
-        commands.append(.remove(oldStructure.rangeForReplacingSigil))
-        newStructure.sigil = .none
+      withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
+        var newStructure = oldStructure
+        if case .path = oldStructure.sigil {
+          commands += .remove(oldStructure.rangeForReplacingSigil)
+          newStructure.sigil = .none
+        }
+        newStructure.pathLength = 1
+        newStructure.firstPathComponentLength = 1
+        commands += .replace(oldPathRange, withCount: 1) { buffer in
+          buffer.baseAddress.unsafelyUnwrapped.initialize(to: ASCII.forwardSlash.codePoint)
+          return 1
+        }
+        try! multiReplaceSubrange(commands, newStructure: newStructure).get()
       }
-      newStructure.pathLength = 1
-      newStructure.firstPathComponentLength = 1
-      commands.append(
-        .replace(
-          oldPathRange, withCount: 1,
-          writer: { buffer in
-            buffer.baseAddress.unsafelyUnwrapped.initialize(to: ASCII.forwardSlash.codePoint)
-            return 1
-          })
-      )
-      replaced = multiReplaceSubrange(commands, newStructure: newStructure)
     }
-    let newPathStart = replaced.structure.pathStart
-    let newPathEnd = replaced.structure.pathStart &+ replaced.structure.pathLength
+    let newPathStart = self.structure.pathStart
+    let newPathEnd = self.structure.pathStart &+ self.structure.pathLength
     let newLowerBound = WebURL.PathComponents.Index(codeUnitRange: newPathStart..<newPathEnd)
     let newUpperBound = WebURL.PathComponents.Index(codeUnitRange: newPathEnd..<newPathEnd)
-    return (replaced, Range(uncheckedBounds: (newLowerBound, newUpperBound)))
+    return Range(uncheckedBounds: (newLowerBound, newUpperBound))
   }
 
   /// Replaces the path components in the given range with the given new components.
@@ -781,7 +728,7 @@ extension URLStorage {
   internal mutating func replacePathComponents<Components>(
     _ replacedIndices: Range<WebURL.PathComponents.Index>,
     with components: Components
-  ) -> (AnyURLStorage, Range<WebURL.PathComponents.Index>)
+  ) -> Range<WebURL.PathComponents.Index>
   where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
 
     let oldStructure = header.structure
@@ -851,67 +798,48 @@ extension URLStorage {
     }
 
     // Calculate the new structure and replace the code-units.
-    var newStructure = oldStructure
-    var commands = [ReplaceSubrangeOperation]()
-
     var pathOffsetFromModifiedSigil = 0
-    switch (oldStructure.sigil, newPathRequiresSigil) {
-    case (.authority, _), (.none, false), (.path, true):
-      break
-    case (.none, true):
-      commands.append(
-        .replace(
+
+    withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
+      var newStructure = oldStructure
+      switch (oldStructure.sigil, newPathRequiresSigil) {
+      case (.authority, _), (.none, false), (.path, true):
+        break
+      case (.none, true):
+        commands += .replace(
           oldStructure.rangeForReplacingSigil,
           withCount: Sigil.path.length,
           writer: Sigil.unsafeWrite(.path))
-      )
-      newStructure.sigil = .path
-      pathOffsetFromModifiedSigil = 2
-    case (.path, false):
-      commands.append(.remove(oldStructure.rangeForReplacingSigil))
-      newStructure.sigil = .none
-      pathOffsetFromModifiedSigil = -2
+        newStructure.sigil = .path
+        pathOffsetFromModifiedSigil = 2
+      case (.path, false):
+        commands += .remove(oldStructure.rangeForReplacingSigil)
+        newStructure.sigil = .none
+        pathOffsetFromModifiedSigil = -2
+      }
+
+      newStructure.firstPathComponentLength = newPathFirstComponentLength
+      newStructure.pathLength -= replacedRange.count
+      newStructure.pathLength += insertedPathLength
+
+      commands += .replace(replacedRange, withCount: insertedPathLength) { buffer in
+        var bytesWritten = 0
+        for component in components {
+          buffer[bytesWritten] = ASCII.forwardSlash.codePoint
+          bytesWritten &+= 1
+          bytesWritten &+=
+            UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...])
+            .fastInitialize(from: component.lazy.percentEncoded(as: \.pathComponent))
+        }
+        return bytesWritten
+      }
+      try! multiReplaceSubrange(commands, newStructure: newStructure).get()
     }
 
-    newStructure.firstPathComponentLength = newPathFirstComponentLength
-    newStructure.pathLength -= replacedRange.count
-    newStructure.pathLength += insertedPathLength
-
-    commands.append(
-      .replace(
-        replacedRange, withCount: insertedPathLength,
-        writer: { buffer in
-          var bytesWritten = 0
-          for component in components {
-            buffer[bytesWritten] = ASCII.forwardSlash.codePoint
-            bytesWritten &+= 1
-            bytesWritten &+=
-              UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...])
-              .fastInitialize(from: component.lazy.percentEncoded(as: \.pathComponent))
-          }
-          return bytesWritten
-        })
-    )
-
-    var replaced = multiReplaceSubrange(commands, newStructure: newStructure)
-
     // Post-replacement normalization of Windows drive letters.
-    //
-    // This is necessary to preserve idempotence. It is much simpler to fix this up after replacing the code-units.
-    // Luckily, it doesn't change the length of the URL or any of its components, so it doesn't modify the URLStructure.
-    // That means we don't need to worry about possibly switching header representations,
-    // and can do a straight code-unit swap.
-    if case .file = newStructure.schemeKind {
-      switch replaced {
-      case .small(var small):
-        replaced = _tempStorage
-        small._normalizeWindowsDriveLetterIfPresent()
-        replaced = AnyURLStorage(small)
-      case .large(var large):
-        replaced = _tempStorage
-        large._normalizeWindowsDriveLetterIfPresent()
-        replaced = AnyURLStorage(large)
-      }
+    // This is necessary to preserve idempotence, but doesn't modify the URLStructure.
+    if case .file = header._structure.schemeKind {
+      _normalizeWindowsDriveLetterIfPresent()
     }
 
     // Calculate the updated path component indices to return.
@@ -929,7 +857,7 @@ extension URLStorage {
     }
     let newLowerBound = WebURL.PathComponents.Index(codeUnitRange: lowerBoundStartPosition..<lowerBoundEndPosition)
     let newUpperBound = WebURL.PathComponents.Index(codeUnitRange: upperBoundStartPosition..<upperBoundEndPosition)
-    return (replaced, Range(uncheckedBounds: (newLowerBound, newUpperBound)))
+    return Range(uncheckedBounds: (newLowerBound, newUpperBound))
   }
 
   @inlinable

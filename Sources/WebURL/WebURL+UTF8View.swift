@@ -25,10 +25,10 @@ extension WebURL {
   public struct UTF8View {
 
     @usableFromInline
-    internal var storage: AnyURLStorage
+    internal var storage: URLStorage
 
     @inlinable
-    internal init(_ storage: AnyURLStorage) {
+    internal init(_ storage: URLStorage) {
       self.storage = storage
     }
   }
@@ -43,7 +43,7 @@ extension WebURL {
   }
 }
 
-extension AnyURLStorage {
+extension URLStorage {
 
   @inlinable
   internal var utf8: WebURL.UTF8View {
@@ -80,19 +80,13 @@ extension WebURL.UTF8View: RandomAccessCollection {
 
   @inlinable
   public var endIndex: Index {
-    switch storage {
-    case .small(let small): return small.codeUnits.count
-    case .large(let large): return large.codeUnits.count
-    }
+    storage.codeUnits.count
   }
 
   @inlinable
   public subscript(position: Index) -> Element {
     // bounds-checking is performed by `ManagedArrayBuffer`.
-    switch storage {
-    case .small(let small): return small.codeUnits[position]
-    case .large(let large): return large.codeUnits[position]
-    }
+    storage.codeUnits[position]
   }
 
   @inlinable
@@ -149,10 +143,7 @@ extension WebURL.UTF8View: RandomAccessCollection {
   ///
   @inlinable @inline(__always)
   public func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
-    switch storage {
-    case .small(let small): return try small.codeUnits.withUnsafeBufferPointer(body)
-    case .large(let large): return try large.codeUnits.withUnsafeBufferPointer(body)
-    }
+    try storage.codeUnits.withUnsafeBufferPointer(body)
   }
 }
 
@@ -167,10 +158,7 @@ extension Slice where Base == WebURL.UTF8View {
   ///
   @inlinable @inline(__always)
   public func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
-    switch base.storage {
-    case .small(let small): return try small.codeUnits.withUnsafeBufferPointer(range: startIndex..<endIndex, body)
-    case .large(let large): return try large.codeUnits.withUnsafeBufferPointer(range: startIndex..<endIndex, body)
-    }
+    try base.storage.codeUnits.withUnsafeBufferPointer(range: startIndex..<endIndex, body)
   }
 }
 
@@ -222,16 +210,11 @@ extension WebURL.UTF8View {
   public mutating func setScheme<UTF8Bytes>(
     _ newScheme: UTF8Bytes
   ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
-    try newScheme.withContiguousStorageIfAvailable { newSchemeBytes in
-      try storage.withUnwrappedMutableStorage(
-        { small in small.setScheme(to: newSchemeBytes.boundsChecked) },
-        { large in large.setScheme(to: newSchemeBytes.boundsChecked) }
-      )
-    }
-      ?? storage.withUnwrappedMutableStorage(
-        { small in small.setScheme(to: newScheme) },
-        { large in large.setScheme(to: newScheme) }
-      )
+    // swift-format-ignore
+    let result = newScheme.withContiguousStorageIfAvailable {
+      storage.setScheme(to: $0.boundsChecked)
+    } ?? storage.setScheme(to: newScheme)
+    try result.get()
   }
 
   /// The UTF-8 code-units containing this URL's `username`, if present.
@@ -251,21 +234,13 @@ extension WebURL.UTF8View {
     _ newUsername: UTF8Bytes?
   ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
     guard let newValue = newUsername else {
-      return try storage.withUnwrappedMutableStorage(
-        { small in small.setUsername(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) },
-        { large in large.setUsername(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) }
-      )
+      return try storage.setUsername(to: UnsafeBoundsCheckedBufferPointer?.none).get()
     }
-    try newValue.withContiguousStorageIfAvailable { newUsernameBytes in
-      try storage.withUnwrappedMutableStorage(
-        { small in small.setUsername(to: newUsernameBytes.boundsChecked) },
-        { large in large.setUsername(to: newUsernameBytes.boundsChecked) }
-      )
-    }
-      ?? storage.withUnwrappedMutableStorage(
-        { small in small.setUsername(to: newValue) },
-        { large in large.setUsername(to: newValue) }
-      )
+    // swift-format-ignore
+    let result = newValue.withContiguousStorageIfAvailable {
+      storage.setUsername(to: $0.boundsChecked)
+    } ?? storage.setUsername(to: newValue)
+    try result.get()
   }
 
   /// The UTF-8 code-units containing this URL's `password`, if present.
@@ -287,21 +262,13 @@ extension WebURL.UTF8View {
     _ newPassword: UTF8Bytes?
   ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
     guard let newValue = newPassword else {
-      return try storage.withUnwrappedMutableStorage(
-        { small in small.setPassword(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) },
-        { large in large.setPassword(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) }
-      )
+      return try storage.setPassword(to: UnsafeBoundsCheckedBufferPointer?.none).get()
     }
-    try newValue.withContiguousStorageIfAvailable { newPasswordBytes in
-      try storage.withUnwrappedMutableStorage(
-        { small in small.setPassword(to: newPasswordBytes.boundsChecked) },
-        { large in large.setPassword(to: newPasswordBytes.boundsChecked) }
-      )
-    }
-      ?? storage.withUnwrappedMutableStorage(
-        { small in small.setPassword(to: newValue) },
-        { large in large.setPassword(to: newValue) }
-      )
+    // swift-format-ignore
+    let result = newValue.withContiguousStorageIfAvailable {
+      storage.setPassword(to: $0.boundsChecked)
+    } ?? storage.setPassword(to: newValue)
+    try result.get()
   }
 
   /// The UTF-8 code-units containing this URL's `hostname`, if present.
@@ -324,21 +291,13 @@ extension WebURL.UTF8View {
     _ newHostname: UTF8Bytes?
   ) throws where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
     guard let newValue = newHostname else {
-      return try storage.withUnwrappedMutableStorage(
-        { small in small.setHostname(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) },
-        { large in large.setHostname(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) }
-      )
+      return try storage.setHostname(to: UnsafeBoundsCheckedBufferPointer?.none).get()
     }
-    try newValue.withContiguousStorageIfAvailable { newHostnameBytes in
-      try storage.withUnwrappedMutableStorage(
-        { small in small.setHostname(to: newHostnameBytes.boundsChecked) },
-        { large in large.setHostname(to: newHostnameBytes.boundsChecked) }
-      )
-    }
-      ?? storage.withUnwrappedMutableStorage(
-        { small in small.setHostname(to: newValue) },
-        { large in large.setHostname(to: newValue) }
-      )
+    // swift-format-ignore
+    let result = newValue.withContiguousStorageIfAvailable {
+      storage.setHostname(to: $0.boundsChecked)
+    } ?? storage.setHostname(to: newValue)
+    try result.get()
   }
 
   /// The UTF-8 code-units containing this URL's `port`, if present.
@@ -367,16 +326,11 @@ extension WebURL.UTF8View {
   public mutating func setPath<UTF8Bytes>(
     _ newPath: UTF8Bytes
   ) throws where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
-    try newPath.withContiguousStorageIfAvailable { newPathBytes in
-      try storage.withUnwrappedMutableStorage(
-        { small in small.setPath(to: newPathBytes.boundsChecked) },
-        { large in large.setPath(to: newPathBytes.boundsChecked) }
-      )
-    }
-      ?? storage.withUnwrappedMutableStorage(
-        { small in small.setPath(to: newPath) },
-        { large in large.setPath(to: newPath) }
-      )
+    // swift-format-ignore
+    let result = newPath.withContiguousStorageIfAvailable {
+      storage.setPath(to: $0.boundsChecked)
+    } ?? storage.setPath(to: newPath)
+    try result.get()
   }
 
   /// The UTF-8 code-units containing this URL's `query`, if present.
@@ -397,23 +351,15 @@ extension WebURL.UTF8View {
   @inlinable
   public mutating func setQuery<UTF8Bytes>(
     _ newQuery: UTF8Bytes?
-  ) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
     guard let newValue = newQuery else {
-      return storage.withUnwrappedMutableStorage(
-        { small in small.setQuery(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) },
-        { large in large.setQuery(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) }
-      )
+      return try storage.setQuery(to: UnsafeBoundsCheckedBufferPointer?.none).get()
     }
-    newValue.withContiguousStorageIfAvailable { newQueryBytes in
-      storage.withUnwrappedMutableStorage(
-        { small in small.setQuery(to: newQueryBytes.boundsChecked) },
-        { large in large.setQuery(to: newQueryBytes.boundsChecked) }
-      )
-    }
-      ?? storage.withUnwrappedMutableStorage(
-        { small in small.setQuery(to: newValue) },
-        { large in large.setQuery(to: newValue) }
-      )
+    // swift-format-ignore
+    let result = newValue.withContiguousStorageIfAvailable {
+      storage.setQuery(to: $0.boundsChecked)
+    } ?? storage.setQuery(to: newValue)
+    try result.get()
   }
 
   /// The UTF-8 code-units containing this URL's `fragment`, if present.
@@ -433,22 +379,38 @@ extension WebURL.UTF8View {
   @inlinable
   public mutating func setFragment<UTF8Bytes>(
     _ newFragment: UTF8Bytes?
-  ) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
     guard let newValue = newFragment else {
-      return storage.withUnwrappedMutableStorage(
-        { small in small.setFragment(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) },
-        { large in large.setFragment(to: UnsafeBoundsCheckedBufferPointer<UInt8>?.none) }
-      )
+      return try storage.setFragment(to: UnsafeBoundsCheckedBufferPointer?.none).get()
     }
-    newValue.withContiguousStorageIfAvailable { newFragmentBytes in
-      storage.withUnwrappedMutableStorage(
-        { small in small.setFragment(to: newFragmentBytes.boundsChecked) },
-        { large in large.setFragment(to: newFragmentBytes.boundsChecked) }
-      )
+    // swift-format-ignore
+    let result = newValue.withContiguousStorageIfAvailable {
+      storage.setFragment(to: $0.boundsChecked)
+    } ?? storage.setFragment(to: newValue)
+    try result.get()
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Internal helpers
+// --------------------------------------------
+
+
+extension WebURL.UTF8View {
+
+  /// Set the query component to the given UTF8-encoded string, assuming that the string is already `application/x-www-form-urlencoded`.
+  ///
+  internal mutating func setQuery<UTF8Bytes>(
+    toKnownFormEncoded newQuery: UTF8Bytes?
+  ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+    guard let newValue = newQuery else {
+      return try storage.setQuery(toKnownFormEncoded: UnsafeBoundsCheckedBufferPointer?.none).get()
     }
-      ?? storage.withUnwrappedMutableStorage(
-        { small in small.setFragment(to: newValue) },
-        { large in large.setFragment(to: newValue) }
-      )
+    // swift-format-ignore
+    let result = newValue.withContiguousStorageIfAvailable {
+      storage.setQuery(toKnownFormEncoded: $0.boundsChecked)
+    } ?? storage.setQuery(toKnownFormEncoded: newValue)
+    try result.get()
   }
 }

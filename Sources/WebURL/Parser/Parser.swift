@@ -25,18 +25,19 @@
 //
 // - Parsing:
 //    A 'ParsedURLString' is initialized for either the filtered/trimmed input string.
-//    This initializer calls in to `URLScanner.scanURLString', which begins the process of scanning the byte string -
-//    looking for components and marking where they start/end. The scanner concerns itself with locating components,
-//    not with checking their content.
+//    This initializer makes use of the `URLScanner' type to interpret the byte string - looking for URL components
+//    and marking where they start/end. The scanner performs only minimal content validation necessary to scan later
+//    components.
 //
-//    The resulting component ranges and flags are validated and stored as a 'ParsedURLString.ProcessedMapping',
-//    which checks the few components that can actually be rejected on content. At this point, we are finished parsing,
-//    and the 'ParsedURLString' object is returned to 'urlFromBytes'.
+//    A 'ParsedURLString.ProcessedMapping' is then constructed using the scanned ranges and flags, which checks
+//    the few components that can actually be rejected on content (e.g. hostname must be valid, port must be a number).
+//    At this point, we are finished parsing, and the 'ParsedURLString' object is successfully constructed.
 //
 // - Construction:
-//    'urlFromBytes' calls 'constructURLObject' on the result of the previous step, which unconditionally writes
-//    the content to freshly-allocated storage. The actual construction process involves performing a dry-run
-//    to calculate the optimal result type and produce an allocation which is correctly sized to hold the result.
+//    'urlFromBytes' calls 'constructURLObject' on the 'ParsedURLString', which allocates storage and writes the URL
+//    components to it, in a normalized format. Since the input was successfully parsed, this step only fails if the
+//    resulting normalized URL string would exceed the maximum capacity of the URLStorage type
+//    (see: URLStorage.SizeType).
 //
 //-------------------------------------------------------------------------
 
@@ -130,13 +131,18 @@ internal struct ParsedURLString<InputString> where InputString: BidirectionalCol
     mapping.write(inputString: inputString, baseURL: baseURL, to: &writer)
   }
 
-  /// Writes the URL to new `URLStorage`, appropriate for its size and structure, and returns it as a `WebURL` object.
+  /// Writes the URL to new `URLStorage`, and returns it as a `WebURL` object.
+  ///
+  /// Construction will only fail if the normalized URL string exceeds the maximum capacity supported by `URLStorage`.
   ///
   @inlinable
-  internal func constructURLObject() -> WebURL {
+  internal func constructURLObject() -> WebURL? {
     var info = StructureAndMetricsCollector()
     write(to: &info)
-    let storage = AnyURLStorage(optimalStorageForCapacity: info.requiredCapacity, structure: info.structure) { buffer in
+    guard info.requiredCapacity <= URLStorage.SizeType.max else {
+      return nil
+    }
+    let storage = URLStorage(count: info.requiredCapacity, structure: info.structure) { buffer in
       var writer = UnsafePresizedBufferWriter(buffer: buffer, hints: info.hints)
       write(to: &writer)
       return writer.bytesWritten
@@ -293,7 +299,9 @@ internal struct _CopyableURLComponentSet: OptionSet {
 extension ParsedURLString.ProcessedMapping {
 
   /// Parses failable components discovered by the scanner.
-  /// This is the last stage at which parsing may fail, and successful construction of this mapping signifies that the input string can definitely be written as a URL.
+  ///
+  /// Successful construction of this mapping affirms that the URL components discovered by the scanner do not contain invalid content,
+  /// and may definitely be written to a `URLWriter` as a standard-compliant, normalized URL string.
   ///
   @inlinable
   internal init?<Callback>(

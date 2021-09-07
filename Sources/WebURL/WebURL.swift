@@ -27,10 +27,10 @@
 public struct WebURL {
 
   @usableFromInline
-  internal var storage: AnyURLStorage
+  internal var storage: URLStorage
 
   @inlinable
-  internal init(storage: AnyURLStorage) {
+  internal init(storage: URLStorage) {
     self.storage = storage
   }
 
@@ -259,7 +259,7 @@ extension WebURL {
   ///
   public var query: String? {
     get { utf8.query.map { String(decoding: $0, as: UTF8.self) } }
-    set { setQuery(newValue) }
+    set { try? setQuery(newValue) }
   }
 
   /// The fragment of this URL, if present, as a percent-encoded string.
@@ -271,7 +271,7 @@ extension WebURL {
   ///
   public var fragment: String? {
     get { utf8.fragment.map { String(decoding: $0, as: UTF8.self) } }
-    set { setFragment(newValue) }
+    set { try? setFragment(newValue) }
   }
 
   /// Whether this is a hierarchical URL.
@@ -363,19 +363,12 @@ extension WebURL {
   ///
   public mutating func setPort(_ newPort: Int?) throws {
     guard let newPort = newPort else {
-      try storage.withUnwrappedMutableStorage(
-        { small in small.setPort(to: nil) },
-        { large in large.setPort(to: nil) }
-      )
-      return
+      return try storage.setPort(to: nil).get()
     }
     guard let uint16Port = UInt16(exactly: newPort) else {
       throw URLSetterError.portValueOutOfBounds
     }
-    try storage.withUnwrappedMutableStorage(
-      { small in small.setPort(to: uint16Port) },
-      { large in large.setPort(to: uint16Port) }
-    )
+    try storage.setPort(to: uint16Port).get()
   }
 
   /// Replaces this URL's `path` with the given string.
@@ -398,8 +391,8 @@ extension WebURL {
   /// - seealso: `query`
   ///
   @inlinable
-  public mutating func setQuery<S>(_ newQuery: S?) where S: StringProtocol {
-    utf8.setQuery(newQuery?.utf8)
+  public mutating func setQuery<S>(_ newQuery: S?) throws where S: StringProtocol {
+    try utf8.setQuery(newQuery?.utf8)
   }
 
   /// Replaces this URL's `fragment` with the given string.
@@ -409,7 +402,7 @@ extension WebURL {
   /// - seealso: `fragment`
   ///
   @inlinable
-  public mutating func setFragment<S>(_ newFragment: S?) where S: StringProtocol {
-    utf8.setFragment(newFragment?.utf8)
+  public mutating func setFragment<S>(_ newFragment: S?) throws where S: StringProtocol {
+    try utf8.setFragment(newFragment?.utf8)
   }
 }

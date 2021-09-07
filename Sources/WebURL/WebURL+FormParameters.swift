@@ -28,16 +28,9 @@ extension WebURL {
     }
     set {
       if newValue.storage.structure.queryIsKnownFormEncoded {
-        storage.withUnwrappedMutableStorage(
-          { small in small.setQuery(toKnownFormEncoded: newValue.storage.utf8.query) },
-          { large in large.setQuery(toKnownFormEncoded: newValue.storage.utf8.query) }
-        )
+        try! storage.utf8.setQuery(toKnownFormEncoded: newValue.storage.utf8.query)
       } else {
-        let formEncoded = newValue.formEncodedQueryBytes
-        storage.withUnwrappedMutableStorage(
-          { small in small.setQuery(toKnownFormEncoded: formEncoded) },
-          { large in large.setQuery(toKnownFormEncoded: formEncoded) }
-        )
+        try! storage.utf8.setQuery(toKnownFormEncoded: newValue.formEncodedQueryBytes)
       }
     }
   }
@@ -93,9 +86,9 @@ extension WebURL {
   public struct FormEncodedQueryParameters {
 
     @usableFromInline
-    internal var storage: AnyURLStorage
+    internal var storage: URLStorage
 
-    internal init(storage: AnyURLStorage) {
+    internal init(storage: URLStorage) {
       self.storage = storage
     }
   }
@@ -124,11 +117,7 @@ extension WebURL.FormEncodedQueryParameters {
   @usableFromInline
   internal mutating func reencodeQueryIfNeeded() {
     guard !storage.structure.queryIsKnownFormEncoded else { return }
-    let reencodedQuery = formEncodedQueryBytes
-    storage.withUnwrappedMutableStorage(
-      { small in small.setQuery(toKnownFormEncoded: reencodedQuery) },
-      { large in large.setQuery(toKnownFormEncoded: reencodedQuery) }
-    )
+    try! storage.utf8.setQuery(toKnownFormEncoded: formEncodedQueryBytes)
     assert(storage.structure.queryIsKnownFormEncoded)
   }
 }
@@ -310,7 +299,6 @@ extension WebURL.FormEncodedQueryParameters {
     }
   }
 
-  @inlinable
   public subscript(dynamicMember dynamicMember: String) -> String? {
     get { get(dynamicMember) }
     set { set(dynamicMember, to: newValue) }
@@ -347,9 +335,8 @@ extension WebURL.FormEncodedQueryParameters {
 
   /// Removes all key-value pairs. This is equivalent to setting the URL's `query` to `nil`.
   ///
-  @inlinable
   public mutating func removeAll() {
-    storage.utf8.setQuery(UnsafeBufferPointer?.none)
+    try! storage.utf8.setQuery(toKnownFormEncoded: UnsafeBoundsCheckedBufferPointer?.none)
   }
 
   /// If `key` is already present, sets the value of the first key-value pair whose key matches `key` to `newValue`.
@@ -368,10 +355,7 @@ extension WebURL.FormEncodedQueryParameters {
     reencodeQueryIfNeeded()
     let encodedKeyToSet = key.urlFormEncoded
     let encodedNewValue = newValue?.urlFormEncoded
-    storage.withUnwrappedMutableStorage(
-      { small in small.setFormParamPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) },
-      { large in large.setFormParamPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8) }
-    )
+    storage.setFormParamPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8)
   }
 }
 
@@ -388,10 +372,7 @@ extension WebURL.FormEncodedQueryParameters {
     contentsOf keyValuePairs: CollectionType
   ) where CollectionType: Collection, CollectionType.Element == (StringType, StringType), StringType: StringProtocol {
     reencodeQueryIfNeeded()
-    storage.withUnwrappedMutableStorage(
-      { small in small.appendFormParamPairs(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) },
-      { large in large.appendFormParamPairs(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) }) }
-    )
+    storage.appendFormParamPairs(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) })
   }
 
   /// Appends the given collection of key-value pairs.
@@ -484,8 +465,8 @@ extension URLStorage {
   @inlinable
   internal mutating func appendFormParamPairs<C, UTF8Bytes>(
     fromUnencoded keyValuePairs: C
-  ) -> AnyURLStorage
-  where C: Collection, C.Element == (UTF8Bytes, UTF8Bytes), UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  ) where C: Collection, C.Element == (UTF8Bytes, UTF8Bytes), UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+
     let combinedLength: Int
     let needsEscaping: Bool
     (combinedLength, needsEscaping) = keyValuePairs.reduce(into: (0, false)) { metrics, kvp in
@@ -495,14 +476,14 @@ extension URLStorage {
       metrics.1 = metrics.1 || encodeKey || encodeVal
     }
     if needsEscaping {
-      return appendFormParamPairs(
+      appendFormParamPairs(
         fromEncoded: keyValuePairs.lazy.map {
           ($0.0.lazy.percentEncoded(as: \.form), $0.1.lazy.percentEncoded(as: \.form))
         },
         lengthIfKnown: combinedLength
       )
     } else {
-      return appendFormParamPairs(fromEncoded: keyValuePairs, lengthIfKnown: combinedLength)
+      appendFormParamPairs(fromEncoded: keyValuePairs, lengthIfKnown: combinedLength)
     }
   }
 
@@ -515,8 +496,7 @@ extension URLStorage {
   @inlinable
   internal mutating func appendFormParamPairs<C, UTF8Bytes>(
     fromEncoded keyValuePairs: C, lengthIfKnown: Int? = nil
-  ) -> AnyURLStorage
-  where C: Collection, C.Element == (UTF8Bytes, UTF8Bytes), UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  ) where C: Collection, C.Element == (UTF8Bytes, UTF8Bytes), UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     let oldStructure = header.structure
 
@@ -545,7 +525,7 @@ extension URLStorage {
     var newStructure = oldStructure
     newStructure.queryLength += separatorLength + encodedKVPsLength
 
-    return replaceSubrange(
+    try! replaceSubrange(
       oldStructure.fragmentStart..<oldStructure.fragmentStart,
       withUninitializedSpace: separatorLength + encodedKVPsLength,
       newStructure: newStructure
@@ -569,7 +549,7 @@ extension URLStorage {
         }
       }
       return bytesWritten
-    }.newStorage
+    }.get()
   }
 
   /// Sets the value of the first key-value pair whose key matches `encodedKey` to `encodedValue`.
@@ -583,32 +563,28 @@ extension URLStorage {
   @inlinable
   internal mutating func setFormParamPair<UTF8Bytes>(
     encodedKey: UTF8Bytes, encodedValue: UTF8Bytes?
-  ) -> AnyURLStorage where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  ) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
+    assert(structure.queryIsKnownFormEncoded)
     let oldQueryRange = header.structure.rangeForReplacingCodeUnits(of: .query).dropFirst()
 
     // If we have a new value to set, find the first KVP which matches the key.
     let rangeToRemoveMatchesFrom: Range<Int>
-    var _rangeOfFirstValue: Range<Int>?
+    var rangeOfFirstValue: Range<Int>?
     if let encodedValue = encodedValue {
-      guard
-        let firstMatch = WebURL.FormEncodedQueryParameters.RawKeyValuePairs(
-          utf8: codeUnits[oldQueryRange]
-        ).first(where: { codeUnits[$0.key].elementsEqual(encodedKey) })
-      else {
-        return appendFormParamPairs(fromEncoded: CollectionOfOne((encodedKey, encodedValue)))
+      let formParams = WebURL.FormEncodedQueryParameters.RawKeyValuePairs(utf8: codeUnits[oldQueryRange])
+      guard let firstMatch = formParams.first(where: { codeUnits[$0.key].elementsEqual(encodedKey) }) else {
+        appendFormParamPairs(fromEncoded: CollectionOfOne((encodedKey, encodedValue)))
+        return
       }
-      _rangeOfFirstValue = firstMatch.value
+      rangeOfFirstValue = firstMatch.value
       rangeToRemoveMatchesFrom = firstMatch.pair.upperBound..<oldQueryRange.upperBound
     } else {
-      _rangeOfFirstValue = nil
+      rangeOfFirstValue = nil
       rangeToRemoveMatchesFrom = oldQueryRange
     }
 
-    // Remove key-value pairs in the range after the first match.
-    // Since all `URLHeader`s support *fewer* code-units (even if not the optimal header type for the smaller string),
-    // we'll just remove the KVPs from the query's code-units and copy to the optimal the header type later (if needed).
-    // This will potentially cause an extra copy due to COW.
+    // Remove all subsequent KVPs with the same key.
     var totalRemovedBytes = 0
     codeUnits.unsafeTruncate(rangeToRemoveMatchesFrom) { query in
       var remaining = query
@@ -626,7 +602,7 @@ extension URLStorage {
         totalRemovedBytes += match.pair.count
       }
       // If we removed the last KVP in the query, we may have a trailing ampersand that needs dropping.
-      if totalRemovedBytes != query.count, query[query.count - totalRemovedBytes - 1] == ASCII.ampersand.codePoint {
+      if totalRemovedBytes < query.count, query[query.count - totalRemovedBytes - 1] == ASCII.ampersand.codePoint {
         totalRemovedBytes += 1
       }
       (query.baseAddress! + query.count - totalRemovedBytes).deinitialize(count: totalRemovedBytes)
@@ -637,16 +613,18 @@ extension URLStorage {
     var newStructure = header.structure
     newStructure.queryLength -= totalRemovedBytes
 
-    if let encodedValue = encodedValue, let rangeOfFirstValue = _rangeOfFirstValue {
+    // Write the new value.
+    if let encodedValue = encodedValue, let rangeOfFirstValue = rangeOfFirstValue {
       newStructure.queryLength += (encodedValue.count - rangeOfFirstValue.count)
-      return replaceSubrange(
+      try! replaceSubrange(
         rangeOfFirstValue,
         withUninitializedSpace: encodedValue.count,
         newStructure: newStructure,
         initializer: { buffer in buffer.fastInitialize(from: encodedValue) }
-      ).newStorage
+      ).get()
 
     } else {
+      // FIXME: Move this up in to the 'unsafeTruncate' block to avoid the 'removeSubrange'.
       // If the query is just a lone "?", set it to nil instead.
       if newStructure.queryLength == 1 {
         assert(codeUnits[newStructure.queryStart] == ASCII.questionMark.codePoint)
@@ -654,12 +632,6 @@ extension URLStorage {
         newStructure.queryLength = 0
       }
       header.copyStructure(from: newStructure)
-      if !AnyURLStorage.isOptimalStorageType(Self.self, requiredCapacity: codeUnits.count, structure: newStructure) {
-        return AnyURLStorage(optimalStorageForCapacity: codeUnits.count, structure: newStructure) { buffer in
-          buffer.fastInitialize(from: codeUnits)
-        }
-      }
-      return AnyURLStorage(self)
     }
   }
 }
