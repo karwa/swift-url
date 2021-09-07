@@ -73,9 +73,9 @@ extension WebURL {
   ///
   public struct JSModel {
 
-    internal var storage: AnyURLStorage
+    internal var storage: URLStorage
 
-    init(storage: AnyURLStorage) {
+    init(storage: URLStorage) {
       self.storage = storage
     }
 
@@ -334,7 +334,7 @@ extension WebURL.JSModel {
       if newValue.first?.asciiValue == ASCII.questionMark.codePoint {
         newQuery = newValue.dropFirst()
       }
-      swiftModel.utf8.setQuery(ASCII.NewlineAndTabFiltered(newQuery.utf8))
+      try? swiftModel.utf8.setQuery(ASCII.NewlineAndTabFiltered(newQuery.utf8))
     }
   }
 
@@ -357,7 +357,7 @@ extension WebURL.JSModel {
       if newValue.first?.asciiValue == ASCII.numberSign.codePoint {
         newFragment = newValue.dropFirst()
       }
-      swiftModel.utf8.setFragment(ASCII.NewlineAndTabFiltered(newFragment.utf8))
+      try? swiftModel.utf8.setFragment(ASCII.NewlineAndTabFiltered(newFragment.utf8))
     }
   }
 }

@@ -894,18 +894,17 @@ internal func _filePathFromURL_windows(
 @inlinable
 internal var _emptyFileURL: WebURL {
   WebURL(
-    storage: AnyURLStorage(
-      URLStorage<BasicURLHeader<UInt8>>(
-        count: 8,
-        structure: URLStructure(
-          schemeLength: 5, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
-          portLength: 0, pathLength: 1, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 1,
-          sigil: .authority, schemeKind: .file, isHierarchical: true, queryIsKnownFormEncoded: true),
-        initializingCodeUnitsWith: { buffer in
-          ("file:///" as StaticString).withUTF8Buffer { buffer.fastInitialize(from: $0) }
-        }
-      )
-    ))
+    storage: URLStorage(
+      count: 8,
+      structure: URLStructure(
+        schemeLength: 5, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
+        portLength: 0, pathLength: 1, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 1,
+        sigil: .authority, schemeKind: .file, isHierarchical: true, queryIsKnownFormEncoded: true),
+      initializingCodeUnitsWith: { buffer in
+        ("file:///" as StaticString).withUTF8Buffer { buffer.fastInitialize(from: $0) }
+      }
+    )
+  )
 }
 
 extension PercentEncodeSet {

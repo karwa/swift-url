@@ -851,32 +851,6 @@ extension WebURLTests {
       XCTAssertEqual(x.href, "sc://x?hello")
       XCTAssertEqual(x.pathname, "")
     }
-
-
-    // TODO [testing]: This test needs to be more comprehensive, and we need tests like this exercising all major
-    // paths in all setters.
-
-    // Checks what happens when a scheme change requires the port to be removed, and the resulting URL
-    // has a different optimal storage type to the original (i.e. suddenly becomes less than 255 bytes).
-    // It's such a niche case that we'd otherwise never see it.
-    do {
-      var url = WebURL(
-        "ws://hostnamewhichtakesustotheedge:443?hellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellop"
-      )!.jsModel
-      switch url.storage {
-      case .large(_): break
-      default: XCTFail("Unexpected storage type")
-      }
-      url.scheme = "wss"
-      switch url.storage {
-      case .small(_): break
-      default: XCTFail("Unexpected storage type")
-      }
-      XCTAssertEqual(
-        url.description,
-        "wss://hostnamewhichtakesustotheedge/?hellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellohellop"
-      )
-    }
   }
 }
 
