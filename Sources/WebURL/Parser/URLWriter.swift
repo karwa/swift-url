@@ -298,14 +298,14 @@ internal struct StructureAndMetricsCollector: URLWriter {
   internal mutating func writeAuthoritySigil() {
     assert(structure.sigil == .none)
     structure.sigil = .authority
-    requiredCapacity += Sigil.authority.length
+    requiredCapacity += Int(Sigil.authority.length)
   }
 
   @inlinable
   internal mutating func writePathSigil() {
     assert(structure.sigil == .none)
     structure.sigil = .path
-    requiredCapacity += Sigil.path.length
+    requiredCapacity += Int(Sigil.path.length)
   }
 
   @inlinable
