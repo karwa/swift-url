@@ -542,7 +542,7 @@ extension Sigil {
   /// The number of bytes required to write the sigil's code-units.
   ///
   @inlinable
-  internal var length: Int {
+  internal var length: URLStorage.SizeType {
     return 2
   }
 
@@ -588,13 +588,18 @@ internal struct URLHeader<SizeType: FixedWidthInteger> {
   internal var _capacity: SizeType
 
   @usableFromInline
-  internal var _structure: URLStructure<SizeType>
+  internal var structure: URLStructure<SizeType>
 
   @inlinable
   internal init(_count: SizeType, _capacity: SizeType, _structure: URLStructure<SizeType>) {
     self._count = _count
     self._capacity = _capacity
-    self._structure = _structure
+    self.structure = _structure
+  }
+
+  @inlinable
+  internal init(structure: URLStructure<SizeType>) {
+    self = .init(_count: 0, _capacity: 0, _structure: structure)
   }
 }
 
@@ -617,25 +622,7 @@ extension URLHeader: ManagedBufferHeader {
     guard newCapacity >= minimumCapacity else {
       return nil
     }
-    return Self(_count: _count, _capacity: newCapacity, _structure: _structure)
-  }
-}
-
-extension URLHeader {
-
-  @inlinable
-  internal init(structure: URLStructure<Int>) {
-    self = .init(_count: 0, _capacity: 0, _structure: URLStructure<SizeType>(copying: structure))
-  }
-
-  @inlinable
-  internal var structure: URLStructure<Int> {
-    return URLStructure(copying: _structure)
-  }
-
-  @inlinable
-  internal mutating func copyStructure(from newStructure: URLStructure<Int>) {
-    self._structure = URLStructure(copying: newStructure)
+    return Self(_count: _count, _capacity: newCapacity, _structure: structure)
   }
 }
 
@@ -685,33 +672,34 @@ internal struct URLStorage {
   ///
   @inlinable
   internal init(
-    count: Int,
-    structure: URLStructure<Int>,
+    count: SizeType,
+    structure: URLStructure<SizeType>,
     initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
-    self.codeUnits = ManagedArrayBuffer(minimumCapacity: count, initialHeader: URLHeader(structure: structure))
+    self.codeUnits = ManagedArrayBuffer(minimumCapacity: Int(count), initialHeader: URLHeader(structure: structure))
     assert(self.codeUnits.count == 0)
     assert(self.codeUnits.header.capacity >= count)
-    self.codeUnits.unsafeAppend(uninitializedCapacity: count) { buffer in initializer(&buffer) }
+    self.codeUnits.unsafeAppend(uninitializedCapacity: Int(count)) { buffer in initializer(&buffer) }
     assert(self.codeUnits.header.count == count)
   }
 }
 
 extension URLStorage {
 
+  // TODO: Change this to URLStructure<URLStorage.SizeType>
   @inlinable
   internal var structure: URLStructure<Int> {
-    header.structure
+    URLStructure<Int>(copying: header.structure)
   }
 
   @inlinable
   internal var schemeKind: WebURL.SchemeKind {
-    header._structure.schemeKind
+    header.structure.schemeKind
   }
 
   @inlinable
   internal var isHierarchical: Bool {
-    header._structure.isHierarchical
+    header.structure.isHierarchical
   }
 
   @inlinable
@@ -727,8 +715,12 @@ extension URLStorage {
     let structure = header.structure
     guard let range = structure.rangeOfAuthorityString else { return body(nil, 0, 0, 0, 0) }
     // Note: ManagedArrayBuffer.withUnsafeBufferPointer(range:) is bounds-checked.
-    return codeUnits.withUnsafeBufferPointer(range: range) { buffer in
-      body(buffer, structure.usernameLength, structure.passwordLength, structure.hostnameLength, structure.portLength)
+    return codeUnits.withUnsafeBufferPointer(range: range.toCodeUnitsIndices()) { buffer in
+      body(
+        buffer,
+        Int(structure.usernameLength), Int(structure.passwordLength),
+        Int(structure.hostnameLength), Int(structure.portLength)
+      )
     }
   }
 }
@@ -751,3 +743,38 @@ internal let _tempStorage = URLStorage(
     return 2
   }
 )
+
+
+// --------------------------------------------
+// MARK: - Index conversion utilities
+// --------------------------------------------
+
+
+extension Range where Bound == URLStorage.SizeType {
+
+  @inlinable
+  internal func toCodeUnitsIndices() -> Range<Int> {
+    Range<Int>(uncheckedBounds: (Int(lowerBound), Int(upperBound)))
+  }
+}
+
+extension Range where Bound == ManagedArrayBuffer<URLHeader<URLStorage.SizeType>, UInt8>.Index {
+
+  @inlinable
+  internal func toURLStorageIndices() -> Range<URLStorage.SizeType> {
+    Range<URLStorage.SizeType>(uncheckedBounds: (URLStorage.SizeType(lowerBound), URLStorage.SizeType(upperBound)))
+  }
+}
+
+extension ManagedArrayBuffer where Header == URLHeader<URLStorage.SizeType> {
+
+  @inlinable
+  internal subscript(position: URLStorage.SizeType) -> Element {
+    self[Index(position)]
+  }
+
+  @inlinable
+  internal subscript(bounds: Range<URLStorage.SizeType>) -> Slice<Self> {
+    Slice(base: self, bounds: bounds.toCodeUnitsIndices())
+  }
+}

@@ -139,10 +139,10 @@ internal struct ParsedURLString<InputString> where InputString: BidirectionalCol
   internal func constructURLObject() -> WebURL? {
     var info = StructureAndMetricsCollector()
     write(to: &info)
-    guard info.requiredCapacity <= URLStorage.SizeType.max else {
+    guard let requiredCapacity = URLStorage.SizeType(exactly: info.requiredCapacity) else {
       return nil
     }
-    let storage = URLStorage(count: info.requiredCapacity, structure: info.structure) { buffer in
+    let storage = URLStorage(count: requiredCapacity, structure: URLStructure(copying: info.structure)) { buffer in
       var writer = UnsafePresizedBufferWriter(buffer: buffer, hints: info.hints)
       write(to: &writer)
       return writer.bytesWritten

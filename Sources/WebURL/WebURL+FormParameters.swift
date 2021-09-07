@@ -522,12 +522,16 @@ extension URLStorage {
       separatorLength = 1
     }
 
+    guard let bytesToAppend = URLStorage.SizeType(exactly: separatorLength + encodedKVPsLength) else {
+      fatalError(URLSetterError.exceedsMaximumSize.description)
+    }
+
     var newStructure = oldStructure
-    newStructure.queryLength += separatorLength + encodedKVPsLength
+    newStructure.queryLength += bytesToAppend
 
     try! replaceSubrange(
       oldStructure.fragmentStart..<oldStructure.fragmentStart,
-      withUninitializedSpace: separatorLength + encodedKVPsLength,
+      withUninitializedSpace: bytesToAppend,
       newStructure: newStructure
     ) { buffer in
       var bytesWritten = 0
@@ -566,25 +570,31 @@ extension URLStorage {
   ) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     assert(structure.queryIsKnownFormEncoded)
-    let oldQueryRange = header.structure.rangeForReplacingCodeUnits(of: .query).dropFirst()
+    let oldQueryRange = header.structure.rangeForReplacingCodeUnits(of: .query).dropFirst().toCodeUnitsIndices()
 
-    // If we have a new value to set, find the first KVP which matches the key.
-    let rangeToRemoveMatchesFrom: Range<Int>
-    var rangeOfFirstValue: Range<Int>?
-    if let encodedValue = encodedValue {
-      let formParams = WebURL.FormEncodedQueryParameters.RawKeyValuePairs(utf8: codeUnits[oldQueryRange])
-      guard let firstMatch = formParams.first(where: { codeUnits[$0.key].elementsEqual(encodedKey) }) else {
+    // Find the first KVP to match the key. If no keys match, and we have a value to set, append the new value.
+    let formParams = WebURL.FormEncodedQueryParameters.RawKeyValuePairs(utf8: codeUnits[oldQueryRange])
+    guard let firstMatch = formParams.first(where: { codeUnits[$0.key].elementsEqual(encodedKey) }) else {
+      if let encodedValue = encodedValue {
         appendFormParamPairs(fromEncoded: CollectionOfOne((encodedKey, encodedValue)))
-        return
+      } else {
+        // No matching keys, and no value to set. We're done.
       }
-      rangeOfFirstValue = firstMatch.value
-      rangeToRemoveMatchesFrom = firstMatch.pair.upperBound..<oldQueryRange.upperBound
-    } else {
-      rangeOfFirstValue = nil
-      rangeToRemoveMatchesFrom = oldQueryRange
+      return
     }
 
-    // Remove all subsequent KVPs with the same key.
+    // We have a match. If we have a new value to set, remove all subsequent KVPs with the same key.
+    var rangeToInsertNewValue: Range<Int>?
+    let rangeToRemoveMatchesFrom: Range<Int>
+
+    if encodedValue != nil {
+      rangeToInsertNewValue = firstMatch.value
+      rangeToRemoveMatchesFrom = firstMatch.pair.upperBound..<oldQueryRange.upperBound
+    } else {
+      rangeToInsertNewValue = nil
+      rangeToRemoveMatchesFrom = oldQueryRange  // TODO: Start removals from firstMatch
+    }
+
     var totalRemovedBytes = 0
     codeUnits.unsafeTruncate(rangeToRemoveMatchesFrom) { query in
       var remaining = query
@@ -601,7 +611,7 @@ extension URLStorage {
         )
         totalRemovedBytes += match.pair.count
       }
-      // If we removed the last KVP in the query, we may have a trailing ampersand that needs dropping.
+      // If we removed the last KVP, we may have a trailing ampersand that needs dropping.
       if totalRemovedBytes < query.count, query[query.count - totalRemovedBytes - 1] == ASCII.ampersand.codePoint {
         totalRemovedBytes += 1
       }
@@ -610,28 +620,35 @@ extension URLStorage {
       return query.count - totalRemovedBytes
     }
 
+    // Now that all subsequent KVPs have been removed, replace the value in the first match.
+    // Since it already exists as part of a KVP, it already has the required separators around it.
     var newStructure = header.structure
-    newStructure.queryLength -= totalRemovedBytes
+    newStructure.queryLength -= URLStorage.SizeType(totalRemovedBytes)
 
-    // Write the new value.
-    if let encodedValue = encodedValue, let rangeOfFirstValue = rangeOfFirstValue {
-      newStructure.queryLength += (encodedValue.count - rangeOfFirstValue.count)
+    if let encodedValue = encodedValue, let rangeOfFirstValue = rangeToInsertNewValue {
+      guard let encodedValueLength = URLStorage.SizeType(exactly: encodedValue.count) else {
+        fatalError(URLSetterError.exceedsMaximumSize.description)
+      }
+      let rangeOfFirstValue = rangeOfFirstValue.toURLStorageIndices()
+      newStructure.queryLength -= URLStorage.SizeType(rangeOfFirstValue.count)
+      newStructure.queryLength += encodedValueLength
       try! replaceSubrange(
         rangeOfFirstValue,
-        withUninitializedSpace: encodedValue.count,
+        withUninitializedSpace: encodedValueLength,
         newStructure: newStructure,
         initializer: { buffer in buffer.fastInitialize(from: encodedValue) }
       ).get()
 
     } else {
-      // FIXME: Move this up in to the 'unsafeTruncate' block to avoid the 'removeSubrange'.
+      // TODO: Move this up in to the 'unsafeTruncate' operation to avoid the 'removeSubrange'.
       // If the query is just a lone "?", set it to nil instead.
       if newStructure.queryLength == 1 {
         assert(codeUnits[newStructure.queryStart] == ASCII.questionMark.codePoint)
-        codeUnits.removeSubrange(newStructure.queryStart..<newStructure.queryStart + 1)
         newStructure.queryLength = 0
+        removeSubrange(newStructure.queryStart..<newStructure.queryStart + 1, newStructure: newStructure)
+      } else {
+        header.structure = newStructure
       }
-      header.copyStructure(from: newStructure)
     }
   }
 }
