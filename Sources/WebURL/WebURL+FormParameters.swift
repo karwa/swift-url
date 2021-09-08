@@ -498,8 +498,6 @@ extension URLStorage {
     fromEncoded keyValuePairs: C, lengthIfKnown: Int? = nil
   ) where C: Collection, C.Element == (UTF8Bytes, UTF8Bytes), UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-    let oldStructure = structure
-
     let encodedKVPsLength: Int
     if let knownLength = lengthIfKnown {
       encodedKVPsLength = knownLength + (keyValuePairs.count * 2) - 1 /* '=' and '&' */
@@ -510,36 +508,34 @@ extension URLStorage {
         } - 1
     }
 
-    let separatorLength: Int
-    if oldStructure.queryLength == 0 {
+    var separator: ASCII?
+    switch structure.queryLength {
+    case 0:
       // No query. We need to add a "?" delimiter.
-      separatorLength = 1
-    } else if oldStructure.queryLength == 1 {
+      separator = .questionMark
+    case 1:
       // There is a query, but it's a lone "?" with no string after it.
-      separatorLength = 0
-    } else {
+      separator = nil
+    default:
       // There is a query, and we need to add a "&" between the existing contents and appended KVPs.
-      separatorLength = 1
+      separator = .ampersand
     }
 
-    guard let bytesToAppend = URLStorage.SizeType(exactly: separatorLength + encodedKVPsLength) else {
+    guard let bytesToAppend = URLStorage.SizeType(exactly: encodedKVPsLength + (separator == nil ? 0 : 1)) else {
       fatalError(URLSetterError.exceedsMaximumSize.description)
     }
 
-    var newStructure = oldStructure
+    var newStructure = structure
     newStructure.queryLength += bytesToAppend
 
     try! replaceSubrange(
-      oldStructure.fragmentStart..<oldStructure.fragmentStart,
+      structure.fragmentStart..<structure.fragmentStart,
       withUninitializedSpace: bytesToAppend,
       newStructure: newStructure
     ) { buffer in
       var bytesWritten = 0
-      if oldStructure.queryLength == 0 {
-        buffer[0] = ASCII.questionMark.codePoint
-        bytesWritten += 1
-      } else if oldStructure.queryLength != 1 {
-        buffer[0] = ASCII.ampersand.codePoint
+      if let separator = separator {
+        buffer[0] = separator.codePoint
         bytesWritten += 1
       }
       for (key, value) in keyValuePairs {
