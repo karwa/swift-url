@@ -37,7 +37,7 @@ extension URLStorage {
 
     // Check that the operation is semantically valid for the existing structure.
     let newSchemeBytes = newValue[..<idx]
-    let oldStructure = header.structure
+    let oldStructure = structure
 
     if newSchemeKind.isSpecial != oldStructure.schemeKind.isSpecial {
       return .failure(.changeOfSchemeSpecialness)
@@ -92,7 +92,7 @@ extension URLStorage {
     to newValue: UTF8Bytes?
   ) -> Result<Void, URLSetterError> where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-    let oldStructure = header.structure
+    let oldStructure = structure
 
     // Check that the operation is semantically valid for the existing structure.
     if oldStructure.cannotHaveCredentialsOrPort {
@@ -151,7 +151,7 @@ extension URLStorage {
     to newValue: UTF8Bytes?
   ) -> Result<Void, URLSetterError> where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-    let oldStructure = header.structure
+    let oldStructure = structure
 
     // Check that the operation is semantically valid for the existing structure.
     if oldStructure.cannotHaveCredentialsOrPort {
@@ -223,7 +223,7 @@ extension URLStorage {
     to newValue: UTF8Bytes?
   ) -> Result<Void, URLSetterError> where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
-    let oldStructure = header.structure
+    let oldStructure = structure
 
     // Check that the operation is semantically valid for the existing structure.
     guard oldStructure.isHierarchical else {
@@ -349,7 +349,7 @@ extension URLStorage {
   ) -> Result<Void, URLSetterError> {
 
     var newValue = newValue
-    let oldStructure = header.structure
+    let oldStructure = structure
 
     // Check that the operation is semantically valid for the existing structure.
     guard !oldStructure.cannotHaveCredentialsOrPort else {
@@ -396,7 +396,7 @@ extension URLStorage {
     to newPath: UTF8Bytes
   ) -> Result<Void, URLSetterError> where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
-    let oldStructure = header.structure
+    let oldStructure = structure
 
     // Check that the operation is semantically valid for the existing structure.
     guard oldStructure.isHierarchical else {
@@ -475,7 +475,7 @@ extension URLStorage {
     to newValue: UTF8Bytes?
   ) -> Result<Void, URLSetterError> where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-    if self.header.structure.schemeKind.isSpecial {
+    if structure.schemeKind.isSpecial {
       return setSimpleComponent(
         .query,
         to: newValue,
@@ -748,7 +748,7 @@ extension URLStorage {
     codeUnits.unsafeReplaceSubrange(
       subrange.toCodeUnitsIndices(), withUninitializedCapacity: newElementCount, initializingWith: initializer
     )
-    header.structure = newStructure
+    structure = newStructure
     return .success
   }
 
@@ -764,7 +764,7 @@ extension URLStorage {
   ) {
     newStructure.checkInvariants()
     codeUnits.removeSubrange(subrange.toCodeUnitsIndices())
-    header.structure = newStructure
+    structure = newStructure
   }
 
   /// Performs a series of code-unit replacements and a URL structure replacement.
@@ -817,7 +817,7 @@ extension URLStorage {
           )
         }
       }
-      header.structure = newStructure
+      structure = newStructure
     } else {
       self = URLStorage(count: newCount, structure: newStructure) { dest in
         codeUnits.withUnsafeBufferPointer { src in
@@ -887,7 +887,7 @@ extension URLStorage {
   ) -> Result<Void, URLSetterError>
   where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, EncodeSet: PercentEncodeSetProtocol {
 
-    let oldStructure = header.structure
+    let oldStructure = structure
 
     guard let newBytes = newValue else {
       guard let existingFragment = oldStructure.range(of: component) else {

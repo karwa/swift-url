@@ -498,7 +498,7 @@ extension URLStorage {
     fromEncoded keyValuePairs: C, lengthIfKnown: Int? = nil
   ) where C: Collection, C.Element == (UTF8Bytes, UTF8Bytes), UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-    let oldStructure = header.structure
+    let oldStructure = structure
 
     let encodedKVPsLength: Int
     if let knownLength = lengthIfKnown {
@@ -570,7 +570,7 @@ extension URLStorage {
   ) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     assert(structure.queryIsKnownFormEncoded)
-    let oldQueryRange = header.structure.rangeForReplacingCodeUnits(of: .query).dropFirst().toCodeUnitsIndices()
+    let oldQueryRange = structure.rangeForReplacingCodeUnits(of: .query).dropFirst().toCodeUnitsIndices()
 
     // Find the first KVP to match the key. If no keys match, and we have a value to set, append the new value.
     let formParams = WebURL.FormEncodedQueryParameters.RawKeyValuePairs(utf8: codeUnits[oldQueryRange])
@@ -622,7 +622,7 @@ extension URLStorage {
 
     // Now that all subsequent KVPs have been removed, replace the value in the first match.
     // Since it already exists as part of a KVP, it already has the required separators around it.
-    var newStructure = header.structure
+    var newStructure = structure
     newStructure.queryLength -= URLStorage.SizeType(totalRemovedBytes)
 
     if let encodedValue = encodedValue, let rangeOfFirstValue = rangeToInsertNewValue {
@@ -647,7 +647,7 @@ extension URLStorage {
         newStructure.queryLength = 0
         removeSubrange(newStructure.queryStart..<newStructure.queryStart + 1, newStructure: newStructure)
       } else {
-        header.structure = newStructure
+        structure = newStructure
       }
     }
   }
