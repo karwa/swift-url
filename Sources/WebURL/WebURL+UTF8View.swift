@@ -90,6 +90,11 @@ extension WebURL.UTF8View: RandomAccessCollection {
   }
 
   @inlinable
+  public subscript(bounds: Range<Index>) -> Slice<Self> {
+    Slice(base: self, bounds: bounds)
+  }
+
+  @inlinable
   public func index(after i: Index) -> Index {
     i &+ 1
   }
@@ -412,5 +417,10 @@ extension WebURL.UTF8View {
       storage.setQuery(toKnownFormEncoded: $0.boundsChecked)
     } ?? storage.setQuery(toKnownFormEncoded: newValue)
     try result.get()
+  }
+
+  @inlinable @inline(__always)
+  internal subscript(bounds: Range<URLStorage.SizeType>) -> Slice<WebURL.UTF8View> {
+    self[bounds.toCodeUnitsIndices()]
   }
 }

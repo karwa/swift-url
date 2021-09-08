@@ -686,20 +686,27 @@ internal struct URLStorage {
 
 extension URLStorage {
 
-  // TODO: Change this to URLStructure<URLStorage.SizeType>
   @inlinable
-  internal var structure: URLStructure<Int> {
-    URLStructure<Int>(copying: header.structure)
+  internal var structure: URLStructure<URLStorage.SizeType> {
+    get {
+      header.structure
+    }
+    _modify {
+      yield &header.structure
+    }
+    set {
+      header.structure = newValue
+    }
   }
 
   @inlinable
   internal var schemeKind: WebURL.SchemeKind {
-    header.structure.schemeKind
+    structure.schemeKind
   }
 
   @inlinable
   internal var isHierarchical: Bool {
-    header.structure.isHierarchical
+    structure.isHierarchical
   }
 
   @inlinable
@@ -712,7 +719,6 @@ extension URLStorage {
       _ portLength: Int
     ) -> T
   ) -> T {
-    let structure = header.structure
     guard let range = structure.rangeOfAuthorityString else { return body(nil, 0, 0, 0, 0) }
     // Note: ManagedArrayBuffer.withUnsafeBufferPointer(range:) is bounds-checked.
     return codeUnits.withUnsafeBufferPointer(range: range.toCodeUnitsIndices()) { buffer in

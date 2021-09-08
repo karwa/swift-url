@@ -162,7 +162,7 @@ extension WebURL {
   /// The string representation of this URL, excluding the URL's fragment.
   ///
   public var serializedExcludingFragment: String {
-    utf8.withUnsafeBufferPointer { String(decoding: $0[..<storage.structure.fragmentStart], as: UTF8.self) }
+    utf8[0..<storage.structure.fragmentStart].withUnsafeBufferPointer { String(decoding: $0, as: UTF8.self) }
   }
 
   /// The scheme of this URL, for example `https` or `file`.

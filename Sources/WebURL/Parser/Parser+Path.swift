@@ -311,7 +311,7 @@ extension _PathParser {
       visitEmptyPathComponent()
       if isFileScheme, let base = baseURL {
         let _baseDrive = PathComponentParser._normalizedWindowsDrive(
-          in: base.utf8.path, firstCmptLength: base.storage.structure.firstPathComponentLength
+          in: base.utf8.path, firstCmptLength: Int(base.storage.structure.firstPathComponentLength)
         )
         if let baseDrive = _baseDrive {
           visitBasePathComponent(baseDrive)
@@ -434,7 +434,9 @@ extension _PathParser {
     if isFileScheme {
       if let basePath = _basePath {
         let baseURLFirstCmptLength = baseURL.unsafelyUnwrapped.storage.structure.firstPathComponentLength
-        baseDrive = PathComponentParser._normalizedWindowsDrive(in: basePath, firstCmptLength: baseURLFirstCmptLength)
+        baseDrive = PathComponentParser._normalizedWindowsDrive(
+          in: basePath, firstCmptLength: Int(baseURLFirstCmptLength)
+        )
       }
       // If the first written component of the input string is a Windows drive letter, the path is never relative -
       // even if it normally would be. [URL Standard: "file" state, "file slash" state]

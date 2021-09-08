@@ -475,7 +475,7 @@ extension ParsedURLString.ProcessedMapping {
       if baseURL.storage.structure.pathRequiresSigil, hasAuthority == false {
         writer.writePathSigil()
       }
-      writer.writePath(firstComponentLength: baseURL.storage.structure.firstPathComponentLength) { writer in
+      writer.writePath(firstComponentLength: Int(baseURL.storage.structure.firstPathComponentLength)) { writer in
         writer(baseURL.utf8.path)
       }
 

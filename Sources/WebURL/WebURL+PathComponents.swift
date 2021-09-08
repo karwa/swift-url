@@ -637,13 +637,13 @@ extension URLStorage {
 
   @inlinable
   internal var pathComponentsStartIndex: WebURL.PathComponents.Index {
-    let pathStart = header.structure.rangeForReplacingCodeUnits(of: .path).lowerBound
-    return WebURL.PathComponents.Index(codeUnitRange: pathStart..<pathStart + header.structure.firstPathComponentLength)
+    let pathStart = structure.rangeForReplacingCodeUnits(of: .path).lowerBound
+    return WebURL.PathComponents.Index(codeUnitRange: pathStart..<pathStart + structure.firstPathComponentLength)
   }
 
   @inlinable
   internal var pathComponentsEndIndex: WebURL.PathComponents.Index {
-    let pathEnd = header.structure.rangeForReplacingCodeUnits(of: .path).upperBound
+    let pathEnd = structure.rangeForReplacingCodeUnits(of: .path).upperBound
     return WebURL.PathComponents.Index(codeUnitRange: pathEnd..<pathEnd)
   }
 
@@ -653,7 +653,7 @@ extension URLStorage {
   ///
   @inlinable
   internal func endOfPathComponent(startingAt componentStartOffset: Int) -> Int? {
-    let pathRange = header.structure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
+    let pathRange = structure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
     guard pathRange.contains(componentStartOffset) else { return nil }
     assert(codeUnits[componentStartOffset] == ASCII.forwardSlash.codePoint, "UTF8 position not aligned to a component")
     return codeUnits[componentStartOffset + 1..<pathRange.upperBound].firstIndex(of: ASCII.forwardSlash.codePoint)
@@ -669,7 +669,7 @@ extension URLStorage {
   ///
   @inlinable
   internal func startOfPathComponent(endingAt componentEndOffset: Int) -> Int? {
-    let pathRange = header.structure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
+    let pathRange = structure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
     guard componentEndOffset > pathRange.lowerBound, componentEndOffset <= pathRange.upperBound else { return nil }
     assert(
       componentEndOffset == pathRange.upperBound || codeUnits[componentEndOffset] == ASCII.forwardSlash.codePoint,
@@ -689,7 +689,7 @@ extension URLStorage {
   @inlinable
   internal mutating func _clearPath() -> Range<WebURL.PathComponents.Index> {
 
-    let oldStructure = header.structure
+    let oldStructure = structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
     precondition(oldStructure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
 
@@ -716,8 +716,8 @@ extension URLStorage {
         try! multiReplaceSubrange(commands, newStructure: newStructure).get()
       }
     }
-    let newPathStart = header.structure.pathStart
-    let newPathEnd = header.structure.pathStart &+ header.structure.pathLength
+    let newPathStart = structure.pathStart
+    let newPathEnd = structure.pathStart &+ structure.pathLength
     let newLowerBound = WebURL.PathComponents.Index(codeUnitRange: newPathStart..<newPathEnd)
     let newUpperBound = WebURL.PathComponents.Index(codeUnitRange: newPathEnd..<newPathEnd)
     return Range(uncheckedBounds: (newLowerBound, newUpperBound))
@@ -735,7 +735,7 @@ extension URLStorage {
   ) -> Range<WebURL.PathComponents.Index>
   where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
 
-    let oldStructure = header.structure
+    let oldStructure = structure
     let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
     precondition(oldStructure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
 
@@ -863,7 +863,7 @@ extension URLStorage {
 
     // Post-replacement normalization of Windows drive letters.
     // This is necessary to preserve idempotence, but doesn't modify the URLStructure.
-    if case .file = header.structure.schemeKind {
+    if case .file = structure.schemeKind {
       _normalizeWindowsDriveLetterIfPresent()
     }
 
@@ -892,7 +892,7 @@ extension URLStorage {
 
   @inlinable
   internal mutating func _normalizeWindowsDriveLetterIfPresent() {
-    guard case .file = header.structure.schemeKind, header.structure.firstPathComponentLength == 3 else { return }
+    guard case .file = structure.schemeKind, structure.firstPathComponentLength == 3 else { return }
     let firstComponent = utf8.path.dropFirst().prefix(2)
     if PathComponentParser.isWindowsDriveLetter(firstComponent) {
       codeUnits[firstComponent.startIndex + 1] = ASCII.colon.codePoint
