@@ -689,22 +689,21 @@ extension URLStorage {
   @inlinable
   internal mutating func _clearPath() -> Range<WebURL.PathComponents.Index> {
 
-    let oldStructure = structure
-    let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path)
-    precondition(oldStructure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
+    let oldPathRange = structure.rangeForReplacingCodeUnits(of: .path)
+    precondition(structure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
 
     // We can only set an empty path if this is a non-special scheme with authority ("foo://host?query").
     // Everything else (special, path-only) requires at least a lone "/".
-    if !oldStructure.schemeKind.isSpecial, oldStructure.hasAuthority {
-      var newStructure = oldStructure
+    if !structure.schemeKind.isSpecial, structure.hasAuthority {
+      var newStructure = structure
       newStructure.pathLength = 0
       newStructure.firstPathComponentLength = 0
       removeSubrange(oldPathRange, newStructure: newStructure)
     } else {
       withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
-        var newStructure = oldStructure
-        if case .path = oldStructure.sigil {
-          commands += .remove(oldStructure.rangeForReplacingSigil)
+        var newStructure = structure
+        if case .path = structure.sigil {
+          commands += .remove(structure.rangeForReplacingSigil)
           newStructure.sigil = .none
         }
         newStructure.pathLength = 1
@@ -735,9 +734,8 @@ extension URLStorage {
   ) -> Range<WebURL.PathComponents.Index>
   where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
 
-    let oldStructure = structure
-    let oldPathRange = oldStructure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
-    precondition(oldStructure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
+    let oldPathRange = structure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
+    precondition(structure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
 
     // If 'firstGivenComponentLength' is nil, we infer that the components are empty (i.e. removal operation).
     let components = components.lazy.filter { utf8 in
@@ -817,20 +815,20 @@ extension URLStorage {
     var pathOffsetFromSigilChange = 0
 
     withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
-      var newStructure = oldStructure
-      switch (oldStructure.sigil, newPathRequiresSigil) {
+      var newStructure = structure
+      switch (structure.sigil, newPathRequiresSigil) {
       case (.authority, _), (.none, false), (.path, true):
         break
       case (.none, true):
         commands += .replace(
-          oldStructure.rangeForReplacingSigil,
+          structure.rangeForReplacingSigil,
           withCount: Sigil.path.length,
           writer: Sigil.unsafeWrite(.path)
         )
         newStructure.sigil = .path
         pathOffsetFromSigilChange = 2
       case (.path, false):
-        commands += .remove(oldStructure.rangeForReplacingSigil)
+        commands += .remove(structure.rangeForReplacingSigil)
         newStructure.sigil = .none
         pathOffsetFromSigilChange = -2
       }

@@ -588,13 +588,13 @@ internal struct URLHeader<SizeType: FixedWidthInteger> {
   internal var _capacity: SizeType
 
   @usableFromInline
-  internal var structure: URLStructure<SizeType>
+  internal var _structure: URLStructure<SizeType>
 
   @inlinable
   internal init(_count: SizeType, _capacity: SizeType, _structure: URLStructure<SizeType>) {
     self._count = _count
     self._capacity = _capacity
-    self.structure = _structure
+    self._structure = _structure
   }
 
   @inlinable
@@ -622,7 +622,7 @@ extension URLHeader: ManagedBufferHeader {
     guard newCapacity >= minimumCapacity else {
       return nil
     }
-    return Self(_count: _count, _capacity: newCapacity, _structure: structure)
+    return Self(_count: _count, _capacity: newCapacity, _structure: _structure)
   }
 }
 
@@ -689,13 +689,13 @@ extension URLStorage {
   @inlinable
   internal var structure: URLStructure<URLStorage.SizeType> {
     get {
-      header.structure
+      header._structure
     }
     _modify {
-      yield &header.structure
+      yield &header._structure
     }
     set {
-      header.structure = newValue
+      header._structure = newValue
     }
   }
 
