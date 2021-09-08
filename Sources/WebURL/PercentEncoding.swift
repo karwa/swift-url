@@ -417,8 +417,8 @@ extension Collection where Element == UInt8 {
     as encodeSet: KeyPath<PercentEncodeSet, EncodeSet.Type>
   ) -> String {
     withContiguousStorageIfAvailable {
-      String(decoding: $0.boundsChecked.lazy.percentEncoded(as: encodeSet), as: UTF8.self)
-    } ?? String(decoding: self.lazy.percentEncoded(as: encodeSet), as: UTF8.self)
+      String(discontiguousUTF8: $0.boundsChecked.lazy.percentEncoded(as: encodeSet))
+    } ?? String(discontiguousUTF8: self.lazy.percentEncoded(as: encodeSet))
   }
 
   /// Interpets this collection's elements as UTF-8 code-units, and returns a `String` formed by encoding them using the `\.component` encoding-set.
@@ -772,8 +772,8 @@ extension Collection where Element == UInt8 {
     from decodeSet: KeyPath<PercentDecodeSet, EncodeSet.Type>
   ) -> String where EncodeSet: PercentEncodeSetProtocol {
     withContiguousStorageIfAvailable {
-      String(decoding: $0.boundsChecked.lazy.percentDecodedUTF8(from: decodeSet), as: UTF8.self)
-    } ?? String(decoding: self.lazy.percentDecodedUTF8(from: decodeSet), as: UTF8.self)
+      String(discontiguousUTF8: $0.boundsChecked.lazy.percentDecodedUTF8(from: decodeSet))
+    } ?? String(discontiguousUTF8: self.lazy.percentDecodedUTF8(from: decodeSet))
   }
 
   /// Interprets this collection's elements as UTF-8 code-units, and returns a string formed by decoding all percent-encoded code-unit sequences.
