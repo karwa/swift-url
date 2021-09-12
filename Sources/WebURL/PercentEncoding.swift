@@ -136,100 +136,120 @@ extension PercentEncodeSetProtocol {
 
 extension LazyCollectionProtocol where Element == UInt8 {
 
-  /// Interprets this collection's elements as UTF8 code-units, and returns a collection of ASCII codepoints formed by lazily encoding
-  /// the source contents with the given `EncodeSet`.
+  /// Returns a collection of ASCII codepoints formed by percent-encoding this collection's elements using the given `EncodeSet`.
+  /// For instance, the byte 200 (0xC8) becomes the 3-byte ASCII string "%C8" (0x25, 0x43, 0x38).
   ///
   @inlinable @inline(__always)
   public func percentEncoded<EncodeSet>(
     as: KeyPath<PercentEncodeSet, EncodeSet.Type>
   ) -> LazilyPercentEncodedUTF8<Elements, EncodeSet> {
-    LazilyPercentEncodedGroups(source: elements, encodeSet: EncodeSet.self).joined()
-  }
-
-  /// Interprets this collection's elements as UTF8 code-units, and returns a collection of groups of ASCII codepoints, where each group is formed by lazily encoding
-  /// the source contents with `EncodeSet`.
-  ///
-  @inlinable @inline(__always)
-  internal func percentEncodedGroups<EncodeSet>(
-    as: KeyPath<PercentEncodeSet, EncodeSet.Type>
-  ) -> LazilyPercentEncodedGroups<Elements, EncodeSet> {
-    LazilyPercentEncodedGroups(source: elements, encodeSet: EncodeSet.self)
+    LazilyPercentEncodedUTF8(source: elements, encodeSet: EncodeSet.self)
   }
 }
 
-/// A `Collection` which lazily percent-encodes its `Source` UTF8 code-units using a given `EncodeSet`.
-/// This collection only _adds_ percent-encoding or substitutions; it does not decode any pre-existing percent-encoded or substituted code-points in `Source`.
+/// A `Collection` which percent-encodes elements from its `Source` on-demand using a given `EncodeSet`.
 ///
-/// Percent encoding transforms arbitrary Unicode strings to a limited set of ASCII code-points which are permitted by the `EncodeSet`.
-/// If the `EncodeSet` performs substitutions, users should take care to decode the contents using the same `EncodeSet`.
+/// This collection only _adds_ percent-encoding or substitutions; it does not decode any pre-existing encoded or substituted bytes.
+/// Only encode-sets which include the percent character (0x25) will preserve their source contents exactly when decoded.
 ///
-public typealias LazilyPercentEncodedUTF8<Source, EncodeSet> =
-  FlattenSequence<LazilyPercentEncodedGroups<Source, EncodeSet>>
-where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetProtocol
-
-/// A `Collection` which lazily percent-encodes its `Source` UTF8 code-units using a given `EncodeSet`.
-/// This collection only _adds_ percent-encoding or substitutions; it does not decode any pre-existing percent-encoded or substituted code-points in `Source`.
+/// Percent encoding is used to escape arbitrary bytes using a limited set of ASCII code-points permitted by the encode-set.
+/// Some encode-sets perform additional substitutions (e.g. replacing spaces with "+"), so users should take care to decode
+/// these sequences using the same encode-set.
 ///
-/// The elements of this collection are `_PercentEncodedByte`s, which are small clusters of either 1 or 3 ASCII code-points depending on how the source
-/// code-unit must be encoded. The overall, encoded ASCII string is obtained by flattening this 2-dimensional collection.
+/// The elements of this collection are guaranteed to be ASCII code-units, and hence valid UTF-8.
 ///
-/// Percent encoding transforms arbitrary Unicode strings to a limited set of ASCII code-points which are permitted by the `EncodeSet`.
-/// If the `EncodeSet` performs substitutions, users should take care to decode the contents using the same `EncodeSet`.
-///
-public struct LazilyPercentEncodedGroups<Source, EncodeSet>: Collection, LazyCollectionProtocol
+public struct LazilyPercentEncodedUTF8<Source, EncodeSet>: Collection, LazyCollectionProtocol
 where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetProtocol {
 
   @usableFromInline
   internal let source: Source
 
+  public let startIndex: Index
+
   @inlinable
   internal init(source: Source, encodeSet: EncodeSet.Type) {
     self.source = source
+    let sourceStartIndex = source.startIndex
+    if sourceStartIndex < source.endIndex {
+      self.startIndex = Index(sourceIndex: sourceStartIndex, sourceByte: source[sourceStartIndex])
+    } else {
+      self.startIndex = Index(endIndex: sourceStartIndex)
+    }
   }
 
-  public typealias Index = Source.Index
+  public struct Index: Equatable, Comparable {
 
-  @inlinable
-  public var startIndex: Index {
-    source.startIndex
+    @usableFromInline
+    internal var sourceIndex: Source.Index
+
+    @usableFromInline
+    internal var encodedByteOffset: UInt8
+
+    @usableFromInline
+    internal var encodedByte: _EncodedByte
+
+    @inlinable
+    internal init(sourceIndex: Source.Index, sourceByte: UInt8) {
+      self.sourceIndex = sourceIndex
+      self.encodedByteOffset = 0
+      self.encodedByte = _EncodedByte(byte: sourceByte, encodeSet: EncodeSet.self)
+    }
+
+    @inlinable
+    internal init(endIndex: Source.Index) {
+      self.sourceIndex = endIndex
+      self.encodedByteOffset = 0
+      self.encodedByte = _EncodedByte(_null: ())
+    }
+
+    @inlinable
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+      // This uses 3 comparisons rather than 2, but generates smaller, faster code,
+      // because most of the time we're testing that an index is < endIndex.
+      if lhs.sourceIndex < rhs.sourceIndex {
+        return true
+      }
+      return lhs.sourceIndex == rhs.sourceIndex && lhs.encodedByteOffset < rhs.encodedByteOffset
+    }
+
+    @inlinable
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+      lhs.sourceIndex == rhs.sourceIndex && lhs.encodedByteOffset == rhs.encodedByteOffset
+    }
   }
 
   @inlinable
   public var endIndex: Index {
-    source.endIndex
+    Index(endIndex: source.endIndex)
   }
 
   @inlinable
-  public subscript(position: Index) -> _PercentEncodedByte {
-    let sourceByte = source[position]
-    if let asciiChar = ASCII(sourceByte), EncodeSet.shouldPercentEncode(ascii: asciiChar.codePoint) == false {
-      if let substitute = EncodeSet.substitute(ascii: asciiChar.codePoint) {
-        return _PercentEncodedByte(.substituted, substitute)
-      } else {
-        return _PercentEncodedByte(.unencoded, sourceByte)
-      }
-    }
-    return _PercentEncodedByte(.percentEncoded, sourceByte)
+  public subscript(position: Index) -> UInt8 {
+    position.encodedByte[position.encodedByteOffset]
   }
 
   @inlinable
   public func index(after i: Index) -> Index {
-    source.index(after: i)
+    var copy = i
+    formIndex(after: &copy)
+    return copy
   }
 
   @inlinable
   public func formIndex(after i: inout Index) {
-    source.formIndex(after: &i)
-  }
-
-  @inlinable
-  public func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
-    source.index(i, offsetBy: distance, limitedBy: limit)
-  }
-
-  @inlinable
-  public func formIndex(_ i: inout Index, offsetBy distance: Int, limitedBy limit: Index) -> Bool {
-    source.formIndex(&i, offsetBy: distance, limitedBy: limit)
+    i.encodedByteOffset &+= 1
+    if i.encodedByteOffset < i.encodedByte.count {
+      return
+    }
+    i.encodedByteOffset = 0
+    guard i.sourceIndex < source.endIndex else {
+      return
+    }
+    source.formIndex(after: &i.sourceIndex)
+    guard i.sourceIndex < source.endIndex else {
+      return
+    }
+    i.encodedByte = _EncodedByte(byte: source[i.sourceIndex], encodeSet: EncodeSet.self)
   }
 
   @inlinable
@@ -241,166 +261,128 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
   public var underestimatedCount: Int {
     source.underestimatedCount
   }
-
-  @inlinable
-  public var count: Int {
-    source.count
-  }
-
-  @inlinable
-  public func distance(from start: Index, to end: Index) -> Int {
-    source.distance(from: start, to: end)
-  }
 }
 
-extension LazilyPercentEncodedGroups: BidirectionalCollection where Source: BidirectionalCollection {
+extension LazilyPercentEncodedUTF8: BidirectionalCollection where Source: BidirectionalCollection {
 
   @inlinable
   public func index(before i: Index) -> Index {
-    source.index(before: i)
+    var copy = i
+    formIndex(before: &copy)
+    return copy
   }
 
   @inlinable
   public func formIndex(before i: inout Index) {
-    source.formIndex(before: &i)
+    guard i.encodedByteOffset == 0 else {
+      i.encodedByteOffset &-= 1
+      return
+    }
+    guard i.sourceIndex > startIndex.sourceIndex else {
+      return
+    }
+    source.formIndex(before: &i.sourceIndex)
+    i.encodedByte = _EncodedByte(byte: source[i.sourceIndex], encodeSet: EncodeSet.self)
+    i.encodedByteOffset = i.encodedByte.count &- 1
   }
 }
 
-extension LazilyPercentEncodedGroups: RandomAccessCollection where Source: RandomAccessCollection {}
-
-/// A UTF8 code-unit which has been encoded by a `PercentEncodeSet` to a collection of ASCII codepoints.
+/// A byte which has been encoded by a `PercentEncodeSet`.
 ///
-public struct _PercentEncodedByte: RandomAccessCollection {
-
-  @usableFromInline
-  internal enum Encoding {
-    case unencoded
-    case substituted
-    case percentEncoded
-  }
-
-  /// The method used to encode this UTF8 code-unit from its source.
-  /// If the method is `percentEncoded`, the collection will contain 3 ASCII codepoints. Otherwise, it will contain 1 ASCII codepoint.
-  ///
-  @usableFromInline
-  internal let encoding: Encoding
+@usableFromInline
+internal struct _EncodedByte {
 
   @usableFromInline
   internal let byte: UInt8
 
-  @inlinable
-  internal init(_ encoding: Encoding, _ byte: UInt8) {
-    self.encoding = encoding
-    self.byte = byte
-  }
+  @usableFromInline
+  internal let count: UInt8
+
+  @usableFromInline
+  internal let isEncodedOrSubstituted: Bool
 
   @inlinable
-  public var startIndex: Int {
-    0
-  }
-
-  @inlinable
-  public var endIndex: Int {
-    switch encoding {
-    case .unencoded, .substituted:
-      return 1
-    case .percentEncoded:
-      return 3
-    }
-  }
-
-  @inlinable
-  public subscript(position: Int) -> UInt8 {
-    switch encoding {
-    case .unencoded:
-      assert(position == 0, "Invalid index")
-      return byte
-    case .substituted:
-      assert(position == 0, "Invalid index")
-      return byte
-    case .percentEncoded:
-      assert((0..<3).contains(position), "Invalid index")
-      switch position {
-      case 0: return ASCII.percentSign.codePoint
-      case 1: return ASCII.uppercaseHexDigit(of: byte &>> 4).codePoint
-      default: return ASCII.uppercaseHexDigit(of: byte).codePoint
+  internal init<EncodeSet>(byte: UInt8, encodeSet: EncodeSet.Type) where EncodeSet: PercentEncodeSetProtocol {
+    if let asciiChar = ASCII(byte), EncodeSet.shouldPercentEncode(ascii: asciiChar.codePoint) == false {
+      self.count = 1
+      if let substitute = EncodeSet.substitute(ascii: asciiChar.codePoint) {
+        self.byte = substitute & 0b01111_1111  // Ensure the substitute is ASCII.
+        self.isEncodedOrSubstituted = true
+      } else {
+        self.byte = byte
+        self.isEncodedOrSubstituted = false
       }
+    } else {
+      self.byte = byte
+      self.count = 3
+      self.isEncodedOrSubstituted = true
     }
   }
 
   @inlinable
-  public func index(after i: Int) -> Int {
-    i &+ 1
+  internal init(_null: Void) {
+    self.byte = 0
+    self.count = 1
+    self.isEncodedOrSubstituted = false
   }
 
   @inlinable
-  public func formIndex(after i: inout Int) {
-    i &+= 1
-  }
-
-  @inlinable
-  public func index(before i: Int) -> Int {
-    i &- 1
-  }
-
-  @inlinable
-  public func formIndex(before i: inout Int) {
-    i &-= 1
-  }
-
-  @inlinable
-  public var isEmpty: Bool {
-    false
-  }
-
-  @inlinable
-  public var underestimatedCount: Int {
-    endIndex
-  }
-
-  @inlinable
-  public var count: Int {
-    endIndex
-  }
-
-  @inlinable
-  public func distance(from start: Int, to end: Int) -> Int {
-    end &- start
+  internal subscript(position: UInt8) -> UInt8 {
+    if count == 1 {
+      assert(position == 0, "Invalid index")
+      return byte
+    } else {
+      assert((0..<3).contains(position), "Invalid index")
+      return percentEncodedCharacter(byte, offset: position)
+    }
   }
 }
 
-extension LazilyPercentEncodedGroups {
+extension LazilyPercentEncodedUTF8 {
 
-  /// Calls `writer` for every `_PercentEncodedByte` in this collection, in `for`-loop order,
-  /// and returns whether any of the visited code-units were encoded by the `EncodeSet`.
+  /// Calls `writer` for every byte in the source collection, providing it with a pointer
+  /// from which it may copy entire percent-encoded characters (1 or 3 bytes), and returning
+  /// whether or not any bytes were actually encoded or substituted.
   ///
-  @inlinable @inline(__always)
-  internal func write(to writer: (_PercentEncodedByte) -> Void) -> Bool {
+  /// This is used when writing a URL string, as we want to not only write the percent-encoded contents,
+  /// but determine whether or not percent-encoding was even necessary, in a single pass.
+  ///
+  @inlinable
+  internal func write(to writer: (UnsafeBufferPointer<UInt8>) -> Void) -> Bool {
     var didEncode = false
-    // This leads to significantly better code generation than a 'for' loop, especially after inlining.
     var i = startIndex
-    while i < endIndex {
-      let byteGroup = self[i]
-      writer(byteGroup)
-      switch byteGroup.encoding {
-      case .percentEncoded, .substituted:
+    while i.sourceIndex < source.endIndex {
+      i.encodedByte = _EncodedByte(byte: source[i.sourceIndex], encodeSet: EncodeSet.self)
+      if i.encodedByte.count == 1 {
+        withUnsafePointer(to: i.encodedByte.byte) {
+          writer(UnsafeBufferPointer(start: $0, count: 1))
+        }
+        didEncode = didEncode || i.encodedByte.isEncodedOrSubstituted
+      } else {
+        withPercentEncodedString(i.encodedByte.byte) { writer($0) }
         didEncode = true
-      case .unencoded:
-        break
       }
-      formIndex(after: &i)
+      source.formIndex(after: &i.sourceIndex)
     }
     return didEncode
   }
 
-  /// Returns the total length of the encoded UTF-8 bytes,
+  /// Returns the total length of the encoded UTF-8 bytes, calculated without considering overflow,
   /// and whether or not any code-units were altered by the `EncodeSet`.
   ///
-  @inlinable @inline(__always)
-  internal var encodedLength: (count: Int, needsEncoding: Bool) {
-    var count = 0
-    let needsEncoding = write { count += $0.count }
-    return (count, needsEncoding)
+  /// This is useful for determining the expected allocation size required to hold the contents,
+  /// but since it does not consider overflow, it will be inaccurate in the case that the collection yields more than `Int.max` elements.
+  ///
+  /// If not exact, this value should always be an underestimate; never negative,
+  /// and (assuming the source collection yields the same sequence of elements), never an overestimate.
+  /// The latter point means that writers should still be wary - even an invalid collection which yields different values every time must
+  /// never cause memory safety to be violated.
+  ///
+  @inlinable
+  internal var unsafeEncodedLength: (count: Int, needsEncoding: Bool) {
+    var count: UInt = 0
+    let needsEncoding = write { count &+= UInt($0.count) }
+    return (Int(truncatingIfNeeded: count), needsEncoding)
   }
 }
 
@@ -1248,7 +1230,7 @@ internal struct URLEncodeSetSet: OptionSet {
   @usableFromInline
   internal var rawValue: UInt8
 
-  @usableFromInline
+  @inlinable
   internal init(rawValue: UInt8) {
     self.rawValue = rawValue
   }
@@ -1405,3 +1387,45 @@ internal let percent_encoding_table: [URLEncodeSetSet] = [
   /*  0x7F delete */                   [.c0, .fragment, .query, .specialQuery, .path, .userInfo, .form, .component]
   // The End.                          ---------------------------------------------------------------------
 ]
+
+@inlinable
+internal func withPercentEncodedString<T>(
+  _ byte: UInt8, _ body: (UnsafeBufferPointer<UInt8>) -> T
+) -> T {
+  let table: StaticString = """
+    %00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F\
+    %10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F\
+    %20%21%22%23%24%25%26%27%28%29%2A%2B%2C%2D%2E%2F\
+    %30%31%32%33%34%35%36%37%38%39%3A%3B%3C%3D%3E%3F\
+    %40%41%42%43%44%45%46%47%48%49%4A%4B%4C%4D%4E%4F\
+    %50%51%52%53%54%55%56%57%58%59%5A%5B%5C%5D%5E%5F\
+    %60%61%62%63%64%65%66%67%68%69%6A%6B%6C%6D%6E%6F\
+    %70%71%72%73%74%75%76%77%78%79%7A%7B%7C%7D%7E%7F\
+    %80%81%82%83%84%85%86%87%88%89%8A%8B%8C%8D%8E%8F\
+    %90%91%92%93%94%95%96%97%98%99%9A%9B%9C%9D%9E%9F\
+    %A0%A1%A2%A3%A4%A5%A6%A7%A8%A9%AA%AB%AC%AD%AE%AF\
+    %B0%B1%B2%B3%B4%B5%B6%B7%B8%B9%BA%BB%BC%BD%BE%BF\
+    %C0%C1%C2%C3%C4%C5%C6%C7%C8%C9%CA%CB%CC%CD%CE%CF\
+    %D0%D1%D2%D3%D4%D5%D6%D7%D8%D9%DA%DB%DC%DD%DE%DF\
+    %E0%E1%E2%E3%E4%E5%E6%E7%E8%E9%EA%EB%EC%ED%EE%EF\
+    %F0%F1%F2%F3%F4%F5%F6%F7%F8%F9%FA%FB%FC%FD%FE%FF
+    """
+  return table.withUTF8Buffer {
+    let offset = Int(byte) &* 3
+    let buffer = UnsafeBufferPointer(start: $0.baseAddress.unsafelyUnwrapped + offset, count: 3)
+    return body(buffer)
+  }
+}
+
+@inlinable
+internal func percentEncodedCharacter(_ byte: UInt8, offset: UInt8) -> UInt8 {
+  // This is used by _EncodedByte.subscript.
+  //
+  // Hopefully one day the compiler will be able to eliminate the 'min' which serves as a bounds-check.
+  // It isn't a huge hit, but we want to write safe code and have the compiler make it fast.
+  //
+  // Unfortunately, even in a loop where the compiler can see the entire evolution of the offset,
+  // and even if we rewrite the check as "min(offset, encodedByte.count)" - literally the same as in index(after:) -
+  // it still doesn't want to eliminate the bounds-check. Hmph.
+  withPercentEncodedString(byte) { ptr in ptr[Int(min(offset, 2))] }
+}

@@ -470,8 +470,8 @@ extension URLStorage {
     let combinedLength: Int
     let needsEscaping: Bool
     (combinedLength, needsEscaping) = keyValuePairs.reduce(into: (0, false)) { metrics, kvp in
-      let (keyLength, encodeKey) = kvp.0.lazy.percentEncodedGroups(as: \.form).encodedLength
-      let (valLength, encodeVal) = kvp.1.lazy.percentEncodedGroups(as: \.form).encodedLength
+      let (keyLength, encodeKey) = kvp.0.lazy.percentEncoded(as: \.form).unsafeEncodedLength
+      let (valLength, encodeVal) = kvp.1.lazy.percentEncoded(as: \.form).unsafeEncodedLength
       metrics.0 += keyLength + valLength
       metrics.1 = metrics.1 || encodeKey || encodeVal
     }

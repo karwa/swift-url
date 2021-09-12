@@ -111,7 +111,7 @@ extension URLStorage {
       return .success
     }
 
-    let (_newValueLength, needsEncoding) = newValue.lazy.percentEncodedGroups(as: \.userInfo).encodedLength
+    let (_newValueLength, needsEncoding) = newValue.lazy.percentEncoded(as: \.userInfo).unsafeEncodedLength
     guard let newValueLength = URLStorage.SizeType(exactly: _newValueLength) else {
       return .failure(.exceedsMaximumSize)
     }
@@ -168,7 +168,7 @@ extension URLStorage {
       return .success
     }
 
-    let (_newValueLength, needsEncoding) = newValue.lazy.percentEncodedGroups(as: \.userInfo).encodedLength
+    let (_newValueLength, needsEncoding) = newValue.lazy.percentEncoded(as: \.userInfo).unsafeEncodedLength
     guard let newValueLength = URLStorage.SizeType(exactly: _newValueLength) else {
       return .failure(.exceedsMaximumSize)
     }
@@ -890,7 +890,7 @@ extension URLStorage {
       return .success
     }
 
-    let (_newValueLength, needsEncoding) = newBytes.lazy.percentEncodedGroups(as: encodeSet).encodedLength
+    let (_newValueLength, needsEncoding) = newBytes.lazy.percentEncoded(as: encodeSet).unsafeEncodedLength
     guard let newValueLength = URLStorage.SizeType(exactly: _newValueLength) else {
       return .failure(.exceedsMaximumSize)
     }

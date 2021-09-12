@@ -1,7 +1,4 @@
-LazilyPercentEncodedGroups
-LazilyPercentEncodedGroups.index(before:)
-LazilyPercentEncodedGroups.formIndex(before:)
-_PercentEncodedByte
+LazilyPercentEncodedUTF8.Index
 LazilyPercentDecodedUTF8.Index
 PercentEncodeSet.C0Control
 PercentEncodeSet.Fragment

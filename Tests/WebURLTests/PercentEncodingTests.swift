@@ -128,15 +128,12 @@ extension PercentEncodingTests {
       // Check the contents and Collection conformance.
       let lazilyEncoded = original.utf8.lazy.percentEncoded(as: encodeSet)
       XCTAssertEqualElements(lazilyEncoded, encoded.utf8)
-      // Due to https://bugs.swift.org/browse/SR-13874 we can only check conformance for percentEncodedGroups.
-      // CollectionChecker.check(lazilyEncoded)
-      CollectionChecker.check(original.utf8.lazy.percentEncodedGroups(as: encodeSet))
+      CollectionChecker.check(lazilyEncoded)
 
       // Check the contents and Collection conformance in reverse.
-      // Again, limited to awkward hacks via percentEncodedGroups due to stdlib bugs.
-      let lazilyEncodedGroups = original.utf8.lazy.percentEncodedGroups(as: encodeSet)
-      XCTAssertEqualElements(lazilyEncodedGroups.reversed().flatMap { $0.reversed() }, encoded.utf8.reversed())
-      CollectionChecker.check(lazilyEncodedGroups.reversed() as ReversedCollection)
+      let lazilyEncodedReversed = lazilyEncoded.reversed() as ReversedCollection
+      XCTAssertEqualElements(lazilyEncodedReversed, encoded.utf8.reversed())
+      CollectionChecker.check(lazilyEncodedReversed)
     }
 
     _testLazilyEncoded("hello, world!", as: \.userInfo, to: "hello,%20world!")
@@ -180,13 +177,12 @@ extension PercentEncodingTests {
     ) {
       let lazilyDecoded = encoded.utf8.lazy.percentDecodedUTF8(from: decodeSet)
       // Check the contents and Collection conformance.
-      // This should also check BidirectionalCollection conformance, but the tests are a bit limited right now.
       XCTAssertEqualElements(lazilyDecoded, decoded.utf8)
       CollectionChecker.check(lazilyDecoded)
       // Check the contents and Collection conformance in reverse.
-      // This tends to be quite a good double-check, especially as BidirectionalCollection tests are a bit limited.
-      XCTAssertEqualElements(lazilyDecoded.reversed() as ReversedCollection, decoded.utf8.reversed())
-      CollectionChecker.check(lazilyDecoded.reversed() as ReversedCollection)
+      let lazilyDecodedReversed = lazilyDecoded.reversed() as ReversedCollection
+      XCTAssertEqualElements(lazilyDecodedReversed, decoded.utf8.reversed())
+      CollectionChecker.check(lazilyDecodedReversed)
     }
 
     _testLazilyDecoded("hello%2C%20world!", from: \.percentEncodedOnly, to: "hello, world!")
