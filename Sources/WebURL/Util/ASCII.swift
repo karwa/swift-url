@@ -483,7 +483,7 @@ extension ASCII {
       if overflowM || overflowA {
         return nil
       }
-      idx = utf8.index(after: idx)
+      utf8.formIndex(after: &idx)
     }
     return idx < utf8.endIndex ? nil : value
   }

@@ -40,7 +40,7 @@ extension Collection {
         if current.length > longest.length { longest = (current.start..<idx, current.length) }
         current.length = 0
       }
-      idx = index(after: idx)
+      formIndex(after: &idx)
     }
     if current.length > longest.length {
       longest = (current.start..<endIndex, current.length)

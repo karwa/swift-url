@@ -27,11 +27,11 @@ extension BidirectionalCollection {
     var sliceStart = startIndex
     var sliceEnd = endIndex
     // Consume elements from the front.
-    while sliceStart != sliceEnd, try predicate(self[sliceStart]) {
-      sliceStart = index(after: sliceStart)
+    while sliceStart < sliceEnd, try predicate(self[sliceStart]) {
+      formIndex(after: &sliceStart)
     }
     // Consume elements from the back only if the element at the "before" index matches the predicate.
-    while sliceStart != sliceEnd {
+    while sliceStart < sliceEnd {
       let idxBeforeSliceEnd = index(before: sliceEnd)
       guard try predicate(self[idxBeforeSliceEnd]) else {
         return self[sliceStart..<sliceEnd]
