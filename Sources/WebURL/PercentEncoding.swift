@@ -1408,7 +1408,7 @@ internal func withPercentEncodedString<T>(
     %C0%C1%C2%C3%C4%C5%C6%C7%C8%C9%CA%CB%CC%CD%CE%CF\
     %D0%D1%D2%D3%D4%D5%D6%D7%D8%D9%DA%DB%DC%DD%DE%DF\
     %E0%E1%E2%E3%E4%E5%E6%E7%E8%E9%EA%EB%EC%ED%EE%EF\
-    %F0%F1%F2%F3%F4%F5%F6%F7%F8%F9%FA%FB%FC%FD%FE%FF
+    %F0%F1%F2%F3%F4%F5%F6%F7%F8%F9%FA%FB%FC%FD%FE%FF-
     """
   return table.withUTF8Buffer {
     let offset = Int(byte) &* 3
@@ -1419,13 +1419,15 @@ internal func withPercentEncodedString<T>(
 
 @inlinable
 internal func percentEncodedCharacter(_ byte: UInt8, offset: UInt8) -> UInt8 {
-  // This is used by _EncodedByte.subscript.
+  // Ideally, we'd enforce safety here by using 'ptr[Int(min(offset, 2))]', and the compiler
+  // would eliminate it. But it doesn't - even when it can see the entire evolution of 'offset'
+  // and that it is always within (0...2). Hmph.
   //
-  // Hopefully one day the compiler will be able to eliminate the 'min' which serves as a bounds-check.
-  // It isn't a huge hit, but we want to write safe code and have the compiler make it fast.
-  //
-  // Unfortunately, even in a loop where the compiler can see the entire evolution of the offset,
-  // and even if we rewrite the check as "min(offset, encodedByte.count)" - literally the same as in index(after:) -
-  // it still doesn't want to eliminate the bounds-check. Hmph.
-  withPercentEncodedString(byte) { ptr in ptr[Int(min(offset, 2))] }
+  // So as a cheeky work-around, the percent-encoding table includes an extra byte at the end,
+  // meaning that it will not over-read if you get the _4th_ offset of a percent-encoded byte.
+  // Of course, semantically you'd be reading in to the next byte, or the extra byte,
+  // so your code would see incorrect results, but it wouldn't be _unsafe_.
+  // This means we can enforce memory safety with a simple bitmask.
+
+  withPercentEncodedString(byte) { ptr in ptr[Int(offset & 0b0000_0011)] }
 }
