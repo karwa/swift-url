@@ -157,7 +157,7 @@ extension MutableCollection {
     // If the content begins with a separator, advance past it.
     // The segment's contents extend from after the separator until the next separator.
     if readHead < endIndex, isSeparator(self[readHead]) {
-      readHead = index(after: readHead)
+      formIndex(after: &readHead)
     }
 
     var writeHead = readHead

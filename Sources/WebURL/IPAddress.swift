@@ -286,12 +286,12 @@ extension IPv6Address {
       var idx = utf8.startIndex
 
       if utf8[idx] == ASCII.colon.codePoint {
-        idx = utf8.index(after: idx)
+        utf8.formIndex(after: &idx)
         guard idx < utf8.endIndex, utf8[idx] == ASCII.colon.codePoint else {
           callback.validationError(ipv6: .unexpectedLeadingColon)
           return nil
         }
-        idx = utf8.index(after: idx)
+        utf8.formIndex(after: &idx)
         pieceIndex &+= 1
         expandFrom = pieceIndex
       }
@@ -306,7 +306,7 @@ extension IPv6Address {
             callback.validationError(ipv6: .multipleCompressedPieces)
             return nil
           }
-          idx = utf8.index(after: idx)
+          utf8.formIndex(after: &idx)
           pieceIndex &+= 1
           expandFrom = pieceIndex
           continue parseloop
@@ -320,7 +320,7 @@ extension IPv6Address {
           value <<= 4
           value &+= UInt16(numberValue)
           length &+= 1
-          idx = utf8.index(after: idx)
+          utf8.formIndex(after: &idx)
         }
         value = value.bigEndian
         // After the numeric value.
@@ -335,7 +335,7 @@ extension IPv6Address {
         guard utf8[idx] != ASCII.colon.codePoint else {
           parsedPieces[pieceIndex] = value
           pieceIndex &+= 1
-          idx = utf8.index(after: idx)
+          utf8.formIndex(after: &idx)
           guard idx < utf8.endIndex else {
             callback.validationError(ipv6: .unexpectedTrailingColon)
             return nil
@@ -718,11 +718,11 @@ extension IPv4Address {
           return nil
         }
         if firstCharInPiece == ASCII.n0 {
-          idx = utf8.index(after: idx)
+          utf8.formIndex(after: &idx)
           if idx < utf8.endIndex {
             if ASCII(utf8[idx])?.lowercased == .x {
               radix = 16
-              idx = utf8.index(after: idx)
+              utf8.formIndex(after: &idx)
             } else {
               radix = 8
             }
@@ -741,7 +741,7 @@ extension IPv4Address {
             callback.validationError(ipv4: .pieceOverflows)
             return nil
           }
-          idx = utf8.index(after: idx)
+          utf8.formIndex(after: &idx)
         }
         // Set the piece to its numeric value.
         guard pieceIndex < 4 else {
@@ -755,7 +755,7 @@ extension IPv4Address {
         guard idx < utf8.endIndex, utf8[idx] == ASCII.period.codePoint else {
           break
         }
-        idx = utf8.index(after: idx)
+        utf8.formIndex(after: &idx)
       }
 
       guard idx == utf8.endIndex else {
@@ -875,7 +875,7 @@ extension IPv4Address {
         guard numbersSeen < 4 else {
           return nil  // too many pieces.
         }
-        idx = utf8.index(after: idx)
+        utf8.formIndex(after: &idx)
       }
       var ipv4Piece = -1  // -1 means "no digits parsed".
       while idx < utf8.endIndex, let digit = ASCII(utf8[idx])?.decimalNumberValue {
@@ -891,7 +891,7 @@ extension IPv4Address {
         guard ipv4Piece < 256 else {
           return nil  // piece overflow.
         }
-        idx = utf8.index(after: idx)
+        utf8.formIndex(after: &idx)
       }
       guard ipv4Piece > -1 else {
         return nil  // piece does not begin with a decimal digit.
