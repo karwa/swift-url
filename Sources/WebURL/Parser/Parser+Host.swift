@@ -283,7 +283,7 @@ extension ParsedHost {
     case .opaque(let hostnameInfo):
       if hostnameInfo.needsPercentEncoding {
         writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount) { writePiece in
-          _ = bytes.lazy.percentEncodedGroups(as: \.c0Control).write(to: writePiece)
+          _ = bytes.lazy.percentEncoded(as: \.c0Control).write(to: writePiece)
         }
       } else {
         writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount) { writePiece in

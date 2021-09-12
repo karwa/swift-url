@@ -591,7 +591,7 @@ extension PathMetrics {
       _ pathComponent: UTF8Bytes.SubSequence, isWindowsDriveLetter: Bool
     ) {
       metrics.numberOfComponents += 1
-      let (encodedLength, needsEncoding) = pathComponent.lazy.percentEncodedGroups(as: \.path).encodedLength
+      let (encodedLength, needsEncoding) = pathComponent.lazy.percentEncoded(as: \.path).unsafeEncodedLength
       metrics.needsPercentEncoding = metrics.needsPercentEncoding || needsEncoding
       metrics.firstComponentLength = 1 /* "/" */ + encodedLength
       metrics.requiredCapacity += metrics.firstComponentLength
@@ -721,17 +721,9 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         return
       }
       if needsEscaping {
-        for byteGroup in pathComponent.reversed().lazy.percentEncodedGroups(as: \.path) {
-          switch byteGroup.encoding {
-          case .percentEncoded:
-            (buffer.baseAddress.unsafelyUnwrapped + front - 3).initialize(to: byteGroup[0])
-            (buffer.baseAddress.unsafelyUnwrapped + front - 2).initialize(to: byteGroup[1])
-            (buffer.baseAddress.unsafelyUnwrapped + front - 1).initialize(to: byteGroup[2])
-            front &-= 3
-          case .unencoded, .substituted:
-            (buffer.baseAddress.unsafelyUnwrapped + front - 1).initialize(to: byteGroup[0])
-            front &-= 1
-          }
+        for byte in pathComponent.lazy.percentEncoded(as: \.path).reversed() {
+          front &-= 1
+          (buffer.baseAddress.unsafelyUnwrapped + front).initialize(to: byte)
         }
       } else {
         let count = pathComponent.count
