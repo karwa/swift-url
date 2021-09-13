@@ -270,7 +270,11 @@ internal struct UnsafeBoundsCheckedBufferPointer<Element> {
   ///
   @inlinable
   internal init(_ buffer: UnsafeBufferPointer<Element>) {
-    self.init(baseAddress: buffer.baseAddress, size: UInt(bitPattern: buffer.count))
+    // We trust UnsafeBufferPointer to meet our conditions:
+    // - 'count' is within 0..<Int.max
+    // - if 'baseAddress' is nil, 'count' is 0
+    self.baseAddress = buffer.baseAddress
+    self.bounds = 0..<UInt(bitPattern: buffer.count)
   }
 
   /// Creates a bounds-checked buffer view covering the memory from `baseAddress` and spanning `size` elements.
@@ -411,17 +415,21 @@ extension UnsafeBoundsCheckedBufferPointer: RandomAccessCollection {
     Int(bitPattern: end) &- Int(bitPattern: start)
   }
 
-  @inlinable
+  @inlinable @inline(__always)
   internal func withContiguousStorageIfAvailable<R>(
     _ body: (UnsafeBufferPointer<Element>) throws -> R
   ) rethrows -> R? {
     // Watch out!
-    // 'guard startIndex <= endIndex' is effectively a bounds-check for 'startIndex'.
-    // We otherwise don't check the collection's lower bound.
-    guard let baseAddress = baseAddress, startIndex <= endIndex else {
-      return try body(UnsafeBufferPointer(start: nil, count: 0))
-    }
-    return try body(UnsafeBufferPointer(start: baseAddress + Int(bitPattern: startIndex), count: count))
+    // - 'guard startIndex < endIndex' is effectively a bounds-check for 'startIndex'.
+    //   We otherwise don't check the collection's lower bound.
+    // - This must be a single statement, otherwise the compiler may not recognize that this
+    //   never returns 'nil', and might not eliminate the non-contiguous branch in generic algorithms.
+    return try body(
+      UnsafeBufferPointer(
+        start: baseAddress.map { $0 + Int(bitPattern: startIndex) },
+        count: baseAddress != nil && startIndex < endIndex ? count : 0
+      )
+    )
   }
 
   @inlinable @inline(__always)

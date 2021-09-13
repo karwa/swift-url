@@ -19,6 +19,10 @@ import XCTest
 
 final class ASCIITests: XCTestCase {
 
+  func testASCIIHexParseTable() {
+    XCTAssertEqual(_parseHex_table.count, 128)
+  }
+
   func testASCIIHexValue() {
     // Test that hex digits have the appropriate character classes,
     // that we can get the numeric value of a character and the character of a numeric value.
