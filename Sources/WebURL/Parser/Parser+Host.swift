@@ -170,7 +170,7 @@ extension ParsedHost {
           callback.validationError(.domainToASCIIFailure)
           return .containsUnicodeOrIDNA
         }
-        if i != domain.endIndex {
+        if i < domain.endIndex {
           startOfLastLabel = i
         }
       }

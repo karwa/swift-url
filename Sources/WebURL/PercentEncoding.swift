@@ -224,6 +224,16 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
   }
 
   @inlinable
+  public var isEmpty: Bool {
+    source.isEmpty
+  }
+
+  @inlinable
+  public var underestimatedCount: Int {
+    source.underestimatedCount
+  }
+
+  @inlinable
   public subscript(position: Index) -> UInt8 {
     position.encodedByte[position.encodedByteOffset]
   }
@@ -250,16 +260,6 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
       return
     }
     i.encodedByte = _EncodedByte(byte: source[i.sourceIndex], encodeSet: EncodeSet.self)
-  }
-
-  @inlinable
-  public var isEmpty: Bool {
-    source.isEmpty
-  }
-
-  @inlinable
-  public var underestimatedCount: Int {
-    source.underestimatedCount
   }
 }
 
@@ -571,7 +571,18 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
 
   @inlinable
   public var endIndex: Index {
-    Index(endIndexOf: source)
+    Index(_endIndex: source.endIndex)
+  }
+
+  @inlinable
+  public var isEmpty: Bool {
+    source.isEmpty
+  }
+
+  @inlinable
+  public subscript(position: Index) -> Element {
+    assert(position != endIndex, "Attempt to read element at endIndex")
+    return position.decodedValue
   }
 
   @inlinable
@@ -588,12 +599,6 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
     i = Index(at: i.range.upperBound, in: source)
   }
 
-  @inlinable
-  public subscript(position: Index) -> Element {
-    assert(position != endIndex, "Attempt to read element at endIndex")
-    return position.decodedValue
-  }
-
   public struct Index: Comparable {
 
     /// Always either 0, 1, or 3 bytes from the source:
@@ -605,30 +610,30 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
     internal let range: Range<Source.Index>
 
     @usableFromInline
-    internal let isDecoded: Bool
+    internal let decodedValue: UInt8
 
     @usableFromInline
-    internal let decodedValue: UInt8
+    internal let isDecoded: Bool
 
     /// Creates an index referencing the given source collection's `endIndex`.
     /// This index's `decodedValue` is always 0. It is meaningless and should not be read.
     ///
     @inlinable
-    internal init(endIndexOf source: Source) {
-      self.range = Range(uncheckedBounds: (source.endIndex, source.endIndex))
-      self.isDecoded = false
+    internal init(_endIndex i: Source.Index) {
+      self.range = Range(uncheckedBounds: (i, i))
       self.decodedValue = 0
+      self.isDecoded = false
     }
 
     @inlinable @inline(__always)
     internal init(_unsubstituting value: UInt8, range: Range<Source.Index>) {
       self.range = range
       if let unsub = ASCII(value).flatMap({ EncodeSet.unsubstitute(ascii: $0.codePoint) }) {
-        self.isDecoded = true
         self.decodedValue = unsub
+        self.isDecoded = true
       } else {
-        self.isDecoded = false
         self.decodedValue = value
+        self.isDecoded = false
       }
     }
 
@@ -641,7 +646,7 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
     internal init(at i: Source.Index, in source: Source) {
       // The successor of endIndex is endIndex.
       guard i < source.endIndex else {
-        self = .init(endIndexOf: source)
+        self = .init(_endIndex: i)
         return
       }
 
@@ -651,34 +656,40 @@ where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSetPr
         self = Self(_unsubstituting: byte0, range: Range(uncheckedBounds: (i, byte1Index)))
         return
       }
-      var tail = source.suffix(from: byte1Index)
-      guard
-        let decodedByte1 = ASCII(flatMap: tail.popFirst())?.hexNumberValue,
-        let decodedByte2 = ASCII(flatMap: tail.popFirst())?.hexNumberValue
-      else {
+      var cursor = byte1Index
+      guard cursor < source.endIndex, let decodedByte1 = ASCII(source[cursor])?.hexNumberValue else {
         self.range = Range(uncheckedBounds: (i, byte1Index))
+        self.decodedValue = byte0  // Percent-sign, should never be substituted.
         self.isDecoded = false
-        self.decodedValue = ASCII.percentSign.codePoint  // Percent-sign should never be substituted.
         return
       }
+      source.formIndex(after: &cursor)
+      guard cursor < source.endIndex, let decodedByte2 = ASCII(source[cursor])?.hexNumberValue else {
+        self.range = Range(uncheckedBounds: (i, byte1Index))
+        self.decodedValue = byte0  // Percent-sign, should never be substituted.
+        self.isDecoded = false
+        return
+      }
+      source.formIndex(after: &cursor)
+
+      self.range = Range(uncheckedBounds: (i, cursor))
       self.decodedValue = (decodedByte1 &* 16) &+ (decodedByte2)
       self.isDecoded = true
-      self.range = Range(uncheckedBounds: (i, tail.startIndex))
     }
 
     @inlinable
     public static func == (lhs: Self, rhs: Self) -> Bool {
-      return lhs.range.lowerBound == rhs.range.lowerBound
+      lhs.range.lowerBound == rhs.range.lowerBound
     }
 
     @inlinable
     public static func < (lhs: Self, rhs: Self) -> Bool {
-      return lhs.range.lowerBound < rhs.range.lowerBound
+      lhs.range.lowerBound < rhs.range.lowerBound
     }
 
     @inlinable
     public static func > (lhs: Self, rhs: Self) -> Bool {
-      return lhs.range.lowerBound > rhs.range.lowerBound
+      lhs.range.lowerBound > rhs.range.lowerBound
     }
   }
 }
@@ -699,21 +710,23 @@ extension LazilyPercentDecodedUTF8.Index where Source: BidirectionalCollection {
     let byte2Index = source.index(before: i)
     let byte2 = source[byte2Index]
 
-    let slice = source[Range(uncheckedBounds: (source.startIndex, byte2Index))].suffix(2)
-    guard slice.first == ASCII.percentSign.codePoint else {
-      self = Self(_unsubstituting: byte2, range: Range(uncheckedBounds: (byte2Index, i)))
-      return
-    }
     guard
-      let decodedByte1 = ASCII(flatMap: slice.last)?.hexNumberValue,
-      let decodedByte2 = ASCII(flatMap: byte2)?.hexNumberValue
+      let byte0Index = source.index(byte2Index, offsetBy: -2, limitedBy: source.startIndex),
+      source[byte0Index] == ASCII.percentSign.codePoint
     else {
       self = Self(_unsubstituting: byte2, range: Range(uncheckedBounds: (byte2Index, i)))
       return
     }
+    guard
+      let decodedByte1 = ASCII(source[source.index(before: byte2Index)])?.hexNumberValue,
+      let decodedByte2 = ASCII(byte2)?.hexNumberValue
+    else {
+      self = Self(_unsubstituting: byte2, range: Range(uncheckedBounds: (byte2Index, i)))
+      return
+    }
+    self.range = Range(uncheckedBounds: (byte0Index, i))
     self.decodedValue = (decodedByte1 &* 16) &+ (decodedByte2)
     self.isDecoded = true
-    self.range = Range(uncheckedBounds: (slice.startIndex, i))
   }
 }
 

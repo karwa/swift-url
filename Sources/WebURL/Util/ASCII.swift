@@ -287,9 +287,9 @@ extension ASCII {
 // --------------------------------------------
 
 
-@usableFromInline internal let DC: UInt8 = 99
+@usableFromInline internal let DC: Int8 = -1
 // swift-format-ignore
-@usableFromInline internal let _parseHex_table: [UInt8] = [
+@usableFromInline internal let _parseHex_table: [Int8] = [
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC, // 48 invalid chars.
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC,
     DC, DC, DC, DC, DC, DC, DC, DC, DC, DC,
@@ -313,9 +313,8 @@ extension ASCII {
   ///
   @inlinable
   internal var hexNumberValue: UInt8? {
-    assert(_parseHex_table.count == 128)
     let numericValue = _parseHex_table.withUnsafeBufferPointer { $0[Int(codePoint)] }
-    return numericValue == DC ? nil : numericValue
+    return numericValue < 0 ? nil : UInt8(bitPattern: numericValue)
   }
 
   /// If this character is a decimal digit, returns the digit's numeric value.
