@@ -33,7 +33,7 @@ let package = Package(
   ],
   dependencies: [
     // swift-system for WebURLSystemExtras.
-    .package(url: "https://github.com/apple/swift-system.git", .upToNextMinor(from: "0.0.3")),
+    .package(url: "https://github.com/apple/swift-system.git", .upToNextMajor(from: "1.0.0")),
 
     // swift-checkit for testing protocol conformances. Test-only dependency.
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
