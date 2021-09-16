@@ -43,7 +43,7 @@
     "ReturnVoidInsteadOfEmptyTuple" : true,
     "UseEnumForNamespacing" : true,
     "UseLetInEveryBoundCaseVariable" : true,
-    "UseShorthandTypeNames" : true,
+    "UseShorthandTypeNames" : false,
     "UseSingleLinePropertyGetter" : true,
     "UseSynthesizedInitializer" : true,
     "UseTripleSlashForDocumentationComments" : true,
