@@ -227,7 +227,7 @@ internal struct URLWriterHints {
   /// If not set, users may make no assumptions about the path.
   ///
   @usableFromInline
-  internal var pathMetrics: PathMetrics?
+  internal var pathMetrics: Optional<PathMetrics>
 
   /// Components which are known to not require percent-encoding.
   /// If a component is not in this set, users must assume that it requires percent-encoding.

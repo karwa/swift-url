@@ -261,7 +261,7 @@ extension UnsafeBufferPointer {
 internal struct UnsafeBoundsCheckedBufferPointer<Element> {
 
   @usableFromInline
-  internal var baseAddress: UnsafePointer<Element>?
+  internal var baseAddress: Optional<UnsafePointer<Element>>
 
   @usableFromInline
   internal var bounds: Range<UInt>

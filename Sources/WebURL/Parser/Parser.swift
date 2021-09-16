@@ -95,7 +95,7 @@ internal struct ParsedURLString<InputString> where InputString: BidirectionalCol
   internal let inputString: InputString
 
   @usableFromInline
-  internal let baseURL: WebURL?
+  internal let baseURL: Optional<WebURL>
 
   @usableFromInline
   internal let mapping: ProcessedMapping
@@ -162,10 +162,10 @@ extension ParsedURLString {
     internal let info: ScannedRangesAndFlags<InputString>
 
     @usableFromInline
-    internal let parsedHost: ParsedHost?
+    internal let parsedHost: Optional<ParsedHost>
 
     @usableFromInline
-    internal let port: UInt16?
+    internal let port: Optional<UInt16>
   }
 }
 
@@ -178,46 +178,46 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
 
   /// The position of the scheme's content, if present, without trailing separators.
   @usableFromInline
-  internal var schemeRange: Range<InputString.Index>?
+  internal var schemeRange: Optional<Range<InputString.Index>>
 
   /// The position of the authority section, if present, without leading or trailing separators.
   @usableFromInline
-  internal var authorityRange: Range<InputString.Index>?
+  internal var authorityRange: Optional<Range<InputString.Index>>
 
   /// The position of the username content, if present, without leading or trailing separators.
   @usableFromInline
-  internal var usernameRange: Range<InputString.Index>?
+  internal var usernameRange: Optional<Range<InputString.Index>>
 
   /// The position of the password content, if present, without leading or trailing separators.
   @usableFromInline
-  internal var passwordRange: Range<InputString.Index>?
+  internal var passwordRange: Optional<Range<InputString.Index>>
 
   /// The position of the hostname content, if present, without leading or trailing separators.
   @usableFromInline
-  internal var hostnameRange: Range<InputString.Index>?
+  internal var hostnameRange: Optional<Range<InputString.Index>>
 
   /// The position of the port content, if present, without leading or trailing separators.
   @usableFromInline
-  internal var portRange: Range<InputString.Index>?
+  internal var portRange: Optional<Range<InputString.Index>>
 
   /// The position of the path content, if present, without leading or trailing separators.
   /// Note that the path's initial "/", if present, is not considered a separator.
   @usableFromInline
-  internal var pathRange: Range<InputString.Index>?
+  internal var pathRange: Optional<Range<InputString.Index>>
 
   /// The position of the query content, if present, without leading or trailing separators.
   @usableFromInline
-  internal var queryRange: Range<InputString.Index>?
+  internal var queryRange: Optional<Range<InputString.Index>>
 
   /// The position of the fragment content, if present, without leading or trailing separators.
   @usableFromInline
-  internal var fragmentRange: Range<InputString.Index>?
+  internal var fragmentRange: Optional<Range<InputString.Index>>
 
   // Flags.
 
   /// The kind of scheme contained in `schemeRange`, if it is not `nil`.
   @usableFromInline
-  internal var schemeKind: WebURL.SchemeKind?
+  internal var schemeKind: Optional<WebURL.SchemeKind>
 
   /// Whether this URL is hierarchical ("cannot-be-a-base" is false).
   @usableFromInline
