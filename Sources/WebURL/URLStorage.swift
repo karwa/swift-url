@@ -102,7 +102,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
   /// If `sigil == .path` or `sigil == nil`, the next component is a path/query/fragment and no username/password/hostname/port is present.
   ///
   @usableFromInline
-  internal var sigil: Sigil?
+  internal var sigil: Optional<Sigil>
 
   /// A summary of this URL's `scheme`.
   ///
