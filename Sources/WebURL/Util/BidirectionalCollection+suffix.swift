@@ -29,3 +29,21 @@ extension BidirectionalCollection {
     return self[startIndex..<endIndex]
   }
 }
+
+extension BidirectionalCollection {
+
+  /// Returns the index closest to `endIndex` where the element at the returned index matches the given predicate.
+  ///
+  /// The difference between this implementation and the one in the standard library is that this uses  `>` and `<` rather than `==` and `!=`
+  /// to compare indexes, which allows bounds-checking to be more throughly eliminated.
+  ///
+  @inlinable
+  internal func fastLastIndex(where predicate: (Element) -> Bool) -> Index? {
+    var i = endIndex
+    while i > startIndex {
+      formIndex(before: &i)
+      if i < endIndex, predicate(self[i]) { return i }
+    }
+    return nil
+  }
+}
