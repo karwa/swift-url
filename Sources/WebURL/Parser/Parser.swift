@@ -457,8 +457,8 @@ extension ParsedURLString.ProcessedMapping {
         writer.writePathSigil()
       }
       writer.writePresizedPathUnsafely(
-        length: pathMetrics.requiredCapacity,
-        firstComponentLength: pathMetrics.firstComponentLength
+        length: Int(bitPattern: pathMetrics.requiredCapacity),
+        firstComponentLength: Int(bitPattern: pathMetrics.firstComponentLength)
       ) { buffer in
         return buffer.writeNormalizedPath(
           parsing: inputString[path],

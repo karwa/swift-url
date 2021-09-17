@@ -56,7 +56,7 @@ internal protocol _PathParser {
   ///
   /// This method exists as an optimisation, since empty components have no content to percent-encode/transform.
   ///
-  mutating func visitEmptyPathComponents(_ n: Int)
+  mutating func visitEmptyPathComponents(_ n: UInt)
 
   /// A callback which is invoked when the parser yields a path sigil ("/.") in order to disambiguate a path with leading slashes from an authority.
   /// Conformers should ensure that a "/." is prepended to the path string if it is written to a URL without an authority sigil.
@@ -99,7 +99,7 @@ extension _PathParser {
 @usableFromInline
 internal enum _DeferredPathComponent<Source: Collection> {
   case potentialWindowsDrive(Source, UInt)
-  case empties(Int)
+  case empties(UInt)
 
   @inlinable
   internal var isPotentialWindowsDrive: Bool {
@@ -516,28 +516,40 @@ extension _PathParser {
 // --------------------------------------------
 
 
-/// A summary of statistics about a of the lexically-normalized, percent-encoded path string.
+/// A summary of statistics about a lexically-normalized, percent-encoded path string.
+///
+/// Note that the information collected by this object is calculated without regards to overflow,
+/// or invalid collections which return a negative `count`. The measured capacity is sufficient to predict
+/// the size of the allocation required, although actually writing to that allocation must employ bounds-checking
+/// to ensure memory safety.
+///
+/// Assuming the path string is able to be written in the measured capacity, the other metrics may also be assumed to be accurate.
 ///
 @usableFromInline
 internal struct PathMetrics {
 
-  /// The precise length of the path string, in bytes.
+  /// The size of the allocation required to write the URL string.
+  ///
   @usableFromInline
-  internal private(set) var requiredCapacity: Int
+  internal private(set) var requiredCapacity: UInt
 
   /// The length of the first path component, in bytes, including its leading "/".
+  ///
   @usableFromInline
-  internal private(set) var firstComponentLength: Int
+  internal private(set) var firstComponentLength: UInt
 
   /// The number of components in the path.
+  ///
   @usableFromInline
-  internal private(set) var numberOfComponents: Int
+  internal private(set) var numberOfComponents: UInt
 
   /// Whether or not the path must be prefixed with a path sigil when it is written to a URL which does not have an authority sigil.
+  ///
   @usableFromInline
   internal private(set) var requiresPathSigil: Bool
 
   /// Whether there is at least one component in the path which needs percent-encoding.
+  ///
   @usableFromInline
   internal private(set) var needsPercentEncoding: Bool
 }
@@ -576,6 +588,9 @@ extension PathMetrics {
   where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
     @usableFromInline
+    internal typealias InputString = UTF8Bytes
+
+    @usableFromInline
     internal var metrics: PathMetrics
 
     @inlinable
@@ -583,24 +598,21 @@ extension PathMetrics {
       self.metrics = _emptyMetrics
     }
 
-    @usableFromInline
-    internal typealias InputString = UTF8Bytes
-
     @inlinable
     internal mutating func visitInputPathComponent(
-      _ pathComponent: UTF8Bytes.SubSequence, isWindowsDriveLetter: Bool
+      _ pathComponent: InputString.SubSequence, isWindowsDriveLetter: Bool
     ) {
-      metrics.numberOfComponents += 1
+      metrics.numberOfComponents &+= 1
       let (encodedLength, needsEncoding) = pathComponent.lazy.percentEncoded(as: \.path).unsafeEncodedLength
       metrics.needsPercentEncoding = metrics.needsPercentEncoding || needsEncoding
-      metrics.firstComponentLength = 1 /* "/" */ + encodedLength
-      metrics.requiredCapacity += metrics.firstComponentLength
+      metrics.firstComponentLength = 1 /* "/" */ &+ encodedLength
+      metrics.requiredCapacity &+= metrics.firstComponentLength
     }
 
     @inlinable
-    internal mutating func visitEmptyPathComponents(_ n: Int) {
-      metrics.numberOfComponents += n
-      metrics.requiredCapacity += n
+    internal mutating func visitEmptyPathComponents(_ n: UInt) {
+      metrics.numberOfComponents &+= n
+      metrics.requiredCapacity &+= n
       metrics.firstComponentLength = 1
     }
 
@@ -611,9 +623,9 @@ extension PathMetrics {
 
     @inlinable
     internal mutating func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence) {
-      metrics.numberOfComponents += 1
-      metrics.firstComponentLength = 1 /* "/" */ + pathComponent.count
-      metrics.requiredCapacity += metrics.firstComponentLength
+      metrics.numberOfComponents &+= 1
+      metrics.firstComponentLength = 1 /* "/" */ &+ UInt(bitPattern: pathComponent.count)
+      metrics.requiredCapacity &+= metrics.firstComponentLength
     }
   }
 }
@@ -622,11 +634,11 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 
   /// Initializes this buffer to the simplified, normalized path parsed from `utf8`.
   ///
-  /// The buffer must have precisely the correct capacity to store the path string, or a runtime error will be triggered.  This implies that its address may not be `nil`.
-  /// The fact that the exact capacity is known is taken as proof that `PathMetrics` have been calculated, and that the number of bytes written will not overflow
-  /// an `Int`.
+  /// The buffer is written with bounds-checking; a runtime error will be triggered if an attempt is made to write beyond its bounds.
+  /// Additionally, a runtime error will be triggered if the buffer is not precisely sized to store the path string (i.e. with excess capacity).
+  /// The buffer's address may not be `nil`.
   ///
-  /// - returns; The number of bytes written. This will be equal to `self.count`, but is calculated independently as an additional check.
+  /// - returns: The number of bytes written. This will be equal to `self.count`.
   ///
   @inlinable
   internal func writeNormalizedPath<UTF8Bytes>(
@@ -652,6 +664,9 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
   where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
     @usableFromInline
+    internal typealias InputString = UTF8Bytes
+
+    @usableFromInline
     internal let buffer: UnsafeMutableBufferPointer<UInt8>
 
     @usableFromInline
@@ -659,6 +674,13 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 
     @usableFromInline
     internal let needsEscaping: Bool
+
+    @inlinable
+    internal init(_doNotUse buffer: UnsafeMutableBufferPointer<UInt8>, front: Int, needsPercentEncoding: Bool) {
+      self.buffer = buffer
+      self.front = front
+      self.needsEscaping = needsPercentEncoding
+    }
 
     @inlinable
     internal static func writePath(
@@ -680,65 +702,70 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         baseURL: baseURL,
         absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase
       )
-      // Checking this now allows the implementation to be safe when omitting bounds checks.
       precondition(writer.front == 0, "Buffer was incorrectly sized")
-      return buffer.count - writer.front
+      return buffer.count
     }
 
-    /// **Do not use**. Use the `_PathWriter.writePath(...)` static method instead.
-    ///
     @inlinable
-    internal init(_doNotUse buffer: UnsafeMutableBufferPointer<UInt8>, front: Int, needsPercentEncoding: Bool) {
-      self.buffer = buffer
-      self.front = front
-      self.needsEscaping = needsPercentEncoding
-    }
-
-    @usableFromInline
-    internal typealias InputString = UTF8Bytes
-
-    @inlinable
-    internal mutating func prependSlash(_ n: Int = 1) {
-      front &-= n
+    internal mutating func prependSlash(_ n: UInt = 1) {
+      precondition(front >= n)
+      // Since front >= n, the compiler can prove that Int(n) will not trap.
+      // However, it can't prove that 'front - n' won't underflow (even though it can't, as n >= 0 due to unsigned).
+      front &-= Int(n)
       buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
-        .initialize(repeating: ASCII.forwardSlash.codePoint, count: n)
+        .initialize(repeating: ASCII.forwardSlash.codePoint, count: Int(n))
     }
 
     @inlinable
     internal mutating func visitInputPathComponent(
       _ pathComponent: UTF8Bytes.SubSequence, isWindowsDriveLetter: Bool
     ) {
-      guard pathComponent.isEmpty == false else {
+
+      guard !pathComponent.isEmpty else {
         prependSlash()
         return
       }
-      guard isWindowsDriveLetter == false else {
+      guard !isWindowsDriveLetter else {
         assert(pathComponent.count == 2)
+        precondition(front > 2)
         front &-= 2
         buffer.baseAddress.unsafelyUnwrapped.advanced(by: front).initialize(to: pathComponent[pathComponent.startIndex])
         buffer.baseAddress.unsafelyUnwrapped.advanced(by: front &+ 1).initialize(to: ASCII.colon.codePoint)
         prependSlash()
         return
       }
+
       if needsEscaping {
         for byte in pathComponent.lazy.percentEncoded(as: \.path).reversed() {
+          precondition(front > 1)
           front &-= 1
           (buffer.baseAddress.unsafelyUnwrapped + front).initialize(to: byte)
         }
       } else {
-        let count = pathComponent.count
-        let newFront = front &- count
-        _ = UnsafeMutableBufferPointer(
-          start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
-          count: count
-        ).fastInitialize(from: pathComponent)
-        front = newFront
+        let _ =
+          pathComponent.withContiguousStorageIfAvailable { componentContent in
+            let count = componentContent.count
+            precondition(front > count && count >= 0)
+            let newFront = front &- count
+            _ = UnsafeMutableBufferPointer(
+              start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
+              count: count
+            ).fastInitialize(from: componentContent)
+            front = newFront
+          }
+          ?? {
+            for byte in pathComponent.reversed() {
+              precondition(front > 1)
+              front &-= 1
+              (buffer.baseAddress.unsafelyUnwrapped + front).initialize(to: byte)
+            }
+          }()
       }
       prependSlash()
     }
 
     @inlinable
-    internal mutating func visitEmptyPathComponents(_ n: Int) {
+    internal mutating func visitEmptyPathComponents(_ n: UInt) {
       prependSlash(n)
     }
 
@@ -750,6 +777,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     @inlinable
     internal mutating func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence) {
       let count = pathComponent.count
+      precondition(front > count && count >= 0)
       let newFront = front &- count
       _ = UnsafeMutableBufferPointer(
         start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
@@ -818,7 +846,7 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
   }
 
   @usableFromInline
-  internal mutating func visitEmptyPathComponents(_ n: Int) {
+  internal mutating func visitEmptyPathComponents(_ n: UInt) {
     // Nothing to do.
   }
 
