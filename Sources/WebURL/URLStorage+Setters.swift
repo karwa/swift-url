@@ -298,7 +298,7 @@ extension URLStorage {
 
     var newLengthCounter = HostnameLengthCounter()
     newHost.write(bytes: newHostnameBytes, using: &newLengthCounter)
-    guard let newValueLength = URLStorage.SizeType(exactly: newLengthCounter.length) else {
+    guard let newValueLength = URLStorage.SizeType(exactly: newLengthCounter.requiredCapacity) else {
       return .failure(.exceedsMaximumSize)
     }
 
