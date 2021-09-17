@@ -467,7 +467,7 @@ extension URLStorage {
     fromUnencoded keyValuePairs: C
   ) where C: Collection, C.Element == (UTF8Bytes, UTF8Bytes), UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-    let combinedLength: Int
+    let combinedLength: UInt
     let needsEscaping: Bool
     (combinedLength, needsEscaping) = keyValuePairs.reduce(into: (0, false)) { metrics, kvp in
       let (keyLength, encodeKey) = kvp.0.lazy.percentEncoded(as: \.form).unsafeEncodedLength
@@ -480,10 +480,10 @@ extension URLStorage {
         fromEncoded: keyValuePairs.lazy.map {
           ($0.0.lazy.percentEncoded(as: \.form), $0.1.lazy.percentEncoded(as: \.form))
         },
-        lengthIfKnown: combinedLength
+        lengthIfKnown: Int(combinedLength)
       )
     } else {
-      appendFormParamPairs(fromEncoded: keyValuePairs, lengthIfKnown: combinedLength)
+      appendFormParamPairs(fromEncoded: keyValuePairs, lengthIfKnown: Int(combinedLength))
     }
   }
 

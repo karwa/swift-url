@@ -379,10 +379,10 @@ extension LazilyPercentEncodedUTF8 {
   /// never cause memory safety to be violated.
   ///
   @inlinable
-  internal var unsafeEncodedLength: (count: Int, needsEncoding: Bool) {
+  internal var unsafeEncodedLength: (count: UInt, needsEncoding: Bool) {
     var count: UInt = 0
     let needsEncoding = write { count &+= UInt($0.count) }
-    return (Int(truncatingIfNeeded: count), needsEncoding)
+    return (count, needsEncoding)
   }
 }
 
