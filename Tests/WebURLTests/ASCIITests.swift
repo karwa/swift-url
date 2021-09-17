@@ -136,6 +136,7 @@ final class ASCIITests: XCTestCase {
       for num in (UInt16.min)...(UInt16.max) {
         let bufferContentsCount = ASCII.writeDecimalString(for: num, to: buffer.baseAddress!)
         XCTAssertEqualElements(buffer[..<Int(bufferContentsCount)], String(num, radix: 10).utf8)
+        XCTAssertEqual(bufferContentsCount, ASCII.lengthOfDecimalString(for: num))
       }
     }
   }

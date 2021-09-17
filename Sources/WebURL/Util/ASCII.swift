@@ -398,7 +398,7 @@ extension ASCII {
   }
 
   /// Prints the decimal representation of `number` to the memory location given by `stringBuffer`.
-  /// A maximum of 5 bytes will be written.
+  /// The amount of space required is given by `lengthOfDecimalString(for: UInt16)`, and is `1...5` bytes.
   ///
   /// - returns:  The number of bytes written to `stringBuffer`.
   ///
@@ -462,6 +462,20 @@ extension ASCII {
     )
     count += 1
     return count
+  }
+
+  /// Returns the number of bytes required to print the decimal representation of `number` (`1...5` bytes).
+  /// This value is guaranteed to be accurate, so it may be used to ensure memory safety.
+  ///
+  @usableFromInline
+  internal static func lengthOfDecimalString(for number: UInt16) -> UInt8 {
+    switch number {
+    case 10000...UInt16.max: return 5
+    case 1000..<10000: return 4
+    case 100..<1000: return 3
+    case 10..<100: return 2
+    default /* 0..<10 */: return 1
+    }
   }
 
   /// Parses a 16-bit unsigned integer from a decimal representation contained in the given UTF-8 code-units.

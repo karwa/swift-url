@@ -250,20 +250,28 @@ internal struct URLWriterHints {
 
 /// A `URLWriter` which does not actually write to any storage, only gathering information about what the URL string looks like.
 ///
-/// This type cannot be instantiated directly. Use the `StructureAndMetricsCollector.collect { ... }` function
-/// to obtain an instance, write to it, and collect its results.
+/// Note that the information collected by this object is calculated without regards to overflow,
+/// or invalid collections which return a negative `count`. The measured capacity is sufficient to predict
+/// the size of the allocation required, although actually writing to that allocation must employ bounds-checking
+/// to ensure memory safety.
+///
+/// Assuming the URL string is able to be written, the measured structure and hints may also be assumed to be accurate.
 ///
 @usableFromInline
 internal struct StructureAndMetricsCollector: URLWriter {
 
-  // Note: requiredCapacity must always use arithmetic which traps on overflow,
-  //       as 'UnsafePresizedBufferWriter' relies on this fact being verified for memory safety.
+  /// The size of the allocation required to write the URL string.
+  ///
   @usableFromInline
-  internal private(set) var requiredCapacity: Int
+  internal private(set) var requiredCapacity: UInt
 
+  /// The structure of the URL string observed by writing to this collector.
+  ///
   @usableFromInline
-  internal private(set) var structure: URLStructure<Int>
+  internal private(set) var structure: URLStructure<UInt>
 
+  /// Additional hints observed by this collector which may be used to accelerate other `URLWriter`s.
+  ///
   @usableFromInline
   internal private(set) var hints: URLWriterHints
 
@@ -290,7 +298,7 @@ internal struct StructureAndMetricsCollector: URLWriter {
   ) where T: Collection, T.Element == UInt8 {
 
     assert(structure.schemeLength == 0)
-    structure.schemeLength = schemeBytes.count + 1 /* ":" */
+    structure.schemeLength = UInt(bitPattern: schemeBytes.count) &+ 1 /* ":" */
     requiredCapacity = structure.schemeLength
   }
 
@@ -298,14 +306,14 @@ internal struct StructureAndMetricsCollector: URLWriter {
   internal mutating func writeAuthoritySigil() {
     assert(structure.sigil == .none)
     structure.sigil = .authority
-    requiredCapacity += Int(Sigil.authority.length)
+    requiredCapacity &+= UInt(Sigil.authority.length)
   }
 
   @inlinable
   internal mutating func writePathSigil() {
     assert(structure.sigil == .none)
     structure.sigil = .path
-    requiredCapacity += Int(Sigil.path.length)
+    requiredCapacity &+= UInt(Sigil.path.length)
   }
 
   @inlinable
@@ -314,8 +322,8 @@ internal struct StructureAndMetricsCollector: URLWriter {
   ) where T: Collection, T.Element == UInt8 {
 
     assert(structure.usernameLength == 0)
-    usernameWriter { structure.usernameLength += $0.count }
-    requiredCapacity += structure.usernameLength
+    usernameWriter { structure.usernameLength &+= UInt(bitPattern: $0.count) }
+    requiredCapacity &+= structure.usernameLength
   }
 
   @inlinable
@@ -325,13 +333,13 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
     assert(structure.passwordLength == 0)
     structure.passwordLength = 1
-    passwordWriter { structure.passwordLength += $0.count }
-    requiredCapacity += structure.passwordLength
+    passwordWriter { structure.passwordLength &+= UInt(bitPattern: $0.count) }
+    requiredCapacity &+= structure.passwordLength
   }
 
   @inlinable
   internal mutating func writeCredentialsTerminator() {
-    requiredCapacity += 1
+    requiredCapacity &+= 1
   }
 
   @inlinable
@@ -341,11 +349,11 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
     assert(structure.hostnameLength == 0)
     if let knownLength = lengthIfKnown {
-      structure.hostnameLength = knownLength
-      requiredCapacity += structure.hostnameLength
+      structure.hostnameLength = UInt(bitPattern: knownLength)
+      requiredCapacity &+= structure.hostnameLength
     } else {
-      hostnameWriter { structure.hostnameLength += $0.count }
-      requiredCapacity += structure.hostnameLength
+      hostnameWriter { structure.hostnameLength &+= UInt(bitPattern: $0.count) }
+      requiredCapacity &+= structure.hostnameLength
     }
   }
 
@@ -354,14 +362,8 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
     assert(structure.portLength == 0)
     structure.portLength = 1 /* ":" */
-    switch port {
-    case 10000...UInt16.max: structure.portLength += 5
-    case 1000..<10000: structure.portLength += 4
-    case 100..<1000: structure.portLength += 3
-    case 10..<100: structure.portLength += 2
-    default /* 0..<10 */: structure.portLength += 1
-    }
-    requiredCapacity += structure.portLength
+    structure.portLength &+= UInt(ASCII.lengthOfDecimalString(for: port))
+    requiredCapacity &+= structure.portLength
   }
 
   @inlinable
@@ -372,11 +374,11 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
     assert(structure.usernameLength == 0 && structure.passwordLength == 0)
     assert(structure.hostnameLength == 0 && structure.portLength == 0)
-    structure.usernameLength = usernameLength
-    structure.passwordLength = passwordLength
-    structure.hostnameLength = hostnameLength
-    structure.portLength = portLength
-    requiredCapacity += authority.count
+    structure.usernameLength = UInt(bitPattern: usernameLength)
+    structure.passwordLength = UInt(bitPattern: passwordLength)
+    structure.hostnameLength = UInt(bitPattern: hostnameLength)
+    structure.portLength = UInt(bitPattern: portLength)
+    requiredCapacity &+= UInt(bitPattern: authority.count)
   }
 
   @inlinable
@@ -386,9 +388,9 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
     assert(structure.firstPathComponentLength == 0)
     assert(structure.pathLength == 0)
-    structure.firstPathComponentLength = firstComponentLength
-    writer { structure.pathLength += $0.count }
-    requiredCapacity += structure.pathLength
+    structure.firstPathComponentLength = UInt(bitPattern: firstComponentLength)
+    writer { structure.pathLength &+= UInt(bitPattern: $0.count) }
+    requiredCapacity &+= structure.pathLength
   }
 
   @inlinable
@@ -398,9 +400,9 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
     assert(structure.firstPathComponentLength == 0)
     assert(structure.pathLength == 0)
-    structure.firstPathComponentLength = firstComponentLength
-    structure.pathLength = length
-    requiredCapacity += length
+    structure.firstPathComponentLength = UInt(bitPattern: firstComponentLength)
+    structure.pathLength = UInt(bitPattern: length)
+    requiredCapacity &+= UInt(bitPattern: length)
   }
 
   @inlinable
@@ -410,9 +412,9 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
     assert(structure.queryLength == 0)
     structure.queryLength = 1 /* "?" */
-    queryWriter { structure.queryLength += $0.count }
+    queryWriter { structure.queryLength &+= UInt(bitPattern: $0.count) }
     structure.queryIsKnownFormEncoded = isKnownFormEncoded
-    requiredCapacity += structure.queryLength
+    requiredCapacity &+= structure.queryLength
   }
 
   @inlinable
@@ -422,8 +424,8 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
     assert(structure.fragmentLength == 0)
     structure.fragmentLength = 1
-    fragmentWriter { structure.fragmentLength += $0.count }
-    requiredCapacity += structure.fragmentLength
+    fragmentWriter { structure.fragmentLength &+= UInt(bitPattern: $0.count) }
+    requiredCapacity &+= structure.fragmentLength
   }
 
   @inlinable
@@ -449,10 +451,11 @@ internal struct StructureAndMetricsCollector: URLWriter {
   }
 }
 
-/// A `URLWriter` which writes a URL string to a pre-sized mutable buffer.
+/// A `URLWriter` which writes a URL string to a pre-sized buffer.
 ///
-/// The buffer must have precisely the correct capacity to store the URL string, or a runtime error will be triggered.  This implies that its address may not be `nil`.
-/// The fact that the exact capacity is known (and `URLWriterHints` available) is taken as proof that the number of bytes written will not overflow an `Int`.
+/// The buffer is written with bounds-checking; a runtime error will be triggered if an attempt is made to write beyond its bounds.
+/// Additionally, a runtime error will be triggered if the buffer is not precisely sized to store the URL string (i.e. with excess capacity).
+/// The buffer's address may not be `nil`.
 ///
 @usableFromInline
 internal struct UnsafePresizedBufferWriter: URLWriter {
@@ -476,26 +479,27 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
 
   @inlinable
   internal mutating func _writeByte(_ byte: UInt8) {
-    assert(bytesWritten < buffer.count)
+    precondition(bytesWritten < buffer.count)
     (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).initialize(to: byte)
-    bytesWritten &+= 1
+    bytesWritten += 1
   }
 
   @inlinable
   internal mutating func _writeByte(_ byte: UInt8, count: Int) {
-    assert(bytesWritten < buffer.count || count == 0)
+    precondition(bytesWritten + count <= buffer.count)
     (buffer.baseAddress.unsafelyUnwrapped + bytesWritten).initialize(repeating: byte, count: count)
-    bytesWritten &+= count
+    bytesWritten += count
   }
 
   @inlinable
   internal mutating func _writeBytes<T>(_ bytes: T) where T: Collection, T.Element == UInt8 {
-    assert(bytesWritten < buffer.count || bytes.isEmpty)
+    // This will never over-write the buffer.
     let count = UnsafeMutableBufferPointer(
       start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten,
       count: buffer.count &- bytesWritten
     ).fastInitialize(from: bytes)
     bytesWritten &+= count
+    assert(bytesWritten <= buffer.count)
   }
 
   // URLWriter.
@@ -554,8 +558,12 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
   @inlinable
   internal mutating func writePort(_ port: UInt16) {
     _writeByte(ASCII.colon.codePoint)
+    let expectedLength = Int(ASCII.lengthOfDecimalString(for: port))
+    precondition(bytesWritten + expectedLength <= buffer.count)
     let rawPointer = UnsafeMutableRawPointer(buffer.baseAddress.unsafelyUnwrapped + bytesWritten)
-    bytesWritten &+= Int(ASCII.writeDecimalString(for: port, to: rawPointer))
+    let actualLength = Int(ASCII.writeDecimalString(for: port, to: rawPointer))
+    assert(expectedLength == actualLength)
+    bytesWritten += expectedLength
   }
 
   @inlinable
@@ -577,10 +585,12 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
   internal mutating func writePresizedPathUnsafely(
     length: Int, firstComponentLength: Int, writer: (UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
-    let space = UnsafeMutableBufferPointer(start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten, count: length)
-    let pathBytesWritten = writer(space)
-    assert(pathBytesWritten == length)
-    bytesWritten &+= pathBytesWritten
+    precondition(bytesWritten + length <= buffer.count)
+    let pathBytesWritten = writer(
+      UnsafeMutableBufferPointer(start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten, count: length)
+    )
+    precondition(pathBytesWritten == length)
+    bytesWritten += length
   }
 
   @inlinable
@@ -636,17 +646,22 @@ internal protocol HostnameWriter {
   ) where T: Collection, T.Element == UInt8
 }
 
-/// A `HostnameWriter` which computes the length of the hostname, were it to be written.
+/// A `HostnameWriter` which does not actually write to any storage, only gathering information about what the hostname would look like.
+///
+/// Note that the information collected by this object is calculated without regards to overflow,
+/// or invalid collections which return a negative `count`. The measured capacity is sufficient to predict
+/// the size of the allocation required, although actually writing to that allocation must employ bounds-checking
+/// to ensure memory safety.
 ///
 @usableFromInline
 internal struct HostnameLengthCounter: HostnameWriter {
 
   @usableFromInline
-  internal private(set) var length: Int
+  internal private(set) var requiredCapacity: UInt
 
   @inlinable
   internal init() {
-    self.length = 0
+    self.requiredCapacity = 0
   }
 
   @inlinable
@@ -654,17 +669,18 @@ internal struct HostnameLengthCounter: HostnameWriter {
     lengthIfKnown: Int?, _ writerFunc: ((T) -> Void) -> Void
   ) where T: Collection, T.Element == UInt8 {
     if let knownLength = lengthIfKnown {
-      length = knownLength
+      requiredCapacity = UInt(bitPattern: knownLength)
       return
     }
     writerFunc { piece in
-      length += piece.count
+      requiredCapacity &+= UInt(bitPattern: piece.count)
     }
   }
 }
 
 /// A `HostnameWriter` which writes a hostname to a given buffer.
-/// After writing, the buffer points to the space after written hostname.
+///
+/// After writing, `buffer` points to the remaining space after written hostname.
 ///
 @usableFromInline
 internal struct UnsafeBufferHostnameWriter: HostnameWriter {
@@ -675,6 +691,7 @@ internal struct UnsafeBufferHostnameWriter: HostnameWriter {
   @inlinable
   internal init(buffer: UnsafeMutableBufferPointer<UInt8>) {
     self.buffer = buffer
+    precondition(buffer.baseAddress != nil)
   }
 
   @inlinable
@@ -682,8 +699,12 @@ internal struct UnsafeBufferHostnameWriter: HostnameWriter {
     lengthIfKnown: Int?, _ writerFunc: ((T) -> Void) -> Void
   ) where T: Collection, T.Element == UInt8 {
     writerFunc { piece in
-      let n = buffer.fastInitialize(from: piece)
-      buffer = UnsafeMutableBufferPointer(rebasing: buffer.suffix(from: n))
+      // This will never over-write the buffer.
+      let bytesWritten = buffer.fastInitialize(from: piece)
+      buffer = UnsafeMutableBufferPointer(
+        start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten,
+        count: buffer.count &- bytesWritten
+      )
     }
   }
 }
