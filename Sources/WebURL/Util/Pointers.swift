@@ -128,6 +128,15 @@ extension UnsafeMutableRawBufferPointer {
 // Arity 2:
 
 @inlinable @inline(__always)
+internal func withUnsafeBufferPointerToElements<T, Result>(
+  tuple: (T, T), _ body: (UnsafeBufferPointer<T>) -> Result
+) -> Result {
+  return withUnsafeBytes(of: tuple) {
+    return body($0._assumingMemoryBound(to: T.self))
+  }
+}
+
+@inlinable @inline(__always)
 internal func withUnsafeMutableBufferPointerToElements<T, Result>(
   tuple: inout (T, T), _ body: (inout UnsafeMutableBufferPointer<T>) -> Result
 ) -> Result {
