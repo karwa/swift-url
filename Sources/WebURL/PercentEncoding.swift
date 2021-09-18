@@ -378,7 +378,7 @@ extension LazilyPercentEncodedUTF8 {
   /// The latter point means that writers should still be wary - even an invalid collection which yields different values every time must
   /// never cause memory safety to be violated.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal var unsafeEncodedLength: (count: UInt, needsEncoding: Bool) {
     var count: UInt = 0
     let needsEncoding = write { count &+= UInt($0.count) }
