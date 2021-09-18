@@ -387,17 +387,13 @@ extension _PathParser {
         return remainingInput[Range(uncheckedBounds: (remainingInput.index(after: $0), remainingInput.endIndex))]
       } ?? remainingInput
 
-      if PathComponentParser.isDoubleDotPathSegment(pathComponent) {
-        state.popcount &+= 1
-        if pathComponent.endIndex == input.endIndex {
-          // Don't defer this as it would have no effect due to the popcount increment.
-          // Since this is at the end of the path, 'didYieldComponent' is sufficient for calculating path sigil.
-          visitEmptyPathComponent()
-          state.didYieldComponent = true
+      if let dotComponent = PathComponentParser.parseDotPathComponent(pathComponent) {
+        switch dotComponent {
+        case .singleDot:
+          break  // Single-dot components cannot be popped; e.g. "/a/b/./../" -> "/a/", not "/a/b/".
+        case .doubleDot:
+          state.popcount &+= 1
         }
-
-      } else if PathComponentParser.isSingleDotPathSegment(pathComponent) {
-        // Single-dot components cannot be popped; e.g. "/a/b/./../" -> "/a/", not "/a/b/".
         if pathComponent.endIndex == input.endIndex {
           // Don't defer this as it would have no effect due to the popcount increment.
           // Since this is at the end of the path, 'didYieldComponent' is sufficient for calculating path sigil.
@@ -448,15 +444,14 @@ extension _PathParser {
     // Input/Base Path interface.
     // ==========================
 
-    let _basePath = baseURL?.utf8.path
-    var baseDrive: WebURL.UTF8View.SubSequence?
+    var baseDrive: WebURL.UTF8View.SubSequence? = nil
 
     if case .file = schemeKind {
-      if let basePath = _basePath {
-        let baseURLFirstCmptLength = baseURL.unsafelyUnwrapped.storage.structure.firstPathComponentLength
-        baseDrive = PathComponentParser._normalizedWindowsDrive(
-          in: basePath, firstCmptLength: Int(baseURLFirstCmptLength)
-        )
+      if let base = baseURL {
+        let firstComponentFromBase = base.utf8.pathComponent(base.storage.pathComponentsStartIndex)
+        if PathComponentParser.isNormalizedWindowsDriveLetter(firstComponentFromBase) {
+          baseDrive = firstComponentFromBase
+        }
       }
       // If the first written component of the input string is a Windows drive letter, the path is never relative -
       // even if it normally would be. [URL Standard: "file" state, "file slash" state]
@@ -473,7 +468,7 @@ extension _PathParser {
       }
     }
 
-    guard !inputIsAbsolute, let basePath = _basePath, basePath.startIndex < basePath.endIndex else {
+    guard !inputIsAbsolute, let baseURL = baseURL, baseURL.storage.structure.pathLength > 0 else {
       _flushForFinalization(&state, hasAuthority)
       return  // Absolute paths, and relative paths with no base URL, are finished now.
     }
@@ -482,20 +477,19 @@ extension _PathParser {
     // Add components from the Base Path.
     // ==================================
 
-    assert(basePath.first == ASCII.forwardSlash.codePoint, "Normalized non-empty base paths must start with a /")
+    let basePath = baseURL.utf8.path
 
-    // Drop the last base path component (unless it is a Windows drive, in which case flush and we're done).
-    if let baseDrive = baseDrive, basePath.count == 3 {
+    // If the last component is the Windows drive at the start of the path, don't drop it - yield it and exit.
+    if let baseDrive = baseDrive, baseDrive.endIndex == basePath.endIndex {
       _flushAndMergePopcount(&state)
       visitBasePathComponent(baseDrive)
       return
     }
 
+    // Drop the last base path component.
+    // Normalized non-empty base paths always have at least one component.
     var remainingBasePath = basePath[
-      Range(
-        uncheckedBounds: (
-          basePath.startIndex, basePath.lastIndex(of: ASCII.forwardSlash.codePoint) ?? basePath.startIndex
-        ))
+      Range(uncheckedBounds: (basePath.startIndex, basePath.lastIndex(of: ASCII.forwardSlash.codePoint)!))
     ]
 
     while let separatorIndex = remainingBasePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
@@ -503,8 +497,7 @@ extension _PathParser {
         Range(uncheckedBounds: (remainingBasePath.index(after: separatorIndex), remainingBasePath.endIndex))
       ]
 
-      assert(PathComponentParser.isDoubleDotPathSegment(pathComponent) == false)
-      assert(PathComponentParser.isSingleDotPathSegment(pathComponent) == false)
+      assert(PathComponentParser.parseDotPathComponent(pathComponent) == nil)
 
       switch pathComponent {
       // If we reached the base path's Windows drive letter, we can flush everything and end.
@@ -940,6 +933,8 @@ extension PathComponentParser where T == Never {
   }
 }
 
+// Windows drive letters.
+
 extension PathComponentParser where T: Collection, T.Element == UInt8 {
 
   /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
@@ -947,21 +942,23 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
   /// https://url.spec.whatwg.org/#url-miscellaneous
   ///
   @inlinable
-  internal static func isWindowsDriveLetter(_ bytes: T) -> Bool {
-    var it = bytes.makeIterator()
-    guard let byte1 = it.next(), ASCII(byte1)?.isAlpha == true else { return false }
-    guard let byte2 = it.next(), ASCII(byte2) == .colon || ASCII(byte2) == .verticalBar else { return false }
-    guard it.next() == nil else { return false }
-    return true
-  }
-
-  @inlinable
   internal static func parseWindowsDriveLetter(_ bytes: T) -> (UInt8, UInt8)? {
     var it = bytes.makeIterator()
-    guard let byte1 = it.next(), ASCII(byte1)?.isAlpha == true else { return nil }
-    guard let byte2 = it.next(), ASCII(byte2) == .colon || ASCII(byte2) == .verticalBar else { return nil }
+    guard let byte0 = it.next(), ASCII(byte0)?.isAlpha == true else { return nil }
+    guard let byte1 = it.next(), byte1 == ASCII.colon.codePoint || byte1 == ASCII.verticalBar.codePoint else {
+      return nil
+    }
     guard it.next() == nil else { return nil }
-    return (byte1, byte2)
+    return (byte0, byte1)
+  }
+
+  /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
+  ///
+  /// https://url.spec.whatwg.org/#url-miscellaneous
+  ///
+  @inlinable
+  internal static func isWindowsDriveLetter(_ bytes: T) -> Bool {
+    parseWindowsDriveLetter(bytes) != nil
   }
 
   /// A normalized Windows drive letter is a Windows drive letter of which the second code point is U+003A (:).
@@ -970,7 +967,10 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
   ///
   @inlinable
   internal static func isNormalizedWindowsDriveLetter(_ bytes: T) -> Bool {
-    isWindowsDriveLetter(bytes) && (bytes.dropFirst().first.map { ASCII($0) == .colon } ?? false)
+    if let drive = parseWindowsDriveLetter(bytes), drive.1 == ASCII.colon.codePoint {
+      return true
+    }
+    return false
   }
 
   /// A string starts with a Windows drive letter if all of the following are true:
@@ -983,73 +983,70 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
   ///
   @inlinable
   internal static func hasWindowsDriveLetterPrefix(_ bytes: T) -> Bool {
-    var it = bytes.makeIterator()
-    guard let byte1 = it.next(), ASCII(byte1)?.isAlpha == true else { return false }
-    guard let byte2 = it.next(), ASCII(byte2) == .colon || ASCII(byte2) == .verticalBar else { return false }
-    guard let byte3 = it.next() else { return true }
-    switch ASCII(byte3) {
+    var i = bytes.startIndex
+    guard i < bytes.endIndex else { return false }
+    bytes.formIndex(after: &i)
+    guard i < bytes.endIndex else { return false }
+    bytes.formIndex(after: &i)
+    guard PathComponentParser<T.SubSequence>.isWindowsDriveLetter(bytes[Range(uncheckedBounds: (bytes.startIndex, i))])
+    else {
+      return false
+    }
+    guard i < bytes.endIndex else { return true }
+    switch ASCII(bytes[i]) {
     case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: return true
     default: return false
     }
   }
+}
 
-  /// Interprets the given collection as a URL's normalized path whose first component length is `firstCmptLength`, and returns a slice
-  /// covering the path's normalized Windows drive letter, if it has one.
-  ///
-  /// Windows drive letters only have meaning for `file` URLs.
-  ///
+// Dot components.
+
+@usableFromInline
+internal enum DotPathComponent {
+  case singleDot
+  case doubleDot
+}
+
+extension PathComponentParser where T: Collection, T.Element == UInt8 {
+
   @inlinable
-  internal static func _normalizedWindowsDrive(
-    in path: T, firstCmptLength: Int
-  ) -> T.SubSequence? {
-
-    if firstCmptLength == 3 {
-      let firstComponentContent = path.dropFirst().prefix(2)
-      if PathComponentParser<T.SubSequence>.isNormalizedWindowsDriveLetter(firstComponentContent) {
-        return firstComponentContent
-      }
+  internal static func _checkForDotOrCaseInsensitivePercentEncodedDot2(in iterator: inout T.Iterator) -> Bool? {
+    guard let byte0 = iterator.next() else { return nil }
+    // The most likely spelling is a plain '.'
+    if byte0 == ASCII.period.codePoint { return true }
+    // Copy 3 bytes in to a UInt32 and match them as one unit.
+    var buffer = 0 as UInt32
+    let hasThreeBytes = withUnsafeMutableBytes(of: &buffer) { buffer -> Bool in
+      guard let byte1 = iterator.next(), let byte2 = iterator.next() else { return false }
+      buffer[0] = byte0
+      buffer[1] = byte1
+      buffer[2] = byte2 & 0b11011111
+      return true
     }
-    return nil
+    // swift-format-ignore
+    let _percentTwoE = UInt32(bigEndian:
+      UInt32(ASCII.percentSign.codePoint) &<< 24 | UInt32(ASCII.n2.codePoint) &<< 16 | UInt32(ASCII.E.codePoint) &<< 8
+    )
+    return hasThreeBytes && buffer == _percentTwoE
   }
 
-  /// Returns `true` if the next contents of `iterator` are either the ASCII byte U+002E (.), the string "%2e", or "%2E".
-  /// Otherwise, `false`.
+  /// Returns a `DotPathComponent` if the given bytes contain one or two ASCII periods (including percent-encoded ASCII periods).
+  /// For example, "." and "%2e" return `.singleDot`. "..", ".%2E", and "%2e%2E" return `.doubleDot`.
   ///
   @inlinable
-  internal static func _checkForDotOrCaseInsensitivePercentEncodedDot(in iterator: inout T.Iterator) -> Bool {
-    guard let byte1 = iterator.next(), let ascii1 = ASCII(byte1) else { return false }
-    if ascii1 == .period { return true }
-    guard ascii1 == .percentSign,
-      let byte2 = iterator.next(), ASCII(byte2) == .n2,
-      let byte3 = iterator.next(), ASCII(byte3 & 0b11011111) == .E  // bitmask uppercases ASCII alphas.
-    else {
-      return false
-    }
-    return true
+  internal static func parseDotPathComponent(_ bytes: T) -> DotPathComponent? {
+    var iter = bytes.makeIterator()
+    guard _checkForDotOrCaseInsensitivePercentEncodedDot2(in: &iter) == true else { return nil }
+    guard let second = _checkForDotOrCaseInsensitivePercentEncodedDot2(in: &iter) else { return .singleDot }
+    guard second, iter.next() == nil else { return nil }
+    return .doubleDot
   }
+}
 
-  /// Returns `true` if `bytes` contains a single U+002E (.), the ASCII string "%2e" or "%2E" only.
-  /// Otherwise, `false`.
-  ///
-  @inlinable
-  internal static func isSingleDotPathSegment(_ bytes: T) -> Bool {
-    var it = bytes.makeIterator()
-    guard _checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
-    guard it.next() == nil else { return false }
-    return true
-  }
+// Path sigils.
 
-  /// Returns `true` if `bytes` contains two of either U+002E (.), the ASCII string "%2e" or "%2E" only.
-  /// Otherwise, `false`.
-  ///
-  @inlinable
-  internal static func isDoubleDotPathSegment(_ bytes: T) -> Bool {
-    var it = bytes.makeIterator()
-    guard _checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
-    guard _checkForDotOrCaseInsensitivePercentEncodedDot(in: &it) else { return false }
-    guard it.next() == nil else { return false }
-    return true
-  }
+extension PathComponentParser where T: Collection, T.Element == UInt8 {
 
   /// Returns `true` if the given normalized path requires a path sigil when written to a URL that does not have an authority sigil.
   ///
