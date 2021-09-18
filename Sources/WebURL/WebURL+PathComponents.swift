@@ -738,9 +738,7 @@ extension URLStorage {
     precondition(structure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
 
     // If 'firstGivenComponentLength' is nil, we infer that the components are empty (i.e. removal operation).
-    let components = components.lazy.filter { utf8 in
-      !PathComponentParser.isSingleDotPathSegment(utf8) && !PathComponentParser.isDoubleDotPathSegment(utf8)
-    }
+    let components = components.lazy.filter { utf8 in PathComponentParser.parseDotPathComponent(utf8) == nil }
     let firstGivenComponentLength = components.first.map { 1 + $0.lazy.percentEncoded(as: \.pathComponent).count }
 
     // If the URL's path ends with a trailing slash and we're inserting elements at the end,
