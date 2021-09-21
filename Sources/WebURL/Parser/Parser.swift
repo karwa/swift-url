@@ -162,10 +162,30 @@ extension ParsedURLString {
     internal let info: ScannedRangesAndFlags<InputString>
 
     @usableFromInline
-    internal let parsedHost: Optional<ParsedHost>
+    internal let __parsedHost: Optional<ParsedHost>
 
     @usableFromInline
-    internal let port: Optional<UInt16>
+    internal let __port: Optional<UInt16>
+
+    // Work around avoid expensive 'outlined init with take' calls.
+    // https://bugs.swift.org/browse/SR-15215
+    // https://forums.swift.org/t/expensive-calls-to-outlined-init-with-take/52187
+
+    @inlinable @inline(__always)
+    internal var parsedHost: Optional<ParsedHost> {
+      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
+      // and use the spare bits.
+      guard let offset = MemoryLayout.offset(of: \Self.__parsedHost) else { return __parsedHost }
+      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<ParsedHost>.self) }
+    }
+
+    @inlinable @inline(__always)
+    internal var port: Optional<UInt16> {
+      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
+      // and use the spare bits.
+      guard let offset = MemoryLayout.offset(of: \Self.__port) else { return __port }
+      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<UInt16>.self) }
+    }
   }
 }
 
@@ -217,7 +237,7 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
 
   /// The kind of scheme contained in `schemeRange`, if it is not `nil`.
   @usableFromInline
-  internal var schemeKind: Optional<WebURL.SchemeKind>
+  internal var __schemeKind: Optional<WebURL.SchemeKind>
 
   /// Whether this URL is hierarchical ("cannot-be-a-base" is false).
   @usableFromInline
@@ -258,7 +278,7 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
     self.pathRange = pathRange
     self.queryRange = queryRange
     self.fragmentRange = fragmentRange
-    self.schemeKind = schemeKind
+    self.__schemeKind = schemeKind
     self.isHierarchical = isHierarchical
     self.absolutePathsCopyWindowsDriveFromBase = absolutePathsCopyWindowsDriveFromBase
     self.componentsToCopyFromBase = componentsToCopyFromBase
@@ -271,6 +291,25 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
       schemeKind: nil, isHierarchical: true, absolutePathsCopyWindowsDriveFromBase: false,
       componentsToCopyFromBase: []
     )
+  }
+
+  // This is a workaround to avoid expensive 'outlined init with take' calls.
+  // https://bugs.swift.org/browse/SR-15215
+  // https://forums.swift.org/t/expensive-calls-to-outlined-init-with-take/52187
+
+  /// The kind of scheme contained in `schemeRange`, if it is not `nil`.
+  @inlinable @inline(__always)
+  internal var schemeKind: Optional<WebURL.SchemeKind> {
+    get {
+      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
+      // and use the spare bits.
+      guard let offset = MemoryLayout.offset(of: \Self.__schemeKind) else { return __schemeKind }
+      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<WebURL.SchemeKind>.self) }
+    }
+    set {
+      // We're not seeing the same expensive runtime calls for the setter, so there's nothing to work around here.
+      __schemeKind = newValue
+    }
   }
 }
 
@@ -341,8 +380,8 @@ extension ParsedURLString.ProcessedMapping {
     }
 
     self.info = scannedInfo
-    self.parsedHost = parsedHost
-    self.port = port
+    self.__parsedHost = parsedHost
+    self.__port = port
   }
 
   @inlinable
