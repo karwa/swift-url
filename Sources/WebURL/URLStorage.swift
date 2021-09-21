@@ -102,7 +102,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
   /// If `sigil == .path` or `sigil == nil`, the next component is a path/query/fragment and no username/password/hostname/port is present.
   ///
   @usableFromInline
-  internal var sigil: Optional<Sigil>
+  internal var __sigil: Optional<Sigil>
 
   /// A summary of this URL's `scheme`.
   ///
@@ -152,10 +152,33 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     self.queryLength = queryLength
     self.fragmentLength = fragmentLength
     self.firstPathComponentLength = firstPathComponentLength
-    self.sigil = sigil
+    self.__sigil = sigil
     self.schemeKind = schemeKind
     self.isHierarchical = isHierarchical
     self.queryIsKnownFormEncoded = queryIsKnownFormEncoded
+  }
+
+  // This is a workaround to avoid expensive 'outlined init with take' calls.
+  // https://bugs.swift.org/browse/SR-15215
+  // https://forums.swift.org/t/expensive-calls-to-outlined-init-with-take/52187
+
+  /// The sigil, if present. The sigil comes immediately after the scheme and identifies the component following it.
+  ///
+  /// If `sigil == .authority`, the next component is an authority, consisting of username/password/hostname/port components.
+  /// If `sigil == .path` or `sigil == nil`, the next component is a path/query/fragment and no username/password/hostname/port is present.
+  ///
+  @inlinable @inline(__always)
+  internal var sigil: Optional<Sigil> {
+    get {
+      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
+      // and use the spare bits.
+      guard let offset = MemoryLayout.offset(of: \Self.__sigil) else { return __sigil }
+      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<Sigil>.self) }
+    }
+    set {
+      // We're not seeing the same expensive runtime calls for the setter, so there's nothing to work around here.
+      __sigil = newValue
+    }
   }
 }
 
