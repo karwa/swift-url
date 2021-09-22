@@ -27,6 +27,7 @@ extension UnsafeRawPointer {
   ///
   @inlinable @inline(__always)
   internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
+    assert(_isPOD(T.self))
     var val: T = 0
     withUnsafeMutableBytes(of: &val) {
       $0.copyMemory(from: UnsafeRawBufferPointer(start: self + offset, count: MemoryLayout<T>.stride))
