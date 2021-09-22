@@ -50,6 +50,102 @@ let stringWithEveryASCIICharacter: String = {
 
 
 // --------------------------------------------
+// MARK: - Tuples
+// --------------------------------------------
+
+
+typealias Tuple4<T> = (T, T, T, T)
+typealias Tuple8<T> = (T, T, T, T, T, T, T, T)
+typealias Tuple16<T> = (T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T)
+
+extension Array {
+
+  init(elements tuple: Tuple4<Element>) {
+    self = [tuple.0, tuple.1, tuple.2, tuple.3]
+  }
+
+  init(elements tuple: Tuple8<Element>) {
+    self = [tuple.0, tuple.1, tuple.2, tuple.3, tuple.4, tuple.5, tuple.6, tuple.7]
+  }
+
+  init(elements tuple: Tuple16<Element>) {
+    self = [
+      tuple.0, tuple.1, tuple.2, tuple.3, tuple.4, tuple.5, tuple.6, tuple.7,
+      tuple.8, tuple.9, tuple.10, tuple.11, tuple.12, tuple.13, tuple.14, tuple.15,
+    ]
+  }
+}
+
+// One day, when tuples are Equatable, we won't need these.
+// https://github.com/apple/swift-evolution/blob/main/proposals/0283-tuples-are-equatable-comparable-hashable.md
+func XCTAssertEqual<T>(
+  _ expression1: @autoclosure () throws -> Tuple4<T>?,
+  _ expression2: @autoclosure () throws -> Tuple4<T>?,
+  _ message: @autoclosure () -> String = "",
+  file: StaticString = #filePath,
+  line: UInt = #line
+) rethrows where T: Equatable {
+  let left = try expression1()
+  let right = try expression2()
+  switch (left, right) {
+  case (.none, .none):
+    return
+  case (.some, .none), (.none, .some):
+    XCTFail(
+      "XCTAssertEqual failed. \(String(describing: left)) is not equal to \(String(describing: right)). \(message())",
+      file: file, line: line
+    )
+  case (.some(let left), .some(let right)):
+    XCTAssertEqual(Array(elements: left), Array(elements: right), message(), file: file, line: line)
+  }
+}
+
+func XCTAssertEqual<T>(
+  _ expression1: @autoclosure () throws -> Tuple8<T>?,
+  _ expression2: @autoclosure () throws -> Tuple8<T>?,
+  _ message: @autoclosure () -> String = "",
+  file: StaticString = #filePath,
+  line: UInt = #line
+) rethrows where T: Equatable {
+  let left = try expression1()
+  let right = try expression2()
+  switch (left, right) {
+  case (.none, .none):
+    return
+  case (.some, .none), (.none, .some):
+    XCTFail(
+      "XCTAssertEqual failed. \(String(describing: left)) is not equal to \(String(describing: right)). \(message())",
+      file: file, line: line
+    )
+  case (.some(let left), .some(let right)):
+    XCTAssertEqual(Array(elements: left), Array(elements: right), message(), file: file, line: line)
+  }
+}
+
+func XCTAssertEqual<T>(
+  _ expression1: @autoclosure () throws -> Tuple16<T>?,
+  _ expression2: @autoclosure () throws -> Tuple16<T>?,
+  _ message: @autoclosure () -> String = "",
+  file: StaticString = #filePath,
+  line: UInt = #line
+) rethrows where T: Equatable {
+  let left = try expression1()
+  let right = try expression2()
+  switch (left, right) {
+  case (.none, .none):
+    return
+  case (.some, .none), (.none, .some):
+    XCTFail(
+      "XCTAssertEqual failed. \(String(describing: left)) is not equal to \(String(describing: right)). \(message())",
+      file: file, line: line
+    )
+  case (.some(let left), .some(let right)):
+    XCTAssertEqual(Array(elements: left), Array(elements: right), message(), file: file, line: line)
+  }
+}
+
+
+// --------------------------------------------
 // MARK: - WebURL test utilities
 // --------------------------------------------
 

@@ -51,6 +51,7 @@ extension IPv4Address.Utils {
   }
 
   /// Generates a random IP address string representing the given address.
+  /// The returned string describes the octets of the address in binary/big-endian/network byte order.
   ///
   /// - parameters:
   ///   - address:         The address to serialize
@@ -82,6 +83,7 @@ extension IPv4Address.Utils {
   }
 
   /// Generates a random IP address string representing the given address.
+  /// The returned string describes the octets of the address in binary/big-endian/network byte order.
   ///
   /// - seealso: `randomString<RNG>(address:allowedFormats:allowedRadixes:)`
   ///
@@ -99,6 +101,11 @@ extension IPv4Address.Utils {
       case .hex: return "0x" + String(piece, radix: 16)
       }
     }
+
+    // Bitmasking and shifting are numeric operations, but we want the bytes to be serialized
+    // as they are in the binary representation, so little-endian machines must byte-swap.
+    let address = address.bigEndian
+
     // swift-format-ignore
     switch allowedFormats.randomElement(using: &rng)! {
     case .a:
@@ -163,27 +170,50 @@ extension IPv6Address.Utils {
     using rng: inout RNG
   ) -> IPv6Address.Pieces {
 
+    var address: IPv6Address.Pieces = (0, 0, 0, 0, 0, 0, 0, 0)
+
     switch limitedToIPv4 {
     case true:
-      var randomBytes = (UInt64(0), UInt64.random(in: 0...UInt64(UInt32.max), using: &rng).bigEndian)
-      return withUnsafeBytes(of: &randomBytes) { $0.load(as: IPv6Address.Pieces.self) }
+      withUnsafeMutableBytes(of: &address) { octets in
+        octets[12] = .random(in: 0 ... .max, using: &rng)
+        octets[13] = .random(in: 0 ... .max, using: &rng)
+        octets[14] = .random(in: 0 ... .max, using: &rng)
+        octets[15] = .random(in: 0 ... .max, using: &rng)
+      }
 
     case false:
-      var randomBytes = (UInt64.random(in: 0 ... .max, using: &rng), UInt64.random(in: 0 ... .max, using: &rng))
-      return withUnsafeMutableBytes(of: &randomBytes) { rawPtr in
+      withUnsafeMutableBytes(of: &address) { octets in
+        octets[0] = .random(in: 0 ... .max, using: &rng)
+        octets[1] = .random(in: 0 ... .max, using: &rng)
+        octets[2] = .random(in: 0 ... .max, using: &rng)
+        octets[3] = .random(in: 0 ... .max, using: &rng)
+        octets[4] = .random(in: 0 ... .max, using: &rng)
+        octets[5] = .random(in: 0 ... .max, using: &rng)
+        octets[6] = .random(in: 0 ... .max, using: &rng)
+        octets[7] = .random(in: 0 ... .max, using: &rng)
+        octets[8] = .random(in: 0 ... .max, using: &rng)
+        octets[9] = .random(in: 0 ... .max, using: &rng)
+        octets[10] = .random(in: 0 ... .max, using: &rng)
+        octets[11] = .random(in: 0 ... .max, using: &rng)
+        octets[12] = .random(in: 0 ... .max, using: &rng)
+        octets[13] = .random(in: 0 ... .max, using: &rng)
+        octets[14] = .random(in: 0 ... .max, using: &rng)
+        octets[15] = .random(in: 0 ... .max, using: &rng)
+
         if injectCompression {
-          // Compress a random range by setting bytes to 0.
-          // The range should be aligned to a 16-bit piece, be a multiple of 16 bits in length,
-          // and be at least 2 pieces long to ensure it results in a compressed serialization format.
+          // Compress a random range by setting octets to 0. The range should:
+          // - Be aligned to a 2-octet piece, and
+          // - Be at least 4 octets long, and
+          // - End at another 2-octet piece.
           let compressStart = Int.random(in: 0..<6)
           let compressEnd = Int.random(in: (compressStart + 2)..<9)
           for x in (compressStart * 2)..<(compressEnd * 2) {
-            rawPtr[x] = 0
+            octets[x] = 0
           }
         }
-        return rawPtr.load(as: IPv6Address.Pieces.self)
       }
     }
+    return address
   }
 
   // Random strings.
@@ -204,6 +234,8 @@ extension IPv6Address.Utils {
   ///
   /// This may be skewed a bit - some generated addresses will already be compressed, regardless of our
   /// randomised toggle to inject compressable pieces.
+  ///
+  /// The returned string describes the 16-bit pieces of the address in binary/big-endian/network byte order.
   ///
   public static func randomString() -> (IPv6Address.Pieces, String) {
     var rng = SystemRandomNumberGenerator()
@@ -226,6 +258,8 @@ extension IPv6Address.Utils {
   /// The format of the resulting String is configured by the `allowIPv4Addresses` and `mayCompress` flags. These flags only describe
   /// the allowed formats, and the actual format will be randomly selected given that configuration.
   ///
+  /// The returned string describes the 16-bit pieces of the address in binary/big-endian/network byte order.
+  ///
   /// - parameters:
   ///   - address:             The address to serialize.
   ///   - allowIPv4Addresses:  If `true`, and if `address` represents a value that could be written as an IPv4 address, the resulting String
@@ -244,15 +278,12 @@ extension IPv6Address.Utils {
 
     // If the address can be represented as an IPv4 address, randomly decide to format it that way.
 
-    let ipv4Address = withUnsafeBytes(of: address) { rawAddress -> UInt32? in
-      let ptr = rawAddress.bindMemory(to: UInt64.self)
-      guard ptr[0] == 0, ptr[1].bigEndian <= UInt64(UInt32.max) else {
-        return nil
-      }
-      return UInt32(exactly: ptr[1].bigEndian)
+    let binaryIPv4Address = withUnsafeBytes(of: address) { rawAddress -> UInt32? in
+      guard rawAddress[0..<12].allSatisfy({ $0 == 0 }) else { return nil }
+      return rawAddress.baseAddress!.loadUnaligned(fromByteOffset: 12, as: UInt32.self)
     }
 
-    if let ipv4Address = ipv4Address, allowIPv4Addresses && Bool.random(using: &rng) {
+    if let ipv4Address = binaryIPv4Address, allowIPv4Addresses && Bool.random(using: &rng) {
       let ipv4Piece = IPv4Address.Utils.randomString(
         address: ipv4Address,
         allowedFormats: [.abcd], allowedRadixes: [.decimal],
@@ -294,5 +325,29 @@ extension IPv6Address.Utils {
     }
 
     return addressString
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Unaligned loads
+// --------------------------------------------
+
+
+extension UnsafeRawPointer {
+
+  /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
+  ///
+  /// The memory at this pointer plus offset must be initialized to `T` or another type that is layout compatible with `T`.
+  /// It does not need to be aligned for access to `T`.
+  ///
+  @inlinable @inline(__always)
+  internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
+    assert(_isPOD(T.self))
+    var val: T = 0
+    withUnsafeMutableBytes(of: &val) {
+      $0.copyMemory(from: UnsafeRawBufferPointer(start: self + offset, count: MemoryLayout<T>.stride))
+    }
+    return val
   }
 }
