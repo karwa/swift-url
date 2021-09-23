@@ -160,7 +160,7 @@ extension WebURL.PathComponents: BidirectionalCollection {
   }
 
   public subscript(position: Index) -> String {
-    storage.utf8.pathComponent(position).percentDecodedString
+    storage.utf8.pathComponent(position).percentDecodedString(substitutions: .none)
   }
 
   public func distance(from start: Index, to end: Index) -> Int {
@@ -739,7 +739,7 @@ extension URLStorage {
 
     // If 'firstGivenComponentLength' is nil, we infer that the components are empty (i.e. removal operation).
     let components = components.lazy.filter { utf8 in PathComponentParser.parseDotPathComponent(utf8) == nil }
-    let firstGivenComponentLength = components.first.map { 1 + $0.lazy.percentEncoded(as: \.pathComponent).count }
+    let firstGivenComponentLength = components.first.map { 1 + $0.lazy.percentEncoded(using: .pathComponentSet).count }
 
     // If the URL's path ends with a trailing slash and we're inserting elements at the end,
     // widen the replacement range so we drop that trailing slash.
@@ -759,7 +759,7 @@ extension URLStorage {
     }
     // swift-format-ignore
     let insertedPathLength = firstGivenComponentLength.map { components.dropFirst().reduce(into: $0)
-      { count, component in count += 1 + component.lazy.percentEncoded(as: \.pathComponent).count }
+      { count, component in count += 1 + component.lazy.percentEncoded(using: .pathComponentSet).count }
     } ?? 0
 
     // Calculate what the path will look like after the replacement. In particular, we need to know:
@@ -850,7 +850,7 @@ extension URLStorage {
           bytesWritten &+= 1
           bytesWritten &+=
             UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...])
-            .fastInitialize(from: component.lazy.percentEncoded(as: \.pathComponent))
+            .fastInitialize(from: component.lazy.percentEncoded(using: .pathComponentSet))
         }
         return bytesWritten
       }

@@ -103,9 +103,9 @@ extension WebURL.FormEncodedQueryParameters {
     var result = ContiguousArray<UInt8>()
     result.reserveCapacity(queryUTF8.count + 1)
     for kvp in RawKeyValuePairs(utf8: queryUTF8) {
-      result.append(contentsOf: queryUTF8[kvp.key].lazy.percentDecodedUTF8(from: \.form).percentEncoded(as: \.form))
+      result += queryUTF8[kvp.key].percentDecodedAndReencoded(using: .formEncoding)
       result.append(ASCII.equalSign.codePoint)
-      result.append(contentsOf: queryUTF8[kvp.value].lazy.percentDecodedUTF8(from: \.form).percentEncoded(as: \.form))
+      result += queryUTF8[kvp.value].percentDecodedAndReencoded(using: .formEncoding)
       result.append(ASCII.ampersand.codePoint)
     }
     _ = result.popLast()
@@ -163,7 +163,10 @@ extension WebURL.FormEncodedQueryParameters {
           return nil
         }
         let queryUTF8 = rawIter!.remaining.base
-        return (queryUTF8[nextKVP.key].urlFormDecodedString, queryUTF8[nextKVP.value].urlFormDecodedString)
+        return (
+          queryUTF8[nextKVP.key].percentDecodedString(substitutions: .formEncoding),
+          queryUTF8[nextKVP.value].percentDecodedString(substitutions: .formEncoding)
+        )
       }
     }
 
@@ -254,7 +257,7 @@ extension WebURL.FormEncodedQueryParameters {
       _ keyToFind: StringType
     ) -> LazyFilterSequence<Self> where StringType: StringProtocol {
       self.lazy.filter { (_, key, _) in
-        utf8[key].lazy.percentDecodedUTF8(from: \.form).elementsEqual(keyToFind.utf8)
+        utf8[key].lazy.percentDecoded(substitutions: .formEncoding).elementsEqual(keyToFind.utf8)
       }
     }
   }
@@ -283,7 +286,7 @@ extension WebURL.FormEncodedQueryParameters {
   public func get<StringType>(_ key: StringType) -> String? where StringType: StringProtocol {
     guard let queryUTF8 = storage.utf8.query else { return nil }
     var iter = RawKeyValuePairs(utf8: queryUTF8).filteredToUnencodedKey(key).makeIterator()
-    return iter.next().map { queryUTF8[$0.value].urlFormDecodedString }
+    return iter.next().map { queryUTF8[$0.value].percentDecodedString(substitutions: .formEncoding) }
   }
 
   /// Returns the values of all key-value pairs whose key matches the given key. The values are form-decoded.
@@ -295,7 +298,7 @@ extension WebURL.FormEncodedQueryParameters {
   public func getAll<StringType>(_ key: StringType) -> [String] where StringType: StringProtocol {
     guard let queryUTF8 = storage.utf8.query else { return [] }
     return RawKeyValuePairs(utf8: queryUTF8).filteredToUnencodedKey(key).map {
-      queryUTF8[$0.value].urlFormDecodedString
+      queryUTF8[$0.value].percentDecodedString(substitutions: .formEncoding)
     }
   }
 
@@ -353,8 +356,8 @@ extension WebURL.FormEncodedQueryParameters {
     _ key: StringType, to newValue: StringType?
   ) where StringType: StringProtocol {
     reencodeQueryIfNeeded()
-    let encodedKeyToSet = key.urlFormEncoded
-    let encodedNewValue = newValue?.urlFormEncoded
+    let encodedKeyToSet = key.percentEncoded(using: .formEncoding)
+    let encodedNewValue = newValue?.percentEncoded(using: .formEncoding)
     storage.setFormParamPair(encodedKey: encodedKeyToSet.utf8, encodedValue: encodedNewValue?.utf8)
   }
 }
@@ -470,15 +473,15 @@ extension URLStorage {
     let combinedLength: UInt
     let needsEscaping: Bool
     (combinedLength, needsEscaping) = keyValuePairs.reduce(into: (0, false)) { metrics, kvp in
-      let (keyLength, encodeKey) = kvp.0.lazy.percentEncoded(as: \.form).unsafeEncodedLength
-      let (valLength, encodeVal) = kvp.1.lazy.percentEncoded(as: \.form).unsafeEncodedLength
+      let (keyLength, encodeKey) = kvp.0.lazy.percentEncoded(using: .formEncoding).unsafeEncodedLength
+      let (valLength, encodeVal) = kvp.1.lazy.percentEncoded(using: .formEncoding).unsafeEncodedLength
       metrics.0 += keyLength + valLength
       metrics.1 = metrics.1 || encodeKey || encodeVal
     }
     if needsEscaping {
       appendFormParamPairs(
         fromEncoded: keyValuePairs.lazy.map {
-          ($0.0.lazy.percentEncoded(as: \.form), $0.1.lazy.percentEncoded(as: \.form))
+          ($0.0.lazy.percentEncoded(using: .formEncoding), $0.1.lazy.percentEncoded(using: .formEncoding))
         },
         lengthIfKnown: Int(combinedLength)
       )

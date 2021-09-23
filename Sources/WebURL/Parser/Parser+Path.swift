@@ -527,7 +527,7 @@ extension PathMetrics {
 
     @inlinable
     internal mutating func visitInputPathComponent(_ pathComponent: InputString.SubSequence) {
-      let (encodedLength, needsEncoding) = pathComponent.lazy.percentEncoded(as: \.path).unsafeEncodedLength
+      let (encodedLength, needsEncoding) = pathComponent.lazy.percentEncoded(using: .pathSet).unsafeEncodedLength
       metrics.needsPercentEncoding = metrics.needsPercentEncoding || needsEncoding
       metrics.firstComponentLength = 1 /* "/" */ &+ encodedLength
       metrics.requiredCapacity &+= metrics.firstComponentLength
@@ -539,8 +539,8 @@ extension PathMetrics {
       // the first byte is an ASCII alpha, and the second is ":" or "|". Neither are percent-encoded.
       assert(ASCII(pathComponent.0)!.isAlpha)
       assert(pathComponent.1 == ASCII.colon.codePoint || pathComponent.1 == ASCII.verticalBar.codePoint)
-      assert(!PercentEncodeSet.Path.shouldPercentEncode(ascii: pathComponent.0))
-      assert(!PercentEncodeSet.Path.shouldPercentEncode(ascii: pathComponent.1))
+      assert(!URLEncodeSet.Path().shouldPercentEncode(ascii: pathComponent.0))
+      assert(!URLEncodeSet.Path().shouldPercentEncode(ascii: pathComponent.1))
 
       metrics.firstComponentLength = 1 /* "/" */ &+ 2 /* encodedLength */
       metrics.requiredCapacity &+= metrics.firstComponentLength
@@ -659,7 +659,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         return
       }
       guard !needsEscaping else {
-        for byte in pathComponent.lazy.percentEncoded(as: \.path).reversed() {
+        for byte in pathComponent.lazy.percentEncoded(using: .pathSet).reversed() {
           precondition(front > 1)
           front &-= 1
           (buffer.baseAddress.unsafelyUnwrapped + front).initialize(to: byte)
@@ -693,8 +693,8 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       // the first byte is an ASCII alpha, and the second is ":" or "|". Neither are percent-encoded.
       assert(ASCII(pathComponent.0)!.isAlpha)
       assert(pathComponent.1 == ASCII.colon.codePoint || pathComponent.1 == ASCII.verticalBar.codePoint)
-      assert(!PercentEncodeSet.Path.shouldPercentEncode(ascii: pathComponent.0))
-      assert(!PercentEncodeSet.Path.shouldPercentEncode(ascii: pathComponent.1))
+      assert(!URLEncodeSet.Path().shouldPercentEncode(ascii: pathComponent.0))
+      assert(!URLEncodeSet.Path().shouldPercentEncode(ascii: pathComponent.1))
 
       precondition(front > 2)
       front &-= 2
