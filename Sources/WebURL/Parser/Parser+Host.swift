@@ -68,7 +68,7 @@ extension ParsedHost {
       return
     }
 
-    let domain = hostname.lazy.percentDecodedUTF8
+    let domain = hostname.lazy.percentDecoded()
 
     // TODO: [idna]
     //
@@ -125,7 +125,7 @@ extension ParsedHost {
         callback.validationError(.hostForbiddenCodePoint)
         return nil
       }
-      if PercentEncodeSet.C0Control.shouldPercentEncode(ascii: asciiChar.codePoint) {
+      if URLEncodeSet.C0Control().shouldPercentEncode(ascii: asciiChar.codePoint) {
         hostnameInfo.needsPercentEncoding = true
         hostnameInfo.encodedCount += 2
       }
@@ -139,7 +139,7 @@ extension ParsedHost {
   ///
   @inlinable
   internal static func _tryParseDomain<UTF8Bytes, Callback>(
-    _ domain: LazilyPercentDecodedUTF8WithoutSubstitutions<UTF8Bytes>, callback: inout Callback
+    _ domain: LazilyPercentDecoded<UTF8Bytes>, callback: inout Callback
   ) -> _DomainParseResult
   where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
@@ -162,7 +162,8 @@ extension ParsedHost {
         callback.validationError(.hostForbiddenCodePoint)
         return .forbiddenHostCodePoint
       }
-      domainInfo.needsDecodeOrLowercasing = domainInfo.needsDecodeOrLowercasing || i.isDecoded || char.isUppercaseAlpha
+      domainInfo.needsDecodeOrLowercasing =
+        (domainInfo.needsDecodeOrLowercasing || i.isDecodedOrUnsubstituted || char.isUppercaseAlpha)
       domainInfo.decodedCount &+= 1
       domain.formIndex(after: &i)
       if char == .period {
@@ -272,7 +273,7 @@ extension ParsedHost {
     case .asciiDomain(let domainInfo):
       if domainInfo.needsDecodeOrLowercasing {
         writer.writeHostname(lengthIfKnown: domainInfo.decodedCount) {
-          $0(ASCII.Lowercased(bytes.lazy.percentDecodedUTF8))
+          $0(ASCII.Lowercased(bytes.lazy.percentDecoded()))
         }
       } else {
         writer.writeHostname(lengthIfKnown: domainInfo.decodedCount) {
@@ -283,7 +284,7 @@ extension ParsedHost {
     case .opaque(let hostnameInfo):
       if hostnameInfo.needsPercentEncoding {
         writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount) { writePiece in
-          _ = bytes.lazy.percentEncoded(as: \.c0Control).write(to: writePiece)
+          _ = bytes.lazy.percentEncoded(using: .c0ControlSet).write(to: writePiece)
         }
       } else {
         writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount) { writePiece in

@@ -21,54 +21,20 @@ final class PercentEncodingTests: XCTestCase {}
 
 extension PercentEncodingTests {
 
-  func do_testEncodeSet_Component<T>(encodingWith encoder: (String) -> T) where T: Collection, T.Element == UInt8 {
-    let testData: [String] = [
-      stringWithEveryASCIICharacter,
-      stringWithEveryASCIICharacter + "😎✈️🏝🍹" + stringWithEveryASCIICharacter.shuffled(),
-      "%00this is not percent-encoded: %20",
-      "nochange0123456789",
-      "",
-    ]
-    for input in testData {
-      let encodedUTF8 = encoder(input)
-      for codeUnit in encodedUTF8 {
-        guard let ascii = ASCII(codeUnit) else {
-          XCTFail("Found non-ASCII byte in percent-encoded string")
-          continue
-        }
-        // The 'component' encode set is a superset of the following sets.
-        XCTAssertFalse(PercentEncodeSet.C0Control.shouldPercentEncode(ascii: codeUnit))
-        XCTAssertFalse(PercentEncodeSet.Path.shouldPercentEncode(ascii: codeUnit))
-        XCTAssertFalse(PercentEncodeSet.Query_NotSpecial.shouldPercentEncode(ascii: codeUnit))
-        XCTAssertFalse(PercentEncodeSet.Fragment.shouldPercentEncode(ascii: codeUnit))
-        XCTAssertFalse(PercentEncodeSet.UserInfo.shouldPercentEncode(ascii: codeUnit))
-        // The only set it does not contain is the special-query set, which includes the extra U+0027.
-        if PercentEncodeSet.Query_Special.shouldPercentEncode(ascii: codeUnit) {
-          XCTAssertEqual(ascii, .apostrophe)
-        }
-        // Strings encoded by the 'component' set should not contain forbidden host code-points (other than '%').
-        XCTAssertFalse(
-          ascii.isForbiddenHostCodePoint && ascii != .percentSign,
-          "Forbidden host code point: \(Character(UnicodeScalar(ascii.codePoint)))"
-        )
-      }
-      // The 'component' encode set should always preserve its contents, even if it contains
-      // things that look like percent-encode sequences (maybe someone really meant to write "%20").
-      XCTAssertEqualElements(encodedUTF8.lazy.percentDecodedUTF8, input.utf8)
-    }
-
-    // An important feature of the component encode-set is that it includes the % sign itself (U+0025).
-    XCTAssertTrue(PercentEncodeSet.Component.shouldPercentEncode(ascii: ASCII.percentSign.codePoint))
-  }
-
-  func testEncodeSet_Component() {
-    do_testEncodeSet_Component(encodingWith: {
-      $0.utf8.lazy.percentEncoded(as: \.component)
-    })
-  }
-
   func testTable() {
     XCTAssert(percent_encoding_table.count == 128)
+  }
+
+  func testPercentEncodedCharacter() {
+    for byte in UInt8.min...UInt8.max {
+      withPercentEncodedString(byte) { stringBuffer in
+        XCTAssertEqual(stringBuffer.count, 3)
+        let string = String(decoding: stringBuffer, as: UTF8.self)
+        XCTAssertEqual(string.count, 3)
+        XCTAssertEqual(string.first, "%")
+        XCTAssertEqual(UInt8(string.dropFirst(), radix: 16), byte)
+      }
+    }
   }
 
   func testDualImplementationEquivalence() {
@@ -81,52 +47,112 @@ extension PercentEncodingTests {
         )
       }
     }
-    testEncodeSet(PercentEncodeSet.C0Control.self)
-    testEncodeSet(PercentEncodeSet.Fragment.self)
-    testEncodeSet(PercentEncodeSet.Query_NotSpecial.self)
-    testEncodeSet(PercentEncodeSet.Query_Special.self)
-    testEncodeSet(PercentEncodeSet.Path.self)
-    testEncodeSet(PercentEncodeSet.UserInfo.self)
-    testEncodeSet(PercentEncodeSet.Component.self)
-    testEncodeSet(PercentEncodeSet.FormEncoded.self)
+    testEncodeSet(URLEncodeSet.C0Control.self)
+    testEncodeSet(URLEncodeSet.Fragment.self)
+    testEncodeSet(URLEncodeSet.Query.self)
+    testEncodeSet(URLEncodeSet.SpecialQuery.self)
+    testEncodeSet(URLEncodeSet.Path.self)
+    testEncodeSet(URLEncodeSet.UserInfo.self)
+    testEncodeSet(URLEncodeSet.Component.self)
+    testEncodeSet(URLEncodeSet.FormEncoding.self)
+  }
+
+  func testComponentEncodeSet() {
+    let testData: [String] = [
+      stringWithEveryASCIICharacter,
+      stringWithEveryASCIICharacter + "😎✈️🏝🍹" + stringWithEveryASCIICharacter.shuffled(),
+      "%00this is not percent-encoded: %20",
+      "nochange0123456789",
+      "",
+    ]
+    for input in testData {
+      let encodedUTF8 = input.utf8.lazy.percentEncoded(using: .urlComponentSet)
+      for codeUnit in encodedUTF8 {
+        guard let ascii = ASCII(codeUnit) else {
+          XCTFail("Found non-ASCII byte in percent-encoded string")
+          continue
+        }
+        // The 'component' encode set is a superset of the following sets.
+        XCTAssertFalse(URLEncodeSet.C0Control().shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(URLEncodeSet.Path().shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(URLEncodeSet.Query().shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(URLEncodeSet.Fragment().shouldPercentEncode(ascii: codeUnit))
+        XCTAssertFalse(URLEncodeSet.UserInfo().shouldPercentEncode(ascii: codeUnit))
+        // The only set it does not contain is the special-query set, which includes the extra U+0027.
+        if URLEncodeSet.SpecialQuery().shouldPercentEncode(ascii: codeUnit) {
+          XCTAssertEqual(ascii, .apostrophe)
+        }
+        // Strings encoded by the 'component' set should not contain forbidden host code-points (other than '%').
+        XCTAssertFalse(
+          ascii.isForbiddenHostCodePoint && ascii != .percentSign,
+          "Forbidden host code point: \(Character(UnicodeScalar(ascii.codePoint)))"
+        )
+      }
+      // The 'component' encode set should always preserve its contents, even if it contains
+      // things that look like percent-encode sequences (maybe someone really meant to write "%20").
+      XCTAssertEqualElements(encodedUTF8.lazy.percentDecoded(), input.utf8)
+    }
+
+    // An important feature of the component encode-set is that it includes the % sign itself (U+0025).
+    XCTAssertTrue(URLEncodeSet.Component().shouldPercentEncode(ascii: ASCII.percentSign.codePoint))
   }
 }
 
 extension PercentEncodingTests {
 
-  func testPercentEncoded() {
-    XCTAssertEqualElements("hello, world!".percentEncoded(as: \.userInfo), "hello,%20world!")
-    XCTAssertEqualElements("/usr/bin/swift".percentEncoded(as: \.component), "%2Fusr%2Fbin%2Fswift")
-    XCTAssertEqualElements("got en%63oders?".percentEncoded(as: \.userInfo), "got%20en%63oders%3F")
-    XCTAssertEqualElements("king of the 🦆s".percentEncoded(as: \.form), "king+of+the+%F0%9F%A6%86s")
+  func testPercentEncoded_documentationExamples() {
 
-    XCTAssertEqualElements("fo%1o".percentEncoded(as: \.userInfo), "fo%1o")
-    XCTAssertEqualElements("%1".percentEncoded(as: \.userInfo), "%1")
-    XCTAssertEqualElements("%%%%%".percentEncoded(as: \.userInfo), "%%%%%")
+    // LazyCollectionProtocol.percentEncoded(using:)
+    do {
+      // Encode arbitrary data as an ASCII string.
+      let image = Data([0xBA, 0x74, 0x5F, 0xE0, 0x11, 0x22, 0xEB, 0x10, 0x2C, 0x7F])
+      XCTAssert(
+        image.lazy.percentEncoded(using: .urlComponentSet)
+          .elementsEqual("%BAt_%E0%11%22%EB%10%2C%7F".utf8)
+      )
+
+      // Encode-sets determine which characters are encoded, and some perform substitutions.
+      let bytes = "hello, world!".utf8
+      XCTAssert(
+        bytes.lazy.percentEncoded(using: .urlComponentSet)
+          .elementsEqual("hello%2C%20world!".utf8)
+      )
+      XCTAssert(
+        bytes.lazy.percentEncoded(using: .formEncoding)
+          .elementsEqual("hello%2C+world%21".utf8)
+      )
+    }
+
+    // Collection.percentEncodedString(using:)
+    do {
+      // Encode arbitrary data as an ASCII string.
+      let image = Data([0xBA, 0x74, 0x5F, 0xE0, 0x11, 0x22, 0xEB, 0x10, 0x2C, 0x7F])
+      XCTAssertEqual(image.percentEncodedString(using: .urlComponentSet), "%BAt_%E0%11%22%EB%10%2C%7F")
+
+      // Encode-sets determine which characters are encoded, and some perform substitutions.
+      let bytes = "hello, world!".utf8
+      XCTAssert(bytes.percentEncodedString(using: .urlComponentSet) == "hello%2C%20world!")
+      XCTAssert(bytes.percentEncodedString(using: .formEncoding) == "hello%2C+world%21")
+    }
+
+    // StringProtocol.percentEncoded(using:)
+    do {
+      // Percent-encoding can be used to escapes special characters, e.g. spaces.
+      XCTAssertEqual("hello, world!".percentEncoded(using: .userInfoSet), "hello,%20world!")
+
+      // Encode-sets determine which characters are encoded, and some perform substitutions.
+      XCTAssertEqual("/usr/bin/swift".percentEncoded(using: .urlComponentSet), "%2Fusr%2Fbin%2Fswift")
+      XCTAssertEqual("king of the 🦆s".percentEncoded(using: .formEncoding), "king+of+the+%F0%9F%A6%86s")
+    }
   }
 
-  func testURLComponentEncoded() {
-    XCTAssertEqual("hello, world!".urlComponentEncoded, "hello%2C%20world!")
-    XCTAssertEqual("/usr/bin/swift".urlComponentEncoded, "%2Fusr%2Fbin%2Fswift")
-    XCTAssertEqual("😎".urlComponentEncoded, "%F0%9F%98%8E")
-    // The .urlComponentEncoded property should use the component encode set.
-    do_testEncodeSet_Component(encodingWith: { $0.urlComponentEncoded.utf8 })
-  }
+  func testLazilyPercentEncoded_collectionConformance() {
 
-  func testURLFormEncoded() {
-    let myKVPs: KeyValuePairs = ["favourite pet": "🦆, of course", "favourite foods": "🍎 & 🍦"]
-    let form = myKVPs.map { key, value in "\(key.urlFormEncoded)=\(value.urlFormEncoded)" }
-      .joined(separator: "&")
-    XCTAssertEqual(form, "favourite+pet=%F0%9F%A6%86%2C+of+course&favourite+foods=%F0%9F%8D%8E+%26+%F0%9F%8D%A6")
-  }
-
-  func testLazilyPercentEncoded() {
-
-    func _testLazilyEncoded<EncodeSet: PercentEncodeSetProtocol>(
-      _ original: String, as encodeSet: KeyPath<PercentEncodeSet, EncodeSet.Type>, to encoded: String
+    func _testLazilyEncoded<EncodeSet: PercentEncodeSet>(
+      _ original: String, using encodeSet: EncodeSet._Member, expected encoded: String
     ) {
       // Check the contents and Collection conformance.
-      let lazilyEncoded = original.utf8.lazy.percentEncoded(as: encodeSet)
+      let lazilyEncoded = original.utf8.lazy.percentEncoded(using: encodeSet)
       XCTAssertEqualElements(lazilyEncoded, encoded.utf8)
       CollectionChecker.check(lazilyEncoded)
 
@@ -136,46 +162,103 @@ extension PercentEncodingTests {
       CollectionChecker.check(lazilyEncodedReversed)
     }
 
-    _testLazilyEncoded("hello, world!", as: \.userInfo, to: "hello,%20world!")
-    _testLazilyEncoded("/usr/bin/swift", as: \.component, to: "%2Fusr%2Fbin%2Fswift")
-    _testLazilyEncoded("got en%63oders?", as: \.userInfo, to: "got%20en%63oders%3F")
-    _testLazilyEncoded("king of the 🦆s", as: \.form, to: "king+of+the+%F0%9F%A6%86s")
+    _testLazilyEncoded("hello, world!", using: .userInfoSet, expected: "hello,%20world!")
+    _testLazilyEncoded("/usr/bin/swift", using: .urlComponentSet, expected: "%2Fusr%2Fbin%2Fswift")
+    _testLazilyEncoded("got en%63oders?", using: .userInfoSet, expected: "got%20en%63oders%3F")
+    _testLazilyEncoded("king of the 🦆s", using: .formEncoding, expected: "king+of+the+%F0%9F%A6%86s")
 
-    _testLazilyEncoded("fo%1o", as: \.userInfo, to: "fo%1o")
-    _testLazilyEncoded("%1", as: \.userInfo, to: "%1")
-    _testLazilyEncoded("%%%%%", as: \.userInfo, to: "%%%%%")
+    _testLazilyEncoded("fo%1o", using: .userInfoSet, expected: "fo%1o")
+    _testLazilyEncoded("%1", using: .userInfoSet, expected: "%1")
+    _testLazilyEncoded("%%%%%", using: .userInfoSet, expected: "%%%%%")
+  }
+}
+
+extension PercentEncodingTests {
+
+  func testPercentDecoded_documentationExamples() {
+
+    // LazyCollectionProtocol.percentDecoded(substitutions:)
+    do {
+      // The bytes, containing a string with UTF-8 form-encoding.
+      let source: [UInt8] = [
+        0x68, 0x25, 0x43, 0x32, 0x25, 0x41, 0x33, 0x6C, 0x6C, 0x6F, 0x2B, 0x77, 0x6F, 0x72, 0x6C, 0x64,
+      ]
+      XCTAssertEqual(String(decoding: source, as: UTF8.self), "h%C2%A3llo+world")
+
+      // Specify the `.formEncoding` substitution set to decode the contents.
+      XCTAssert(source.lazy.percentDecoded(substitutions: .formEncoding).elementsEqual("h£llo world".utf8))
+    }
+
+    // LazyCollectionProtocol.percentDecoded()
+    do {
+      // The bytes, containing a string with percent-encoding.
+      let source: [UInt8] = [0x25, 0x36, 0x31, 0x25, 0x36, 0x32, 0x25, 0x36, 0x33]
+      XCTAssertEqual(String(decoding: source, as: UTF8.self), "%61%62%63")
+
+      // In this case, the decoded bytes contain the ASCII string "abc".
+      XCTAssert(source.lazy.percentDecoded().elementsEqual("abc".utf8))
+    }
+
+    // StringProtocol.percentDecodedBytesArray(substitutions:)
+    do {
+      let originalImage = Data([0xBA, 0x74, 0x5F, 0xE0, 0x11, 0x22, 0xEB, 0x10, 0x2C, 0x7F])
+
+      // Encode the data, e.g. using form-encoding.
+      let encodedImage = originalImage.percentEncodedString(using: .formEncoding)
+      XCTAssertEqual("%BAt_%E0%11%22%EB%10%2C%7F", encodedImage)
+
+      // Decode the data, giving the same substitution map.
+      let decodedImage = encodedImage.percentDecodedBytesArray(substitutions: .formEncoding)
+      XCTAssert(decodedImage.elementsEqual(originalImage))
+    }
+
+    // StringProtocol.percentDecodedBytesArray()
+    do {
+      let url = WebURL("data:application/octet-stream,%BC%A8%CD")!
+
+      // Check the data URL's payload.
+      let payloadOptions = url.path.prefix(while: { $0 != "," })
+      if payloadOptions.hasSuffix(";base64") {
+        // ... decode as base-64
+        XCTFail()
+      } else {
+        let encodedPayload = url.path[payloadOptions.endIndex...].dropFirst()
+        let decodedPayload = encodedPayload.percentDecodedBytesArray()
+        XCTAssert(decodedPayload == [0xBC, 0xA8, 0xCD])
+      }
+    }
+
+    // StringProtocol.percentDecoded(substitutions:)
+    do {
+      // Decode percent-encoded UTF-8 as a string.
+      XCTAssertEqual("hello,%20world!".percentDecoded(substitutions: .none), "hello, world!")
+      XCTAssertEqual("%2Fusr%2Fbin%2Fswift".percentDecoded(substitutions: .none), "/usr/bin/swift")
+
+      // Some encodings require a substitution map to accurately decode.
+      XCTAssertEqual("king+of+the+%F0%9F%A6%86s".percentDecoded(substitutions: .formEncoding), "king of the 🦆s")
+    }
+
+    // StringProtocol.percentDecoded()
+    do {
+      // Decode percent-encoded UTF-8 as a string.
+      XCTAssertEqual("hello%2C%20world!".percentDecoded(), "hello, world!")
+      XCTAssertEqual("%2Fusr%2Fbin%2Fswift".percentDecoded(), "/usr/bin/swift")
+      XCTAssertEqual("%F0%9F%98%8E".percentDecoded(), "😎")
+    }
   }
 
-  func testPercentDecodedWithEncodeSet() {
-    XCTAssertEqual("hello,%20world!".percentDecoded(from: \.percentEncodedOnly), "hello, world!")
-    XCTAssertEqual("%2Fusr%2Fbin%2Fswift".percentDecoded(from: \.percentEncodedOnly), "/usr/bin/swift")
-    XCTAssertEqual("king+of+the+%F0%9F%A6%86s".percentDecoded(from: \.form), "king of the 🦆s")
-  }
 
-  func testPercentDecoded() {
-    XCTAssertEqual("hello%2C%20world!".percentDecoded, "hello, world!")
-    XCTAssertEqual("%2Fusr%2Fbin%2Fswift".percentDecoded, "/usr/bin/swift")
-    XCTAssertEqual("%F0%9F%98%8E".percentDecoded, "😎")
-
+  func testPercentDecoded_noFormDecoding() {
     // Check that we only do percent-decoding, not form-decoding.
-    XCTAssertEqual("king+of+the+%F0%9F%A6%86s".percentDecoded, "king+of+the+🦆s")
+    XCTAssertEqual("king+of+the+%F0%9F%A6%86s".percentDecoded(), "king+of+the+🦆s")
   }
 
-  func testURLFormDecoded() {
-    let form = "favourite+pet=%F0%9F%A6%86%2C+of+course&favourite+foods=%F0%9F%8D%8E+%26+%F0%9F%8D%A6"
-    let decoded = form.split(separator: "&").map { joined_kvp in joined_kvp.split(separator: "=") }
-      .map { kvp in (kvp[0].urlFormDecoded, kvp[1].urlFormDecoded) }
-    XCTAssertEqual(decoded.count, 2)
-    XCTAssertTrue(decoded[0] == ("favourite pet", "🦆, of course"))
-    XCTAssertTrue(decoded[1] == ("favourite foods", "🍎 & 🍦"))
-  }
+  func testLazilyPercentDecoded_collectionConformance() {
 
-  func testLazilyPercentDecoded() {
-
-    func _testLazilyDecoded<EncodeSet: PercentEncodeSetProtocol>(
-      _ encoded: String, from decodeSet: KeyPath<PercentDecodeSet, EncodeSet.Type>, to decoded: String
+    func _testLazilyDecoded<Substitutions: SubstitutionMap>(
+      _ encoded: String, substitutions: Substitutions._Member, to decoded: String
     ) {
-      let lazilyDecoded = encoded.utf8.lazy.percentDecodedUTF8(from: decodeSet)
+      let lazilyDecoded = encoded.utf8.lazy.percentDecoded(substitutions: substitutions)
       // Check the contents and Collection conformance.
       XCTAssertEqualElements(lazilyDecoded, decoded.utf8)
       CollectionChecker.check(lazilyDecoded)
@@ -185,18 +268,18 @@ extension PercentEncodingTests {
       CollectionChecker.check(lazilyDecodedReversed)
     }
 
-    _testLazilyDecoded("hello%2C%20world!", from: \.percentEncodedOnly, to: "hello, world!")
-    _testLazilyDecoded("%2Fusr%2Fbin%2Fswift", from: \.percentEncodedOnly, to: "/usr/bin/swift")
-    _testLazilyDecoded("%F0%9F%98%8E", from: \.percentEncodedOnly, to: "😎")
+    _testLazilyDecoded("hello%2C%20world!", substitutions: .none, to: "hello, world!")
+    _testLazilyDecoded("%2Fusr%2Fbin%2Fswift", substitutions: .none, to: "/usr/bin/swift")
+    _testLazilyDecoded("%F0%9F%98%8E", substitutions: .none, to: "😎")
 
-    _testLazilyDecoded("%5", from: \.percentEncodedOnly, to: "%5")
-    _testLazilyDecoded("%0%61", from: \.percentEncodedOnly, to: "%0a")
-    _testLazilyDecoded("%0%6172", from: \.percentEncodedOnly, to: "%0a72")
-    _testLazilyDecoded("%0z%61", from: \.percentEncodedOnly, to: "%0za")
-    _testLazilyDecoded("%0z%|1", from: \.percentEncodedOnly, to: "%0z%|1")
-    _testLazilyDecoded("%%%%%%", from: \.percentEncodedOnly, to: "%%%%%%")
+    _testLazilyDecoded("%5", substitutions: .none, to: "%5")
+    _testLazilyDecoded("%0%61", substitutions: .none, to: "%0a")
+    _testLazilyDecoded("%0%6172", substitutions: .none, to: "%0a72")
+    _testLazilyDecoded("%0z%61", substitutions: .none, to: "%0za")
+    _testLazilyDecoded("%0z%|1", substitutions: .none, to: "%0z%|1")
+    _testLazilyDecoded("%%%%%%", substitutions: .none, to: "%%%%%%")
 
-    _testLazilyDecoded("%F0%9F%A6%86%2C+of+course", from: \.form, to: "🦆, of course")
-    _testLazilyDecoded("%F0%9F%8D%8E+%26+%F0%9F%8D%A6", from: \.form, to: "🍎 & 🍦")
+    _testLazilyDecoded("%F0%9F%A6%86%2C+of+course", substitutions: .formEncoding, to: "🦆, of course")
+    _testLazilyDecoded("%F0%9F%8D%8E+%26+%F0%9F%8D%A6", substitutions: .formEncoding, to: "🍎 & 🍦")
   }
 }

@@ -423,7 +423,7 @@ extension ParsedURLString.ProcessedMapping {
         } else {
           var wasEncoded = false
           writer.writeUsernameContents { writer in
-            wasEncoded = inputString[username].lazy.percentEncoded(as: \.userInfo).write(to: writer)
+            wasEncoded = inputString[username].lazy.percentEncoded(using: .userInfoSet).write(to: writer)
           }
           writer.writeHint(.username, maySkipPercentEncoding: !wasEncoded)
         }
@@ -435,7 +435,7 @@ extension ParsedURLString.ProcessedMapping {
         } else {
           var wasEncoded = false
           writer.writePasswordContents { writer in
-            wasEncoded = inputString[password].lazy.percentEncoded(as: \.userInfo).write(to: writer)
+            wasEncoded = inputString[password].lazy.percentEncoded(using: .userInfoSet).write(to: writer)
           }
           writer.writeHint(.password, maySkipPercentEncoding: !wasEncoded)
         }
@@ -472,7 +472,7 @@ extension ParsedURLString.ProcessedMapping {
       } else {
         var wasEncoded = false
         writer.writePath(firstComponentLength: 0) { writer in
-          wasEncoded = inputString[path].lazy.percentEncoded(as: \.c0Control).write(to: writer)
+          wasEncoded = inputString[path].lazy.percentEncoded(using: .c0ControlSet).write(to: writer)
         }
         writer.writeHint(.path, maySkipPercentEncoding: !wasEncoded)
       }
@@ -534,9 +534,9 @@ extension ParsedURLString.ProcessedMapping {
         var wasEncoded = false
         writer.writeQueryContents { (writer: (UnsafeBufferPointer<UInt8>) -> Void) in
           if schemeKind.isSpecial {
-            wasEncoded = inputString[query].lazy.percentEncoded(as: \.query_special).write(to: writer)
+            wasEncoded = inputString[query].lazy.percentEncoded(using: .specialQuerySet).write(to: writer)
           } else {
-            wasEncoded = inputString[query].lazy.percentEncoded(as: \.query_notSpecial).write(to: writer)
+            wasEncoded = inputString[query].lazy.percentEncoded(using: .querySet).write(to: writer)
           }
         }
         writer.writeHint(.query, maySkipPercentEncoding: !wasEncoded)
@@ -557,7 +557,7 @@ extension ParsedURLString.ProcessedMapping {
       } else {
         var wasEncoded = false
         writer.writeFragmentContents { writer in
-          wasEncoded = inputString[fragment].lazy.percentEncoded(as: \.fragment).write(to: writer)
+          wasEncoded = inputString[fragment].lazy.percentEncoded(using: .fragmentSet).write(to: writer)
         }
         writer.writeHint(.fragment, maySkipPercentEncoding: !wasEncoded)
       }

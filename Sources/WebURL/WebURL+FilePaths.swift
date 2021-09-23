@@ -377,7 +377,7 @@ internal func _urlFromFilePath_posix<Bytes>(
     return .failure(.relativePath)
   }
 
-  var escapedPath = ContiguousArray(path.lazy.percentEncoded(as: \.posixPath))
+  var escapedPath = ContiguousArray(path.lazy.percentEncoded(using: POSIXPathEncodeSet()))
 
   // Collapse multiple path slashes into a single slash, except if a leading double slash ("//usr/bin").
   // POSIX says that leading double slashes are implementation-defined.
@@ -476,7 +476,7 @@ internal func _urlFromFilePath_windows_DOS<Bytes>(
   }
 
   var escapedPath = ContiguousArray(driveLetter)
-  escapedPath.append(contentsOf: path[driveLetter.endIndex...].lazy.percentEncoded(as: \.windowsPath))
+  escapedPath.append(contentsOf: path[driveLetter.endIndex...].lazy.percentEncoded(using: WindowsPathEncodeSet()))
 
   escapedPath.collapseWindowsPathSeparators(from: 2)
   if trimComponents {
@@ -538,7 +538,7 @@ internal func _urlFromFilePath_windows_UNC<Bytes>(
     return .failure(.upwardsTraversal)
   }
 
-  var escapedShareAndPath = ContiguousArray(rawShareAndPath.lazy.percentEncoded(as: \.windowsPath))
+  var escapedShareAndPath = ContiguousArray(rawShareAndPath.lazy.percentEncoded(using: WindowsPathEncodeSet()))
 
   escapedShareAndPath.collapseWindowsPathSeparators(from: escapedShareAndPath.startIndex)
   if trimComponents {
@@ -739,18 +739,18 @@ internal func _filePathFromURL_posix(
   // Do not decode characters which are interpreted by the filesystem and would meaningfully alter the path.
   // For POSIX, that means 0x00 and 0x2F. Pct-encoded periods are already interpreted by the URL parser.
 
-  for i in url.utf8.path.lazy.percentDecodedUTF8.indices {
-    if i.isDecoded {
-      if i.decodedValue == ASCII.null.codePoint {
+  for i in url.utf8.path.lazy.percentDecoded().indices {
+    if i.isDecodedOrUnsubstituted {
+      if i.byte == ASCII.null.codePoint {
         return .failure(.encodedNullBytes)
       }
-      if i.decodedValue == ASCII.forwardSlash.codePoint {
+      if i.byte == ASCII.forwardSlash.codePoint {
         return .failure(.encodedPathSeparator)
       }
     } else {
-      assert(i.decodedValue != ASCII.null.codePoint, "Non-percent-encoded NULL byte in URL path")
+      assert(i.byte != ASCII.null.codePoint, "Non-percent-encoded NULL byte in URL path")
     }
-    filePath.append(i.decodedValue)
+    filePath.append(i.byte)
   }
 
   // Normalization.
@@ -816,16 +816,16 @@ internal func _filePathFromURL_windows(
   var filePath = ContiguousArray<UInt8>()
   filePath.reserveCapacity(url.utf8.path.count)
 
-  for i in urlPath.lazy.percentDecodedUTF8.indices {
-    if i.isDecoded {
-      if i.decodedValue == ASCII.null.codePoint {
+  for i in urlPath.lazy.percentDecoded().indices {
+    if i.isDecodedOrUnsubstituted {
+      if i.byte == ASCII.null.codePoint {
         return .failure(.encodedNullBytes)
       }
-      if isWindowsFilePathSeparator(i.decodedValue) {
+      if isWindowsFilePathSeparator(i.byte) {
         return .failure(.encodedPathSeparator)
       }
     }
-    filePath.append(i.decodedValue)
+    filePath.append(i.byte)
   }
 
   assert(!filePath.isEmpty)
@@ -907,66 +907,65 @@ internal var _emptyFileURL: WebURL {
   )
 }
 
-extension PercentEncodeSet {
+/// A percent-encode set for Windows DOS-style path components, as well as UNC share names and UNC path components.
+///
+/// This set encodes ASCII codepoints which may occur in the Windows path components, but have special meaning in a URL string.
+/// The set does not include the 'path' encode-set, as some codepoints must stay in their original form for trimming (e.g. spaces, periods).
+///
+/// Note that the colon character (`:`) is also included, so this encode-set is not appropriate for Windows drive letter components.
+/// Drive letters should not be percent-encoded.
+///
+@usableFromInline
+internal struct WindowsPathEncodeSet: PercentEncodeSet {
 
-  /// A percent-encode set for Windows DOS-style path components, as well as UNC share names and UNC path components.
-  ///
-  /// This set encodes ASCII codepoints which may occur in the Windows path components, but have special meaning in a URL string.
-  /// The set does not include the 'path' encode-set, as some codepoints must stay in their original form for trimming (e.g. spaces, periods).
-  ///
-  /// Note that the colon character (`:`) is also included, so this encode-set is not appropriate for Windows drive letter components.
-  /// Drive letters should not be percent-encoded.
-  ///
-  @usableFromInline
-  internal struct WindowsPathPercentEncoder: PercentEncodeSetProtocol {
-    // swift-format-ignore
-    @inlinable
-    internal static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
-      // Encode:
-      // - The `%` sign itself. Filesystem paths do not contain percent-encoding, and any character seqeuences which
-      //   look like percent-encoding are just coincidences.
-      codePoint == ASCII.percentSign.codePoint
-      // - Colons (`:`). These are interpreted as Windows drive letter delimiters; but *actual* drive letters
-      //   are detected by the file-path-to-URL function and not encoded. Any other components that look
-      //   like drive letters are coincidences.
-      || codePoint == ASCII.colon.codePoint
-      // - Vertical bars (`|`). These are sometimes interpreted as Windows drive delimiters in URL paths
-      //   and relative references, but not by Windows in filesystem paths.
-      || codePoint == ASCII.verticalBar.codePoint
-    }
+  @inlinable
+  internal init() {}
+
+  // swift-format-ignore
+  @inlinable
+  internal func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    // Encode:
+    // - The `%` sign itself. Filesystem paths do not contain percent-encoding, and any character seqeuences which
+    //   look like percent-encoding are just coincidences.
+    codePoint == ASCII.percentSign.codePoint
+    // - Colons (`:`). These are interpreted as Windows drive letter delimiters; but *actual* drive letters
+    //   are detected by the file-path-to-URL function and not encoded. Any other components that look
+    //   like drive letters are coincidences.
+    || codePoint == ASCII.colon.codePoint
+    // - Vertical bars (`|`). These are sometimes interpreted as Windows drive delimiters in URL paths
+    //   and relative references, but not by Windows in filesystem paths.
+    || codePoint == ASCII.verticalBar.codePoint
   }
+}
 
-  /// A percent-encode set for POSIX-style path components.
-  ///
-  /// This set encodes ASCII codepoints which may occur in the path components of a POSIX-style path, but have special meaning in a URL string.
-  /// The set includes the codepoints of the 'path' encode-set, as the components of POSIX paths are not trimmed.
-  ///
-  @usableFromInline
-  internal struct POSIXPathPercentEncoder: PercentEncodeSetProtocol {
-    // swift-format-ignore
-    @inlinable
-    internal static func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
-      // Encode:
-      // - The '%' sign itself. Filesystem paths do not contain percent-encoding, and any character seqeuences which
-      //   look like percent-encoding are just coincidences.
-      codePoint == ASCII.percentSign.codePoint
-      // - Backslashes (`\`). They are allowed in POSIX paths and are not separators.
-      || codePoint == ASCII.backslash.codePoint
-      // - Colons (`:`) and vertical bars (`|`). These are sometimes interpreted as Windows drive letter delimiters,
-      //   which POSIX paths obviously do not have.
-      || codePoint == ASCII.colon.codePoint || codePoint == ASCII.verticalBar.codePoint
-      // - The entire 'path' percent-encode set. The path setter will check this and do it as well, but we can
-      //   make things more efficient by correctly encoding the path in the first place.
-      //   Since POSIX path components are not trimmed, we don't need to avoid encoding things like spaces or periods.
-      || PercentEncodeSet.Path.shouldPercentEncode(ascii: codePoint)
-    }
+/// A percent-encode set for POSIX-style path components.
+///
+/// This set encodes ASCII codepoints which may occur in the path components of a POSIX-style path, but have special meaning in a URL string.
+/// The set includes the codepoints of the 'path' encode-set, as the components of POSIX paths are not trimmed.
+///
+@usableFromInline
+internal struct POSIXPathEncodeSet: PercentEncodeSet {
+
+  @inlinable
+  internal init() {}
+
+  // swift-format-ignore
+  @inlinable
+  internal func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    // Encode:
+    // - The '%' sign itself. Filesystem paths do not contain percent-encoding, and any character seqeuences which
+    //   look like percent-encoding are just coincidences.
+    codePoint == ASCII.percentSign.codePoint
+    // - Backslashes (`\`). They are allowed in POSIX paths and are not separators.
+    || codePoint == ASCII.backslash.codePoint
+    // - Colons (`:`) and vertical bars (`|`). These are sometimes interpreted as Windows drive letter delimiters,
+    //   which POSIX paths obviously do not have.
+    || codePoint == ASCII.colon.codePoint || codePoint == ASCII.verticalBar.codePoint
+    // - The entire 'path' percent-encode set. The path setter will check this and do it as well, but we can
+    //   make things more efficient by correctly encoding the path in the first place.
+    //   Since POSIX path components are not trimmed, we don't need to avoid encoding things like spaces or periods.
+    || URLEncodeSet.Path().shouldPercentEncode(ascii: codePoint)
   }
-
-  @usableFromInline
-  internal var windowsPath: WindowsPathPercentEncoder.Type { WindowsPathPercentEncoder.self }
-
-  @usableFromInline
-  internal var posixPath: POSIXPathPercentEncoder.Type { POSIXPathPercentEncoder.self }
 }
 
 /// Whether the given code-unit, which is assumed to be in a Windows 'filesystem-safe' encoding, is considered a path separator on Windows.

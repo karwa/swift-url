@@ -111,7 +111,7 @@ extension URLStorage {
       return .success
     }
 
-    let (_newValueLength, needsEncoding) = newValue.lazy.percentEncoded(as: \.userInfo).unsafeEncodedLength
+    let (_newValueLength, needsEncoding) = newValue.lazy.percentEncoded(using: .userInfoSet).unsafeEncodedLength
     guard let newValueLength = URLStorage.SizeType(exactly: _newValueLength) else {
       return .failure(.exceedsMaximumSize)
     }
@@ -126,7 +126,7 @@ extension URLStorage {
     ) { dest in
       var bytesWritten: Int
       if needsEncoding {
-        bytesWritten = dest.fastInitialize(from: newValue.lazy.percentEncoded(as: \.userInfo))
+        bytesWritten = dest.fastInitialize(from: newValue.lazy.percentEncoded(using: .userInfoSet))
       } else {
         bytesWritten = dest.fastInitialize(from: newValue)
       }
@@ -168,7 +168,7 @@ extension URLStorage {
       return .success
     }
 
-    let (_newValueLength, needsEncoding) = newValue.lazy.percentEncoded(as: \.userInfo).unsafeEncodedLength
+    let (_newValueLength, needsEncoding) = newValue.lazy.percentEncoded(using: .userInfoSet).unsafeEncodedLength
     guard let newValueLength = URLStorage.SizeType(exactly: _newValueLength) else {
       return .failure(.exceedsMaximumSize)
     }
@@ -186,7 +186,7 @@ extension URLStorage {
       if needsEncoding {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .fastInitialize(from: newValue.lazy.percentEncoded(as: \.userInfo))
+          .fastInitialize(from: newValue.lazy.percentEncoded(using: .userInfoSet))
       } else {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
@@ -367,7 +367,7 @@ extension URLStorage {
         to: stringPointer,
         prefix: .colon,
         lengthKey: \.portLength,
-        encodeSet: \.alreadyEncoded
+        encodeSet: Optional<_StaticMember<URLEncodeSet.SpecialQuery>>.none
       )
     }
   }
@@ -471,7 +471,7 @@ extension URLStorage {
         to: newValue,
         prefix: .questionMark,
         lengthKey: \.queryLength,
-        encodeSet: \.query_special,
+        encodeSet: .specialQuerySet,
         adjustStructure: { newStructure in
           // Empty and nil queries are considered form-encoded (in that they do not need to be re-encoded).
           newStructure.queryIsKnownFormEncoded = (newStructure.queryLength == 0 || newStructure.queryLength == 1)
@@ -483,7 +483,7 @@ extension URLStorage {
         to: newValue,
         prefix: .questionMark,
         lengthKey: \.queryLength,
-        encodeSet: \.query_notSpecial,
+        encodeSet: .querySet,
         adjustStructure: { newStructure in
           newStructure.queryIsKnownFormEncoded = (newStructure.queryLength == 0 || newStructure.queryLength == 1)
         }
@@ -503,7 +503,7 @@ extension URLStorage {
       to: newValue,
       prefix: .questionMark,
       lengthKey: \.queryLength,
-      encodeSet: \.alreadyEncoded,
+      encodeSet: Optional<_StaticMember<URLEncodeSet.SpecialQuery>>.none,
       adjustStructure: { newStructure in
         newStructure.queryIsKnownFormEncoded = true
       }
@@ -524,7 +524,7 @@ extension URLStorage {
       to: newValue,
       prefix: .numberSign,
       lengthKey: \.fragmentLength,
-      encodeSet: \.fragment
+      encodeSet: .fragmentSet
     )
   }
 }
@@ -858,7 +858,7 @@ extension URLStorage {
   ///   - newValue:  The new value of the component.
   ///   - prefix:    A single ASCII character to write before the new value. If `newValue` is not `nil`, this is _always_ written.
   ///   - lengthKey: The `URLStructure` field to update with the component's new length. Said length will include the single-character prefix.
-  ///   - encodeSet: The `PercentEncodeSet` which should be used to encode the new value.
+  ///   - encodeSet: The `URLEncodeSet` which should be used to encode the new value.
   ///   - adjustStructure: A closure which allows setting additional properties of the structure to be tweaked before writing.
   ///                      This closure is invoked after the structure's `lengthKey` has been updated with the component's new length.
   ///
@@ -872,10 +872,10 @@ extension URLStorage {
     to newValue: UTF8Bytes?,
     prefix: ASCII,
     lengthKey: WritableKeyPath<URLStructure<URLStorage.SizeType>, URLStorage.SizeType>,
-    encodeSet: KeyPath<PercentEncodeSet, EncodeSet.Type>,
+    encodeSet: EncodeSet._Member?,
     adjustStructure: (inout URLStructure<URLStorage.SizeType>) -> Void = { _ in }
   ) -> Result<Void, URLSetterError>
-  where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, EncodeSet: PercentEncodeSetProtocol {
+  where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, EncodeSet: PercentEncodeSet {
 
     let oldStructure = structure
 
@@ -890,7 +890,10 @@ extension URLStorage {
       return .success
     }
 
-    let (_newValueLength, needsEncoding) = newBytes.lazy.percentEncoded(as: encodeSet).unsafeEncodedLength
+    let (_newValueLength, needsEncoding) =
+      encodeSet.map {
+        newBytes.lazy.percentEncoded(using: $0).unsafeEncodedLength
+      } ?? (UInt(bitPattern: newBytes.count), false)
     guard let newValueLength = URLStorage.SizeType(exactly: _newValueLength) else {
       return .failure(.exceedsMaximumSize)
     }
@@ -905,10 +908,10 @@ extension URLStorage {
     return replaceSubrange(oldRange, withUninitializedSpace: bytesToWrite, newStructure: newStructure) { dest in
       dest[0] = prefix.codePoint
       var bytesWritten = 1
-      if needsEncoding {
+      if let encodeSet = encodeSet, needsEncoding {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
-          .fastInitialize(from: newBytes.lazy.percentEncoded(as: encodeSet))
+          .fastInitialize(from: newBytes.lazy.percentEncoded(using: encodeSet))
       } else {
         bytesWritten +=
           UnsafeMutableBufferPointer(rebasing: dest.dropFirst())
