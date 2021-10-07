@@ -15,7 +15,7 @@
 import Benchmark
 import WebURL
 
-/// Benchmarks the `StringProtocol.urlEncoded` and `StringProtocol.urlDecoded` properties.
+/// Benchmarks percent encoding (using the `urlComponentSet`) and decoding without substitutions.
 ///
 let urlEncoded_Decoded = BenchmarkSuite(name: "URLEncoded") { suite in
 
@@ -35,7 +35,7 @@ let urlEncoded_Decoded = BenchmarkSuite(name: "URLEncoded") { suite in
   ]
   suite.benchmark("String.urlEncoded") {
     for string in urlEncoded_strings {
-      blackHole(string.urlComponentEncoded)
+      blackHole(string.percentEncoded(using: .urlComponentSet))
     }
   }
 
@@ -46,7 +46,7 @@ let urlEncoded_Decoded = BenchmarkSuite(name: "URLEncoded") { suite in
   ]
   suite.benchmark("String.urlDecoded") {
     for string in urlDecoded_strings {
-      blackHole(string.percentDecoded)
+      blackHole(string.percentDecoded())
     }
   }
 }
