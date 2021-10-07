@@ -12,7 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// These APIs will be deprecated at the next opportunity.
+// These APIs will be removed at the next opportunity.
+
+
+// --------------------------------------------
+// MARK: - IP Addresses (deprecated from: 0.2.0)
+// --------------------------------------------
+
 
 extension IPv4Address {
 
@@ -113,6 +119,12 @@ extension IPv4Address {
   }
 }
 
+
+// --------------------------------------------
+// MARK: - WebURL type (deprecated from: 0.2.0)
+// --------------------------------------------
+
+
 extension WebURL {
 
   /// Whether this URL cannot be a base.
@@ -136,5 +148,347 @@ extension WebURL {
   @available(*, deprecated, message: "Use `!isHierarchical` instead")
   public var cannotBeABase: Bool {
     !storage.isHierarchical
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Percent-encoding (deprecated from: 0.2.0)
+// --------------------------------------------
+
+
+/// A set of ASCII code-points which should be percent-encoded.
+///
+/// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
+/// and is most commonly used to escape special characters in URLs. Bytes within the ASCII range are encoded according
+/// to the encode-set's `shouldPercentEncode(ascii:)` method, and bytes which are not ASCII code-points are always
+/// percent-encoded.
+///
+@available(*, deprecated, renamed: "PercentEncodeSet")
+public typealias PercentEncodeSetProtocol = PercentEncodeSet
+
+/// A `Collection` which percent-encodes elements from its `Source` on-demand using a given `EncodeSet`.
+///
+/// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
+/// and is most commonly used to escape special characters in URLs. Bytes which are not ASCII code-points are always percent-encoded,
+/// and bytes within the ASCII range are encoded according to the encode-set's `shouldPercentEncode(ascii:)` method.
+///
+@available(*, deprecated, renamed: "LazilyPercentEncoded")
+public typealias LazilyPercentEncodedUTF8<Source, EncodeSet> = LazilyPercentEncoded<Source, EncodeSet>
+where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet
+
+/// A namespace for percent-encode sets defined by the URL Standard.
+///
+@available(*, deprecated)
+public struct PercentEncodeSet_Namespace {
+  internal init() {}
+
+  /// The [C0 control](https://url.spec.whatwg.org/#c0-control-percent-encode-set) percent-encode set.
+  ///
+  @available(*, deprecated, renamed: "PercentEncodeSet.c0ControlSet")
+  public var c0Control: URLEncodeSet.C0Control { .init() }
+
+  /// The [fragment](https://url.spec.whatwg.org/#fragment-percent-encode-set) percent-encode set.
+  ///
+  @available(*, deprecated, renamed: "PercentEncodeSet.fragmentSet")
+  public var fragment: URLEncodeSet.Fragment { .init() }
+
+  /// The [query](https://url.spec.whatwg.org/#query-percent-encode-set) percent-encode set.
+  ///
+  @available(*, deprecated, renamed: "PercentEncodeSet.querySet")
+  public var query_notSpecial: URLEncodeSet.Query { .init() }
+
+  /// The [special query](https://url.spec.whatwg.org/#special-query-percent-encode-set) percent-encode set.
+  ///
+  @available(*, deprecated, renamed: "PercentEncodeSet.specialQuerySet")
+  public var query_special: URLEncodeSet.SpecialQuery { .init() }
+
+  /// The [path](https://url.spec.whatwg.org/#path-percent-encode-set) percent-encode set.
+  ///
+  @available(*, deprecated, renamed: "PercentEncodeSet.pathSet")
+  public var path: URLEncodeSet.Path { .init() }
+
+  /// The [userinfo](https://url.spec.whatwg.org/#userinfo-percent-encode-set) percent-encode set.
+  ///
+  @available(*, deprecated, renamed: "PercentEncodeSet.userInfoSet")
+  public var userInfo: URLEncodeSet.UserInfo { .init() }
+
+  /// The [component](https://url.spec.whatwg.org/#component-percent-encode-set) percent-encode set.
+  ///
+  @available(*, deprecated, renamed: "PercentEncodeSet.urlComponentSet")
+  public var component: URLEncodeSet.Component { .init() }
+
+  /// The [application/x-www-form-urlencoded](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set)
+  /// percent-encode set.
+  ///
+  @available(*, deprecated, renamed: "PercentEncodeSet.formEncoding")
+  public var form: URLEncodeSet.FormEncoding { .init() }
+}
+
+extension LazyCollectionProtocol where Element == UInt8 {
+
+  /// Returns a `Collection` whose elements are computed lazily by percent-encoding this collection's elements.
+  ///
+  /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
+  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
+  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  ///
+  /// ```swift
+  /// // Encode arbitrary data as an ASCII string.
+  /// let image: Data = ...
+  /// image.lazy.percentEncoded(using: .urlComponentSet) // ASCII bytes, decoding to "%BAt_%E0%11%22%EB%10%2C%7F..."
+  ///
+  /// // Encode-sets determine which characters are encoded, and some perform substitutions.
+  /// let bytes = "hello, world!".utf8
+  /// bytes.lazy.percentEncoded(using: .urlComponentSet)
+  ///   .elementsEqual("hello%2C%20world!".utf8) // ✅
+  /// bytes.lazy.percentEncoded(using: .formEncoding)
+  ///   .elementsEqual("hello%2C+world%21".utf8) // ✅
+  /// ```
+  ///
+  @available(*, deprecated, message: "Use percentEncoded(using:) and static-member syntax rather than a KeyPath")
+  public func percentEncoded<EncodeSet: PercentEncodeSet>(
+    as encodeSetKP: KeyPath<PercentEncodeSet_Namespace, EncodeSet>
+  ) -> LazilyPercentEncoded<Elements, EncodeSet> {
+    self.percentEncoded(using: PercentEncodeSet_Namespace()[keyPath: encodeSetKP])
+  }
+}
+
+extension Collection where Element == UInt8 {
+
+  /// Returns an ASCII string formed by percent-encoding this collection's elements.
+  ///
+  /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
+  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
+  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  ///
+  /// ```swift
+  /// // Encode arbitrary data as an ASCII string.
+  /// let image: Data = ...
+  /// image.percentEncodedString(using: .urlComponentSet) // "%BAt_%E0%11%22%EB%10%2C%7F..."
+  ///
+  /// // Encode-sets determine which characters are encoded, and some perform substitutions.
+  /// let bytes = "hello, world!".utf8
+  /// bytes.percentEncodedString(using: .urlComponentSet) == "hello%2C%20world!" // ✅
+  /// bytes.percentEncodedString(using: .formEncoding) == "hello%2C+world%21" // ✅
+  /// ```
+  ///
+  @available(*, deprecated, message: "Use percentEncodedString(using:) and static-member syntax rather than a KeyPath")
+  public func percentEncodedString<EncodeSet: PercentEncodeSet>(
+    as encodeSetKP: KeyPath<PercentEncodeSet_Namespace, EncodeSet>
+  ) -> String {
+    self.percentEncodedString(using: PercentEncodeSet_Namespace()[keyPath: encodeSetKP])
+  }
+
+  /// Returns an ASCII string formed by percent-encoding this collection's elements with `.urlComponentSet`.
+  ///
+  @available(*, deprecated, message: "Use percentEncodedString(using: .urlComponentSet)")
+  public var urlComponentEncodedString: String {
+    percentEncodedString(using: .urlComponentSet)
+  }
+
+  /// Returns an ASCII string formed by percent-encoding this collection's elements with `.formEncoding`.
+  ///
+  @available(*, deprecated, message: "Use percentEncodedString(using: .formEncoding)")
+  public var urlFormEncodedString: String {
+    percentEncodedString(using: .formEncoding)
+  }
+}
+
+extension StringProtocol {
+
+  /// Returns an ASCII string formed by percent-encoding this string's UTF-8 representation.
+  ///
+  /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
+  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
+  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  ///
+  /// ```swift
+  /// // Percent-encoding can be used to escapes special characters, e.g. spaces.
+  /// "hello, world!".percentEncoded(using: .userInfoSet) // "hello,%20world!"
+  ///
+  /// // Encode-sets determine which characters are encoded, and some perform substitutions.
+  /// "/usr/bin/swift".percentEncoded(using: .urlComponentSet) // "%2Fusr%2Fbin%2Fswift"
+  /// "king of the 🦆s".percentEncoded(using: .formEncoding) // "king+of+the+%F0%9F%A6%86s"
+  /// ```
+  ///
+  @available(*, deprecated, message: "Use percentEncoded(using:) and static-member syntax rather than a KeyPath")
+  public func percentEncoded<EncodeSet: PercentEncodeSet>(
+    as encodeSetKP: KeyPath<PercentEncodeSet_Namespace, EncodeSet>
+  ) -> String {
+    self.percentEncoded(using: PercentEncodeSet_Namespace()[keyPath: encodeSetKP])
+  }
+
+  /// Returns an ASCII string formed by percent-encoding this string's UTF-8 representation with `.urlComponentSet`.
+  ///
+  @available(*, deprecated, message: "Use percentEncoded(using: .urlComponentSet)")
+  public var urlComponentEncoded: String {
+    percentEncoded(using: .urlComponentSet)
+  }
+
+  /// Returns an ASCII string formed by percent-encoding this string's UTF-8 representation with `.formEncoding`.
+  ///
+  @available(*, deprecated, message: "Use percentEncoded(using: .formEncoding)")
+  public var urlFormEncoded: String {
+    percentEncoded(using: .formEncoding)
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Percent-decoding (deprecated from: 0.2.0)
+// --------------------------------------------
+
+
+/// A `Collection` which percent-decodes elements from its `Source` on-demand.
+///
+/// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB),
+/// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding;
+/// use ``LazilyPercentDecodedWithSubstitutions``, providing the correct ``SubstitutionMap``,
+/// to accurately decode content encoded with substitutions.
+///
+@available(*, deprecated, renamed: "LazilyPercentDecoded")
+public typealias Lazily​Percent​Decoded​UTF8Without​Substitutions<Source> = LazilyPercentDecoded<Source>
+where Source: Collection, Source.Element == UInt8
+
+/// A `Collection` which percent-decodes elements from its `Source` on-demand, and reverses substitutions made by a ``SubstitutionMap``.
+///
+/// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB),
+/// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
+/// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+///
+@available(*, deprecated, renamed: "LazilyPercentDecodedWithSubstitutions")
+public typealias Lazily​Percent​Decoded​UTF8<Source, Subs> = LazilyPercentDecodedWithSubstitutions<Source, Subs>
+where Source: Collection, Source.Element == UInt8, Subs: SubstitutionMap
+
+/// A namespace for substitution maps used by percent-encode sets defined by the URL Standard.
+///
+public struct PercentDecodeSet_Namespace {
+  internal init() {}
+
+  /// No substitutions. This is the substitution map used by all encode-sets specified in the URL standard, except form-encoding.
+  ///
+  @available(*, deprecated, renamed: "SubstitutionMap.none")
+  public var percentEncodedOnly: NoSubstitutions { .init() }
+
+  /// Substitutions applicable to the [application/x-www-form-urlencoded][form-encoded] percent-encode set.
+  ///
+  /// [form-encoded]: https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set
+  ///
+  @available(*, deprecated, renamed: "SubstitutionMap.formEncoding")
+  public var form: URLEncodeSet.FormEncoding.Substitutions { .init() }
+}
+
+extension LazyCollectionProtocol where Element == UInt8 {
+
+  // swift-format-ignore
+  /// Returns a `Collection` whose elements are computed lazily by percent-decoding the elements of this collection.
+  ///
+  /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  @available(*, deprecated, message: "Use percentDecoded(substitutions:) and static-member syntax rather than a KeyPath")
+  public func percentDecodedUTF8<Substitutions>(
+    from subsKP: KeyPath<PercentDecodeSet_Namespace, Substitutions>
+  ) -> LazilyPercentDecodedWithSubstitutions<Elements, Substitutions> {
+    self.percentDecoded(substitutions: PercentDecodeSet_Namespace()[keyPath: subsKP])
+  }
+
+  /// Returns a `Collection` whose elements are computed lazily by percent-decoding the elements of this collection.
+  ///
+  /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  @available(*, deprecated, renamed: "percentDecoded()")
+  public var percentDecodedUTF8: LazilyPercentDecoded<Elements> {
+    self.percentDecoded()
+  }
+}
+
+extension Collection where Element == UInt8 {
+
+  // swift-format-ignore
+  /// Returns the percent-decoding of this collection's elements, interpreted as UTF-8 code-units.
+  ///
+  /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  @available(*, deprecated, message: """
+    Use .lazy.percentDecoded(substitutions:) with static-member syntax rather than a KeyPath \
+    to decode the bytes, and String(decoding: _, as: UTF8.self) to construct a String from it.
+    """
+  )
+  public func percentDecodedString<Substitutions: SubstitutionMap>(
+    from subsKP: KeyPath<PercentDecodeSet_Namespace, Substitutions>
+  ) -> String {
+    self.percentDecodedString(substitutions: PercentDecodeSet_Namespace()[keyPath: subsKP])
+  }
+
+  // swift-format-ignore
+  /// Returns the percent-decoding of this collection's elements, interpreted as UTF-8 code-units.
+  ///
+  /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  @available(*, deprecated, message: """
+    Use .lazy.percentDecoded(substitutions: .none) to decode the bytes, \
+    and String(decoding: _, as: UTF8.self) to construct a String from it.
+    """
+  )
+  public var percentDecodedString: String {
+    self.percentDecodedString(substitutions: .none)
+  }
+
+  // swift-format-ignore
+  /// Returns the form-decoding of this collection's elements, interpreted as UTF-8 code-units.
+  ///
+  /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  @available(*, deprecated, message: """
+    Use .lazy.percentDecoded(substitutions: .formEncoding) to decode the bytes, \
+    and String(decoding: _, as: UTF8.self) to construct a String from it.
+    """
+  )
+  public var urlFormDecodedString: String {
+    self.percentDecodedString(substitutions: .formEncoding)
+  }
+}
+
+extension StringProtocol {
+
+  // swift-format-ignore
+  /// Returns the percent-decoding of this string, interpreted as UTF-8 code-units.
+  ///
+  /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  @available(*, deprecated, message: "Use percentDecoded(substitutions:) with static-member syntax rather than a KeyPath")
+  public func percentDecoded<Substitutions: SubstitutionMap>(
+    from subsKP: KeyPath<PercentDecodeSet_Namespace, Substitutions>
+  ) -> String {
+    self.percentDecoded(substitutions: PercentDecodeSet_Namespace()[keyPath: subsKP])
+  }
+
+  // Cannot be back-ported; changed from a computed property to a function.
+  // public var percentDecoded: String {
+  //   self.percentDecoded()
+  // }
+
+  /// Returns the form-decoding of this string, interpreted as UTF-8 code-units.
+  ///
+  /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  @available(*, deprecated, message: "Use percentDecoded(substitutions: .formEncoding)")
+  public var urlFormDecoded: String {
+    self.percentDecoded(substitutions: .formEncoding)
   }
 }
