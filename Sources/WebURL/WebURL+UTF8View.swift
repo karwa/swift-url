@@ -71,6 +71,7 @@ extension URLStorage {
 extension WebURL.UTF8View: RandomAccessCollection {
 
   public typealias Index = Int
+  public typealias Indices = Range<Index>
   public typealias Element = UInt8
 
   @inlinable
@@ -81,6 +82,11 @@ extension WebURL.UTF8View: RandomAccessCollection {
   @inlinable
   public var endIndex: Index {
     storage.codeUnits.count
+  }
+
+  @inlinable
+  public var indices: Range<Index> {
+    Range(uncheckedBounds: (startIndex, endIndex))
   }
 
   @inlinable
