@@ -239,9 +239,9 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
   @usableFromInline
   internal var __schemeKind: Optional<WebURL.SchemeKind>
 
-  /// Whether this URL is hierarchical ("cannot-be-a-base" is false).
+  /// Whether this URL's path is opaque.
   @usableFromInline
-  internal var isHierarchical: Bool
+  internal var hasOpaquePath: Bool
 
   /// A flag for a quirk in the standard, which means that absolute paths in particular URL strings should copy the Windows drive from their base URL.
   @usableFromInline
@@ -265,7 +265,7 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
     queryRange: Range<InputString.Index>?,
     fragmentRange: Range<InputString.Index>?,
     schemeKind: WebURL.SchemeKind?,
-    isHierarchical: Bool,
+    hasOpaquePath: Bool,
     absolutePathsCopyWindowsDriveFromBase: Bool,
     componentsToCopyFromBase: _CopyableURLComponentSet
   ) {
@@ -279,7 +279,7 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
     self.queryRange = queryRange
     self.fragmentRange = fragmentRange
     self.__schemeKind = schemeKind
-    self.isHierarchical = isHierarchical
+    self.hasOpaquePath = hasOpaquePath
     self.absolutePathsCopyWindowsDriveFromBase = absolutePathsCopyWindowsDriveFromBase
     self.componentsToCopyFromBase = componentsToCopyFromBase
   }
@@ -288,7 +288,7 @@ internal struct ScannedRangesAndFlags<InputString> where InputString: Collection
     self.init(
       schemeRange: nil, authorityRange: nil, usernameRange: nil, passwordRange: nil,
       hostnameRange: nil, portRange: nil, pathRange: nil, queryRange: nil, fragmentRange: nil,
-      schemeKind: nil, isHierarchical: true, absolutePathsCopyWindowsDriveFromBase: false,
+      schemeKind: nil, hasOpaquePath: false, absolutePathsCopyWindowsDriveFromBase: false,
       componentsToCopyFromBase: []
     )
   }
@@ -398,7 +398,7 @@ extension ParsedURLString.ProcessedMapping {
     }
 
     // 1: Flags
-    writer.writeFlags(schemeKind: schemeKind, isHierarchical: info.isHierarchical)
+    writer.writeFlags(schemeKind: schemeKind, hasOpaquePath: info.hasOpaquePath)
 
     // 2: Scheme.
     if let inputScheme = info.schemeRange {
@@ -466,7 +466,7 @@ extension ParsedURLString.ProcessedMapping {
 
     // 4: Path.
     switch info.pathRange {
-    case .some(let path) where !info.isHierarchical:
+    case .some(let path) where info.hasOpaquePath:
       if writer.getHint(maySkipPercentEncoding: .path) {
         writer.writePath(firstComponentLength: 0) { writer in writer(inputString[path]) }
       } else {
@@ -523,7 +523,7 @@ extension ParsedURLString.ProcessedMapping {
       writer.writePath(firstComponentLength: 1) { writer in writer(CollectionOfOne(ASCII.forwardSlash.codePoint)) }
 
     default:
-      assert(!info.isHierarchical || hasAuthority, "Hierarchical URLs must have an authority or path")
+      assert(info.hasOpaquePath || hasAuthority, "If URL doesn't have a path, it must have an authority or be opaque")
     }
 
     // 5: Query.
@@ -658,13 +658,13 @@ extension URLScanner {
     }
     var relative = input[...]
 
-    if !base.isHierarchical {
+    if base.hasOpaquePath {
       guard ASCII(flatMap: relative.popFirst()) == .numberSign else {
         callback.validationError(.missingSchemeNonRelativeURL)
         return nil
       }
       scanResults.componentsToCopyFromBase = [.scheme, .path, .query]
-      scanResults.isHierarchical = false
+      scanResults.hasOpaquePath = true
       _ = scanFragment(relative, &scanResults, callback: &callback)
       return scanResults
     }
@@ -706,8 +706,7 @@ extension URLScanner {
     case .other:
       var authority = input
       guard ASCII(flatMap: authority.popFirst()) == .forwardSlash else {
-        mapping.isHierarchical = false
-        return scanAllNonHierarchicalURLComponents(input, scheme: scheme, &mapping, callback: &callback)
+        return scanAllComponentsFromOpaquePath(input, scheme: scheme, &mapping, callback: &callback)
       }
       // [URL Standard: "path or authority" state].
       guard ASCII(flatMap: authority.popFirst()) == .forwardSlash else {
@@ -803,6 +802,7 @@ extension URLScanner {
     assert(mapping.pathRange == nil)
     assert(mapping.queryRange == nil)
     assert(mapping.fragmentRange == nil)
+    assert(!mapping.hasOpaquePath)
 
     // 2. Find the extent of the authority (i.e. the terminator between host and path/query/fragment).
     let authority = input.prefix {
@@ -869,6 +869,7 @@ extension URLScanner {
     assert(mapping.pathRange == nil)
     assert(mapping.queryRange == nil)
     assert(mapping.fragmentRange == nil)
+    assert(!mapping.hasOpaquePath)
 
     // 2. Find the extent of the hostname.
     var separatorIndex: InputSlice.Index?
@@ -919,6 +920,7 @@ extension URLScanner {
     assert(mapping.pathRange == nil)
     assert(mapping.queryRange == nil)
     assert(mapping.fragmentRange == nil)
+    assert(!mapping.hasOpaquePath)
 
     // 2. Find the extent of the port string.
     let portString = input
@@ -947,6 +949,7 @@ extension URLScanner {
     assert(mapping.pathRange == nil)
     assert(mapping.queryRange == nil)
     assert(mapping.fragmentRange == nil)
+    assert(!mapping.hasOpaquePath)
 
     // 2. Return the component to parse based on input.
     guard input.startIndex < input.endIndex else {
@@ -977,6 +980,7 @@ extension URLScanner {
     assert(mapping.pathRange == nil)
     assert(mapping.queryRange == nil)
     assert(mapping.fragmentRange == nil)
+    assert(!mapping.hasOpaquePath)
 
     // 2. Find the extent of the path.
     let startOfNextComponent = input.firstIndex { ASCII($0) == .questionMark || ASCII($0) == .numberSign }
@@ -1212,7 +1216,7 @@ extension URLScanner {
 
 
 // --------------------------------------------
-// MARK: - Non-Hierarchical URLs
+// MARK: - URLs with opaque paths
 // --------------------------------------------
 
 
@@ -1221,12 +1225,13 @@ extension URLScanner {
   /// Scans the given component from `input`, and continues scanning additional components until we can't find any more.
   ///
   @inlinable
-  internal static func scanAllNonHierarchicalURLComponents(
+  internal static func scanAllComponentsFromOpaquePath(
     _ input: InputSlice, scheme: WebURL.SchemeKind,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> Bool {
 
-    var nextLocation = scanNonHierarchicalPath(input, &mapping, callback: &callback)
+    mapping.hasOpaquePath = true
+    var nextLocation = scanOpaquePath(input, &mapping, callback: &callback)
     guard case .scan(_, let firstComponentStartIndex) = nextLocation else {
       return true
     }
@@ -1247,7 +1252,7 @@ extension URLScanner {
   }
 
   @inlinable
-  internal static func scanNonHierarchicalPath(
+  internal static func scanOpaquePath(
     _ input: InputSlice,
     _ mapping: inout ScannedRangesAndFlags<InputString>, callback: inout Callback
   ) -> ScanComponentResult {
@@ -1259,6 +1264,7 @@ extension URLScanner {
     assert(mapping.pathRange == nil)
     assert(mapping.queryRange == nil)
     assert(mapping.fragmentRange == nil)
+    assert(mapping.hasOpaquePath)
 
     // 2. Find the extent of the path.
     let startOfNextComponent = input.firstIndex { byte in
@@ -1417,13 +1423,17 @@ extension ScannedRangesAndFlags where InputString: BidirectionalCollection, Inpu
       if usernameRange != nil || passwordRange != nil || hostnameRange != nil || portRange != nil {
         assert(hostnameRange != nil, "A scanned authority component implies a scanned hostname")
         assert(authorityRange != nil, "A scanned authority component implies a scanned authority")
-        assert(isHierarchical, "A URL with an authority is hierarchical")
+        assert(!hasOpaquePath, "A URL with an authority cannot have an opaque path")
         if passwordRange != nil {
           assert(usernameRange != nil, "Can't have a password without a username (even if empty)")
         }
         if portRange != nil {
           assert(hostnameRange != nil, "Can't have a port without a hostname")
         }
+      }
+      if hasOpaquePath {
+        assert(hostnameRange == nil, "A URL with opaque path cannot have a hostname")
+        assert(authorityRange == nil, "A URL with opaque path cannot have an authority")
       }
       // Ensure components from input string do not overlap with 'componentsToCopyFromBase' (except path).
       if schemeRange != nil {
