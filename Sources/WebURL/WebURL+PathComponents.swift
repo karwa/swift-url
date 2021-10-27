@@ -16,28 +16,27 @@ extension WebURL {
 
   /// A mutable view of this URL's path components.
   ///
-  /// Use of this view requires that the URL is hierarchical (see `WebURL.isHierarchical`).
-  /// Using this view with a non-hierachical URL will trigger a runtime error.
+  /// Accessing this property is invalid and will trigger a runtime error if the URL has an opaque path (see ``WebURL.hasOpaquePath``).
   ///
   public var pathComponents: PathComponents {
     get {
-      precondition(isHierarchical, "Non-hierarchical URLs do not have path components")
+      precondition(!hasOpaquePath, "URLs with opaque paths do not have path components")
       return PathComponents(storage: storage)
     }
     _modify {
-      precondition(isHierarchical, "Non-hierarchical URLs do not have path components")
+      precondition(!hasOpaquePath, "URLs with opaque paths do not have path components")
       var view = PathComponents(storage: storage)
       storage = _tempStorage
       defer { storage = view.storage }
       yield &view
     }
     set {
-      precondition(isHierarchical, "Non-hierarchical URLs do not have path components")
+      precondition(!hasOpaquePath, "URLs with opaque paths do not have path components")
       try! utf8.setPath(newValue.storage.utf8.path)
     }
   }
 
-  /// A view of the components in a hierarchical URL's path.
+  /// A view of the components in a URL's path.
   ///
   /// This collection provides efficient, bidirectional, read-write access to the URL's path components.
   /// Components are percent-decoded when they are returned and percent-encoded when they are replaced.
@@ -81,15 +80,15 @@ extension WebURL {
   /// components described above, URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
   /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
-  /// Accessing this view triggers a runtime error if the URL is non-hierarchical.
-  /// Almost all URLs _are_ hierarchical (in particular, URLs with special schemes, such as http(s) and file, are always hierarchical).
-  /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme. Examples of such URLs are:
+  /// Accessing this view is invalid and triggers a runtime error if the URL has an opaque path.
+  /// Almost all URLs have non-opaque paths (in particular, URLs with special schemes, such as http/s and file, always have non-opaque paths).
+  /// A URL with an opaque path can be recognized by the lack of slashes immediately following its scheme, for example:
   ///
   /// - `mailto:bob@example.com`
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  /// See the `WebURL.isHierarchical` property for more information.
+  /// See the ``WebURL.hasOpaquePath`` property for more information.
   ///
   public struct PathComponents {
 
@@ -684,13 +683,13 @@ extension URLStorage {
 
   /// Removes all components from the path, to the extent that is allowed. URLs which cannot have an empty path will have their path set to "/".
   ///
-  /// If this URL is non-hierarchical, a runtime error is triggered.
+  /// If this URL has an opaque path, a runtime error is triggered.
   ///
   @inlinable
   internal mutating func _clearPath() -> Range<WebURL.PathComponents.Index> {
 
     let oldPathRange = structure.rangeForReplacingCodeUnits(of: .path)
-    precondition(structure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
+    precondition(!structure.hasOpaquePath, "Cannot replace components of an opaque path")
 
     // We can only set an empty path if this is a non-special scheme with authority ("foo://host?query").
     // Everything else (special, path-only) requires at least a lone "/".
@@ -725,7 +724,7 @@ extension URLStorage {
   /// Replaces the path components in the given range with the given new components.
   /// Analogous to `replaceSubrange` from `RangeReplaceableCollection`.
   ///
-  /// If this URL is non-hierarchical, a runtime error is triggered.
+  /// If this URL has an opaque path, a runtime error is triggered.
   ///
   @inlinable
   internal mutating func replacePathComponents<Components>(
@@ -735,7 +734,7 @@ extension URLStorage {
   where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
 
     let oldPathRange = structure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
-    precondition(structure.isHierarchical, "Cannot replace components of a non-hierarchical URL")
+    precondition(!structure.hasOpaquePath, "Cannot replace components of an opaque path")
 
     // If 'firstGivenComponentLength' is nil, we infer that the components are empty (i.e. removal operation).
     let components = components.lazy.filter { utf8 in PathComponentParser.parseDotPathComponent(utf8) == nil }

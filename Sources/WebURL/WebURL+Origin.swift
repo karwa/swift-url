@@ -23,7 +23,7 @@ extension WebURL {
   ///
   /// The only URLs for which meaningful origins may be computed are:
   /// - Those with the http, https, ftp, ws, or wss schemes (i.e. the "special" schemes, excluding file), and
-  /// - Those with the "blob" scheme, which are non-hierarchical, and whose path is another URL.
+  /// - Those with the "blob" scheme, which have an opaque path containing another URL.
   ///
   /// Computing an origin using any other URL results in an _opaque origin_, which is defined to be an "internal value, with no serialization it can be recreated from,
   /// [...] and for which the only meaningful operation is testing for equality." ([HTML Standard][HTML-origin]).
@@ -82,7 +82,7 @@ extension WebURL {
     case .http, .https, .ws, .wss, .ftp:
       let serializedTuple = "\(scheme)://\(hostname!)\(port.map { ":\($0)" } ?? "")"
       return Origin(kind: .tuple(serializedTuple))
-    case .other where !isHierarchical && utf8.scheme.elementsEqual("blob".utf8):
+    case .other where hasOpaquePath && utf8.scheme.elementsEqual("blob".utf8):
       return WebURL(path)?.origin ?? Origin(kind: .opaque)
     default:
       return Origin(kind: .opaque)

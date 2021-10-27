@@ -1430,7 +1430,7 @@ extension URLEncodeSet {
     internal static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool {
       // TODO: [performance]: Benchmark alternative:
       // `codePoint & 0b11100000 == 0 || codePoint == 0x7F`
-      // C0Control percent-encoding is used for non-hierarchical URL paths and opaque host names,
+      // C0Control percent-encoding is used for opaque paths and opaque host names,
       // which currently are not benchmarked.
 
       //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210

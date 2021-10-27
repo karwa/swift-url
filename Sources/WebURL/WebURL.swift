@@ -237,11 +237,12 @@ extension WebURL {
 
   /// The string representation of this URL's path.
   ///
-  /// A URL's path is a list of zero or more ASCII strings, usually identifying a location in hierarchical form.
-  /// Hierarchical paths are those that begin with a "/". Empty paths are assumed to be hierarchical if the URL has a `hostname`.
+  /// A URL’s path is either an opaque ASCII string or a list of zero or more ASCII strings, usually identifying a location.
+  /// Paths which are lists begin with a forward-slash, and their components delimited by forward-slashes ("/").
+  /// Empty paths are lists if the URL has a `hostname`.
   ///
-  /// When setting this property, the given path string will be lexically simplified, and any code-points in the path's components that are not valid
-  /// for use will be percent-encoded. Setting this property may fail if the URL is non-hierarchical (see `WebURL.isHierarchical`).
+  /// When setting this property, the given path will be lexically simplified, and any code-points in the path's components that are not valid
+  /// for use will be percent-encoded. Setting this property will fail if the URL's path is opaque (see ``WebURL.hasOpaquePath``).
   ///
   public var path: String {
     get { String(decoding: utf8.path, as: UTF8.self) }
@@ -274,29 +275,22 @@ extension WebURL {
     set { try? setFragment(newValue) }
   }
 
-  /// Whether this is a hierarchical URL.
+  /// Whether this URL has an opaque path.
   ///
-  /// Hierarchical URLs have an authority component or hierarchical path.
-  /// URLs with special schemes (such as http or file) are always hierarchical.
-  ///
-  /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme, and support only a very
-  /// limited subset of URL operations. Attempting to set any authority components, such as `username`, `password`, `hostname` or `port`,
-  /// will fail, as will attempts to set the `path`. Non-hierarchical URLs do not have path components, so accessing the `pathComponents` property
-  /// will trigger a runtime error. When resolving a relative URL string against a non-hierarchical URL, only replacing the fragment is allowed.
-  ///
-  /// Examples of non-hierarchical URLs are:
+  /// URLs with opaque paths are non-hierarchical: they do not have a hostname, and their paths are opaque strings which cannot be split in to components.
+  /// They can be recognized by the lack of slashes immediately following the scheme delimiter, for example:
   ///
   /// - `mailto:bob@example.com`
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  public var isHierarchical: Bool {
-    storage.isHierarchical
-  }
-
-  @usableFromInline
-  internal var hasOpaquePath: Bool {
-    !storage.isHierarchical
+  /// It is invalid to set any authority components, such as `username`, `password`, `hostname` or `port`, on these URLs.
+  /// Modifying the `path` or accessing the URL's `pathComponents` is also invalid, and they only support limited forms of relative references.
+  ///
+  /// URLs with special schemes (such as http/s and file) never have opaque paths.
+  ///
+  public var hasOpaquePath: Bool {
+    storage.hasOpaquePath
   }
 }
 
@@ -379,7 +373,7 @@ extension WebURL {
   /// Replaces this URL's `path` with the given string.
   ///
   /// When setting this component, the given path string will be lexically simplified, and any code-points in the path's components that are not valid
-  /// for use will be percent-encoded. Setting this component will fail if the URL is non-hierarchical (see `WebURL.isHierarchical` for more information).
+  /// for use will be percent-encoded. Setting this component will fail if the URL's path is opaque (see ``WebURL.hasOpaquePath``).
   ///
   /// - seealso: `path`
   ///

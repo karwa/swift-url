@@ -1245,7 +1245,7 @@ extension URLScanner {
       case .fragment:
         nextLocation = scanFragment(remaining, &mapping, callback: &callback)
       case .pathStart, .path, .host, .port, .authority:
-        fatalError("Tried to scan invalid component for non-hierarchical URL")
+        fatalError("Tried to scan invalid component for URL with opaque path")
       }
     }
     return true

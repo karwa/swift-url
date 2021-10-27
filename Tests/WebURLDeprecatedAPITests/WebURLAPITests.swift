@@ -20,28 +20,28 @@ import XCTest
 final class WebURLAPITests_Deprecated: XCTestCase {
 
   func testCannotBeABase() {
-    // Non-hierarchical URLs.
+    // URLs with opaque paths.
     if let url = WebURL("javascript:alert('hello');") {
-      XCTAssertFalse(url.isHierarchical)
+      XCTAssertTrue(url.hasOpaquePath)
       XCTAssertTrue(url.cannotBeABase)
     } else {
       XCTFail()
     }
     if let url = WebURL("mailto:jim@example.com") {
-      XCTAssertFalse(url.isHierarchical)
+      XCTAssertTrue(url.hasOpaquePath)
       XCTAssertTrue(url.cannotBeABase)
     } else {
       XCTFail()
     }
-    // Hierarchical URLs.
+    // URLs with non-opaque paths.
     if let url = WebURL("http://example.com") {
-      XCTAssertTrue(url.isHierarchical)
+      XCTAssertFalse(url.hasOpaquePath)
       XCTAssertFalse(url.cannotBeABase)
     } else {
       XCTFail()
     }
     if let url = WebURL("foo:/path/only") {
-      XCTAssertTrue(url.isHierarchical)
+      XCTAssertFalse(url.hasOpaquePath)
       XCTAssertFalse(url.cannotBeABase)
     } else {
       XCTFail()
