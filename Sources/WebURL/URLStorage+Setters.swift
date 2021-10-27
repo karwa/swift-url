@@ -219,8 +219,8 @@ extension URLStorage {
   ) -> Result<Void, URLSetterError> where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
     // Check that the operation is semantically valid for the existing structure.
-    guard structure.isHierarchical else {
-      return .failure(.cannotSetHostOnNonHierarchicalURL)
+    guard !structure.hasOpaquePath else {
+      return .failure(.cannotSetHostWithOpaquePath)
     }
 
     guard let newHostnameBytes = newValue, !newHostnameBytes.isEmpty else {
@@ -389,8 +389,8 @@ extension URLStorage {
   ) -> Result<Void, URLSetterError> where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
     // Check that the operation is semantically valid for the existing structure.
-    guard structure.isHierarchical else {
-      return .failure(.cannotSetPathOnNonHierarchicalURL)
+    guard !structure.hasOpaquePath else {
+      return .failure(.cannotModifyOpaquePath)
     }
 
     // The operation is valid. Calculate the new structure and replace the code-units.
@@ -550,13 +550,13 @@ internal enum URLSetterError: Error, Equatable {
   case cannotHaveCredentialsOrPort
   case portValueOutOfBounds
   // hostname.
-  case cannotSetHostOnNonHierarchicalURL
+  case cannotSetHostWithOpaquePath
   case schemeDoesNotSupportNilOrEmptyHostnames
   case cannotSetEmptyHostnameWithCredentialsOrPort
   case invalidHostname
   case cannotRemoveHostnameWithoutPath
   // path.
-  case cannotSetPathOnNonHierarchicalURL
+  case cannotModifyOpaquePath
 }
 
 extension URLSetterError: CustomStringConvertible {
@@ -604,14 +604,12 @@ extension URLSetterError: CustomStringConvertible {
       return #"""
         Attempt to set the port number to an invalid value. Valid port numbers are in the range 0 ..< 65536.
         """#
-    case .cannotSetHostOnNonHierarchicalURL:
+    case .cannotSetHostWithOpaquePath:
       return #"""
-        Attempt to set the hostname on a non-hierarchical URL.
-        Non-hierarchical URLs do not have authority components, and their paths do not begin with '/'.
-        It is invalid to attempt to make a non-hierarchical URL hierarchical by setting these components.
+        URLs with opaque paths do not support authority components; modifying the hostname is an invalid operation.
 
-        Examples of non-hierarchical URLs include:
-          'mailto:somebody@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
+        Examples of URLs with opaque paths include:
+          'mailto:bob@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
         """#
     case .schemeDoesNotSupportNilOrEmptyHostnames:
       return #"""
@@ -641,14 +639,12 @@ extension URLSetterError: CustomStringConvertible {
         Attempt to set the hostname to 'nil' on a URL which also does not have a path.
         This is not allowed, as the result would be an invalid base URL (for example, "foo://examplehost?aQuery" would become "foo:?aQuery").
         """#
-    case .cannotSetPathOnNonHierarchicalURL:
+    case .cannotModifyOpaquePath:
       return #"""
-        Attempt to set the path on a non-hierarchical URL.
-        Non-hierarchical URLs do not have authority components, and their paths do not begin with '/'.
-        It is invalid to attempt to make a non-hierarchical URL hierarchical by setting these components.
+        Modifying a URL's opaque path is not supported.
 
-        Examples of non-hierarchical URLs include:
-          'mailto:somebody@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
+        Examples of URLs with opaque paths include:
+          'mailto:bob@example.com', 'javascript:alert("hi")', 'data:image/png;base64,iVBOR...'
         """#
     }
   }

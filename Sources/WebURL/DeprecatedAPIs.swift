@@ -127,27 +127,25 @@ extension IPv4Address {
 
 extension WebURL {
 
-  /// Whether this URL cannot be a base.
+  /// Whether this URL has an opaque path.
   ///
-  /// **This API is deprecated and will be removed in a future version.**
+  /// **This API is deprecated and will be removed in a future version; use `hasOpaquePath` instead.**
   ///
-  /// 'Cannot be a base' URLs are non-hierarchical; they do not have authority components, or hierarchical paths.
-  /// URLs with special schemes (such as http or file) are never non-hierarchical.
-  /// Non-hierarchical URLs can be recognized by the lack of slashes immediately following their scheme.
-  ///
-  /// When parsing a relative URL string against such a URL, only replacing the fragment is allowed, and any modifications which would change
-  /// a URL's structure to become hierarchical (or non-hierarchical) will fail. This means the `username`, `password`, `hostname`, `port`, and
-  /// `path` setters always fail when performed on a non-hierarchical URL.
-  ///
-  /// Examples of non-hierarchical URLs are:
+  /// URLs with opaque paths are non-hierarchical: they do not have a hostname, and their paths are opaque strings which cannot be split in to components.
+  /// They can be recognized by the lack of slashes immediately following the scheme delimiter, for example:
   ///
   /// - `mailto:bob@example.com`
   /// - `javascript:alert("hello");`
   /// - `data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==`
   ///
-  @available(*, deprecated, message: "Use `!isHierarchical` instead")
+  /// It is invalid to set any authority components, such as `username`, `password`, `hostname` or `port`, on these URLs.
+  /// Modifying the `path` or accessing the URL's `pathComponents` is also invalid, and they only support limited forms of relative references.
+  ///
+  /// URLs with special schemes (such as http/s and file) never have opaque paths.
+  ///
+  @available(*, deprecated, renamed: "hasOpaquePath")
   public var cannotBeABase: Bool {
-    !storage.isHierarchical
+    hasOpaquePath
   }
 }
 

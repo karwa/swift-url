@@ -289,7 +289,7 @@ internal struct StructureAndMetricsCollector: URLWriter {
   @inlinable
   internal mutating func writeFlags(schemeKind: WebURL.SchemeKind, hasOpaquePath: Bool) {
     structure.schemeKind = schemeKind
-    structure.isHierarchical = !hasOpaquePath
+    structure.hasOpaquePath = hasOpaquePath
   }
 
   @inlinable

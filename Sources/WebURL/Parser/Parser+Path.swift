@@ -125,8 +125,8 @@ internal struct _PathParserState {
 
   /// Whether or not the parser has yielded any components.
   ///
-  /// A hierarchical URL requires either an authority segment or hierarchical path.
-  /// Therefore, it is usually required that the path parser yields at least _something_.
+  /// Most URLs require either an authority segment or non-opaque path,
+  /// therefore it is usually required that the path parser yields at least _something_.
   ///
   /// It is also important to track this flag when determining whether a path sigil is required.
   ///
@@ -239,7 +239,7 @@ extension _PathParser {
   /// This method yields the components `["", "c", "a"]`, and path construction by prepending proceeds as follows: `"/" -> "/c/" -> "/a/c/"`.
   ///
   /// - note: The parser produces a non-empty path for almost all inputs. The only case in which this function does not yield a path
-  ///         is when the input is empty, the scheme is not special, and the URL has an authority (and thus is already hierarchical).
+  ///         is when the input is empty, the scheme is not special, and the URL has an authority (as these URLs are allowed to have empty paths).
   ///
   /// - parameters:
   ///   - input:        The path string to parse, as a collection of UTF-8 code-units.
@@ -270,7 +270,7 @@ extension _PathParser {
     guard input.startIndex < input.endIndex else {
       // Special URLs have an implicit path.
       // Non-special URLs may only have an empty path if they have an authority
-      // (otherwise they would be non-hierarchical URLs).
+      // (otherwise they would be opaque-path URLs).
       if schemeKind.isSpecial || !hasAuthority {
         visitEmptyPathComponent()
       }

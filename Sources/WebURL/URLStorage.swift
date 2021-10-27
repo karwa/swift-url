@@ -91,7 +91,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
   @usableFromInline
   internal var fragmentLength: SizeType
 
-  /// The length of the first path component. If zero, the path does not contain any components (e.g. it may not have a path, or may be a non-hierarchical URL).
+  /// The length of the first path component. If zero, the path does not contain any components (e.g. it may not have a path, or the path may be opaque).
   ///
   @usableFromInline
   internal var firstPathComponentLength: SizeType
@@ -112,13 +112,12 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
   @usableFromInline
   internal var schemeKind: WebURL.SchemeKind
 
-  /// Whether this is a hierarchical URL.
+  /// Whether this URL's path is opaque.
   ///
-  /// A non-hierarchical URL essentially means the URL does not contain an authority and, if it has a path, that path does not begin with a `/`.
-  /// (e.g. `mailto:somebody@somehost.com` or `javascript:alert("hello")`.
+  /// An opaque path is just a string, rather than a list of components (e.g. `mailto:bob@example.com` or `javascript:alert("hello")`.
   ///
   @usableFromInline
-  internal var isHierarchical: Bool
+  internal var hasOpaquePath: Bool
 
   /// Whether this URL's query string is known to be `application/x-www-form-urlencoded`.
   ///
@@ -140,7 +139,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     firstPathComponentLength: SizeType,
     sigil: Sigil?,
     schemeKind: WebURL.SchemeKind,
-    isHierarchical: Bool,
+    hasOpaquePath: Bool,
     queryIsKnownFormEncoded: Bool
   ) {
     self.schemeLength = schemeLength
@@ -154,7 +153,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     self.firstPathComponentLength = firstPathComponentLength
     self.__sigil = sigil
     self.schemeKind = schemeKind
-    self.isHierarchical = isHierarchical
+    self.hasOpaquePath = hasOpaquePath
     self.queryIsKnownFormEncoded = queryIsKnownFormEncoded
   }
 
@@ -411,14 +410,13 @@ extension URLStructure {
     usernameLength != 0 || passwordLength != 0 || portLength != 0
   }
 
-  /// > A URL cannot have a username/password/port if its host is null or the empty string,
-  /// > its cannot-be-a-base-URL is true, or its scheme is "file".
+  /// > A URL cannot have a username/password/port if its host is null or the empty string, or its scheme is "file".
   ///
   /// https://url.spec.whatwg.org/#url-miscellaneous
   ///
   @inlinable
   internal var cannotHaveCredentialsOrPort: Bool {
-    schemeKind == .file || isHierarchical == false || hostnameLength == 0
+    hostnameLength == 0 || schemeKind == .file
   }
 }
 
@@ -445,7 +443,7 @@ extension URLStructure {
       firstPathComponentLength: SizeType(other.firstPathComponentLength),
       sigil: other.sigil,
       schemeKind: other.schemeKind,
-      isHierarchical: other.isHierarchical,
+      hasOpaquePath: other.hasOpaquePath,
       queryIsKnownFormEncoded: other.queryIsKnownFormEncoded
     )
     checkInvariants()
@@ -470,7 +468,7 @@ extension URLStructure {
       firstPathComponentLength: 0,
       sigil: nil,
       schemeKind: .other,
-      isHierarchical: false,
+      hasOpaquePath: true,
       queryIsKnownFormEncoded: false
     )
   }
@@ -485,7 +483,7 @@ extension URLStructure {
       && portLength == other.portLength && pathLength == other.pathLength
       && firstPathComponentLength == other.firstPathComponentLength && queryLength == other.queryLength
       && fragmentLength == other.fragmentLength && sigil == other.sigil && schemeKind == other.schemeKind
-      && isHierarchical == other.isHierarchical
+      && hasOpaquePath == other.hasOpaquePath
   }
 
   /// Performs debug-mode checks to ensure that this URL structure does not contain invalid combinations of values.
@@ -526,13 +524,13 @@ extension URLStructure {
         assert(portLength == 0, "A URL without authority cannot have a port")
       }
 
-      if !isHierarchical {
-        assert(sigil == nil, "Non-hierarchical URLs cannot have an authority or path sigil")
+      if hasOpaquePath {
+        assert(sigil == nil, "URLs with opaque paths cannot have an authority or path sigil")
       }
       if schemeKind.isSpecial {
         assert(sigil == .authority, "URLs with special schemes must have an authority")
         assert(pathLength != 0, "URLs with special schemes must have a path")
-        assert(isHierarchical, "URLs with special schemes must always be hierarchical")
+        assert(!hasOpaquePath, "URLs with special schemes cannot have opaque paths")
       }
 
       if cannotHaveCredentialsOrPort {
@@ -545,13 +543,13 @@ extension URLStructure {
         assert(queryIsKnownFormEncoded, "Empty and nil queries must always be flagged as being form-encoded")
       }
 
-      if isHierarchical {
+      if hasOpaquePath {
+        assert(firstPathComponentLength == 0, "Opaque paths do not have path components")
+      } else {
         assert(firstPathComponentLength <= pathLength, "First path component is longer than the entire path")
         if pathLength != 0 {
           assert(firstPathComponentLength != 0, "First path component length not set")
         }
-      } else {
-        assert(firstPathComponentLength == 0, "Non-hierarchical URLs do not have path components")
       }
     }
   #else
@@ -728,8 +726,8 @@ extension URLStorage {
   }
 
   @inlinable
-  internal var isHierarchical: Bool {
-    structure.isHierarchical
+  internal var hasOpaquePath: Bool {
+    structure.hasOpaquePath
   }
 
   @inlinable
@@ -754,8 +752,8 @@ extension URLStorage {
   }
 }
 
-/// The URL `a:` - essentially the smallest valid URL string. This is a used to temporarily occupy an `AnyURLStorage`,
-/// so that its _actual_ storage can be moved to a uniquely-referenced local variable.
+/// The URL `a:` - essentially the smallest valid URL string. This is a used to temporarily occupy a `URLStorage` variable,
+/// so its previous value can be moved to a uniquely-referenced local variable.
 ///
 /// It should not be possible to observe a URL whose storage is set to this object.
 ///
@@ -765,7 +763,7 @@ internal let _tempStorage = URLStorage(
   structure: URLStructure(
     schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
     portLength: 0, pathLength: 0, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 0,
-    sigil: nil, schemeKind: .other, isHierarchical: false, queryIsKnownFormEncoded: true),
+    sigil: nil, schemeKind: .other, hasOpaquePath: true, queryIsKnownFormEncoded: true),
   initializingCodeUnitsWith: { buffer in
     buffer[0] = ASCII.a.codePoint
     buffer[1] = ASCII.colon.codePoint

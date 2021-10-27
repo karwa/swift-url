@@ -214,7 +214,7 @@ extension PathComponentsTests {
     let url = WebURL("foo://somehost?someQuery")!
     XCTAssertEqual(url.serialized, "foo://somehost?someQuery")
     XCTAssertEqual(url.path, "")
-    XCTAssertTrue(url.isHierarchical)
+    XCTAssertFalse(url.hasOpaquePath)
 
     XCTAssertEqualElements(url.pathComponents, [])
     XCTAssertEqual(url.pathComponents.count, 0)
@@ -227,7 +227,7 @@ extension PathComponentsTests {
     let url = WebURL("http://example.com/?someQuery")!
     XCTAssertEqual(url.serialized, "http://example.com/?someQuery")
     XCTAssertEqual(url.path, "/")
-    XCTAssertTrue(url.isHierarchical)
+    XCTAssertFalse(url.hasOpaquePath)
 
     XCTAssertEqualElements(url.pathComponents, [""])
     XCTAssertEqual(url.pathComponents.count, 1)
@@ -240,7 +240,7 @@ extension PathComponentsTests {
     let url = WebURL("foo:/a/b/c")!
     XCTAssertEqual(url.serialized, "foo:/a/b/c")
     XCTAssertEqual(url.path, "/a/b/c")
-    XCTAssertTrue(url.isHierarchical)
+    XCTAssertFalse(url.hasOpaquePath)
 
     XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
     XCTAssertEqual(url.pathComponents.count, 3)
@@ -255,7 +255,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com//?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com//?someQuery")
       XCTAssertEqual(url.path, "//")
-      XCTAssertTrue(url.isHierarchical)
+      XCTAssertFalse(url.hasOpaquePath)
 
       XCTAssertEqualElements(url.pathComponents, ["", ""])
       XCTAssertEqual(url.pathComponents.count, 2)
@@ -267,7 +267,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com///?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com///?someQuery")
       XCTAssertEqual(url.path, "///")
-      XCTAssertTrue(url.isHierarchical)
+      XCTAssertFalse(url.hasOpaquePath)
 
       XCTAssertEqualElements(url.pathComponents, ["", "", ""])
       XCTAssertEqual(url.pathComponents.count, 3)
@@ -279,7 +279,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com////?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com////?someQuery")
       XCTAssertEqual(url.path, "////")
-      XCTAssertTrue(url.isHierarchical)
+      XCTAssertFalse(url.hasOpaquePath)
 
       XCTAssertEqualElements(url.pathComponents, ["", "", "", ""])
       XCTAssertEqual(url.pathComponents.count, 4)
@@ -291,7 +291,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com//p///?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com//p///?someQuery")
       XCTAssertEqual(url.path, "//p///")
-      XCTAssertTrue(url.isHierarchical)
+      XCTAssertFalse(url.hasOpaquePath)
 
       XCTAssertEqualElements(url.pathComponents, ["", "p", "", "", ""])
       XCTAssertEqual(url.pathComponents.count, 5)
@@ -307,7 +307,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com/a/b/c?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c?someQuery")
       XCTAssertEqual(url.path, "/a/b/c")
-      XCTAssertTrue(url.isHierarchical)
+      XCTAssertFalse(url.hasOpaquePath)
 
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
       XCTAssertEqual(url.pathComponents.count, 3)
@@ -319,7 +319,7 @@ extension PathComponentsTests {
       let url = WebURL("http://example.com/a/b/c/?someQuery")!
       XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
       XCTAssertEqual(url.path, "/a/b/c/")
-      XCTAssertTrue(url.isHierarchical)
+      XCTAssertFalse(url.hasOpaquePath)
 
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
       XCTAssertEqual(url.pathComponents.count, 4)
@@ -333,7 +333,7 @@ extension PathComponentsTests {
     let url = WebURL("file:///C:/Windows/🦆/System 32/somefile.dll")!
     XCTAssertEqual(url.serialized, "file:///C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
     XCTAssertEqual(url.path, "/C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
-    XCTAssertTrue(url.isHierarchical)
+    XCTAssertFalse(url.hasOpaquePath)
 
     XCTAssertEqualElements(url.pathComponents, ["C:", "Windows", "🦆", "System 32", "somefile.dll"])
     XCTAssertEqual(url.pathComponents.count, 5)
@@ -357,7 +357,7 @@ extension PathComponentsTests {
     let url = WebURL("http://example.com/a/b/c/?someQuery")!
     XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
     XCTAssertEqual(url.path, "/a/b/c/")
-    XCTAssertTrue(url.isHierarchical)
+    XCTAssertFalse(url.hasOpaquePath)
 
     XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
     XCTAssertEqual(url.pathComponents.count, 4)
@@ -382,7 +382,7 @@ extension PathComponentsTests {
     let url = WebURL("http://example.com/a/b/c/?someQuery")!
     XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
     XCTAssertEqual(url.path, "/a/b/c/")
-    XCTAssertTrue(url.isHierarchical)
+    XCTAssertFalse(url.hasOpaquePath)
 
     XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", ""])
     XCTAssertEqual(url.pathComponents.count, 4)
@@ -641,10 +641,11 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
-    // We can add components to a hierarchical URL with an empty path.
+    // We can add components to a non-opaque, empty path.
     do {
       var url = WebURL("foo://somehost?someQuery")!
       XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertFalse(url.hasOpaquePath)
 
       let range = url.pathComponents.replaceSubrange(
         url.pathComponents.startIndex..<url.pathComponents.endIndex, with: ["a", "b", "c"]
@@ -1566,10 +1567,11 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
 
-    // Insert to a hierarchical URL with an empty path.
+    // Insert to a non-opaque, empty path.
     do {
       var url = WebURL("foo://example.com")!
       XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertFalse(url.hasOpaquePath)
 
       let range = url.pathComponents.insert(contentsOf: ["hello", "world"], at: url.pathComponents.endIndex)
       XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
@@ -1705,10 +1707,11 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
 
-    // Appending to a hierarchical URL with an empty path.
+    // Appending to a non-opaque, empty path.
     do {
       var url = WebURL("foo://example.com")!
       XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertFalse(url.hasOpaquePath)
 
       let range = url.pathComponents.append(contentsOf: ["hello", "world"])
       XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
@@ -1879,10 +1882,11 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
 
-    // Removal from a hierarchical URL with an empty path.
+    // Removal from a non-opaque, empty path.
     do {
       var url = WebURL("foo://example.com")!
       XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertFalse(url.hasOpaquePath)
 
       let idx = url.pathComponents.removeSubrange(url.pathComponents.startIndex..<url.pathComponents.endIndex)
       XCTAssertEqual(idx, url.pathComponents.startIndex)
@@ -2266,10 +2270,11 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "file:///")
       XCTAssertURLIsIdempotent(url)
     }
-    // Appends an empty component if the URL is hierarchical and path is empty.
+    // Appends an empty component if the path is non-opaque and empty.
     do {
       var url = WebURL("foo://example")!
       XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertFalse(url.hasOpaquePath)
 
       url.pathComponents.ensureDirectoryPath()
       XCTAssertEqualElements(url.pathComponents, [""])
