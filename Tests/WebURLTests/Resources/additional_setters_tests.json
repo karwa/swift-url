@@ -78,6 +78,34 @@
     ],
     "host": [],
     "hostname": [],
-    "search": [],
+    "search": [
+      {
+          "comment": "Adding a query to a URL with opaque path does not throw an error",
+          "href": "opaque:somepath",
+          "new_value": "q=test",
+          "expected": {
+              "href": "opaque:somepath?q=test",
+              "search": "?q=test"
+          }
+      },
+      {
+          "comment": "Removing a query on a URL with opaque path does not throw an error",
+          "href": "opaque:somepath?q=test",
+          "new_value": "",
+          "expected": {
+              "href": "opaque:somepath",
+              "search": ""
+          }
+      },
+      {
+          "comment": "Modifying a query on a URL with opaque path does not throw an error",
+          "href": "opaque:somepath?q=test",
+          "new_value": "foo=bar",
+          "expected": {
+              "href": "opaque:somepath?foo=bar",
+              "search": "?foo=bar"
+          }
+      }
+    ],
     "hash": []
 }
