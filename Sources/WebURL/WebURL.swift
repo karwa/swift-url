@@ -293,6 +293,11 @@ extension WebURL {
   public var isHierarchical: Bool {
     storage.isHierarchical
   }
+
+  @usableFromInline
+  internal var hasOpaquePath: Bool {
+    !storage.isHierarchical
+  }
 }
 
 
