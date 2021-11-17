@@ -111,6 +111,9 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       XCTAssertNil(url.query)
       XCTAssertNil(url.formParams.get(""))
       XCTAssertNil(url.formParams.get("?"))
+      XCTAssertNil(url.formParams.somekey)
+      XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
+      XCTAssertFalse(url.formParams.allKeyValuePairs.contains { _ in true })
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
 
       url.query = ""
@@ -118,6 +121,9 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       XCTAssertEqual(url.query, "")
       XCTAssertNil(url.formParams.get(""))
       XCTAssertNil(url.formParams.get("?"))
+      XCTAssertNil(url.formParams.somekey)
+      XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
+      XCTAssertFalse(url.formParams.allKeyValuePairs.contains { _ in true })
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url)
     }
@@ -134,6 +140,8 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       XCTAssertEqual(url.serialized, "http://example.com/")
       XCTAssertNil(url.query)
       XCTAssertNil(url.formParams.h)
+      XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
+      XCTAssertFalse(url.formParams.allKeyValuePairs.contains { _ in true })
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url)
     }
@@ -150,6 +158,8 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       XCTAssertEqual(url.serialized, "http://example.com/")
       XCTAssertNil(url.query)
       XCTAssertNil(url.formParams.get(""))
+      XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
+      XCTAssertFalse(url.formParams.allKeyValuePairs.contains { _ in true })
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url)
     }
@@ -410,6 +420,45 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     XCTAssertURLIsIdempotent(url)
   }
 
+  func testInseredValuesAssumedNonEncoded() {
+
+    // Ensure that we encode characters which are meaningful to form-encoding: "%" and "+".
+    // This means that we assume inserted values are not encoded, and preserve them exactly as given.
+
+    do {
+      var url = WebURL("http://example.com/foo/bar")!
+
+      // Value includes "%".
+      url.formParams.doohickey = "folder-%61"
+      XCTAssertEqual(url.serialized, "http://example.com/foo/bar?doohickey=folder-%2561")
+      XCTAssertEqual(url.query, "doohickey=folder-%2561")
+      XCTAssertEqual(url.formParams.doohickey, "folder-%61")
+      XCTAssertURLIsIdempotent(url)
+      // Key includes "%".
+      url.formParams.set("%61bc", to: "baz")
+      XCTAssertEqual(url.serialized, "http://example.com/foo/bar?doohickey=folder-%2561&%2561bc=baz")
+      XCTAssertEqual(url.query, "doohickey=folder-%2561&%2561bc=baz")
+      XCTAssertEqual(url.formParams.get("%61bc"), "baz")
+      XCTAssertURLIsIdempotent(url)
+    }
+    do {
+      var url = WebURL("http://example.com/foo/bar")!
+
+      // Value includes "+".
+      url.formParams.language = "c++"
+      XCTAssertEqual(url.serialized, "http://example.com/foo/bar?language=c%2B%2B")
+      XCTAssertEqual(url.query, "language=c%2B%2B")
+      XCTAssertEqual(url.formParams.language, "c++")
+      XCTAssertURLIsIdempotent(url)
+      // Key includes "+".
+      url.formParams.set("1 + 1", to: "2")
+      XCTAssertEqual(url.serialized, "http://example.com/foo/bar?language=c%2B%2B&1+%2B+1=2")
+      XCTAssertEqual(url.query, "language=c%2B%2B&1+%2B+1=2")
+      XCTAssertEqual(url.formParams.get("1 + 1"), "2")
+      XCTAssertURLIsIdempotent(url)
+    }
+  }
+
   func testAssignment() {
 
     do {
@@ -500,6 +549,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     XCTAssertEqual(url.serialized, "http://example.com/")
     XCTAssertNil(url.query)
     XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
+    XCTAssertFalse(url.formParams.allKeyValuePairs.contains { _ in true })
 
     url.formParams.someKey = "someValue"
     XCTAssertEqual(url.serialized, "http://example.com/?someKey=someValue")
