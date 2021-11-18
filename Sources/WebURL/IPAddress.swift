@@ -224,6 +224,10 @@ extension IPv6Address: Codable {
   }
 }
 
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension IPv6Address: Sendable {}
+#endif
+
 // Parsing.
 
 extension IPv6Address {
@@ -617,6 +621,10 @@ extension IPv4Address: Codable {
     try container.encode(self.serialized)
   }
 }
+
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension IPv4Address: Sendable {}
+#endif
 
 // Parsing.
 

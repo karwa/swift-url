@@ -167,6 +167,10 @@ extension WebURL.JSModel: Equatable, Hashable {
   }
 }
 
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension WebURL.JSModel: Sendable {}
+#endif
+
 
 // --------------------------------------------
 // MARK: - Components

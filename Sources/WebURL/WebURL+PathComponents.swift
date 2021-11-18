@@ -103,6 +103,16 @@ extension WebURL {
 
 
 // --------------------------------------------
+// MARK: - Standard Protocols
+// --------------------------------------------
+
+
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension WebURL.PathComponents: Sendable {}
+#endif
+
+
+// --------------------------------------------
 // MARK: - Reading
 // --------------------------------------------
 

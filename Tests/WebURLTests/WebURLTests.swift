@@ -35,6 +35,12 @@ class WebURLTests: XCTestCase {}
 
       let url = WebURL("http://example.com")!
       _requiresSendable(url)
+      _requiresSendable(url.jsModel)
+      _requiresSendable(url.host)
+      _requiresSendable(url.utf8)
+      _requiresSendable(url.origin)
+      _requiresSendable(url.pathComponents)
+      _requiresSendable(url.formParams)
     }
   }
 

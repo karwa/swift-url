@@ -64,6 +64,16 @@ extension URLStorage {
 
 
 // --------------------------------------------
+// MARK: - Standard Protocols
+// --------------------------------------------
+
+
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension WebURL.UTF8View: Sendable {}
+#endif
+
+
+// --------------------------------------------
 // MARK: - RandomAccessCollection
 // --------------------------------------------
 

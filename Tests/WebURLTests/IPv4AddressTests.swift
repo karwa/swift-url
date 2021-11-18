@@ -197,7 +197,30 @@ final class IPv4AddressTests: XCTestCase {
   }
 }
 
-// Randomized testing.
+
+// --------------------------------------------
+// MARK: - Protocol conformances
+// --------------------------------------------
+
+
+#if swift(>=5.5) && canImport(_Concurrency)
+
+  extension IPv4AddressTests {
+
+    func testSendable() {
+      // Since Sendable only exists at compile-time, it's enough to just ensure that this type-checks.
+      func _requiresSendable<T: Sendable>(_: T) {}
+      _requiresSendable(IPv4Address())
+    }
+  }
+
+#endif
+
+
+// --------------------------------------------
+// MARK: - Randomized testing
+// --------------------------------------------
+
 
 #if canImport(Glibc) || canImport(Darwin)
 

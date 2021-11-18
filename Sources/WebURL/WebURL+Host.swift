@@ -90,6 +90,10 @@ extension WebURL.Host: CustomStringConvertible {
   }
 }
 
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension WebURL.Host: Sendable {}
+#endif
+
 
 // --------------------------------------------
 // MARK: - Serialization
