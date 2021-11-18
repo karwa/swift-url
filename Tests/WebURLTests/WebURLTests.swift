@@ -25,6 +25,22 @@ class WebURLTests: XCTestCase {}
 // --------------------------------------------
 
 
+extension WebURLTests {
+
+  func testCustomStringConvertible() {
+    // String.init(WebURL) should include the fragment. Is the same as calling .serialized()
+    do {
+      let url = WebURL("http://example.com/some/path?and&a&query#withAFragment")!
+      XCTAssertEqual(url.serialized(), "http://example.com/some/path?and&a&query#withAFragment")
+      XCTAssertEqual(String(url), url.serialized())
+      XCTAssertEqual(url.description, url.serialized())
+
+      XCTAssertEqual(url.serialized(excludingFragment: true), "http://example.com/some/path?and&a&query")
+      XCTAssertNotEqual(url.serialized(), url.serialized(excludingFragment: true))
+    }
+  }
+}
+
 #if swift(>=5.5) && canImport(_Concurrency)
 
   extension WebURLTests {
