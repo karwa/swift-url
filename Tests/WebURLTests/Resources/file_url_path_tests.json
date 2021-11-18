@@ -3595,16 +3595,16 @@
             "file_path_windows": { "failure-reason": "relative-path" }
         },
         {
-            "comment": "URL path with an escaped drive-letter [no hostname, with trailing]. This is an interesting case - since the path component is escaped, there's an argument that it intentionally does not want to be interpreted as a drive letter. Indeed, the Windows API 'PathCreateFromUrl' treats this as a relative path, and IE won't resolve it. Chrome/Edge will, though.",
+            "comment": "URL path with an escaped drive-letter [no hostname, with trailing]",
             "URL": "file:///c%3A/",
             "file_path_posix": "/c:/",
-            "file_path_windows": { "failure-reason": "relative-path" }
+            "file_path_windows": "c:\\"
         },
         {
             "comment": "URL with an escaped drive letter [no hostname] (2)",
             "URL": "file:///C%3A/foo/BAR/baZ.txt",
             "file_path_posix": "/C:/foo/BAR/baZ.txt",
-            "file_path_windows": { "failure-reason": "relative-path" }
+            "file_path_windows": "C:\\foo\\BAR\\baZ.txt"
         },
         {
             "comment": "URL path with a percent-encoded Windows drive-relative path [no hostname, no trailing].",

@@ -796,12 +796,11 @@ internal func _filePathFromURL_windows(
 
   if !isUNC {
     // For DOS-style paths, the first component must be a drive letter and be followed by another component.
-    // (e.g. "/C:/" is okay, "/C:" is not). Furthermore, we require the drive letter not be percent-encoded.
+    // (e.g. "/C:/" is okay, "/C:" is not). Furthermore, we allow the drive letter to be percent-encoded.
 
-    // This may be too strict - people sometimes over-escape characters in URLs, and generally standards favour
-    // treating percent-encoded characters as equivalent to their decoded versions.
     let drive = url.utf8.pathComponent(url.pathComponents.startIndex)
-    guard PathComponentParser.isNormalizedWindowsDriveLetter(drive), drive.endIndex < urlPath.endIndex else {
+    let decodedDrive = drive.lazy.percentDecoded()
+    guard PathComponentParser.isNormalizedWindowsDriveLetter(decodedDrive), drive.endIndex < urlPath.endIndex else {
       return .failure(.windowsPathIsNotFullyQualified)
     }
     // Drop the leading slash from the path.
