@@ -401,6 +401,13 @@ extension ManagedArrayBuffer {
   }
 }
 
+#if swift(>=5.5) && canImport(_Concurrency)
+
+  // ManagedArrayBuffer implements COW, which prohibits data races.
+  extension ManagedArrayBuffer: @unchecked Sendable where Header: Sendable, Element: Sendable {}
+
+#endif
+
 // Collection protocols.
 
 extension ManagedArrayBuffer: RandomAccessCollection {

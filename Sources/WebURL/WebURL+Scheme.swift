@@ -34,6 +34,10 @@ extension WebURL {
   }
 }
 
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension WebURL.SchemeKind: Sendable {}
+#endif
+
 extension WebURL.SchemeKind {
 
   /// Determines the `SchemeKind` for the given scheme content.
