@@ -124,6 +124,16 @@ extension WebURL.FormEncodedQueryParameters {
 
 
 // --------------------------------------------
+// MARK: - Standard Protocols
+// --------------------------------------------
+
+
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension WebURL.FormEncodedQueryParameters: Sendable {}
+#endif
+
+
+// --------------------------------------------
 // MARK: - Reading
 // --------------------------------------------
 
