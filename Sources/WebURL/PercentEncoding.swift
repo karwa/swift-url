@@ -1382,11 +1382,6 @@ extension _StaticMember where Base: PercentEncodeSet {
   ///
   @inlinable
   public static var formEncoding: _StaticMember<URLEncodeSet.FormEncoding> { .init(.init()) }
-
-  /// An internal percent-encode set for manipulating path components.
-  ///
-  @inlinable
-  internal static var pathComponentSet: _StaticMember<URLEncodeSet._PathComponent> { .init(.init()) }
 }
 
 // URL encode-set implementations.
@@ -1665,34 +1660,6 @@ extension URLEncodeSet {
 
     @inlinable @inline(__always)
     public var substitutions: Substitutions { .init() }
-  }
-}
-
-// Non-standard encode-sets.
-
-extension URLEncodeSet {
-
-  /// An encode-set used for escaping the contents path components. **Not defined by the URL standard.**
-  ///
-  /// The URL 'path' encode-set, as defined in the standard, does not include the forward-slash character, as the URL parser won't ever see them in a path component.
-  /// This is problematic for APIs which allow the user to insert path-components, as they might insert content which would be re-parsed as multiple components,
-  /// possibly including hidden "." or ".." components and leading to non-idempotent URL strings.
-  ///
-  /// A solution with true minimal-escaping would be split this encode-set for special/non-special URLs, with only the former including the forwardSlash character.
-  /// For simplicity, we include them both, which means that we will unnecessarily escape forwardSlashes in the path components of non-special URLs.
-  ///
-  @usableFromInline
-  internal struct _PathComponent: PercentEncodeSet {
-
-    @inlinable
-    internal init() {}
-
-    @inlinable @inline(__always)
-    internal func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
-      __shouldPercentEncode(URLEncodeSet.Path.self, ascii: codePoint)
-        || codePoint == ASCII.forwardSlash.codePoint
-        || codePoint == ASCII.backslash.codePoint
-    }
   }
 }
 
