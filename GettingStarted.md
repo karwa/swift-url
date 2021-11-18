@@ -33,7 +33,7 @@ url.scheme // "https"
 url.hostname // "github.com"
 url.path // "/karwa/swift-url/"
 
-url.serialized // "https://github.com/karwa/swift-url/"
+url.serialized() // "https://github.com/karwa/swift-url/"
 ```
 
 Components are returned as they appear in the URL string, including any percent-encoding. The `WebURL` package includes a number of extensions to standard library types and protocols,
@@ -79,11 +79,11 @@ var url = WebURL("http://github.com/karwa/swift-url/")!
 
 // Upgrade to https:
 url.scheme = "https"
-url.serialized // "https://github.com/karwa/swift-url/"
+url.serialized() // "https://github.com/karwa/swift-url/"
 
 // Change the path:
 url.path = "/apple/swift/"
-url.serialized // "https://github.com/apple/swift/"
+url.serialized() // "https://github.com/apple/swift/"
 ```
 
 When you modify a component, the value you set will automatically be percent-encoded if it contains any illegal characters.
@@ -95,10 +95,10 @@ var url = WebURL("https://example.com/my_files/secrets.txt")!
 
 url.username = "my username"
 url.password = "🤫"
-url.serialized // "https://my%20username:%F0%9F%A4%AB@example.com/my_files/secrets.txt"
+url.serialized() // "https://my%20username:%F0%9F%A4%AB@example.com/my_files/secrets.txt"
 
 url.hostname = "👾" // Fails, does not modify.
-url.serialized // (unchanged)
+url.serialized() // (unchanged)
 ```
 
 In general, the setters are very permissive. However, if you do wish to detect and respond to failures to modify a component,

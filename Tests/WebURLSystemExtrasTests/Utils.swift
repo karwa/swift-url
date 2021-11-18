@@ -48,7 +48,7 @@ func XCTAssertThrowsSpecific<E>(
 /// Checks that the given URL returns precisely the same value when its serialized representation is re-parsed.
 ///
 func XCTAssertURLIsIdempotent(_ url: WebURL) {
-  var serialized = url.serialized
+  var serialized = url.serialized()
   serialized.makeContiguousUTF8()
   guard let reparsed = WebURL(serialized) else {
     XCTFail("Failed to reparse URL string: \(serialized)")
@@ -59,7 +59,7 @@ func XCTAssertURLIsIdempotent(_ url: WebURL) {
   // Check that the code-units are the same.
   XCTAssertEqualElements(url.utf8, reparsed.utf8)
   // Triple check: check that the serialized representations are the same.
-  XCTAssertEqual(serialized, reparsed.serialized)
+  XCTAssertEqual(serialized, reparsed.serialized())
 }
 
 /// Checks the component values of the given URL. Any components not specified are checked to have a `nil` value.

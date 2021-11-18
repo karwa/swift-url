@@ -27,13 +27,13 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
 
       url.formParams.from = "GBP"
-      XCTAssertEqual(url.serialized, "http://example.com/currency/convert?from=GBP&to=USD")
+      XCTAssertEqual(url.serialized(), "http://example.com/currency/convert?from=GBP&to=USD")
 
       url.formParams.amount = "20"
-      XCTAssertEqual(url.serialized, "http://example.com/currency/convert?from=GBP&to=USD&amount=20")
+      XCTAssertEqual(url.serialized(), "http://example.com/currency/convert?from=GBP&to=USD&amount=20")
 
       url.formParams.to = "💵"
-      XCTAssertEqual(url.serialized, "http://example.com/currency/convert?from=GBP&to=%F0%9F%92%B5&amount=20")
+      XCTAssertEqual(url.serialized(), "http://example.com/currency/convert?from=GBP&to=%F0%9F%92%B5&amount=20")
 
       XCTAssertURLIsIdempotent(url)
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
@@ -51,7 +51,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // From documentation for 'contains', 'get':
     do {
       let url = WebURL("http://example.com?jalape\u{006E}\u{0303}os=2")!
-      XCTAssertEqual(url.serialized, "http://example.com/?jalapen%CC%83os=2")
+      XCTAssertEqual(url.serialized(), "http://example.com/?jalapen%CC%83os=2")
 
       XCTAssertTrue(url.formParams.contains("jalape\u{006E}\u{0303}os"))
       XCTAssertEqual(url.formParams.get("jalape\u{006E}\u{0303}os"), "2")
@@ -68,7 +68,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
   func testGet_Contains() {
 
     let url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
 
@@ -98,7 +98,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     XCTAssertEqual(url.formParams.getAll("doesNotExist"), [])
 
     // All of this is read-only; the URL's query string remains as it was.
-    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
   }
 
@@ -107,7 +107,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // Both nil and empty query strings present as empty query parameters.
     do {
       var url = WebURL("http://example.com")!
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertNil(url.query)
       XCTAssertNil(url.formParams.get(""))
       XCTAssertNil(url.formParams.get("?"))
@@ -117,7 +117,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
 
       url.query = ""
-      XCTAssertEqual(url.serialized, "http://example.com/?")
+      XCTAssertEqual(url.serialized(), "http://example.com/?")
       XCTAssertEqual(url.query, "")
       XCTAssertNil(url.formParams.get(""))
       XCTAssertNil(url.formParams.get("?"))
@@ -131,13 +131,13 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // When emptying the formParams, the URL's query gets set to nil rather than empty.
     do {
       var url = WebURL("http://example.com?a=b&c is the key=d&&e=&e&=foo&e=g&h=👀&e=f")!
-      XCTAssertEqual(url.serialized, "http://example.com/?a=b&c%20is%20the%20key=d&&e=&e&=foo&e=g&h=%F0%9F%91%80&e=f")
+      XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c%20is%20the%20key=d&&e=&e&=foo&e=g&h=%F0%9F%91%80&e=f")
       XCTAssertEqual(url.query, "a=b&c%20is%20the%20key=d&&e=&e&=foo&e=g&h=%F0%9F%91%80&e=f")
       XCTAssertEqual(url.formParams.h, "👀")
       XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
 
       url.formParams.removeAll()
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertNil(url.query)
       XCTAssertNil(url.formParams.h)
       XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
@@ -150,12 +150,12 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // and are the equivalent of an empty query.
     do {
       var url = WebURL("http://example.com?&&&")!
-      XCTAssertEqual(url.serialized, "http://example.com/?&&&")
+      XCTAssertEqual(url.serialized(), "http://example.com/?&&&")
       XCTAssertEqual(url.query, "&&&")
       XCTAssertNil(url.formParams.get(""))
 
       url.formParams = url.formParams
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertNil(url.query)
       XCTAssertNil(url.formParams.get(""))
       XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
@@ -170,7 +170,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // Start with a URL without query, use 'append' to build one.
     do {
       var url = WebURL("http://example.com")!
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertNil(url.query)
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
 
@@ -179,7 +179,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       url.formParams.append("search query", value: "why are 🦆 so awesome?")  // both need escaping.
       url.formParams.append("`back`'tick'", value: "")  // U+0027 is encoded by forms, and only by forms.
       XCTAssertEqual(
-        url.serialized,
+        url.serialized(),
         "http://example.com/?non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27="
       )
       XCTAssertEqual(
@@ -195,7 +195,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       var storedParams = url.formParams
       url.query = nil
       url.hostname = "foobar.org"
-      XCTAssertEqual(url.serialized, "http://foobar.org/")
+      XCTAssertEqual(url.serialized(), "http://foobar.org/")
       XCTAssertNil(url.query)
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertFalse(url.formParams.contains("search query"))
@@ -208,7 +208,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       // Assign it to the URL.
       url.formParams = storedParams
       XCTAssertEqual(
-        url.serialized,
+        url.serialized(),
         "http://foobar.org/?non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&still+alive%3F=should+be%21&owned+and+mutable%3F=sure+thing%21"
       )
       XCTAssertEqual(url.formParams.get("still alive?"), "should be!")
@@ -219,12 +219,12 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // Ensure that we can append to an empty (not 'nil') query.
     do {
       var url = WebURL("foo://bar?")!
-      XCTAssertEqual(url.serialized, "foo://bar?")
+      XCTAssertEqual(url.serialized(), "foo://bar?")
       XCTAssertEqual(url.query, "")
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
 
       url.formParams.append("test", value: "works!")
-      XCTAssertEqual(url.serialized, "foo://bar?test=works%21")
+      XCTAssertEqual(url.serialized(), "foo://bar?test=works%21")
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url)
     }
@@ -235,7 +235,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     do {
       // Start with a URL without query, use 'append' to build one.
       var url = WebURL("http://example.com")!
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertNil(url.query)
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
 
@@ -244,7 +244,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
         ("`back`'tick'", ""),  // U+0027 is encoded by forms, and only by forms.
       ]
       XCTAssertEqual(
-        url.serialized,
+        url.serialized(),
         "http://example.com/?search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27="
       )
       XCTAssertEqual(url.query, "search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=")
@@ -257,7 +257,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       var storedParams = url.formParams
       url.query = nil
       url.hostname = "foobar.org"
-      XCTAssertEqual(url.serialized, "http://foobar.org/")
+      XCTAssertEqual(url.serialized(), "http://foobar.org/")
       XCTAssertNil(url.query)
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertFalse(url.formParams.contains("search query"))
@@ -272,7 +272,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       // Assign it to the URL.
       url.formParams = storedParams
       XCTAssertEqual(
-        url.serialized,
+        url.serialized(),
         "http://foobar.org/?search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&still+alive%3F=should+be%21&owned+and+mutable%3F=sure+thing%21"
       )
       XCTAssertEqual(url.formParams.get("still alive?"), "should be!")
@@ -284,7 +284,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // so appending a dictionary always gives predictable results.
     do {
       var url = WebURL("http://example.com")!
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertNil(url.query)
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
 
@@ -293,7 +293,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
         "key 2️⃣": "value %02",
       ]
       url.formParams += dictionary
-      XCTAssertEqual(url.serialized, "http://example.com/?key+2%EF%B8%8F%E2%83%A3=value+%2502&key+one=value+one")
+      XCTAssertEqual(url.serialized(), "http://example.com/?key+2%EF%B8%8F%E2%83%A3=value+%2502&key+one=value+one")
       XCTAssertEqual(url.query, "key+2%EF%B8%8F%E2%83%A3=value+%2502&key+one=value+one")
       XCTAssertEqual(url.formParams.get("key one"), "value one")
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
@@ -304,14 +304,14 @@ final class FormEncodedQueryParametersTests: XCTestCase {
   func testRemove() {
 
     var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
 
     // Removal from the front.
     XCTAssertEqual(url.formParams.a, "b")
     url.formParams.remove("a")
-    XCTAssertEqual(url.serialized, "http://example.com/?c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertNil(url.formParams.a)
@@ -321,7 +321,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     XCTAssertEqual(url.formParams.e, "")
     XCTAssertEqual(url.formParams.getAll("e"), ["", "g", "", "f"])
     url.formParams.remove("e")
-    XCTAssertEqual(url.serialized, "http://example.com/?c+is+the+key=d&=foo&h=%F0%9F%91%80")
+    XCTAssertEqual(url.serialized(), "http://example.com/?c+is+the+key=d&=foo&h=%F0%9F%91%80")
     XCTAssertEqual(url.query, "c+is+the+key=d&=foo&h=%F0%9F%91%80")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertNil(url.formParams.e)
@@ -330,7 +330,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // Removal from the back.
     XCTAssertEqual(url.formParams.h, "👀")
     url.formParams.remove("h")
-    XCTAssertEqual(url.serialized, "http://example.com/?c+is+the+key=d&=foo")
+    XCTAssertEqual(url.serialized(), "http://example.com/?c+is+the+key=d&=foo")
     XCTAssertEqual(url.query, "c+is+the+key=d&=foo")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertNil(url.formParams.h)
@@ -341,7 +341,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     XCTAssertEqual(url.formParams.get(""), "foo")
     url.formParams.remove("c is the key")
     url.formParams.remove("")
-    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertEqual(url.serialized(), "http://example.com/")
     XCTAssertNil(url.query)
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertNil(url.formParams.get("c is the key"))
@@ -352,14 +352,14 @@ final class FormEncodedQueryParametersTests: XCTestCase {
   func testRemoveAll() {
 
     var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertEqual(url.formParams.e, "")
     XCTAssertEqual(url.formParams.a, "b")
 
     url.formParams.removeAll()
-    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertEqual(url.serialized(), "http://example.com/")
     XCTAssertNil(url.query)
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertNil(url.formParams.e)
@@ -370,14 +370,14 @@ final class FormEncodedQueryParametersTests: XCTestCase {
   func testSet() {
 
     var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
 
     // Set unique, pre-existing keys. Relative position of KVP within the string is maintained.
     XCTAssertEqual(url.formParams.a, "b")
     url.formParams.a = "THIS ONE"
-    XCTAssertEqual(url.serialized, "http://example.com/?a=THIS+ONE&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=THIS+ONE&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "a=THIS+ONE&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.formParams.a, "THIS ONE")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
@@ -385,7 +385,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
 
     XCTAssertEqual(url.formParams.h, "👀")
     url.formParams.set("h", to: "ALSO THIS ONE")
-    XCTAssertEqual(url.serialized, "http://example.com/?a=THIS+ONE&c+is+the+key=d&e=&=foo&e=g&e=&h=ALSO+THIS+ONE&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=THIS+ONE&c+is+the+key=d&e=&=foo&e=g&e=&h=ALSO+THIS+ONE&e=f")
     XCTAssertEqual(url.query, "a=THIS+ONE&c+is+the+key=d&e=&=foo&e=g&e=&h=ALSO+THIS+ONE&e=f")
     XCTAssertEqual(url.formParams.h, "ALSO THIS ONE")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
@@ -394,7 +394,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // Set a key with multiple entries.
     XCTAssertEqual(url.formParams.e, "")
     url.formParams.e = "collapsed"
-    XCTAssertEqual(url.serialized, "http://example.com/?a=THIS+ONE&c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=THIS+ONE&c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE")
     XCTAssertEqual(url.query, "a=THIS+ONE&c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE")
     XCTAssertEqual(url.formParams.e, "collapsed")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
@@ -403,7 +403,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // Setting to 'nil' removes the key.
     XCTAssertEqual(url.formParams.a, "THIS ONE")
     url.formParams.a = nil
-    XCTAssertEqual(url.serialized, "http://example.com/?c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE")
+    XCTAssertEqual(url.serialized(), "http://example.com/?c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE")
     XCTAssertEqual(url.query, "c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE")
     XCTAssertNil(url.formParams.a)
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
@@ -413,7 +413,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     XCTAssertNil(url.formParams.doesNotExist)
     url.formParams.doesNotExist = "Yes, it does!"
     XCTAssertEqual(
-      url.serialized,
+      url.serialized(),
       "http://example.com/?c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE&doesNotExist=Yes%2C+it+does%21")
     XCTAssertEqual(url.query, "c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE&doesNotExist=Yes%2C+it+does%21")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
@@ -430,13 +430,13 @@ final class FormEncodedQueryParametersTests: XCTestCase {
 
       // Value includes "%".
       url.formParams.doohickey = "folder-%61"
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar?doohickey=folder-%2561")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar?doohickey=folder-%2561")
       XCTAssertEqual(url.query, "doohickey=folder-%2561")
       XCTAssertEqual(url.formParams.doohickey, "folder-%61")
       XCTAssertURLIsIdempotent(url)
       // Key includes "%".
       url.formParams.set("%61bc", to: "baz")
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar?doohickey=folder-%2561&%2561bc=baz")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar?doohickey=folder-%2561&%2561bc=baz")
       XCTAssertEqual(url.query, "doohickey=folder-%2561&%2561bc=baz")
       XCTAssertEqual(url.formParams.get("%61bc"), "baz")
       XCTAssertURLIsIdempotent(url)
@@ -446,13 +446,13 @@ final class FormEncodedQueryParametersTests: XCTestCase {
 
       // Value includes "+".
       url.formParams.language = "c++"
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar?language=c%2B%2B")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar?language=c%2B%2B")
       XCTAssertEqual(url.query, "language=c%2B%2B")
       XCTAssertEqual(url.formParams.language, "c++")
       XCTAssertURLIsIdempotent(url)
       // Key includes "+".
       url.formParams.set("1 + 1", to: "2")
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar?language=c%2B%2B&1+%2B+1=2")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar?language=c%2B%2B&1+%2B+1=2")
       XCTAssertEqual(url.query, "language=c%2B%2B&1+%2B+1=2")
       XCTAssertEqual(url.formParams.get("1 + 1"), "2")
       XCTAssertURLIsIdempotent(url)
@@ -463,21 +463,21 @@ final class FormEncodedQueryParametersTests: XCTestCase {
 
     do {
       var url0 = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-      XCTAssertEqual(url0.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+      XCTAssertEqual(url0.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
       XCTAssertEqual(url0.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
       XCTAssertFalse(url0.storage.structure.queryIsKnownFormEncoded)
 
       var url1 = WebURL("foo://bar")!
-      XCTAssertEqual(url1.serialized, "foo://bar")
+      XCTAssertEqual(url1.serialized(), "foo://bar")
       XCTAssertNil(url1.query)
       XCTAssertTrue(url1.storage.structure.queryIsKnownFormEncoded)
 
       // Set url1's formParams from empty to url0's non-empty formParams.
       // url1's query string should be the form-encoded version version of url0's query, which itself remains unchanged.
       url1.formParams = url0.formParams
-      XCTAssertEqual(url1.serialized, "foo://bar?a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
+      XCTAssertEqual(url1.serialized(), "foo://bar?a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
       XCTAssertEqual(url1.query, "a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
-      XCTAssertEqual(url0.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+      XCTAssertEqual(url0.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
       XCTAssertEqual(url0.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
       XCTAssertFalse(url0.storage.structure.queryIsKnownFormEncoded)
       XCTAssertTrue(url1.storage.structure.queryIsKnownFormEncoded)
@@ -486,15 +486,15 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       // Reset url1 to a nil query. Set url0's non-empty params to url1's empty params.
       // url0 should now have a nil query, and url1 remains unchanged.
       url1 = WebURL("foo://bar")!
-      XCTAssertEqual(url1.serialized, "foo://bar")
+      XCTAssertEqual(url1.serialized(), "foo://bar")
       XCTAssertNil(url1.query)
       XCTAssertTrue(url1.storage.structure.queryIsKnownFormEncoded)
 
       url0.formParams = url1.formParams
-      XCTAssertEqual(url0.serialized, "http://example.com/")
+      XCTAssertEqual(url0.serialized(), "http://example.com/")
       XCTAssertNil(url0.query)
       XCTAssertTrue(url0.storage.structure.queryIsKnownFormEncoded)
-      XCTAssertEqual(url1.serialized, "foo://bar")
+      XCTAssertEqual(url1.serialized(), "foo://bar")
       XCTAssertNil(url1.query)
       XCTAssertTrue(url1.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url0)
@@ -503,12 +503,14 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // Assigning a URL's query parameters to itself causes the string to be re-encoded.
     do {
       var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f&&&")!
-      XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&")
+      XCTAssertEqual(
+        url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&"
+      )
       XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&")
       XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
 
       url.formParams = url.formParams
-      XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
+      XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
       XCTAssertEqual(url.query, "a=b&c+is+the+key=d&e=&=foo&e=g&e=&h=%F0%9F%91%80&e=f")
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url)
@@ -518,7 +520,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
   func testKeyValuePairsSequence() {
 
     var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertFalse(url.formParams.allKeyValuePairs.isEmpty)
 
@@ -546,19 +548,19 @@ final class FormEncodedQueryParametersTests: XCTestCase {
 
     // 'isEmpty' property.
     url.formParams.removeAll()
-    XCTAssertEqual(url.serialized, "http://example.com/")
+    XCTAssertEqual(url.serialized(), "http://example.com/")
     XCTAssertNil(url.query)
     XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
     XCTAssertFalse(url.formParams.allKeyValuePairs.contains { _ in true })
 
     url.formParams.someKey = "someValue"
-    XCTAssertEqual(url.serialized, "http://example.com/?someKey=someValue")
+    XCTAssertEqual(url.serialized(), "http://example.com/?someKey=someValue")
     XCTAssertEqual(url.query, "someKey=someValue")
     XCTAssertFalse(url.formParams.allKeyValuePairs.isEmpty)
 
     // Empty KVPs are ignored by form encoding.
     url = WebURL("http://example.com/?&&&&")!
-    XCTAssertEqual(url.serialized, "http://example.com/?&&&&")
+    XCTAssertEqual(url.serialized(), "http://example.com/?&&&&")
     XCTAssertEqual(url.query, "&&&&")
     XCTAssertTrue(url.formParams.allKeyValuePairs.isEmpty)
     for _ in url.formParams.allKeyValuePairs {
@@ -570,34 +572,34 @@ final class FormEncodedQueryParametersTests: XCTestCase {
 
     // For a non-empty query, the flag should start at 'false'.
     var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
     XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
 
     // Modifying via 'formParams' sets the flag to true, as the query is re-encoded.
     url.formParams.h = nil
-    XCTAssertEqual(url.serialized, "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&e=f")
+    XCTAssertEqual(url.serialized(), "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&e=f")
     XCTAssertEqual(url.query, "a=b&c+is+the+key=d&e=&=foo&e=g&e=&e=f")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertURLIsIdempotent(url)
 
     // Copying from a base URL maintains the flag.
     let joinedURL = url.resolve("#someFragment")!
-    XCTAssertEqual(joinedURL.serialized, "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&e=f#someFragment")
+    XCTAssertEqual(joinedURL.serialized(), "http://example.com/?a=b&c+is+the+key=d&e=&=foo&e=g&e=&e=f#someFragment")
     XCTAssertEqual(joinedURL.query, "a=b&c+is+the+key=d&e=&=foo&e=g&e=&e=f")
     XCTAssertTrue(joinedURL.storage.structure.queryIsKnownFormEncoded)
     XCTAssertURLIsIdempotent(joinedURL)
 
     // Setting via '.query' to a non-empty value sets the flag back to false.
     url.query = "foobar"
-    XCTAssertEqual(url.serialized, "http://example.com/?foobar")
+    XCTAssertEqual(url.serialized(), "http://example.com/?foobar")
     XCTAssertEqual(url.query, "foobar")
     XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertURLIsIdempotent(url)
 
     // Setting via '.query' to an empty/nil value sets the flag to true.
     url.query = ""
-    XCTAssertEqual(url.serialized, "http://example.com/?")
+    XCTAssertEqual(url.serialized(), "http://example.com/?")
     XCTAssertEqual(url.query, "")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertURLIsIdempotent(url)

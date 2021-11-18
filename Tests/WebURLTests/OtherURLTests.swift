@@ -31,17 +31,17 @@ extension OtherURLTests {
     // so copying the path to a special URL can cause it to be interpreted differently.
     do {
       var specialURL = WebURL("https://example.com/")!
-      XCTAssertEqual(specialURL.serialized, "https://example.com/")
+      XCTAssertEqual(specialURL.serialized(), "https://example.com/")
       XCTAssertEqual(specialURL.path, "/")
       XCTAssertEqual(specialURL.pathComponents.count, 1)
 
       let nonSpecialURL = WebURL(#"foo://example.com/baz\qux"#)!
-      XCTAssertEqual(nonSpecialURL.serialized, #"foo://example.com/baz\qux"#)
+      XCTAssertEqual(nonSpecialURL.serialized(), #"foo://example.com/baz\qux"#)
       XCTAssertEqual(nonSpecialURL.path, #"/baz\qux"#)
       XCTAssertEqual(nonSpecialURL.pathComponents.count, 1)
 
       specialURL.path = nonSpecialURL.path
-      XCTAssertEqual(specialURL.serialized, "https://example.com/baz/qux")
+      XCTAssertEqual(specialURL.serialized(), "https://example.com/baz/qux")
       XCTAssertEqual(specialURL.path, "/baz/qux")
       XCTAssertEqual(specialURL.pathComponents.count, 2)
     }
@@ -50,17 +50,17 @@ extension OtherURLTests {
     // (covered already in PathComponentsTests.testReplaceSubrange_Slashes, .testAppendContents, etc)
     do {
       var specialURL = WebURL("https://example.com/")!
-      XCTAssertEqual(specialURL.serialized, "https://example.com/")
+      XCTAssertEqual(specialURL.serialized(), "https://example.com/")
       XCTAssertEqual(specialURL.path, "/")
       XCTAssertEqual(specialURL.pathComponents.count, 1)
 
       let nonSpecialURL = WebURL(#"foo://example.com/baz\qux"#)!
-      XCTAssertEqual(nonSpecialURL.serialized, #"foo://example.com/baz\qux"#)
+      XCTAssertEqual(nonSpecialURL.serialized(), #"foo://example.com/baz\qux"#)
       XCTAssertEqual(nonSpecialURL.path, #"/baz\qux"#)
       XCTAssertEqual(nonSpecialURL.pathComponents.count, 1)
 
       specialURL.pathComponents.append(contentsOf: nonSpecialURL.pathComponents)
-      XCTAssertEqual(specialURL.serialized, "https://example.com/baz%5Cqux")
+      XCTAssertEqual(specialURL.serialized(), "https://example.com/baz%5Cqux")
       XCTAssertEqual(specialURL.path, "/baz%5Cqux")
       XCTAssertEqual(specialURL.pathComponents.count, 1)
     }
