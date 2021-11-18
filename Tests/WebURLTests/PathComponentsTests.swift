@@ -37,7 +37,7 @@ extension PathComponentsTests {
 
       url.pathComponents.removeLast()
       url.pathComponents.append("swift-url")
-      XCTAssertEqual(url.serialized, "http://example.com/swift/packages/swift-url")
+      XCTAssertEqual(url.serialized(), "http://example.com/swift/packages/swift-url")
     }
     do {
       var url = WebURL("file:///")!
@@ -45,16 +45,16 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents.append("usr")
-      XCTAssertEqual(url.serialized, "file:///usr")
+      XCTAssertEqual(url.serialized(), "file:///usr")
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents += ["bin", "swift"]
-      XCTAssertEqual(url.serialized, "file:///usr/bin/swift")
+      XCTAssertEqual(url.serialized(), "file:///usr/bin/swift")
       XCTAssertEqual(url.pathComponents.last, "swift")
       XCTAssertEqual(url.pathComponents.count, 3)
 
       url.pathComponents.ensureDirectoryPath()
-      XCTAssertEqual(url.serialized, "file:///usr/bin/swift/")
+      XCTAssertEqual(url.serialized(), "file:///usr/bin/swift/")
       XCTAssertEqual(url.pathComponents.last, "")
       XCTAssertEqual(url.pathComponents.count, 4)
     }
@@ -76,7 +76,7 @@ extension PathComponentsTests {
           "linux",
           "libswiftCore.so",
         ])
-      XCTAssertEqual(url.serialized, "file:///usr/lib/swift/linux/libswiftCore.so")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/swift/linux/libswiftCore.so")
     }
     do {
       var url = WebURL("file:///usr/")!
@@ -85,7 +85,7 @@ extension PathComponentsTests {
       url.pathComponents.replaceSubrange(
         url.pathComponents.endIndex..<url.pathComponents.endIndex, with: ["bin", "swift"]
       )
-      XCTAssertEqual(url.serialized, "file:///usr/bin/swift")
+      XCTAssertEqual(url.serialized(), "file:///usr/bin/swift")
       XCTAssertEqual(url.pathComponents.last, "swift")
       XCTAssertEqual(url.pathComponents.count, 3)
     }
@@ -96,7 +96,7 @@ extension PathComponentsTests {
       url.pathComponents.replaceSubrange(
         url.pathComponents.startIndex..<url.pathComponents.endIndex, with: [] as [String]
       )
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertEqual(url.pathComponents.first, "")
       XCTAssertEqual(url.pathComponents.count, 1)
     }
@@ -109,14 +109,14 @@ extension PathComponentsTests {
         urlA.pathComponents.endIndex..<urlA.pathComponents.endIndex,
         with: ["The%20Beatles"]
       )
-      XCTAssertEqual(urlA.serialized, "http://example.com/music/bands/The%2520Beatles")
+      XCTAssertEqual(urlA.serialized(), "http://example.com/music/bands/The%2520Beatles")
       //---
       var urlB = url
       urlB.pathComponents.replaceSubrange(
         urlB.pathComponents.endIndex..<urlB.pathComponents.endIndex,
         withPercentEncodedComponents: ["The%20Beatles"]
       )
-      XCTAssertEqual(urlB.serialized, "http://example.com/music/bands/The%20Beatles")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/music/bands/The%20Beatles")
     }
     // WebURL.PathComponents.insert(contentsOf:at:)
     do {
@@ -124,7 +124,7 @@ extension PathComponentsTests {
       url.pathComponents.insert(
         contentsOf: ["local", "bin"], at: url.pathComponents.index(after: url.pathComponents.startIndex)
       )
-      XCTAssertEqual(url.serialized, "file:///usr/local/bin/swift")
+      XCTAssertEqual(url.serialized(), "file:///usr/local/bin/swift")
     }
     // WebURL.PathComponents.append(contentsOf:)
     do {
@@ -137,7 +137,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents.append(contentsOf: ["my_app", "data.json"])
-      XCTAssertEqual(url.serialized, "file:///tmp/my_app/data.json")
+      XCTAssertEqual(url.serialized(), "file:///tmp/my_app/data.json")
       XCTAssertEqual(url.pathComponents.last, "data.json")
       XCTAssertEqual(url.pathComponents.count, 3)
     }
@@ -152,7 +152,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents += ["my_app", "data.json"]
-      XCTAssertEqual(url.serialized, "file:///tmp/my_app/data.json")
+      XCTAssertEqual(url.serialized(), "file:///tmp/my_app/data.json")
       XCTAssertEqual(url.pathComponents.last, "data.json")
       XCTAssertEqual(url.pathComponents.count, 3)
     }
@@ -162,14 +162,14 @@ extension PathComponentsTests {
       url.pathComponents.removeSubrange(
         url.pathComponents.index(after: url.pathComponents.startIndex)..<url.pathComponents.endIndex
       )
-      XCTAssertEqual(url.serialized, "http://example.com/projects")
+      XCTAssertEqual(url.serialized(), "http://example.com/projects")
     }
     do {
       var url = WebURL("http://example.com/awesome_product/index.html")!
       url.pathComponents.removeSubrange(
         url.pathComponents.startIndex..<url.pathComponents.endIndex
       )
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
     }
     // WebURL.PathComponents.replaceComponent(at:with:)
     do {
@@ -178,13 +178,13 @@ extension PathComponentsTests {
         at: url.pathComponents.index(after: url.pathComponents.startIndex),
         with: "lib"
       )
-      XCTAssertEqual(url.serialized, "file:///usr/lib/swift")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/swift")
     }
     // WebURL.PathComponents.insert(_:at:)
     do {
       var url = WebURL("file:///usr/swift")!
       url.pathComponents.insert("bin", at: url.pathComponents.index(after: url.pathComponents.startIndex))
-      XCTAssertEqual(url.serialized, "file:///usr/bin/swift")
+      XCTAssertEqual(url.serialized(), "file:///usr/bin/swift")
     }
     // WebURL.PathComponents.append(_:)
     do {
@@ -197,7 +197,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 1)
 
       url.pathComponents.append("data.json")
-      XCTAssertEqual(url.serialized, "file:///tmp/data.json")
+      XCTAssertEqual(url.serialized(), "file:///tmp/data.json")
       XCTAssertEqual(url.pathComponents.last, "data.json")
       XCTAssertEqual(url.pathComponents.count, 2)
     }
@@ -205,38 +205,38 @@ extension PathComponentsTests {
     do {
       var url = WebURL("http://example.com/projects/swift/swift-url/Sources/")!
       url.pathComponents.remove(at: url.pathComponents.index(after: url.pathComponents.startIndex))
-      XCTAssertEqual(url.serialized, "http://example.com/projects/swift-url/Sources/")
+      XCTAssertEqual(url.serialized(), "http://example.com/projects/swift-url/Sources/")
     }
     do {
       var url = WebURL("http://example.com/foo")!
       url.pathComponents.remove(at: url.pathComponents.startIndex)
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
     }
     // WebURL.PathComponents.removeLast(_:)
     do {
       var url = WebURL("http://example.com/foo/bar")!
       url.pathComponents.removeLast()
-      XCTAssertEqual(url.serialized, "http://example.com/foo")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo")
 
       url.pathComponents.removeLast()
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
     }
     // WebURL.PathComponents.ensureDirectoryPath()
     do {
       var url = WebURL("file:///")!
 
       url.pathComponents += ["Users", "karl", "Desktop"]
-      XCTAssertEqual(url.serialized, "file:///Users/karl/Desktop")
+      XCTAssertEqual(url.serialized(), "file:///Users/karl/Desktop")
 
       url.pathComponents.ensureDirectoryPath()
-      XCTAssertEqual(url.serialized, "file:///Users/karl/Desktop/")
+      XCTAssertEqual(url.serialized(), "file:///Users/karl/Desktop/")
     }
   }
 
   func testURLWithNoPath() {
 
     let url = WebURL("foo://somehost?someQuery")!
-    XCTAssertEqual(url.serialized, "foo://somehost?someQuery")
+    XCTAssertEqual(url.serialized(), "foo://somehost?someQuery")
     XCTAssertEqual(url.path, "")
     XCTAssertFalse(url.hasOpaquePath)
 
@@ -249,7 +249,7 @@ extension PathComponentsTests {
   func testURLWithRootPath() {
 
     let url = WebURL("http://example.com/?someQuery")!
-    XCTAssertEqual(url.serialized, "http://example.com/?someQuery")
+    XCTAssertEqual(url.serialized(), "http://example.com/?someQuery")
     XCTAssertEqual(url.path, "/")
     XCTAssertFalse(url.hasOpaquePath)
 
@@ -262,7 +262,7 @@ extension PathComponentsTests {
   func testPathOnlyURL() {
 
     let url = WebURL("foo:/a/b/c")!
-    XCTAssertEqual(url.serialized, "foo:/a/b/c")
+    XCTAssertEqual(url.serialized(), "foo:/a/b/c")
     XCTAssertEqual(url.path, "/a/b/c")
     XCTAssertFalse(url.hasOpaquePath)
 
@@ -277,7 +277,7 @@ extension PathComponentsTests {
     // 2 empty components.
     do {
       let url = WebURL("http://example.com//?someQuery")!
-      XCTAssertEqual(url.serialized, "http://example.com//?someQuery")
+      XCTAssertEqual(url.serialized(), "http://example.com//?someQuery")
       XCTAssertEqual(url.path, "//")
       XCTAssertFalse(url.hasOpaquePath)
 
@@ -289,7 +289,7 @@ extension PathComponentsTests {
     // 3 empty components.
     do {
       let url = WebURL("http://example.com///?someQuery")!
-      XCTAssertEqual(url.serialized, "http://example.com///?someQuery")
+      XCTAssertEqual(url.serialized(), "http://example.com///?someQuery")
       XCTAssertEqual(url.path, "///")
       XCTAssertFalse(url.hasOpaquePath)
 
@@ -301,7 +301,7 @@ extension PathComponentsTests {
     // 4 empty components.
     do {
       let url = WebURL("http://example.com////?someQuery")!
-      XCTAssertEqual(url.serialized, "http://example.com////?someQuery")
+      XCTAssertEqual(url.serialized(), "http://example.com////?someQuery")
       XCTAssertEqual(url.path, "////")
       XCTAssertFalse(url.hasOpaquePath)
 
@@ -313,7 +313,7 @@ extension PathComponentsTests {
     // 1 empty + 1 non-empty + 3 empty.
     do {
       let url = WebURL("http://example.com//p///?someQuery")!
-      XCTAssertEqual(url.serialized, "http://example.com//p///?someQuery")
+      XCTAssertEqual(url.serialized(), "http://example.com//p///?someQuery")
       XCTAssertEqual(url.path, "//p///")
       XCTAssertFalse(url.hasOpaquePath)
 
@@ -329,7 +329,7 @@ extension PathComponentsTests {
     // File paths (i.e. without trailing slash).
     do {
       let url = WebURL("http://example.com/a/b/c?someQuery")!
-      XCTAssertEqual(url.serialized, "http://example.com/a/b/c?someQuery")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/b/c?someQuery")
       XCTAssertEqual(url.path, "/a/b/c")
       XCTAssertFalse(url.hasOpaquePath)
 
@@ -341,7 +341,7 @@ extension PathComponentsTests {
     // Directory paths (i.e. with trailing slash) have an empty final component.
     do {
       let url = WebURL("http://example.com/a/b/c/?someQuery")!
-      XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/b/c/?someQuery")
       XCTAssertEqual(url.path, "/a/b/c/")
       XCTAssertFalse(url.hasOpaquePath)
 
@@ -355,7 +355,7 @@ extension PathComponentsTests {
   func testComponentEscaping() {
     // Check that components are unescaped when reading.
     let url = WebURL("file:///C:/Windows/🦆/System 32/somefile.dll")!
-    XCTAssertEqual(url.serialized, "file:///C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
+    XCTAssertEqual(url.serialized(), "file:///C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
     XCTAssertEqual(url.path, "/C:/Windows/%F0%9F%A6%86/System%2032/somefile.dll")
     XCTAssertFalse(url.hasOpaquePath)
 
@@ -379,7 +379,7 @@ extension PathComponentsTests {
   func testPassingBounds() {
 
     let url = WebURL("http://example.com/a/b/c/?someQuery")!
-    XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
+    XCTAssertEqual(url.serialized(), "http://example.com/a/b/c/?someQuery")
     XCTAssertEqual(url.path, "/a/b/c/")
     XCTAssertFalse(url.hasOpaquePath)
 
@@ -404,7 +404,7 @@ extension PathComponentsTests {
   func testCollectionDistance() {
 
     let url = WebURL("http://example.com/a/b/c/?someQuery")!
-    XCTAssertEqual(url.serialized, "http://example.com/a/b/c/?someQuery")
+    XCTAssertEqual(url.serialized(), "http://example.com/a/b/c/?someQuery")
     XCTAssertEqual(url.path, "/a/b/c/")
     XCTAssertFalse(url.hasOpaquePath)
 
@@ -441,7 +441,7 @@ extension PathComponentsTests {
 
     XCTAssertEqualElements(url.pathComponents, ["a", "MAKE", "S O M E", "🔊", "d"])
     XCTAssertEqualElements(url.pathComponents[range], ["MAKE", "S O M E", "🔊"])
-    XCTAssertEqual(url.serialized, "http://example.com/a/MAKE/S%20O%20M%20E/%F0%9F%94%8A/d")
+    XCTAssertEqual(url.serialized(), "http://example.com/a/MAKE/S%20O%20M%20E/%F0%9F%94%8A/d")
     XCTAssertURLIsIdempotent(url)
 
     // Check that COW still happens if the storage is not uniquely-referenced.
@@ -450,11 +450,11 @@ extension PathComponentsTests {
       url.pathComponents.startIndex..<url.pathComponents.endIndex, with: ["hello", "world"]
     )
     XCTAssertEqualElements(url.pathComponents, ["hello", "world"])
-    XCTAssertEqual(url.serialized, "http://example.com/hello/world")
+    XCTAssertEqual(url.serialized(), "http://example.com/hello/world")
     XCTAssertURLIsIdempotent(url)
 
     XCTAssertEqualElements(copy.pathComponents, ["a", "MAKE", "S O M E", "🔊", "d"])
-    XCTAssertEqual(copy.serialized, "http://example.com/a/MAKE/S%20O%20M%20E/%F0%9F%94%8A/d")
+    XCTAssertEqual(copy.serialized(), "http://example.com/a/MAKE/S%20O%20M%20E/%F0%9F%94%8A/d")
     XCTAssertURLIsIdempotent(copy)
   }
 
@@ -464,14 +464,14 @@ extension PathComponentsTests {
     do {
       // Check that we can store a freestanding path components object and mutate it independently.
       var url = WebURL("http://example.com/a/b/c/d")!
-      XCTAssertEqual(url.serialized, "http://example.com/a/b/c/d")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/b/c/d")
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
 
       var freestandingComponents = url.pathComponents
       freestandingComponents.append("e")
       XCTAssertEqualElements(freestandingComponents, ["a", "b", "c", "d", "e"])
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
-      XCTAssertEqual(url.serialized, "http://example.com/a/b/c/d")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/b/c/d")
       XCTAssertURLIsIdempotent(url)
 
       url.path = ""
@@ -479,16 +479,16 @@ extension PathComponentsTests {
 
       XCTAssertEqualElements(freestandingComponents, ["a", "b", "c", "d", "e"])
       XCTAssertEqualElements(url.pathComponents, ["test"])
-      XCTAssertEqual(url.serialized, "http://example.com/test")
+      XCTAssertEqual(url.serialized(), "http://example.com/test")
       XCTAssertURLIsIdempotent(url)
 
       // Check that we can assign path components to a different URL.
       var otherURL = WebURL("file://my-pc/some/path/")!
-      XCTAssertEqual(otherURL.serialized, "file://my-pc/some/path/")
+      XCTAssertEqual(otherURL.serialized(), "file://my-pc/some/path/")
       XCTAssertEqualElements(otherURL.pathComponents, ["some", "path", ""])
 
       otherURL.pathComponents = freestandingComponents
-      XCTAssertEqual(otherURL.serialized, "file://my-pc/a/b/c/d/e")
+      XCTAssertEqual(otherURL.serialized(), "file://my-pc/a/b/c/d/e")
       XCTAssertEqualElements(otherURL.pathComponents, ["a", "b", "c", "d", "e"])
       XCTAssertURLIsIdempotent(otherURL)
     }
@@ -511,32 +511,32 @@ extension PathComponentsTests {
       // Sigil is added/removed based on the combination of components and surrounding context.
       do {
         var url = WebURL("foo:/")!
-        XCTAssertEqual(url.serialized, "foo:/")
+        XCTAssertEqual(url.serialized(), "foo:/")
         XCTAssertEqualElements(url.pathComponents, [""])
 
         url.pathComponents = componentsRequiringSigil
-        XCTAssertEqual(url.serialized, "foo:/.//test")
+        XCTAssertEqual(url.serialized(), "foo:/.//test")
         XCTAssertEqualElements(url.pathComponents, ["", "test"])
         XCTAssertURLIsIdempotent(url)
 
         url.pathComponents = componentsWithoutSigil
-        XCTAssertEqual(url.serialized, "foo:/boo")
+        XCTAssertEqual(url.serialized(), "foo:/boo")
         XCTAssertEqualElements(url.pathComponents, ["boo"])
         XCTAssertURLIsIdempotent(url)
       }
       // As above, but in a context where no sigil is required.
       do {
         var url = WebURL("foo://host")!
-        XCTAssertEqual(url.serialized, "foo://host")
+        XCTAssertEqual(url.serialized(), "foo://host")
         XCTAssertEqualElements(url.pathComponents, [])
 
         url.pathComponents = componentsRequiringSigil
-        XCTAssertEqual(url.serialized, "foo://host//test")
+        XCTAssertEqual(url.serialized(), "foo://host//test")
         XCTAssertEqualElements(url.pathComponents, ["", "test"])
         XCTAssertURLIsIdempotent(url)
 
         url.pathComponents = componentsWithoutSigil
-        XCTAssertEqual(url.serialized, "foo://host/boo")
+        XCTAssertEqual(url.serialized(), "foo://host/boo")
         XCTAssertEqualElements(url.pathComponents, ["boo"])
         XCTAssertURLIsIdempotent(url)
       }
@@ -549,33 +549,33 @@ extension PathComponentsTests {
       // Empty components allowed for non-special schemes with host.
       do {
         var url = WebURL("ssh://my-pc/some/path")!
-        XCTAssertEqual(url.serialized, "ssh://my-pc/some/path")
+        XCTAssertEqual(url.serialized(), "ssh://my-pc/some/path")
         XCTAssertEqualElements(url.pathComponents, ["some", "path"])
 
         url.pathComponents = emptyComponents
-        XCTAssertEqual(url.serialized, "ssh://my-pc")
+        XCTAssertEqual(url.serialized(), "ssh://my-pc")
         XCTAssertEqualElements(url.pathComponents, [])
         XCTAssertURLIsIdempotent(url)
       }
       // Empty components not allowed for non-special schemes without host.
       do {
         var url = WebURL("bar:/a/path")!
-        XCTAssertEqual(url.serialized, "bar:/a/path")
+        XCTAssertEqual(url.serialized(), "bar:/a/path")
         XCTAssertEqualElements(url.pathComponents, ["a", "path"])
 
         url.pathComponents = emptyComponents
-        XCTAssertEqual(url.serialized, "bar:/")
+        XCTAssertEqual(url.serialized(), "bar:/")
         XCTAssertEqualElements(url.pathComponents, [""])
         XCTAssertURLIsIdempotent(url)
       }
       // Empty components not allowed for special schemes.
       do {
         var url = WebURL("http://example.com/paul/john/george/ringo")!
-        XCTAssertEqual(url.serialized, "http://example.com/paul/john/george/ringo")
+        XCTAssertEqual(url.serialized(), "http://example.com/paul/john/george/ringo")
         XCTAssertEqualElements(url.pathComponents, ["paul", "john", "george", "ringo"])
 
         url.pathComponents = emptyComponents
-        XCTAssertEqual(url.serialized, "http://example.com/")
+        XCTAssertEqual(url.serialized(), "http://example.com/")
         XCTAssertEqualElements(url.pathComponents, [""])
         XCTAssertURLIsIdempotent(url)
       }
@@ -597,7 +597,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqualElements(url.pathComponents[range], [""])
 
-      XCTAssertEqual(url.serialized, "http://example.com/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "http://example.com/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // "."/".." components are skipped and do not make a path non-empty.
@@ -613,7 +613,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqualElements(url.pathComponents[range], [""])
 
-      XCTAssertEqual(url.serialized, "http://example.com/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "http://example.com/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // We cannot set an empty path on a non-special URL, unless it has an authority.
@@ -629,7 +629,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqualElements(url.pathComponents[range], [""])
 
-      XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // Non-special URLs with an authority support empty paths.
@@ -646,7 +646,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, [])
       XCTAssertEqualElements(url.pathComponents[range], [])
 
-      XCTAssertEqual(url.serialized, "foo://example.com?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://example.com?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // If the URL has a path sigil, it is removed when setting an empty path.
@@ -662,7 +662,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqualElements(url.pathComponents[range], [""])
 
-      XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // We can add components to a non-opaque, empty path.
@@ -679,7 +679,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
       XCTAssertEqualElements(url.pathComponents[range], ["a", "b", "c"])
 
-      XCTAssertEqual(url.serialized, "foo://somehost/a/b/c?someQuery")
+      XCTAssertEqual(url.serialized(), "foo://somehost/a/b/c?someQuery")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -700,7 +700,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["usr", "lib", "swift"])
       XCTAssertEqualElements(url.pathComponents[range], ["swift"])
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib/swift?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/swift?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // Appending a single empty component to a directory path does not actually change the path.
@@ -717,26 +717,26 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
       XCTAssertEqualElements(url.pathComponents[range], [""])
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // You can even append multiple times and they all result in no change.
       _ = url.pathComponents.replaceSubrange(
         url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
       )
-      XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/?aQuery#someFragment")
       XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
       _ = url.pathComponents.replaceSubrange(
         url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
       )
-      XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/?aQuery#someFragment")
       XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
 
       _ = url.pathComponents.replaceSubrange(
         url.pathComponents.endIndex..<url.pathComponents.endIndex, with: [""]
       )
-      XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/?aQuery#someFragment")
       XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
       XCTAssertURLIsIdempotent(url)
     }
@@ -754,7 +754,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["usr", "lib", "", "swift"])
       XCTAssertEqualElements(url.pathComponents[range], ["", "swift"])
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib//swift?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib//swift?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // A trailing empty can be ensured by appending an empty component to any path.
@@ -771,7 +771,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
       XCTAssertEqualElements(url.pathComponents[range], [""])
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // As before, subsequent single-empty appends have no effect.
@@ -784,7 +784,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["usr", "lib", ""])
       XCTAssertEqualElements(url.pathComponents[range2], [""])
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -814,7 +814,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["test"])
       XCTAssertEqualElements(url.pathComponents[range], ["test"])
 
-      XCTAssertEqual(url.serialized, "foo://example.com/test?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://example.com/test?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // Appending an empty component to a root path does not actually change the path.
@@ -831,7 +831,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqualElements(url.pathComponents[range], [""])
 
-      XCTAssertEqual(url.serialized, "foo://example.com/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://example.com/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // Appending 2 empty components to a root path results in 2 empty components.
@@ -848,7 +848,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", ""])
       XCTAssertEqualElements(url.pathComponents[range], ["", ""])
 
-      XCTAssertEqual(url.serialized, "foo://example.com//?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://example.com//?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // Removing the empty subrange from endIndex..<endIdex also does not change the path.
@@ -865,7 +865,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqualElements(url.pathComponents[range], [])
 
-      XCTAssertEqual(url.serialized, "foo://host/?query")
+      XCTAssertEqual(url.serialized(), "foo://host/?query")
       XCTAssertURLIsIdempotent(url)
     }
     // Inserting in the range startIndex..<startIndex works as it does for other paths.
@@ -882,7 +882,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["test", ""])
       XCTAssertEqualElements(url.pathComponents[range], ["test"])
 
-      XCTAssertEqual(url.serialized, "foo://example.com/test/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://example.com/test/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -904,7 +904,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["C:", "Windows"])
       XCTAssertEqualElements(url.pathComponents[range], ["C:", "Windows"])
 
-      XCTAssertEqual(url.serialized, "file:///C:/Windows")
+      XCTAssertEqual(url.serialized(), "file:///C:/Windows")
       XCTAssertURLIsIdempotent(url)
     }
     // Does not apply to non-file URLs.
@@ -921,7 +921,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["C|", "Windows"])
       XCTAssertEqualElements(url.pathComponents[range], ["C|", "Windows"])
 
-      XCTAssertEqual(url.serialized, "http://example/C|/Windows")
+      XCTAssertEqual(url.serialized(), "http://example/C|/Windows")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -940,7 +940,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["C:", "foo", ""])
       XCTAssertEqualElements(url.pathComponents[range], [])
 
-      XCTAssertEqual(url.serialized, "file://host/C:/foo/")
+      XCTAssertEqual(url.serialized(), "file://host/C:/foo/")
       XCTAssertURLIsIdempotent(url)
     }
     // Does not apply to non-file URLs.
@@ -957,7 +957,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["C|", "foo", ""])
       XCTAssertEqualElements(url.pathComponents[range], [])
 
-      XCTAssertEqual(url.serialized, "http://host/C|/foo/")
+      XCTAssertEqual(url.serialized(), "http://host/C|/foo/")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -979,7 +979,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "//boo/"])
       XCTAssertEqualElements(url.pathComponents[range], ["//boo/"])
 
-      XCTAssertEqual(url.serialized, "foo://example.com/a/b/%2F%2Fboo%2F?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://example.com/a/b/%2F%2Fboo%2F?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // Slashes cannot be used to sneak a "." or ".." component through - at least,
@@ -997,7 +997,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "/.."])
       XCTAssertEqualElements(url.pathComponents[range], ["/.."])
 
-      XCTAssertEqual(url.serialized, "foo://example.com/a/b/%2F..?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://example.com/a/b/%2F..?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
     // Backslashes are also encoded, as they are treated like regular slashes in special URLs.
@@ -1014,7 +1014,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "\\"])
       XCTAssertEqualElements(url.pathComponents[range], ["\\"])
 
-      XCTAssertEqual(url.serialized, "foo://example.com/a/b/%5C?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://example.com/a/b/%5C?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -1041,7 +1041,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c", "d"])
       XCTAssertEqualElements(url.pathComponents[range], [""])
 
-      XCTAssertEqual(url.serialized, "foo:/.//a/b/c/d?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/.//a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is not added/removed when inserting a non-empty component at the front of the path.
@@ -1054,7 +1054,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["not empty", "", "a", "b", "c", "d"])
       XCTAssertEqualElements(url.pathComponents[range2], ["not empty"])
 
-      XCTAssertEqual(url.serialized, "foo:/not%20empty//a/b/c/d?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/not%20empty//a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is not added/is removed when replacing the empty component at the front of the path with a non-empty one.
@@ -1068,7 +1068,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["book", "a", "b", "c", "d"])
       XCTAssertEqualElements(url.pathComponents[range3], ["book"])
 
-      XCTAssertEqual(url.serialized, "foo:/book/a/b/c/d?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/book/a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is _not_ added when inserting an empty component at the front of the path _if authority present_.
@@ -1083,7 +1083,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c", "d"])
       XCTAssertEqualElements(url.pathComponents[range4], [""])
 
-      XCTAssertEqual(url.serialized, "foo://host//a/b/c/d?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo://host//a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1102,7 +1102,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c", "d"])
       XCTAssertEqualElements(url.pathComponents[range], [])
 
-      XCTAssertEqual(url.serialized, "foo:/a/b/c/d?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/a/b/c/d?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is inserted when a removal at the front causes an empty component to become first.
@@ -1119,7 +1119,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", "c"])
       XCTAssertEqualElements(url.pathComponents[range2], [])
 
-      XCTAssertEqual(url.serialized, "foo:/.//c")
+      XCTAssertEqual(url.serialized(), "foo:/.//c")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is _not_ inserted when a removal at the front causes an empty component to become first _if authority present_.
@@ -1136,7 +1136,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", "c"])
       XCTAssertEqualElements(url.pathComponents[range3], [])
 
-      XCTAssertEqual(url.serialized, "foo://host//c")
+      XCTAssertEqual(url.serialized(), "foo://host//c")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1155,7 +1155,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", "f"])
       XCTAssertEqualElements(url.pathComponents[range], ["", "f"])
 
-      XCTAssertEqual(url.serialized, "foo:/.//f?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/.//f?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is unaffected by appending a component to a root path, due to special-casing appends to root paths.
@@ -1171,7 +1171,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["f"])
       XCTAssertEqualElements(url.pathComponents[range2], ["f"])
 
-      XCTAssertEqual(url.serialized, "foo:/f?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/f?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is unaffected by appending components after the 2nd component.
@@ -1187,7 +1187,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", "a", "b", "c"])
       XCTAssertEqualElements(url.pathComponents[range3], ["c"])
 
-      XCTAssertEqual(url.serialized, "foo:/.//a/b/c?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/.//a/b/c?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       url = WebURL("foo:/a/b?aQuery#someFragment")!
@@ -1202,7 +1202,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["a", "b", "c"])
       XCTAssertEqualElements(url.pathComponents[range4], ["c"])
 
-      XCTAssertEqual(url.serialized, "foo:/a/b/c?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/a/b/c?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1221,7 +1221,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, [""])
       XCTAssertEqualElements(url.pathComponents[range], [])
 
-      XCTAssertEqual(url.serialized, "foo:/?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
 
       // Sigil is unaffected when removing components after the 2nd one.
@@ -1238,7 +1238,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", "a"])
       XCTAssertEqualElements(url.pathComponents[range2], [])
 
-      XCTAssertEqual(url.serialized, "foo:/.//a?aQuery#someFragment")
+      XCTAssertEqual(url.serialized(), "foo:/.//a?aQuery#someFragment")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1257,7 +1257,7 @@ extension PathComponentsTests {
       XCTAssertEqualElements(url.pathComponents, ["", "g"])
       XCTAssertEqualElements(url.pathComponents[range], ["", "g"])
 
-      XCTAssertEqual(url.serialized, "foo:/.//g")
+      XCTAssertEqual(url.serialized(), "foo:/.//g")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -1290,7 +1290,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/a/3")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/a/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1311,7 +1311,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/a/4")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/a/4")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/a/4")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1330,7 +1330,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/a")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/a")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/a")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1350,7 +1350,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/a/b/c/d/3")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/a/b/c/d/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/b/c/d/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1371,7 +1371,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/a/b/c/d/3")
       XCTAssertEqual(url.pathComponents.count, 6)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/a/b/c/d/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/a/b/c/d/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1391,7 +1391,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/a/b/c/d")
       XCTAssertEqual(url.pathComponents.count, 6)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/a/b/c/d")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/a/b/c/d")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1412,7 +1412,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/3/4")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/3/4")
+      XCTAssertEqual(url.serialized(), "http://example.com/3/4")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1434,7 +1434,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/4")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/4")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/4")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1455,7 +1455,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1474,7 +1474,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/a/b/1/2/3")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/a/b/1/2/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/b/1/2/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1492,7 +1492,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/a/b/3/4")
       XCTAssertEqual(url.pathComponents.count, 6)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/a/b/3/4")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/a/b/3/4")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1511,7 +1511,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3/a/b")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/a/b")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/a/b")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -1522,7 +1522,7 @@ extension PathComponentsTests {
     // will percent encode "%XX" to "%25XX".
     do {
       var url = WebURL("http://example.com/%2561")!
-      XCTAssertEqual(url.serialized, "http://example.com/%2561")
+      XCTAssertEqual(url.serialized(), "http://example.com/%2561")
       XCTAssertEqual(url.path, "/%2561")
       XCTAssertEqualElements(url.pathComponents, ["%61"])
 
@@ -1532,7 +1532,7 @@ extension PathComponentsTests {
         with: [url.pathComponents.first!, "hello to%3A the world!"]
       )
 
-      XCTAssertEqual(url.serialized, "http://example.com/%2561/%2561/hello%20to%253A%20the%20world!")
+      XCTAssertEqual(url.serialized(), "http://example.com/%2561/%2561/hello%20to%253A%20the%20world!")
       XCTAssertEqual(url.path, "/%2561/%2561/hello%20to%253A%20the%20world!")
       XCTAssertEqualElements(url.pathComponents, ["%61", "%61", "hello to%3A the world!"])
       XCTAssertURLIsIdempotent(url)
@@ -1542,7 +1542,7 @@ extension PathComponentsTests {
     // will not double-encode "%XX".
     do {
       var url = WebURL("http://example.com/%2561")!
-      XCTAssertEqual(url.serialized, "http://example.com/%2561")
+      XCTAssertEqual(url.serialized(), "http://example.com/%2561")
       XCTAssertEqual(url.path, "/%2561")
       XCTAssertEqualElements(url.pathComponents, ["%61"])
 
@@ -1552,7 +1552,7 @@ extension PathComponentsTests {
         withPercentEncodedComponents: [url.pathComponents.first!, "hello to%3A the world!"]
       )
 
-      XCTAssertEqual(url.serialized, "http://example.com/%2561/%61/hello%20to%3A%20the%20world!")
+      XCTAssertEqual(url.serialized(), "http://example.com/%2561/%61/hello%20to%3A%20the%20world!")
       XCTAssertEqual(url.path, "/%2561/%61/hello%20to%3A%20the%20world!")
       XCTAssertEqualElements(url.pathComponents, ["%61", "a", "hello to: the world!"])
       XCTAssertURLIsIdempotent(url)
@@ -1563,7 +1563,7 @@ extension PathComponentsTests {
     // the implementation so fixing it is a low priority.
     do {
       var url = WebURL("http://example.com/foo/bar")!
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar")
       XCTAssertEqual(url.path, "/foo/bar")
       XCTAssertEqualElements(url.pathComponents, ["foo", "bar"])
 
@@ -1572,14 +1572,14 @@ extension PathComponentsTests {
         with: ["baz", "%2E%2E", "qux"]  // Should technically be encoded as "%252E%252E".
       )
 
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar/baz/qux")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar/baz/qux")
       XCTAssertEqual(url.path, "/foo/bar/baz/qux")
       XCTAssertEqualElements(url.pathComponents, ["foo", "bar", "baz", "qux"])
       XCTAssertURLIsIdempotent(url)
     }
     do {
       var url = WebURL("http://example.com/foo/bar")!
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar")
       XCTAssertEqual(url.path, "/foo/bar")
       XCTAssertEqualElements(url.pathComponents, ["foo", "bar"])
 
@@ -1588,7 +1588,7 @@ extension PathComponentsTests {
         withPercentEncodedComponents: ["baz", "%2E%2E", "qux"]
       )
 
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar/baz/qux")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar/baz/qux")
       XCTAssertEqual(url.path, "/foo/bar/baz/qux")
       XCTAssertEqualElements(url.pathComponents, ["foo", "bar", "baz", "qux"])
       XCTAssertURLIsIdempotent(url)
@@ -1614,7 +1614,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/a/b/1/2/3")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/a/b/1/2/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/b/1/2/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1633,7 +1633,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/a/b/3/4")
       XCTAssertEqual(url.pathComponents.count, 6)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/a/b/3/4")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/a/b/3/4")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1650,7 +1650,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3/a/b")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/a/b")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/a/b")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1667,7 +1667,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/hello/world")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/hello/world")
+      XCTAssertEqual(url.serialized(), "http://example.com/hello/world")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1685,7 +1685,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/hello/world")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "foo://example.com/hello/world")
+      XCTAssertEqual(url.serialized(), "foo://example.com/hello/world")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1702,7 +1702,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/foo/bar/hello/world")
       XCTAssertEqual(url.pathComponents.count, 4)
 
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar/hello/world")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar/hello/world")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1719,7 +1719,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "//1/2/3")
       XCTAssertEqual(url.pathComponents.count, 4)
 
-      XCTAssertEqual(url.serialized, "foo:/.//1/2/3")
+      XCTAssertEqual(url.serialized(), "foo:/.//1/2/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1736,7 +1736,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/C:/Users/jim/")
       XCTAssertEqual(url.pathComponents.count, 4)
 
-      XCTAssertEqual(url.serialized, "file:///C:/Users/jim/")
+      XCTAssertEqual(url.serialized(), "file:///C:/Users/jim/")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1753,7 +1753,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1770,7 +1770,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3/%2Fa/%5Cb")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/%2Fa/%5Cb")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/%2Fa/%5Cb")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1787,7 +1787,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3/folder-%2561/w%2561m")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/folder-%2561/w%2561m")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/folder-%2561/w%2561m")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -1807,7 +1807,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3/a/b")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/a/b")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/a/b")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1824,7 +1824,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/hello/world")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/hello/world")
+      XCTAssertEqual(url.serialized(), "http://example.com/hello/world")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1842,7 +1842,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/hello/world")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "foo://example.com/hello/world")
+      XCTAssertEqual(url.serialized(), "foo://example.com/hello/world")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1859,7 +1859,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/foo/bar/hello/world")
       XCTAssertEqual(url.pathComponents.count, 4)
 
-      XCTAssertEqual(url.serialized, "http://example.com/foo/bar/hello/world")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar/hello/world")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1876,7 +1876,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "//bar")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "foo:/.//bar")
+      XCTAssertEqual(url.serialized(), "foo:/.//bar")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1893,7 +1893,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/C:/Windows/System32/")
       XCTAssertEqual(url.pathComponents.count, 4)
 
-      XCTAssertEqual(url.serialized, "file://host/C:/Windows/System32/")
+      XCTAssertEqual(url.serialized(), "file://host/C:/Windows/System32/")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1910,7 +1910,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1927,7 +1927,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3/%2Fa/%5Cb")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/%2Fa/%5Cb")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/%2Fa/%5Cb")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1944,7 +1944,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/3/folder-%2561/w%2561m")
       XCTAssertEqual(url.pathComponents.count, 5)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/folder-%2561/w%2561m")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/folder-%2561/w%2561m")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -1965,7 +1965,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/2/3")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/2/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/2/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -1984,7 +1984,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/4")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/4")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/4")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2001,7 +2001,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1")
+      XCTAssertEqual(url.serialized(), "http://example.com/1")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2016,7 +2016,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2033,7 +2033,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "")
       XCTAssertEqual(url.pathComponents.count, 0)
 
-      XCTAssertEqual(url.serialized, "foo://example.com")
+      XCTAssertEqual(url.serialized(), "foo://example.com")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2051,7 +2051,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "//c/d")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "foo:/.//c/d")
+      XCTAssertEqual(url.serialized(), "foo:/.//c/d")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2069,7 +2069,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/C:/d")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "file:///C:/d")
+      XCTAssertEqual(url.serialized(), "file:///C:/d")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2085,7 +2085,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "")
       XCTAssertEqual(url.pathComponents.count, 0)
 
-      XCTAssertEqual(url.serialized, "foo://example.com")
+      XCTAssertEqual(url.serialized(), "foo://example.com")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2100,7 +2100,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "foo:/")
+      XCTAssertEqual(url.serialized(), "foo:/")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -2120,7 +2120,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/a/2/3")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/a/2/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/a/2/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2139,7 +2139,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/a/3/4")
       XCTAssertEqual(url.pathComponents.count, 4)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/a/3/4")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/a/3/4")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2158,7 +2158,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2/a")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2/a")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/a")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2175,7 +2175,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/a")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "http://example.com/a")
+      XCTAssertEqual(url.serialized(), "http://example.com/a")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2194,7 +2194,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/foo/a/")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/foo/a/")
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/a/")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2211,7 +2211,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "//b/c/d")
       XCTAssertEqual(url.pathComponents.count, 4)
 
-      XCTAssertEqual(url.serialized, "foo:/.//b/c/d")
+      XCTAssertEqual(url.serialized(), "foo:/.//b/c/d")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2228,7 +2228,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/C:/b/c/d")
       XCTAssertEqual(url.pathComponents.count, 4)
 
-      XCTAssertEqual(url.serialized, "file:///C:/b/c/d")
+      XCTAssertEqual(url.serialized(), "file:///C:/b/c/d")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2245,7 +2245,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/2/3")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/2/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/2/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2264,7 +2264,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/%5Cb/3")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/%5Cb/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/%5Cb/3")
       XCTAssertURLIsIdempotent(url)
     }
 
@@ -2283,7 +2283,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/folder-%2561/3")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/folder-%2561/3")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/folder-%2561/3")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -2303,7 +2303,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1/2")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1/2")
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2")
       XCTAssertURLIsIdempotent(url)
     }
     // Remove 2, non-empty components.
@@ -2316,7 +2316,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/1")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "http://example.com/1")
+      XCTAssertEqual(url.serialized(), "http://example.com/1")
       XCTAssertURLIsIdempotent(url)
     }
     // Remove all components, special URL.
@@ -2329,7 +2329,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "http://example.com/")
+      XCTAssertEqual(url.serialized(), "http://example.com/")
       XCTAssertURLIsIdempotent(url)
     }
     // Remove all components, non-special URL with hostname.
@@ -2342,7 +2342,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "")
       XCTAssertEqual(url.pathComponents.count, 0)
 
-      XCTAssertEqual(url.serialized, "foo://example.com")
+      XCTAssertEqual(url.serialized(), "foo://example.com")
       XCTAssertURLIsIdempotent(url)
     }
     // Remove all components, non-special URL without hostname.
@@ -2355,7 +2355,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "foo:/")
+      XCTAssertEqual(url.serialized(), "foo:/")
       XCTAssertURLIsIdempotent(url)
     }
     // Remove 1, empty component.
@@ -2368,7 +2368,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/usr/lib")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib")
       XCTAssertURLIsIdempotent(url)
     }
     // Remove 2 empty components.
@@ -2381,7 +2381,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/usr/lib")
       XCTAssertEqual(url.pathComponents.count, 2)
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -2398,7 +2398,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/usr/lib/")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib/")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/")
       XCTAssertURLIsIdempotent(url)
     }
     // Does not append an empty component if the last component is already empty.
@@ -2411,7 +2411,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/usr/lib/")
       XCTAssertEqual(url.pathComponents.count, 3)
 
-      XCTAssertEqual(url.serialized, "file:///usr/lib/")
+      XCTAssertEqual(url.serialized(), "file:///usr/lib/")
       XCTAssertURLIsIdempotent(url)
     }
     // Does not append an empty component to root paths.
@@ -2424,7 +2424,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "file:///")
+      XCTAssertEqual(url.serialized(), "file:///")
       XCTAssertURLIsIdempotent(url)
     }
     // Appends an empty component if the path is non-opaque and empty.
@@ -2438,7 +2438,7 @@ extension PathComponentsTests {
       XCTAssertEqual(url.path, "/")
       XCTAssertEqual(url.pathComponents.count, 1)
 
-      XCTAssertEqual(url.serialized, "foo://example/")
+      XCTAssertEqual(url.serialized(), "foo://example/")
       XCTAssertURLIsIdempotent(url)
     }
   }

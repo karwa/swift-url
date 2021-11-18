@@ -116,7 +116,7 @@ extension WebURL: Equatable, Hashable, Comparable {
 extension WebURL: CustomStringConvertible, LosslessStringConvertible {
 
   public var description: String {
-    serialized
+    serialized()
   }
 }
 
@@ -132,7 +132,7 @@ extension WebURL: Codable {
 
   public func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
-    try container.encode(serialized)
+    try container.encode(serialized())
   }
 }
 
@@ -157,16 +157,15 @@ extension WebURL {
 
 extension WebURL {
 
-  /// The string representation of this URL.
+  /// Returns the string representation of this URL.
   ///
-  public var serialized: String {
-    String(decoding: utf8, as: UTF8.self)
-  }
-
-  /// The string representation of this URL, excluding the URL's fragment.
+  /// - parameters:
+  ///   - excludingFragment: Whether the fragment should be omitted from the result. The default is `false`.
   ///
-  public var serializedExcludingFragment: String {
-    utf8[0..<storage.structure.fragmentStart].withUnsafeBufferPointer { String(decoding: $0, as: UTF8.self) }
+  public func serialized(excludingFragment: Bool = false) -> String {
+    excludingFragment
+      ? String(decoding: utf8[0..<storage.structure.fragmentStart], as: UTF8.self)
+      : String(decoding: utf8, as: UTF8.self)
   }
 
   /// The scheme of this URL, for example `https` or `file`.

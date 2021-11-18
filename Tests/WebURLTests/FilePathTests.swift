@@ -67,7 +67,7 @@ extension FilePathTests {
 extension FilePathTests {
 
   func testEmptyFileURLIsValidURL() {
-    XCTAssertEqual(_emptyFileURL.serialized, "file:///")
+    XCTAssertEqual(_emptyFileURL.serialized(), "file:///")
     XCTAssertURLIsIdempotent(_emptyFileURL)
   }
 
@@ -83,7 +83,7 @@ extension FilePathTests {
       XCTFail()
       return
     }
-    XCTAssertEqual(fileURL.serialized, "file://example/foo/bar")
+    XCTAssertEqual(fileURL.serialized(), "file://example/foo/bar")
     XCTAssertURLIsIdempotent(fileURL)
     XCTAssertThrowsSpecific(URLSetterError.cannotHaveCredentialsOrPort) {
       try fileURL.setPort(99)
@@ -137,7 +137,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .posix)
 
-      XCTAssertEqual(fileURL.serialized, #"file:///fo%ED%A0%80o/bar"#)
+      XCTAssertEqual(fileURL.serialized(), #"file:///fo%ED%A0%80o/bar"#)
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -155,7 +155,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(latin1, format: .posix)
 
-      XCTAssertEqual(fileURL.serialized, "file:///caf%E9%DD")
+      XCTAssertEqual(fileURL.serialized(), "file:///caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 1)
@@ -176,7 +176,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(greek, format: .posix)
 
-      XCTAssertEqual(fileURL.serialized, "file:///hi%E1%E2%E3")
+      XCTAssertEqual(fileURL.serialized(), "file:///hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 1)
@@ -197,7 +197,7 @@ extension FilePathTests {
       let fileURL = try WebURL.fromFilePathBytes(allBytes, format: .posix)
 
       XCTAssertEqual(
-        fileURL.serialized,
+        fileURL.serialized(),
         #"file:///fo%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F"#
           + #"%20!%22%23$%25&'()*+,-./0123456789%3A;%3C=%3E%3F@ABCDEFGHIJKLMNOPQRSTUVWXYZ[%5C]^_%60abcdefghijklm"#
           + #"nopqrstuvwxyz%7B%7C%7D~%7F%80%81%82%83%84%85%86%87%88%89%8A%8B%8C%8D%8E%8F%90%91%92%93%94%95%96%97"#
@@ -277,7 +277,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
 
-      XCTAssertEqual(fileURL.serialized, #"file:///C:/fo%ED%A0%80o/bar"#)
+      XCTAssertEqual(fileURL.serialized(), #"file:///C:/fo%ED%A0%80o/bar"#)
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
@@ -296,7 +296,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(latin1, format: .windows)
 
-      XCTAssertEqual(fileURL.serialized, "file:///C:/caf%E9%DD")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -318,7 +318,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(greek, format: .windows)
 
-      XCTAssertEqual(fileURL.serialized, "file:///C:/hi%E1%E2%E3")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -339,7 +339,7 @@ extension FilePathTests {
       let fileURL = try WebURL.fromFilePathBytes(allBytes, format: .windows)
 
       XCTAssertEqual(
-        fileURL.serialized,
+        fileURL.serialized(),
         #"file:///C:/fo%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F"#
           //      Dot at end of component is trimmed                Backslash turned to forward slash in URL
           //                        V                                                    V
@@ -458,7 +458,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
 
-      XCTAssertEqual(fileURL.serialized, #"file:///C:/fo%ED%A0%80o/bar"#)
+      XCTAssertEqual(fileURL.serialized(), #"file:///C:/fo%ED%A0%80o/bar"#)
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
@@ -478,7 +478,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(latin1, format: .windows)
 
-      XCTAssertEqual(fileURL.serialized, "file:///C:/caf%E9%DD")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -501,7 +501,7 @@ extension FilePathTests {
 
       let fileURL = try WebURL.fromFilePathBytes(greek, format: .windows)
 
-      XCTAssertEqual(fileURL.serialized, "file:///C:/hi%E1%E2%E3")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -522,7 +522,7 @@ extension FilePathTests {
       let fileURL = try WebURL.fromFilePathBytes(allBytes, format: .windows)
 
       XCTAssertEqual(
-        fileURL.serialized,
+        fileURL.serialized(),
         #"file:///C:/fo%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F"#
           //                                                        Backslash turned to forward slash in URL
           //                                                                             V

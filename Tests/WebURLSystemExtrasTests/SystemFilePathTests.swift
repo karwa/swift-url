@@ -49,7 +49,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create a file URL.
       let fileURL = try WebURL(filePath: filePath)
-      XCTAssertEqual(fileURL.serialized, "file:///C:/foo/bar.txt")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/foo/bar.txt")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/foo/bar.txt")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
@@ -66,7 +66,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create another file URL which should exactly match the first one.
       let fileURL2 = try WebURL(filePath: filePath2)
-      XCTAssertEqual(fileURL2.serialized, "file:///C:/foo/bar.txt")
+      XCTAssertEqual(fileURL2.serialized(), "file:///C:/foo/bar.txt")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/C:/foo/bar.txt")
       XCTAssertEqual(fileURL, fileURL2)
@@ -91,7 +91,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create a file URL. Should be transcoded to UTF-8.
       let fileURL = try WebURL(filePath: filePath)
-      XCTAssertEqual(fileURL.serialized, "file:///C:/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(
         fileURL, scheme: "file", hostname: "", path: "/C:/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9"
@@ -110,7 +110,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create another file URL which should exactly match the first one.
       let fileURL2 = try WebURL(filePath: filePath2)
-      XCTAssertEqual(fileURL2.serialized, "file:///C:/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
+      XCTAssertEqual(fileURL2.serialized(), "file:///C:/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(
         fileURL2, scheme: "file", hostname: "", path: "/C:/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9"
@@ -129,7 +129,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create a file URL from the raw bytes.
       let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
-      XCTAssertEqual(fileURL.serialized, "file:///C:/fo%ED%A0%80o/bar")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
@@ -173,7 +173,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create a file URL from the raw bytes.
       let fileURL = try WebURL.fromFilePathBytes(latin1, format: .windows)
-      XCTAssertEqual(fileURL.serialized, "file:///C:/caf%E9%DD")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -199,7 +199,7 @@ final class SystemFilePathTests: XCTestCase {}
       // Since the FilePath contents are UTF-16 (rather than the ANSI bytes we started with),
       // the contents should be transcoded to UTF-8.
       let fileURL2 = try WebURL(filePath: filePath)
-      XCTAssertEqual(fileURL2.serialized, "file:///C:/caf%C3%A9%C3%9D")
+      XCTAssertEqual(fileURL2.serialized(), "file:///C:/caf%C3%A9%C3%9D")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/C:/caf%C3%A9%C3%9D")
       XCTAssertEqual(fileURL2.pathComponents.count, 2)
@@ -225,7 +225,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create a file URL from the raw bytes.
       let fileURL = try WebURL.fromFilePathBytes(greek, format: .windows)
-      XCTAssertEqual(fileURL.serialized, "file:///C:/hi%E1%E2%E3")
+      XCTAssertEqual(fileURL.serialized(), "file:///C:/hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -252,7 +252,7 @@ final class SystemFilePathTests: XCTestCase {}
       // Since the FilePath contents are UTF-16 (rather than the ANSI bytes we started with),
       // the contents should be transcoded to UTF-8.
       let fileURL2 = try WebURL(filePath: filePath)
-      XCTAssertEqual(fileURL2.serialized, "file:///C:/hi%CE%B1%CE%B2%CE%B3")
+      XCTAssertEqual(fileURL2.serialized(), "file:///C:/hi%CE%B1%CE%B2%CE%B3")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/C:/hi%CE%B1%CE%B2%CE%B3")
       XCTAssertEqual(fileURL2.pathComponents.count, 2)
@@ -364,7 +364,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create a file URL.
       let fileURL = try filePath.toURL()
-      XCTAssertEqual(fileURL.serialized, "file:///tmp/foo/bar.txt")
+      XCTAssertEqual(fileURL.serialized(), "file:///tmp/foo/bar.txt")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/tmp/foo/bar.txt")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
@@ -381,7 +381,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create another file URL which should exactly match the first one.
       let fileURL2 = try filePath2.toURL()
-      XCTAssertEqual(fileURL2.serialized, "file:///tmp/foo/bar.txt")
+      XCTAssertEqual(fileURL2.serialized(), "file:///tmp/foo/bar.txt")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/tmp/foo/bar.txt")
       XCTAssertEqual(fileURL, fileURL2)
@@ -407,7 +407,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create a file URL.
       let fileURL = try filePath.toURL()
-      XCTAssertEqual(fileURL.serialized, "file:///tmp/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
+      XCTAssertEqual(fileURL.serialized(), "file:///tmp/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(
         fileURL, scheme: "file", hostname: "", path: "/tmp/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9"
@@ -426,7 +426,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create another file URL which should exactly match the first one.
       let fileURL2 = try filePath2.toURL()
-      XCTAssertEqual(fileURL2.serialized, "file:///tmp/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
+      XCTAssertEqual(fileURL2.serialized(), "file:///tmp/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(
         fileURL2, scheme: "file", hostname: "", path: "/tmp/f%F0%9F%A6%86o/b%F0%9F%8F%86%F0%9F%8F%8Er.%F0%9F%92%A9"
@@ -444,7 +444,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create a file URL from the raw bytes. No UTF-8 validation is performed.
       let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .posix)
-      XCTAssertEqual(fileURL.serialized, "file:///fo%ED%A0%80o/bar")
+      XCTAssertEqual(fileURL.serialized(), "file:///fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -459,7 +459,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create another file URL from the path. Should exactly match the first one.
       let fileURL2 = try filePath.toURL()
-      XCTAssertEqual(fileURL2.serialized, "file:///fo%ED%A0%80o/bar")
+      XCTAssertEqual(fileURL2.serialized(), "file:///fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL, fileURL2)
@@ -478,7 +478,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Use WebURL(filePath: FilePath) to create a file URL.
       let fileURL = try filePath.toURL()
-      XCTAssertEqual(fileURL.serialized, "file:///fo%ED%A0%80o/bar")
+      XCTAssertEqual(fileURL.serialized(), "file:///fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
@@ -495,7 +495,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create another file URL from the path. Should exactly match the first one.
       let fileURL2 = try filePath.toURL()
-      XCTAssertEqual(fileURL2.serialized, "file:///fo%ED%A0%80o/bar")
+      XCTAssertEqual(fileURL2.serialized(), "file:///fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL, fileURL2)
@@ -510,7 +510,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create a file URL from the raw bytes. No UTF-8 validation is performed.
       let fileURL = try WebURL.fromFilePathBytes(latin1, format: .posix)
-      XCTAssertEqual(fileURL.serialized, "file:///caf%E9%DD")
+      XCTAssertEqual(fileURL.serialized(), "file:///caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 1)
@@ -525,7 +525,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create another file URL from the path. Should exactly match the first one.
       let fileURL2 = try filePath.toURL()
-      XCTAssertEqual(fileURL2.serialized, "file:///caf%E9%DD")
+      XCTAssertEqual(fileURL2.serialized(), "file:///caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/caf%E9%DD")
       XCTAssertEqual(fileURL, fileURL2)
@@ -540,7 +540,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create a file URL from the raw bytes. No UTF-8 validation is performed.
       let fileURL = try WebURL.fromFilePathBytes(greek, format: .posix)
-      XCTAssertEqual(fileURL.serialized, "file:///hi%E1%E2%E3")
+      XCTAssertEqual(fileURL.serialized(), "file:///hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 1)
@@ -555,7 +555,7 @@ final class SystemFilePathTests: XCTestCase {}
 
       // Create another file URL from the path. Should exactly match the first one.
       let fileURL2 = try filePath.toURL()
-      XCTAssertEqual(fileURL2.serialized, "file:///hi%E1%E2%E3")
+      XCTAssertEqual(fileURL2.serialized(), "file:///hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL2)
       XCTAssertURLComponents(fileURL2, scheme: "file", hostname: "", path: "/hi%E1%E2%E3")
       XCTAssertEqual(fileURL, fileURL2)

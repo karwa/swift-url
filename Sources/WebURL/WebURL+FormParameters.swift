@@ -46,13 +46,13 @@ extension WebURL {
   /// assert(url.formParams.from == "EUR")
   ///
   /// url.formParams.from = "GBP"
-  /// assert(url.serialized == "http://example.com/currency/convert?from=GBP&to=USD")
+  /// assert(url.serialized() == "http://example.com/currency/convert?from=GBP&to=USD")
   ///
   /// url.formParams.amount = "20"
-  /// assert(url.serialized == "http://example.com/currency/convert?from=GBP&to=USD&amount=20")
+  /// assert(url.serialized() == "http://example.com/currency/convert?from=GBP&to=USD&amount=20")
   ///
   /// url.formParams.to = "💵"
-  /// assert(url.serialized == "http://example.com/currency/convert?from=GBP&to=%F0%9F%92%B5&amount=20")
+  /// assert(url.serialized() == "http://example.com/currency/convert?from=GBP&to=%F0%9F%92%B5&amount=20")
   /// ```
   ///
   /// Additionally, you can iterate over all of the key-value pairs using the `.allKeyValuePairs` property:
@@ -73,7 +73,7 @@ extension WebURL {
   ///
   /// ```swift
   /// let url = WebURL("http://example.com?jalape\u{006E}\u{0303}os=2")!
-  /// url.serialized // "http://example.com/?jalapen%CC%83os=2"
+  /// url.serialized() // "http://example.com/?jalapen%CC%83os=2"
   /// url.formParams.get("jalape\u{006E}\u{0303}os") // "2"
   /// url.formParams.get("jalape\u{00F1}os") // nil
   /// url.formParams.allKeyValuePairs.first(where: { $0.0 == "jalape\u{00F1}os" }) // ("jalapeños", "2")

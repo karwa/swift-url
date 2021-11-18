@@ -37,7 +37,7 @@ extension FilePathToURLTests.WebURLReportHarness: FilePathToURLTests.Harness {
   public func filePathToURL(
     _ path: String, format: FilePathFormat
   ) -> Result<String, FilePathToURLTests.FailureReason> {
-    Result { try WebURL(filePath: path, format: format).serialized }
+    Result { try WebURL(filePath: path, format: format).serialized() }
       .mapError { Self.errorToFailureReason($0 as! URLFromFilePathError) }
   }
 
@@ -56,7 +56,7 @@ extension FilePathToURLTests.WebURLReportHarness: FilePathToURLTests.Harness {
   }
 
   public func parseSerializedURL(_ serializedURL: String) -> String? {
-    WebURL(serializedURL)?.serialized
+    WebURL(serializedURL)?.serialized()
   }
 
   public mutating func markSection(_ name: String) {

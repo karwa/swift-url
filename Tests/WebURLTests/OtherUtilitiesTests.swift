@@ -132,7 +132,7 @@ extension OtherUtilitiesTests {
 
   func testTempStorageIsValidURL() {
     let url = WebURL(storage: _tempStorage)
-    XCTAssertEqual(url.serialized, "a:")
+    XCTAssertEqual(url.serialized(), "a:")
     XCTAssertURLIsIdempotent(url)
   }
 }

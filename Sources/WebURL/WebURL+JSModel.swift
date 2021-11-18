@@ -152,7 +152,7 @@ extension WebURL.JSModel {
 extension WebURL.JSModel: CustomStringConvertible {
 
   public var description: String {
-    swiftModel.serialized
+    swiftModel.serialized()
   }
 }
 
@@ -188,7 +188,7 @@ extension WebURL.JSModel {
   ///
   public var href: String {
     get {
-      swiftModel.serialized
+      swiftModel.serialized()
     }
     set {
       if let newURL = WebURL(newValue) {
