@@ -32,27 +32,12 @@
 /// #"Quoth the Raven "Nevermore.""#.percentEncoded(using: NoQuotes()) // "Quoth the Raven %22Nevermore.%22"
 /// ```
 ///
-/// Encode-sets may also include a ``SubstitutionMap``. If an ASCII code-point is not percent-encoded, the substitution map may
-/// replace it with a different character. Content encoded with substitutions must be decoded using the same substitution map it was created with.
+/// Form-encoding is a legacy variant of percent-encoding, including a ``SubstitutionMap`` which replaces spaces with the "+" character.
+/// Whilst you may define your own encode-sets with custom substitution maps, doing so is often unwise.
 ///
 public protocol PercentEncodeSet {
 
   typealias _Member = _StaticMember<Self>
-
-  /// A ``SubstitutionMap`` which may replace ASCII code-points that are not percent-encoded.
-  ///
-  /// The set of code-points to percent-encode and substitute must not overlap. This means there must be no code-point `x`
-  /// for which `substitutions.substitute(ascii: x) != nil` and `shouldPercentEncode(ascii: x) == true`.
-  ///
-  /// In order to ensure that data with substitutions can be accurately decoded, substitute code-points _returned_ by `substitute(ascii:)`
-  /// should be percent-encoded. In other words, if `y = substitutions.substitute(ascii: x)`, `shouldPercentEncode(ascii: y)` should
-  /// be `true`.
-  ///
-  /// For example, the `application/x-www-form-urlencoded` encode-set substitutes spaces with the "+" character.
-  /// It would be incorrect for that encode-set to also say that the space character should be percent-encoded.
-  /// However, to ensure that _actual_ "+" characters in the source data are not later decoded as spaces, the "+" character is part of the percent-encode set.
-  ///
-  associatedtype Substitutions: SubstitutionMap = NoSubstitutions
 
   /// Whether or not the given ASCII `codePoint` should be percent-encoded.
   ///
@@ -62,6 +47,25 @@ public protocol PercentEncodeSet {
   /// - returns: Whether or not `codePoint` should be percent-encoded.
   ///
   func shouldPercentEncode(ascii codePoint: UInt8) -> Bool
+
+  /// A ``SubstitutionMap`` which may replace ASCII code-points that are not percent-encoded.
+  ///
+  /// This is a legacy feature to support form-encoding; modern percent-encoding does not use substitutions.
+  /// Should you have reason to create a custom substitution map, please observe the following guidelines:
+  ///
+  /// 1. The set of code-points to percent-encode and substitute must not overlap.
+  ///   There must be no code-point `x` for which `substitutions.substitute(ascii: x) != nil` and
+  ///   `shouldPercentEncode(ascii: x) == true`.
+  ///
+  /// 2. Substitute code-points _returned_ by `substitute(ascii:)` should be percent-encoded.
+  ///   In other words, if `y = substitutions.substitute(ascii: x)`, `shouldPercentEncode(ascii: y)` should be `true`.
+  ///
+  /// For example, form-encoding substitutes spaces with the "+" character.
+  /// It would be incorrect for that encode-set to say that the space character should be both substituted _and_ percent-encoded (#1 above),
+  /// and it must ensure that actual "+" characters in the source data are percent-encoded, so all "+" characters in the result can be interpreted as encoded spaces
+  /// (#2 above).
+  ///
+  associatedtype Substitutions: SubstitutionMap = NoSubstitutions
 
   /// The substitution map which applies to ASCII code-points that are not percent-encoded.
   ///
@@ -78,7 +82,7 @@ extension PercentEncodeSet where Substitutions == NoSubstitutions {
 
 /// A bidirectional map of ASCII code-points.
 ///
-/// Some encodings require certain ASCII code-points to be replaced.
+/// Some legacy encodings require certain ASCII code-points to be replaced.
 /// For example, the `application/x-www-form-urlencoded` encoding does not percent-encode ASCII spaces (0x20) as "%20",
 /// and instead replaces them with a "+" (0x2B). The following example shows a potential implementation of this encoding:
 ///
@@ -87,7 +91,7 @@ extension PercentEncodeSet where Substitutions == NoSubstitutions {
 ///
 ///   func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
 ///     if codePoint == 0x20 { return false } // do not percent-encode spaces, substitute instead.
-///     if codePoint == 0x2B { return true } // percent-encode actual "+"s in the source.
+///     if codePoint == 0x2B { return true }  // percent-encode actual "+"s in the source.
 ///     // other codepoints...
 ///   }
 ///
@@ -381,16 +385,15 @@ extension LazilyPercentEncoded {
     return didEncode
   }
 
-  /// Returns the total length of the encoded UTF-8 bytes, calculated without considering overflow,
-  /// and whether or not any code-units were altered by the `EncodeSet`.
+  /// Returns the total length of the encoded UTF-8 bytes, and whether or not any code-units were altered by the `EncodeSet`.
+  /// The length is calculated using arithmetic which wraps on overflow.
   ///
-  /// This is useful for determining the expected allocation size required to hold the contents,
-  /// but since it does not consider overflow, it will be inaccurate in the case that the collection yields more than `Int.max` elements.
+  /// This is useful for estimating an allocation size required to hold the contents, but **does not** eliminate the need to bounds-check
+  /// when writing to that allocation.
   ///
-  /// If not exact, this value should always be an underestimate; never negative,
-  /// and (assuming the source collection yields the same sequence of elements), never an overestimate.
-  /// The latter point means that writers should still be wary - even an invalid collection which yields different values every time must
-  /// never cause memory safety to be violated.
+  /// Ultimately, any user-supplied generic collection must be treated as potentially buggy, including returning a different number of elements each time it is iterated.
+  /// It is unacceptable even for bugs like that to lead to memory-safety errors, therefore this value must **only** be interpreted as an estimated/expected size,
+  /// and not relied upon for safety (although it is acceptable to `fatalError` if the actual size differs from this expected size).
   ///
   @inlinable @inline(never)
   internal var unsafeEncodedLength: (count: UInt, needsEncoding: Bool) {
@@ -430,8 +433,10 @@ extension LazyCollectionProtocol where Element == UInt8 {
   /// Returns a `Collection` whose elements are computed lazily by percent-encoding this collection's elements.
   ///
   /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
-  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
-  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  /// with bytes within the ASCII range being restricted by `encodeSet`.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+  /// provide the appropriate ``SubstitutionMap`` when decoding form-encoded data to accurately recover the source contents.
   ///
   /// ```swift
   /// // Encode arbitrary data as an ASCII string.
@@ -456,8 +461,10 @@ extension LazyCollectionProtocol where Element == UInt8 {
   /// Returns a `Collection` whose elements are computed lazily by percent-encoding this collection's elements.
   ///
   /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
-  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
-  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  /// with bytes within the ASCII range being restricted by `encodeSet`.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+  /// provide the appropriate ``SubstitutionMap`` when decoding form-encoded data to accurately recover the source contents.
   ///
   /// ```swift
   /// // Encode arbitrary data as an ASCII string.
@@ -487,8 +494,10 @@ extension Collection where Element == UInt8 {
   /// Returns an ASCII string formed by percent-encoding this collection's elements.
   ///
   /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
-  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
-  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  /// with bytes within the ASCII range being restricted by `encodeSet`.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+  /// provide the appropriate ``SubstitutionMap`` when decoding form-encoded data to accurately recover the source contents.
   ///
   /// ```swift
   /// // Encode arbitrary data as an ASCII string.
@@ -513,8 +522,10 @@ extension Collection where Element == UInt8 {
   /// Returns an ASCII string formed by percent-encoding this collection's elements.
   ///
   /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
-  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
-  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  /// with bytes within the ASCII range being restricted by `encodeSet`.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+  /// provide the appropriate ``SubstitutionMap`` when decoding form-encoded data to accurately recover the source contents.
   ///
   /// ```swift
   /// // Encode arbitrary data as an ASCII string.
@@ -538,8 +549,10 @@ extension StringProtocol {
   /// Returns an ASCII string formed by percent-encoding this string's UTF-8 representation.
   ///
   /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
-  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
-  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  /// with bytes within the ASCII range being restricted by `encodeSet`.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+  /// provide the appropriate ``SubstitutionMap`` when decoding form-encoded data to accurately recover the source contents.
   ///
   /// ```swift
   /// // Percent-encoding can be used to escapes special characters, e.g. spaces.
@@ -560,8 +573,10 @@ extension StringProtocol {
   /// Returns an ASCII string formed by percent-encoding this string's UTF-8 representation.
   ///
   /// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
-  /// with bytes within the ASCII range being restricted by `encodeSet`. Some encodings (e.g. form encoding) apply substitutions
-  /// in addition to percent-encoding; provide the appropriate ``SubstitutionMap`` when decoding to accurately recover the source contents.
+  /// with bytes within the ASCII range being restricted by `encodeSet`.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+  /// provide the appropriate ``SubstitutionMap`` when decoding form-encoded data to accurately recover the source contents.
   ///
   /// ```swift
   /// // Percent-encoding can be used to escapes special characters, e.g. spaces.
@@ -586,12 +601,13 @@ extension StringProtocol {
 
 /// A `Collection` which percent-decodes elements from its `Source` on-demand.
 ///
-/// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB),
-/// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding;
-/// use ``LazilyPercentDecodedWithSubstitutions``, providing the correct ``SubstitutionMap``,
-/// to accurately decode content encoded with substitutions.
+/// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
 ///
-/// To decode a source collection containing a percent-encoded string, use the extension methods provided on `LazyCollectionProtocol`:
+/// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+/// use ``LazilyPercentDecodedWithSubstitutions``, providing the correct ``SubstitutionMap``,
+/// to accurately decode form-encoded content.
+///
+/// To decode a source collection containing a percent-encoded or form-encoded string, use the extension methods provided on `LazyCollectionProtocol`:
 ///
 /// ```swift
 /// // The bytes, containing a string with percent-encoding.
@@ -609,11 +625,12 @@ where Source: Collection, Source.Element == UInt8
 
 /// A `Collection` which percent-decodes elements from its `Source` on-demand, and reverses substitutions made by a ``SubstitutionMap``.
 ///
-/// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB),
-/// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-/// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+/// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
 ///
-/// To decode a source collection containing a percent-encoded string, use the extension methods provided on `LazyCollectionProtocol`:
+/// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+/// ``SubstitutionMap`` to accurately decode form-encoded content.
+///
+/// To decode a source collection containing a percent-encoded or form-encoded string, use the extension methods provided on `LazyCollectionProtocol`:
 ///
 /// ```swift
 /// // The bytes, containing a string with UTF-8 form-encoding.
@@ -834,8 +851,9 @@ extension Collection where Element == UInt8 {
   /// Returns the percent-decoding of this collection's elements, interpreted as UTF-8 code-units.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content.
   ///
   /// If the bytes obtained by percent-decoding this collection's elements represent anything other than UTF-8 text,
   /// use the `percentDecoded(substitutions:)` lazy wrapper to decode the collection as binary data.
@@ -930,8 +948,9 @@ extension LazyCollectionProtocol where Element == UInt8 {
   /// Returns a `Collection` whose elements are computed lazily by percent-decoding the elements of this collection.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// ```swift
   /// // The bytes, containing a string with UTF-8 form-encoding.
@@ -959,8 +978,9 @@ extension LazyCollectionProtocol where Element == UInt8 {
   /// Returns a `Collection` whose elements are computed lazily by percent-decoding the elements of this collection.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// ```swift
   /// // The bytes, containing a string with UTF-8 form-encoding.
@@ -988,8 +1008,9 @@ extension LazyCollectionProtocol where Element == UInt8 {
   /// Returns a `Collection` whose elements are computed lazily by percent-decoding the elements of this collection.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// This function is equivalent to calling `percentDecoded(substitutions: .none)`.
   ///
@@ -1017,8 +1038,9 @@ extension StringProtocol {
   /// Returns the percent-decoding of this string as binary data.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// ```swift
   /// let originalImage: Data = ...
@@ -1026,7 +1048,7 @@ extension StringProtocol {
   /// // Encode the data, e.g. using form-encoding.
   /// let encodedImage = originalImage.percentEncodedString(using: .formEncoding) // "%BAt_%E0%11%22%EB%10%2C%7F..."
   ///
-  /// // Decode the data, giving the same substitution map.
+  /// // Decode the data, giving the appropriate substitution map.
   /// let decodedImage = encodedImage.percentDecodedBytesArray(substitutions: .formEncoding)
   /// assert(decodedImage.elementsEqual(originalImage)) // ✅
   /// ```
@@ -1043,8 +1065,9 @@ extension StringProtocol {
   /// Returns the percent-decoding of this string as binary data.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// ```swift
   /// let originalImage: Data = ...
@@ -1052,7 +1075,7 @@ extension StringProtocol {
   /// // Encode the data, e.g. using form-encoding.
   /// let encodedImage = originalImage.percentEncodedString(using: .formEncoding) // "%BAt_%E0%11%22%EB%10%2C%7F..."
   ///
-  /// // Decode the data, giving the same substitution map.
+  /// // Decode the data, giving the appropriate substitution map.
   /// let decodedImage = encodedImage.percentDecodedBytesArray(substitutions: .formEncoding)
   /// assert(decodedImage.elementsEqual(originalImage)) // ✅
   /// ```
@@ -1071,8 +1094,9 @@ extension StringProtocol {
   /// Returns the percent-decoding of this string as binary data.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// This function is equivalent to calling `percentDecodedBytesArray(substitutions: .none)`.
   ///
@@ -1105,8 +1129,9 @@ extension StringProtocol {
   /// Returns the percent-decoding of this string, interpreted as UTF-8 code-units.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// If the bytes obtained by percent-decoding this string represent anything other than UTF-8 text,
   /// use the `percentDecodedByteArray` function to decode the string as binary data.
@@ -1116,7 +1141,7 @@ extension StringProtocol {
   /// "hello,%20world!".percentDecoded(substitutions: .none) // "hello, world!"
   /// "%2Fusr%2Fbin%2Fswift".percentDecoded(substitutions: .none) // "/usr/bin/swift"
   ///
-  /// // Some encodings require a substitution map to accurately decode.
+  /// // Form-encoded content requires a substitution map to accurately decode.
   /// "king+of+the+%F0%9F%A6%86s".percentDecoded(substitutions: .formEncoding) // "king of the 🦆s"
   /// ```
   ///
@@ -1136,8 +1161,9 @@ extension StringProtocol {
   /// Returns the percent-decoding of this string, interpreted as UTF-8 code-units.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// If the bytes obtained by percent-decoding this string represent anything other than UTF-8 text,
   /// use the `percentDecodedByteArray` function to decode the string as binary data.
@@ -1147,7 +1173,7 @@ extension StringProtocol {
   /// "hello,%20world!".percentDecoded(substitutions: .none) // "hello, world!"
   /// "%2Fusr%2Fbin%2Fswift".percentDecoded(substitutions: .none) // "/usr/bin/swift"
   ///
-  /// // Some encodings require a substitution map to accurately decode.
+  /// // Form-encoded content requires a substitution map to accurately decode.
   /// "king+of+the+%F0%9F%A6%86s".percentDecoded(substitutions: .formEncoding) // "king of the 🦆s"
   /// ```
   ///
@@ -1167,8 +1193,9 @@ extension StringProtocol {
   /// Returns the percent-decoding of this string, interpreted as UTF-8 code-units.
   ///
   /// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
-  /// Some encodings (e.g. form encoding) apply substitutions in addition to percent-encoding; provide the appropriate
-  /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
+  ///
+  /// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+  /// ``SubstitutionMap`` to accurately decode form-encoded content, or `.none` for modern percent-encoded content.
   ///
   /// If the bytes obtained by percent-decoding this string represent anything other than UTF-8 text,
   /// use the `percentDecodedByteArray` function to decode the string as binary data.
