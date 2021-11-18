@@ -160,7 +160,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 1)
 
-      // FIXME: Perhaps don't automatically percent-decode path components?
+      XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.startIndex], "caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.first, "caf��")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
@@ -181,7 +181,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 1)
 
-      // FIXME: Perhaps don't automatically percent-decode path components?
+      XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.startIndex], "hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.first, "hi���")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
@@ -301,7 +301,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
 
-      // FIXME: Perhaps don't automatically percent-decode path components?
+      XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.indices.last!], "caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.last, "caf��")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
@@ -323,7 +323,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
 
-      // FIXME: Perhaps don't automatically percent-decode path components?
+      XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.indices.last!], "hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.last, "hi���")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
@@ -483,7 +483,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
 
-      // FIXME: Perhaps don't automatically percent-decode path components?
+      XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.indices.last!], "caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.last, "caf��")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
@@ -506,7 +506,7 @@ extension FilePathTests {
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
 
-      // FIXME: Perhaps don't automatically percent-decode path components?
+      XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.indices.last!], "hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.last, "hi���")
 
       let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)

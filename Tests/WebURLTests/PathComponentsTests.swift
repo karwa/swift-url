@@ -58,6 +58,12 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.last, "")
       XCTAssertEqual(url.pathComponents.count, 4)
     }
+    // WebURL.PathComponents.subscript(raw)
+    do {
+      let url = WebURL("https://example.com/music/bands/AC%2FDC")!
+      XCTAssertEqual(url.pathComponents[url.pathComponents.indices.last!], "AC/DC")
+      XCTAssertEqual(url.pathComponents[raw: url.pathComponents.indices.last!], "AC%2FDC")
+    }
     // WebURL.PathComponents.replaceSubrange
     do {
       var url = WebURL("file:///usr/bin/swift")!
@@ -93,6 +99,24 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com/")
       XCTAssertEqual(url.pathComponents.first, "")
       XCTAssertEqual(url.pathComponents.count, 1)
+    }
+    // WebURL.PathComponents.replaceSubrange(_:withPercentEncodedComponents:)
+    do {
+      let url = WebURL("http://example.com/music/bands")!
+
+      var urlA = url
+      urlA.pathComponents.replaceSubrange(
+        urlA.pathComponents.endIndex..<urlA.pathComponents.endIndex,
+        with: ["The%20Beatles"]
+      )
+      XCTAssertEqual(urlA.serialized, "http://example.com/music/bands/The%2520Beatles")
+      //---
+      var urlB = url
+      urlB.pathComponents.replaceSubrange(
+        urlB.pathComponents.endIndex..<urlB.pathComponents.endIndex,
+        withPercentEncodedComponents: ["The%20Beatles"]
+      )
+      XCTAssertEqual(urlB.serialized, "http://example.com/music/bands/The%20Beatles")
     }
     // WebURL.PathComponents.insert(contentsOf:at:)
     do {
@@ -1491,6 +1515,86 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
   }
+
+  func testReplaceSubrange_percentEncoding() {
+
+    // `replaceSubrange(_:with:)` assumes new components are not percent-encoded,
+    // will percent encode "%XX" to "%25XX".
+    do {
+      var url = WebURL("http://example.com/%2561")!
+      XCTAssertEqual(url.serialized, "http://example.com/%2561")
+      XCTAssertEqual(url.path, "/%2561")
+      XCTAssertEqualElements(url.pathComponents, ["%61"])
+
+      // The component is automatically decoded when reading, but fully encoded again when writing.
+      url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex,
+        with: [url.pathComponents.first!, "hello to%3A the world!"]
+      )
+
+      XCTAssertEqual(url.serialized, "http://example.com/%2561/%2561/hello%20to%253A%20the%20world!")
+      XCTAssertEqual(url.path, "/%2561/%2561/hello%20to%253A%20the%20world!")
+      XCTAssertEqualElements(url.pathComponents, ["%61", "%61", "hello to%3A the world!"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // `replaceSubrange(_:withPercentEncoded:)` assumes new components are percent encoded,
+    // will not double-encode "%XX".
+    do {
+      var url = WebURL("http://example.com/%2561")!
+      XCTAssertEqual(url.serialized, "http://example.com/%2561")
+      XCTAssertEqual(url.path, "/%2561")
+      XCTAssertEqualElements(url.pathComponents, ["%61"])
+
+      // The component is automatically decoded when reading, but not re-encoded when writing.
+      url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex,
+        withPercentEncodedComponents: [url.pathComponents.first!, "hello to%3A the world!"]
+      )
+
+      XCTAssertEqual(url.serialized, "http://example.com/%2561/%61/hello%20to%3A%20the%20world!")
+      XCTAssertEqual(url.path, "/%2561/%61/hello%20to%3A%20the%20world!")
+      XCTAssertEqualElements(url.pathComponents, ["%61", "a", "hello to: the world!"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // That said, both methods work the same way in ignoring percent-encoded double-dot components,
+    // as this is checked before encoding. This is a slight defect, but fixing it would significantly complicate
+    // the implementation so fixing it is a low priority.
+    do {
+      var url = WebURL("http://example.com/foo/bar")!
+      XCTAssertEqual(url.serialized, "http://example.com/foo/bar")
+      XCTAssertEqual(url.path, "/foo/bar")
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar"])
+
+      url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex,
+        with: ["baz", "%2E%2E", "qux"]  // Should technically be encoded as "%252E%252E".
+      )
+
+      XCTAssertEqual(url.serialized, "http://example.com/foo/bar/baz/qux")
+      XCTAssertEqual(url.path, "/foo/bar/baz/qux")
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", "baz", "qux"])
+      XCTAssertURLIsIdempotent(url)
+    }
+    do {
+      var url = WebURL("http://example.com/foo/bar")!
+      XCTAssertEqual(url.serialized, "http://example.com/foo/bar")
+      XCTAssertEqual(url.path, "/foo/bar")
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar"])
+
+      url.pathComponents.replaceSubrange(
+        url.pathComponents.endIndex..<url.pathComponents.endIndex,
+        withPercentEncodedComponents: ["baz", "%2E%2E", "qux"]
+      )
+
+      XCTAssertEqual(url.serialized, "http://example.com/foo/bar/baz/qux")
+      XCTAssertEqual(url.path, "/foo/bar/baz/qux")
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", "baz", "qux"])
+      XCTAssertURLIsIdempotent(url)
+    }
+
+  }
 }
 
 extension PathComponentsTests {
@@ -1669,6 +1773,23 @@ extension PathComponentsTests {
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3/%2Fa/%5Cb")
       XCTAssertURLIsIdempotent(url)
     }
+
+    // Insert components with non-percent-encoding "%XX" sequences.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      let range = url.pathComponents.insert(contentsOf: ["folder-%61", "w%61m"], at: url.pathComponents.endIndex)
+      XCTAssertEqual(url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -2), range.lowerBound)
+      XCTAssertEqual(url.pathComponents.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "folder-%61", "w%61m"])
+      XCTAssertEqualElements(url.pathComponents[range], ["folder-%61", "w%61m"])
+      XCTAssertEqual(url.path, "/1/2/3/folder-%2561/w%2561m")
+      XCTAssertEqual(url.pathComponents.count, 5)
+
+      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/folder-%2561/w%2561m")
+      XCTAssertURLIsIdempotent(url)
+    }
   }
 
   func testAppendContents() {
@@ -1807,6 +1928,23 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 5)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/2/3/%2Fa/%5Cb")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending components with non-percent-encoding "%XX" sequences.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      let range = url.pathComponents.append(contentsOf: ["folder-%61", "w%61m"])
+      XCTAssertEqual(url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -2), range.lowerBound)
+      XCTAssertEqual(url.pathComponents.endIndex, range.upperBound)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "folder-%61", "w%61m"])
+      XCTAssertEqualElements(url.pathComponents[range], ["folder-%61", "w%61m"])
+      XCTAssertEqual(url.path, "/1/2/3/folder-%2561/w%2561m")
+      XCTAssertEqual(url.pathComponents.count, 5)
+
+      XCTAssertEqual(url.serialized, "http://example.com/1/2/3/folder-%2561/w%2561m")
       XCTAssertURLIsIdempotent(url)
     }
   }
@@ -2127,6 +2265,25 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized, "http://example.com/1/%5Cb/3")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Replacement containing non-percent-encoding "%XX" sequence.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      let range = url.pathComponents.replaceComponent(
+        at: url.pathComponents.index(after: url.pathComponents.startIndex), with: "folder-%61"
+      )
+      XCTAssertEqual(range.lowerBound, url.pathComponents.index(after: url.pathComponents.startIndex))
+      XCTAssertEqual(range.upperBound, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqualElements(url.pathComponents, ["1", "folder-%61", "3"])
+      XCTAssertEqualElements(url.pathComponents[range], ["folder-%61"])
+      XCTAssertEqual(url.path, "/1/folder-%2561/3")
+      XCTAssertEqual(url.pathComponents.count, 3)
+
+      XCTAssertEqual(url.serialized, "http://example.com/1/folder-%2561/3")
       XCTAssertURLIsIdempotent(url)
     }
   }

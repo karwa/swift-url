@@ -194,6 +194,25 @@ extension WebURL.PathComponents: BidirectionalCollection {
   }
 }
 
+extension WebURL.PathComponents {
+
+  /// Returns the path component at the given index, exactly as it is appears in the URL string (including its percent-encoding).
+  ///
+  /// ```swift
+  /// let url = WebURL("https://example.com/music/bands/AC%2FDC")!
+  ///
+  /// // The regular subscript returns decoded components.
+  /// url.pathComponents[url.pathComponents.indices.last!] // "AC/DC"
+  ///
+  /// // The 'raw' subscript maintains percent-encoding.
+  /// url.pathComponents[raw: url.pathComponents.indices.last!] // "AC%2FDC"
+  /// ```
+  ///
+  public subscript(raw position: Index) -> String {
+    String(decoding: storage.utf8.pathComponent(position), as: UTF8.self)
+  }
+}
+
 
 // --------------------------------------------
 // MARK: - Writing
@@ -204,9 +223,9 @@ extension WebURL.PathComponents {
 
   /// Replaces the specified subrange of path components with the contents of the given collection.
   ///
-  /// This method has the effect of removing the specified range of components from the path and inserting the new components at the same location.
-  /// The number of new components need not match the number of elements being removed, and their contents will be percent-encoded, if necessary,
-  /// upon insertion. If any of the new components in `newComponents` are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive),
+  /// This method has the effect of removing the specified range of components from the path, percent-encoding the new components, and inserting the
+  /// encoded components at the same location. The number of new components need not match the number of elements being removed.
+  /// If any of the new components in `newComponents` are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive),
   /// those components are ignored.
   ///
   /// The following example shows replacing the last 2 components of a `file:` URL with an array of 4 strings.
@@ -226,7 +245,7 @@ extension WebURL.PathComponents {
   ///
   /// If you pass a zero-length range as the `bounds` parameter, this method inserts the elements of `newComponents` at `bounds.lowerBound`.
   /// Calling the `insert(contentsOf:at:)` method instead is preferred. If inserting at the end of a path whose last component is empty (i.e. a directory path),
-  /// the trailing empty component will be dropped and replaced by the first inserted component.
+  /// the empty component at the end of the path will be dropped before inserting the new components.
   ///
   /// Note how the following example inserts 2 components at the end of a path which already contains 2 components (the last of which is empty),
   /// resulting in a path with only 3 components:
@@ -245,9 +264,8 @@ extension WebURL.PathComponents {
   /// url.pathComponents.count // 3
   /// ```
   ///
-  /// If the collection passed as the `newComponents` parameter does not contain any insertable components (i.e. it has a `count` of 0, or contains only
-  /// "." or ".." components), this method removes the components in the given subrange without replacement.
-  /// Calling the `removeSubrange(_:)` method instead is preferred.
+  /// If `newComponents` does not contain any insertable components (i.e. it has a `count` of 0, or contains only "." or ".." components),
+  /// this method removes the components in the given subrange without replacement. Calling the `removeSubrange(_:)` method instead is preferred.
   /// URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
   /// from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's `path` property.
   ///
@@ -278,16 +296,62 @@ extension WebURL.PathComponents {
     _ bounds: Range<Index>, with newComponents: Components
   ) -> Range<Index> where Components: Collection, Components.Element: StringProtocol {
     // TODO: [performance]: Create a specialized StringProtocol -> UTF8View projection wrapper.
-    replaceComponents(bounds, withUTF8: newComponents.lazy.map { $0.utf8 })
+    storage.replacePathComponents(
+      bounds, with: newComponents.lazy.map { $0.utf8 }, encodeSet: PathComponentEncodeSet()
+    )
   }
 
+  /// Replaces the specified subrange of path components with the contents of the given collection.
+  ///
+  /// This method has the effect of removing the specified range of components from the path, percent-encoding the new components, and inserting the
+  /// encoded components at the same location. The number of new components need not match the number of elements being removed.
+  /// If any of the new components in `newComponents` are "." or ".." (or their percent-encoded versions, "%2E" or "%2E%2E", case-insensitive),
+  /// those components are ignored.
+  ///
+  /// This method behaves identically to ``replaceSubrange(_:with:)``, except that the contents of `newComponents` are assumed to be
+  /// percent-encoded already. Additional percent-encoding will be added as necessary, but existing "%XX" elements will not be double-encoded.
+  /// The following example demonstrates this difference.
+  ///
+  /// ```swift
+  /// let url = WebURL("http://example.com/music/bands")!
+  ///
+  /// // replaceSubrange(_:with:) preserves the given components exactly,
+  /// // which can double-encode components that are already percent-encoded.
+  /// // "%20" is a percent-encoded space.
+  ///
+  /// var urlA = url
+  /// urlA.pathComponents.replaceSubrange(
+  ///   urlA.pathComponents.endIndex..<urlA.pathComponents.endIndex,
+  ///   with: ["The%20Beatles"]
+  /// )
+  /// urlA // "http://example.com/music/bands/The%2520Beatles"
+  ///
+  /// // Use replaceSubrange(_:withPercentEncodedComponents:) if the component
+  /// // is already percent-encoded, to avoid double-encoding.
+  ///
+  /// var urlB = url
+  /// urlB.pathComponents.replaceSubrange(
+  ///   urlB.pathComponents.endIndex..<urlB.pathComponents.endIndex,
+  ///   withPercentEncodedComponents: ["The%20Beatles"]
+  /// )
+  /// urlB // "http://example.com/music/bands/The%20Beatles"
+  /// ```
+  ///
+  /// Calling this method invalidates any existing indices for this URL.
+  ///
+  /// - parameters:
+  ///   - bounds: The subrange of the path to replace. The bounds of the range must be valid path-component indices.
+  ///   - newComponents: The new components to add to the path.
+  /// -  returns: A new range of indices corresponding to the location of the new components in the path.
+  ///
   @inlinable
   @discardableResult
-  internal mutating func replaceComponents<Components>(
-    _ range: Range<Index>, withUTF8 newComponents: Components
-  ) -> Range<Index>
-  where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
-    storage.replacePathComponents(range, with: newComponents)
+  public mutating func replaceSubrange<Components>(
+    _ range: Range<Index>, withPercentEncodedComponents newComponents: Components
+  ) -> Range<Index> where Components: Collection, Components.Element: StringProtocol {
+    storage.replacePathComponents(
+      range, with: newComponents.lazy.map { $0.utf8 }, encodeSet: PreencodedPathComponentEncodeSet()
+    )
   }
 }
 
@@ -433,7 +497,9 @@ extension WebURL.PathComponents {
   ///
   @discardableResult
   public mutating func removeSubrange(_ bounds: Range<Index>) -> Index {
-    replaceComponents(bounds, withUTF8: EmptyCollection<EmptyCollection<UInt8>>()).upperBound
+    storage.replacePathComponents(
+      bounds, with: EmptyCollection<EmptyCollection<UInt8>>(), encodeSet: PathComponentEncodeSet()
+    ).upperBound
   }
 
   /// Replaces the path component at the specified position.
@@ -685,7 +751,7 @@ extension URLStorage {
   ///
   /// If this URL has an opaque path, a runtime error is triggered.
   ///
-  @inlinable
+  @inlinable @inline(never)
   internal mutating func _clearPath() -> Range<WebURL.PathComponents.Index> {
 
     let oldPathRange = structure.rangeForReplacingCodeUnits(of: .path)
@@ -727,18 +793,22 @@ extension URLStorage {
   /// If this URL has an opaque path, a runtime error is triggered.
   ///
   @inlinable
-  internal mutating func replacePathComponents<Components>(
+  internal mutating func replacePathComponents<Components, EncodeSet>(
     _ replacedIndices: Range<WebURL.PathComponents.Index>,
-    with components: Components
+    with components: Components,
+    encodeSet: EncodeSet
   ) -> Range<WebURL.PathComponents.Index>
-  where Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8 {
+  where
+    Components: Collection, Components.Element: Collection, Components.Element.Element == UInt8,
+    EncodeSet: PercentEncodeSet
+  {
 
     let oldPathRange = structure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
     precondition(!structure.hasOpaquePath, "Cannot replace components of an opaque path")
 
     // If 'firstGivenComponentLength' is nil, we infer that the components are empty (i.e. removal operation).
     let components = components.lazy.filter { utf8 in PathComponentParser.parseDotPathComponent(utf8) == nil }
-    let firstGivenComponentLength = components.first.map { 1 + $0.lazy.percentEncoded(using: .pathComponentSet).count }
+    let firstGivenComponentLength = components.first.map { 1 + $0.lazy.percentEncoded(using: encodeSet).count }
 
     // If the URL's path ends with a trailing slash and we're inserting elements at the end,
     // widen the replacement range so we drop that trailing slash.
@@ -758,7 +828,7 @@ extension URLStorage {
     }
     // swift-format-ignore
     let insertedPathLength = firstGivenComponentLength.map { components.dropFirst().reduce(into: $0)
-      { count, component in count += 1 + component.lazy.percentEncoded(using: .pathComponentSet).count }
+      { count, component in count += 1 + component.lazy.percentEncoded(using: encodeSet).count }
     } ?? 0
 
     // Calculate what the path will look like after the replacement. In particular, we need to know:
@@ -849,7 +919,7 @@ extension URLStorage {
           bytesWritten &+= 1
           bytesWritten &+=
             UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...])
-            .fastInitialize(from: component.lazy.percentEncoded(using: .pathComponentSet))
+            .fastInitialize(from: component.lazy.percentEncoded(using: encodeSet))
         }
         return bytesWritten
       }
@@ -892,5 +962,52 @@ extension URLStorage {
     if PathComponentParser.isWindowsDriveLetter(firstComponent) {
       codeUnits[firstComponent.startIndex + 1] = ASCII.colon.codePoint
     }
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - PercentEncodeSets
+// --------------------------------------------
+
+
+/// An encode-set used for escaping the contents of individual path components. **Not defined by the URL standard.**
+///
+/// The URL 'path' encode-set, as defined in the standard, does not include slashes, as the URL parser won't ever see them in a path component.
+/// This encode-set adds them, ensuring inserted path components like "AC/DC" get encoded as "AC%2FDC".
+/// This encode-set **does not** include the "%" character, so any sequences of "%XX" (where X is a hex character) are interpreted as intentional
+/// percent-encoding and will not be percent-encoded again.
+///
+@usableFromInline
+internal struct PreencodedPathComponentEncodeSet: PercentEncodeSet {
+
+  @inlinable
+  internal init() {}
+
+  @inlinable
+  internal func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    __shouldPercentEncode(URLEncodeSet.Path.self, ascii: codePoint)
+      || codePoint == ASCII.forwardSlash.codePoint
+      || codePoint == ASCII.backslash.codePoint
+  }
+}
+
+/// An encode-set used for escaping the contents of individual path components. **Not defined by the URL standard.**
+///
+/// The URL 'path' encode-set, as defined in the standard, does not include slashes, as the URL parser won't ever see them in a path component.
+/// This encode-set adds them, ensuring inserted path components like "AC/DC" get encoded as "AC%2FDC".
+/// This encode-set **includes** the "%" character, so any sequences of "%XX" (where X is a hex character) are interpreted as coincidence
+/// and will be percent-encoded to "%25XX".
+///
+@usableFromInline
+internal struct PathComponentEncodeSet: PercentEncodeSet {
+
+  @inlinable
+  internal init() {}
+
+  @inlinable @inline(__always)
+  internal func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    PreencodedPathComponentEncodeSet().shouldPercentEncode(ascii: codePoint)
+      || codePoint == ASCII.percentSign.codePoint
   }
 }
