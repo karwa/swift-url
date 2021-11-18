@@ -154,9 +154,9 @@ import WebURL
 
 #if canImport(SystemPackage)
   import SystemPackage
-  typealias CInterop_PlatformChar = CInterop.PlatformChar
+  private typealias CInterop_PlatformChar = SystemPackage.CInterop.PlatformChar
 #elseif (os(macOS) || os(iOS) || os(tvOS) || os(watchOS)) && canImport(System)
-  typealias CInterop_PlatformChar = CChar
+  private typealias CInterop_PlatformChar = CChar
 #endif
 
 private protocol PlatformStringConversionsProtocol {
@@ -325,9 +325,9 @@ private protocol PlatformStringConversionsProtocol {
   // and normalizes them as UInt8. Which is what the WebURL functions accept/return, because they treat
   // the string as semi-opaque octets and don't care about the sign of the numeric value.
   //
-  enum PlatformStringConversions: PlatformStringConversionsProtocol {
+  private enum PlatformStringConversions: PlatformStringConversionsProtocol {
 
-    static func toMultiByte<ResultType>(
+    fileprivate static func toMultiByte<ResultType>(
       _ platformString: UnsafeBufferPointer<CChar>,
       _ body: (UnsafeBufferPointer<UInt8>?) throws -> ResultType
     ) rethrows -> ResultType {
@@ -336,7 +336,7 @@ private protocol PlatformStringConversionsProtocol {
       return try platformString.withMemoryRebound(to: UInt8.self, body)
     }
 
-    static func fromMultiByte<ResultType>(
+    fileprivate static func fromMultiByte<ResultType>(
       _ mbString: UnsafeBufferPointer<UInt8>,
       _ body: (UnsafeBufferPointer<CChar>?) throws -> ResultType
     ) rethrows -> ResultType {
