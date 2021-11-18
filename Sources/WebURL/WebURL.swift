@@ -136,6 +136,10 @@ extension WebURL: Codable {
   }
 }
 
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension WebURL: Sendable {}
+#endif
+
 
 // --------------------------------------------
 // MARK: - Properties

@@ -19,6 +19,33 @@ import XCTest
 
 class WebURLTests: XCTestCase {}
 
+
+// --------------------------------------------
+// MARK: - Protocol conformances
+// --------------------------------------------
+
+
+#if swift(>=5.5) && canImport(_Concurrency)
+
+  extension WebURLTests {
+
+    func testSendable() {
+      // Since Sendable only exists at compile-time, it's enough to just ensure that this type-checks.
+      func _requiresSendable<T: Sendable>(_: T) {}
+
+      let url = WebURL("http://example.com")!
+      _requiresSendable(url)
+    }
+  }
+
+#endif
+
+
+// --------------------------------------------
+// MARK: - In-place mutation
+// --------------------------------------------
+
+
 extension WebURLTests {
 
   /// Tests that setters copy to new storage when the mutated URL is not a unique reference.
@@ -161,11 +188,14 @@ extension WebURLTests {
   }
 }
 
-// WebURL component tests.
-//
+
+// --------------------------------------------
+// MARK: - WebURL component tests.
+// --------------------------------------------
 // The behaviour of getters and setters are tested via the JS model according to the WPT test files.
 // However, the JS model is in many ways not ideal for use in Swift, so these tests only cover deviations from that
 // model, including errors that can be thrown by the setters.
+
 
 extension WebURLTests {
 
@@ -855,7 +885,9 @@ extension WebURLTests {
 }
 
 
+// --------------------------------------------
 // MARK: - Host and Origin
+// --------------------------------------------
 
 
 extension WebURLTests {

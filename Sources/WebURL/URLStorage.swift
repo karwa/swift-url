@@ -181,11 +181,19 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
   }
 }
 
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension URLStructure: Sendable where SizeType: Sendable {}
+#endif
+
 @usableFromInline
 internal enum Sigil {
   case authority
   case path
 }
+
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension Sigil: Sendable {}
+#endif
 
 extension URLStructure {
 
@@ -647,6 +655,10 @@ extension URLHeader: ManagedBufferHeader {
   }
 }
 
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension URLHeader: Sendable where SizeType: Sendable {}
+#endif
+
 
 // --------------------------------------------
 // MARK: - URLStorage
@@ -704,6 +716,10 @@ internal struct URLStorage {
     assert(self.codeUnits.header.count == count)
   }
 }
+
+#if swift(>=5.5) && canImport(_Concurrency)
+  extension URLStorage: Sendable {}
+#endif
 
 extension URLStorage {
 
