@@ -49,44 +49,64 @@ internal struct IgnoreIPAddressParserErrors: IPAddressParserCallback {
 // --------------------------------------------
 
 
-/// The way in which octets are arranged to form a multi-byte integer.
+/// The way in which binary data is interpreted as an integer.
 ///
-/// Applications should prefer to work with individual octets wherever possible, as octets have a consistent numeric interpretation and binary representation
-/// across machines of different endianness.
+/// It is sometimes useful to view an IP address in terms units larger than individual octets;
+/// for example viewing the 16 x 8-bit octets of an IPv6 address as 8 x 16-bit double-octet integers.
+/// There are two ways to do this, depending on how we wish to interpret the resulting integers.
 ///
-/// When combining octets in to larger (e.g. 16- or 32-bit) integers, we have to consider that machines have a choice in how their octets are arranged in memory.
-/// For instance, the first piece of the IPv6 address `2608::3:5` consists of 2 octets, `0x26` and `0x08`; if we created a 16-bit integer with those same octets
-/// arranged in that order, a big-endian machine would read this as having numeric value 9736 (for the purposes of integer-level operations, such as addition),
-/// whereas a little-endian machine would consider the same octets to contain the numeric value 2086.
+///  - The ``binary`` interpretation.
 ///
-/// Hence there are 2 ways to combine octets in to larger integers:
+///    Larger integers contain the same octets, in the same order, as are found in memory.
+///    These integers do not necessarily have any defined numerical meaning, but are useful for copying the
+///    address to other memory.
 ///
-///  1. With the same octets in the same order in memory. We call this the `binary` interpretation, although it is more-commonly known as
-///    "network" byte order, or big-endian. As noted above, integers derived from the same address using the `binary` interpretation
-///    may have different numeric values on different machines.
+///    For example, the first 16-bit piece of the IPv6 address `2608::3:5` has the numeric value 9736
+///    on a big-endian machine. But those same octets, in the same order, are interpreted as the number 2086
+///    by a little-endian machine. These numeric values are not meaningful because they are machine-dependent,
+///    and the integers are simply used as byte storage.
 ///
-///  2. By rearranging octets to give a consistent numeric value. We call this the `numeric` interpretation, although it is more-comonly known as
-///    "host" byte-order. For instance, when reading the first 16-bit piece of the above address on a little-endian machine,
-///    the octets `0x26 0x08` will be reordered to `0x08 0x26`, so that the numeric value (9736) is the same as the hexadecimal number `0x2608`.
-///    Assigning a group of octets using the `numeric` integer 9736 will similarly reorder the octets, so that they appear as the octet sequence `0x26 0x08`
-///    in the address.
+///  - The ``numeric`` interpretation.
+///
+///    Larger integers contain the same octets as are found in memory, but are arranged to give a meaningful,
+///    machine-independent numeric value.
+///
+///    For example, the first 16-bit piece of the IPv6 address `2608::3:5` will always appear to have
+///    the numeric value `0x2608` (9736) when we print it or compare it to an integer parsed from a string.
+///
+/// The most important thing is to remember that endianness is a property of the data, and how it corresponds
+/// to the endianness of your machine doesn't matter. The thing to think about when deciding which arrangement to
+/// use is: are you using the integers just to copy bytes in memory? If so, use ``binary``.
+/// Or do you want a meaningful number? In that case, use ``numeric``.
+///
+/// > Tip:
+/// > If you can, see if you can solve your problem using octets and avoid thinking about this at all.
+/// > An address' octets at position `.0`, `.1`, `.2`, etc. are always in the same order, and have the same
+/// > binary representation and numeric value on every system.
 ///
 public enum OctetArrangement {
 
-  /// Offers consistent numeric values across machines of different endianness, by adjusting the binary representation when reading or writing multi-byte integers.
-  /// Also known as host byte order (i.e. the integers that you read and write are expected to be in host byte order).
+  /// Integer pieces larger than an octet have a consistent numeric value on all machines.
+  ///
+  /// For example, the first 16-bit piece of the IPv6 address `2608::3:5` will always appear to have
+  /// the numeric value `0x2608` (9736) when we print it, or compare it to an integer parsed from a string.
   ///
   case numeric
 
-  /// Offers consistent binary representations across machines of different endianness, although each machine may interpret those bits as a different numeric value.
-  /// Also known as network byte order (i.e. the integers that you read and write are expected to be in network byte order).
+  /// Integer pieces larger than an octet have a consistent byte sequence on all machines.
+  ///
+  /// For example, the first 16-bit piece of the IPv6 address `2608::3:5` has the numeric value 9736
+  /// on a big-endian machine, but those same octets, in the same order, are interpreted as the number 2086
+  /// by a little-endian machine.
+  ///
+  /// These integers are just raw slices of memory, and only meaningful for copying to other memory.
   ///
   case binary
 
-  /// A synonym for `.numeric`.
+  /// A synonym for ``numeric``.
   @inlinable public static var hostOrder: Self { return .numeric }
 
-  /// A synonym for `.binary`.
+  /// A synonym for ``binary``.
   @inlinable public static var networkOrder: Self { return .binary }
 }
 
@@ -96,8 +116,132 @@ public enum OctetArrangement {
 // --------------------------------------------
 
 
-/// A 128-bit numerical identifier assigned to a device on an
-/// [Internet Protocol, version 6](https://tools.ietf.org/html/rfc2460) network.
+/// A 128-bit numerical identifier assigned to a device on an [Internet Protocol, version 6][rfc2460] network.
+///
+/// Construct an `IPv6Address` initializing a value with an IP address string.
+/// Parsing is defined by the URL Standard, and supports all of the shorthands described by
+/// [Section 2.2 of RFC 4291][rfc4291] - "IP Version 6 Addressing Architecture//Text Representation of Addresses",
+/// such as compressed pieces and embedded IPv4 addresses.
+///
+/// ```swift
+/// IPv6Address("2001:0:ce49:7601:e866:efff:62c3:fffe")! // ✅ Full address
+/// IPv6Address("2608::3:5")!                            // ✅ Compressed address
+/// IPv6Address("::192.168.0.1")!                        // ✅ Embedded IPv4 address
+///
+/// // Or you can initialize from bytes/pieces directly.
+/// IPv6Address(octets: (0x26, 0x08, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x03, 0, 0x05))
+/// IPv6Address(pieces: (0x2608, 0, 0, 0, 0, 0, 0x03, 0x05), .numeric)
+/// ```
+///
+/// To obtain an address' string representation, use the ``serialized`` property or simply initialize a `String`.
+/// This serialization conforms to [RFC 5952][rfc5952] - "A Recommendation for IPv6 Address Text Representation",
+/// so it makes use of compressed notation and normalizes to lowercase.
+///
+/// ```swift
+/// let address1 = IPv6Address("2001:0:CE49:7601:E866:EFFF:62C3:FFFE")!
+/// address1.serialized  // ✅ "2001:0:ce49:7601:e866:efff:62c3:fffe"
+/// String(address1)     // Same as above.
+///
+/// let address2 = IPv6Address("2608:0:0:0::3:5")!
+/// address2.serialized  // ✅ "2608::3:5"
+/// String(address2)     // Same as above.
+/// ```
+///
+/// ### Connecting to an Address
+///
+/// The thing you'll most likely want to do with an IP address is connect to it, by converting to either C's `in6_addr`
+/// or NIO's `SocketAddress`. To do so, use the ``octets-swift.property`` property to access the address' raw bytes
+/// and copy them to the destination.
+///
+/// ```swift
+/// let address = IPv6Address()
+///
+/// // Converting to C's in6_addr:
+/// var c_address = in6_addr()
+/// withUnsafeBytes(of: address.octets) { addressBytes in
+///   withUnsafeMutableBytes(of: &c_address) { $0.copyMemory(from: addressBytes) }
+/// }
+///
+/// // Creating an NIO SocketAddress:
+/// let nioAddress = withUnsafeByes(of: address.octets) { addressBytes in
+///   let buffer = ByteBuffer(bytes: addressBytes)
+///   return try! SocketAddress(packedIPAddress: buffer, port: /* Your choice */)
+/// }
+/// ```
+///
+/// ### Reading or Modifying an Address
+///
+/// The ``octets-swift.property`` property allows you to read and modify the address' raw bytes (or "octets").
+/// This can be useful if you're performing filtering or masking, or other low-level networking operations.
+/// It is preferred to work with IP addresses in terms of octets.
+///
+/// ```swift
+/// var address = IPv6Address("2001:0:ce49:7601:e866:efff:62c3:fffe")!
+/// address.octets.0  //  32, 0x20
+/// address.octets.1  //   1, 0x01
+/// address.octets.4  // 206, 0xCE
+/// address.octets.5  //  73, 0x49
+///
+/// address.octets.4 = 0xFA
+/// address.octets.5 = 0xCE
+/// print(address)
+/// // ✅ "2001:0:face:7601:e866:efff:62c3:fffe"
+/// //            ^^^^
+/// ```
+///
+/// The ``subscript(pieces:)`` subscript allows you to read and modify the address' octets as 16-bit integers.
+/// There are two ways to view the address at units larger than an octet - either as **binary data**
+/// for copying to/from memory, or **numeric integers**, whose values are what you see when printing the address
+/// as a string.
+///
+/// These correspond to the ``OctetArrangement/binary`` and ``OctetArrangement/numeric`` views of the address.
+///
+/// ```swift
+/// var address = IPv6Address("2001:0:ce49:7601:e866:efff:62c3:fffe")!
+///
+/// // Use numeric pieces to read or write numeric integers or literals.
+/// address[pieces: .numeric].0 = 0xFEED
+/// address[pieces: .numeric].1 = 0xBEEF
+/// print(address)
+/// // ✅ "feed:beef:ce49:7601:e866:efff:62c3:fffe"
+/// //     ^^^^ ^^^^
+///
+/// // Binary pieces should only be used when copying to/from memory.
+/// address[pieces: .binary].0 = 0xFEED
+/// address[pieces: .binary].1 = 0xBEEF
+/// print(address)
+/// // ❌ "edfe:efbe:ce49:7601:e866:efff:62c3:fffe"
+/// //     ^^^^ ^^^^ - Where's the beef?!
+/// ```
+///
+/// > Note:
+/// > This type does not support Zone-IDs, as URLs themselves do not support Zone-IDs.
+///
+/// [rfc2460]: https://tools.ietf.org/html/rfc2460
+/// [rfc4291]: https://tools.ietf.org/html/rfc4291#section-2.2
+/// [rfc5952]: https://tools.ietf.org/html/rfc5952
+///
+/// ## Topics
+///
+/// ### Parsing an Address from a String
+///
+/// - ``IPv6Address/init(_:)``
+/// - ``IPv6Address/init(utf8:)``
+///
+/// ### Obtaining an Address' String Representation
+///
+/// - ``IPv6Address/serialized``
+///
+/// ### Addresses as Bytes
+///
+/// - ``IPv6Address/init(octets:)``
+/// - ``IPv6Address/octets-swift.property``
+///
+/// ### Addresses as 16-bit Integer Pieces
+///
+/// - ``IPv6Address/init(pieces:_:)``
+/// - ``IPv6Address/subscript(pieces:)``
+/// - ``OctetArrangement``
 ///
 public struct IPv6Address {
 
@@ -107,9 +251,59 @@ public struct IPv6Address {
   )
 
   /// The octets of this address.
+  ///
+  /// The octets are the lowest-level, most basic interpretation of an address. They are also the simplest to work with,
+  /// as they have the same binary and numeric values on every machine. It is correct to both copy addresses
+  /// to/from memory as octets, and to use integer literals or other numeric integers with an address' octets.
+  ///
+  /// ```swift
+  /// var address = IPv6Address("2001:0:ce49:7601:e866:efff:62c3:fffe")!
+  /// address.octets.0  //  32, 0x20
+  /// address.octets.1  //   1, 0x01
+  /// address.octets.4  // 206, 0xCE
+  /// address.octets.5  //  73, 0x49
+  ///
+  /// address.octets.4 = 0xFA
+  /// address.octets.5 = 0xCE
+  /// print(address)
+  /// // ✅ "2001:0:face:7601:e866:efff:62c3:fffe"
+  /// //            ^^^^
+  /// ```
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv6Address/subscript(pieces:)``
+  ///
   public var octets: Octets
 
-  /// Creates an address with the given octets.
+  /// Creates an address from its raw octets.
+  ///
+  /// The octets are the lowest-level, most basic interpretation of an address. They are also the simplest to work with,
+  /// as they have the same binary and numeric values on every machine. It is correct to both copy addresses
+  /// to/from memory as octets, and to use integer literals or other numeric integers with an address' octets.
+  ///
+  /// ```swift
+  /// // Yes, they are rather long.
+  /// let address = IPv6Address(octets: (0x20, 0x01, 0x00, 0x00, 0xCE, 0x49, 0x76, 0x01, 0xE8, 0x66, 0xEF, 0xFF, 0x62, 0xC3, 0xFF, 0xFE))
+  ///
+  /// print(address)    // "2001:0:ce49:7601:e866:efff:62c3:fffe"
+  /// address.octets.0  //  32, 0x20
+  /// address.octets.1  //   1, 0x01
+  /// address.octets.4  // 206, 0xCE
+  /// address.octets.5  //  73, 0x49
+  ///
+  /// address.octets.4 = 0xFA
+  /// address.octets.5 = 0xCE
+  /// print(address)
+  /// // ✅ "2001:0:face:7601:e866:efff:62c3:fffe"
+  /// //            ^^^^
+  /// ```
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv6Address/init(_:)``
+  /// - ``IPv6Address/init(pieces:_:)``
+  ///
   @inlinable
   public init(octets: Octets = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)) {
     self.octets = octets
@@ -117,17 +311,35 @@ public struct IPv6Address {
 
   public typealias Pieces = (UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16, UInt16)
 
-  /// Creates an address from the given 16-bit integer pieces.
+  /// Creates an address from 16-bit integer pieces.
   ///
-  /// - seealso: `OctetArrangement`
+  /// The 16-bit pieces are interpreted according to the `octetArrangement` parameter. If they are binary pieces
+  /// being copied from memory, specify that they have ``OctetArrangement/binary`` arrangement.
+  /// If they are numbers, for example integer literals or other numeric integers, specify that they
+  /// have ``OctetArrangement/numeric`` arrangement.
+  ///
+  /// ```swift
+  /// // These are integer literals, so use the '.numeric' interpretation.
+  /// let address = IPv6Address(pieces: (0x2001, 0x0000, 0xCE49, 0x7601, 0xE866, 0xEFFF, 0x62C3, 0xFFFE), .numeric)
+  ///
+  /// // The numeric value is what we see in the string.
+  /// print(address)               // "2001:0:ce49:7601:e866:efff:62c3:fffe"
+  /// address[pieces: .numeric].2  // 0xCE49
+  /// address[pieces: .numeric].3  // 0x7601
+  ///
+  /// // Binary pieces should only be used when copying to/from memory.
+  /// let badAddress = IPv6Address(pieces: (0x2001, 0x0000, 0xCE49, 0x7601, 0xE866, 0xEFFF, 0x62C3, 0xFFFE), .binary)
+  /// print(badAddress)            // ❌ "120:0:49ce:176:66e8:ffef:c362:feff"
+  /// ```
+  ///
   /// - parameters:
-  ///     - pieces:            The integer pieces of the address.
-  ///     - octetArrangement:  How the octets in each integer of `pieces` are arranged:
-  ///                          <ul>
-  ///                          <li>If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.</li>
-  ///                          <li>If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
-  ///                              they are in.</li>
-  ///                          </ul>
+  ///   - pieces:           The integer pieces of the address.
+  ///   - octetArrangement: The way in which the pieces should be interpreted.
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv6Address/init(_:)``
+  /// - ``IPv6Address/init(octets:)``
   ///
   @inlinable
   public init(pieces: Pieces, _ octetArrangement: OctetArrangement) {
@@ -135,16 +347,43 @@ public struct IPv6Address {
     self[pieces: octetArrangement] = pieces
   }
 
-  /// The address, expressed as 16-bit integer pieces.
+  /// The octets of this address, combined in to 16-bit integer pieces.
   ///
-  /// - seealso: `OctetArrangement`
+  /// The 16-bit pieces are accepted and returned according to the `octetArrangement` parameter. If they are
+  /// binary pieces being copied to/from memory, specify that they have ``OctetArrangement/binary`` arrangement.
+  /// If they are numbers, for example integer literals or other numeric integers, specify that they
+  /// have ``OctetArrangement/numeric`` arrangement.
+  ///
+  /// ```swift
+  /// // These are integer literals, so use the '.numeric' interpretation.
+  /// var address = IPv6Address(pieces: (0x2001, 0x0000, 0xCE49, 0x7601, 0xE866, 0xEFFF, 0x62C3, 0xFFFE), .numeric)
+  ///
+  /// // The numeric value is what we see in the string.
+  /// print(address)                // "2001:0:ce49:7601:e866:efff:62c3:fffe"
+  /// address[pieces: .numeric].2   // 0xCE49
+  /// address[pieces: .numeric].3   // 0x7601
+  ///
+  /// // Use numeric pieces to read or write numeric integers or literals.
+  /// address[pieces: .numeric].2 = 0xFEED
+  /// address[pieces: .numeric].3 = 0xFACE
+  /// print(address)
+  /// // ✅ "2001:0:feed:face:e866:efff:62c3:fffe"
+  /// //            ^^^^ ^^^^
+  ///
+  /// // Binary pieces should only be used when copying to/from memory.
+  /// address[pieces: .binary].2 = 0xFEED
+  /// address[pieces: .binary].3 = 0xFACE
+  /// print(address)
+  /// // ❌ "2001:0:edfe:cefa:e866:efff:62c3:fffe"
+  /// //            ^^^^ ^^^^
+  /// ```
+  ///
   /// - parameters:
-  ///     - octetArrangement:  How the octets in each integer of `pieces` are arranged:
-  ///                          <ul>
-  ///                          <li>If `numeric`, the integers are assumed to be in "host byte order", and their octets will be rearranged if necessary.</li>
-  ///                          <li>If `binary`, the integers are assumed to be in "network byte order", and their octets will be stored in the order
-  ///                              they are in.</li>
-  ///                          </ul>
+  ///   - octetArrangement: The way in which the pieces should be interpreted.
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv6Address/octets-swift.property``
   ///
   @inlinable
   public subscript(pieces octetArrangement: OctetArrangement) -> Pieces {
@@ -232,30 +471,68 @@ extension IPv6Address: Codable {
 
 extension IPv6Address {
 
-  /// Parses an IPv6 address from a String.
+  /// Parses an IPv6 address string.
   ///
-  /// Accepted formats are documented in [Section 2.2][rfc4291] ("Text Representation of Addresses") of
-  /// IP Version 6 Addressing Architecture (RFC 4291).
+  /// The behavior of this parser is defined by the URL Standard, and supports all of the shorthands described by
+  /// [Section 2.2 of RFC 4291][rfc4291] - "IP Version 6 Addressing Architecture//Text Representation of Addresses",
+  /// such as compressed pieces and embedded IPv4 addresses.
+  ///
+  /// ```swift
+  /// IPv6Address("2001:0:ce49:7601:e866:efff:62c3:fffe")! // ✅ Full address
+  /// IPv6Address("2608::3:5")!                            // ✅ Compressed address
+  /// IPv6Address("::192.168.0.1")!                        // ✅ Embedded IPv4 address
+  /// ```
+  ///
+  /// > Note:
+  /// > This parser supports the same formats for IPv6 addresses as `inet_pton`, but does not accept Zone-IDs.
+  /// > Some implementations of `inet_pton` accept Zone-IDs in address strings as a non-standard extension,
+  /// > but actual support varies greatly. Some platforms will appear to parse an address including a Zone-ID,
+  /// > but really just ignore the Zone-ID value.
   ///
   /// [rfc4291]: https://tools.ietf.org/html/rfc4291#section-2.2
   ///
   /// - parameters:
   ///     - description: The string to parse.
   ///
+  /// ## See Also
+  ///
+  /// - ``IPv6Address/serialized``
+  ///
   @inlinable @inline(__always)
-  public init?<S>(_ description: S) where S: StringProtocol {
+  public init?<StringType>(_ description: StringType) where StringType: StringProtocol {
     self.init(utf8: description.utf8)
   }
 
-  /// Parses an IPv6 address from a collection of UTF-8 code-units.
+  /// Parses an IPv6 address string from a collection of UTF-8 code-units.
   ///
-  /// Accepted formats are documented in [Section 2.2][rfc4291] ("Text Representation of Addresses") of
-  /// IP Version 6 Addressing Architecture (RFC 4291).
+  /// This initializer constructs an IPv6 address from raw UTF-8 bytes rather than requiring
+  /// they be stored as a `String`. It uses precisely the same parsing algorithm as ``init(_:)``.
   ///
-  /// [rfc4291]: https://tools.ietf.org/html/rfc4291#section-2.2
+  /// The following example demonstrates loading a file as a Foundation `Data` object, and parsing each line
+  /// as an IPv6 address string directly from the binary text. Doing this saves allocating a String
+  /// and UTF-8 validation. Since all valid address strings are ASCII, validating UTF-8 is redundant.
+  ///
+  /// ```swift
+  /// let fileContents: Data = getFileContents()
+  ///
+  /// for lineBytes = fileContents.lazy.split(0x0A /* ASCII line feed */) {
+  ///   // ℹ️ Initialize from binary text.
+  ///   let address = IPv6Address(utf8: lineBytes)
+  ///   ...
+  /// }
+  /// ```
+  ///
+  /// > Note:
+  /// > This is not the same as constructing an `IPv6Address` from its raw bytes.
+  /// > The bytes provided to this function must contain a formatted address string.
   ///
   /// - parameters:
   ///     - utf8: The string to parse, as a collection of UTF-8 code-units.
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv6Address/serialized``
+  /// - ``IPv6Address/init(octets:)``
   ///
   @inlinable @inline(__always)
   public init?<UTF8Bytes>(utf8: UTF8Bytes) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -381,7 +658,7 @@ extension IPv6Address {
         pieceIndex = 7
         while pieceIndex != 0, swaps > 0 {
           let destinationPiece = expandFrom &+ swaps &- 1
-          // Manual swap leads to suprisingly better codegen than 'swapAt': https://github.com/apple/swift/pull/36864
+          // Manual swap leads to surprisingly better codegen than 'swapAt': https://github.com/apple/swift/pull/36864
           let tmp = parsedPieces[pieceIndex]
           parsedPieces[pieceIndex] = parsedPieces[destinationPiece]
           parsedPieces[destinationPiece] = tmp
@@ -443,7 +720,35 @@ extension IPv6Address {
 
 extension IPv6Address {
 
-  /// The canonical textual representation of this address, as defined by [RFC 5952](https://tools.ietf.org/html/rfc5952).
+  /// The canonical textual representation of this address.
+  ///
+  /// This serialization is defined by the URL Standard, and conforms to [RFC 5952][rfc5952] -
+  /// "A Recommendation for IPv6 Address Text Representation", so it makes use of compressed notation
+  /// and normalizes to lowercase.
+  ///
+  /// ```swift
+  /// let address1 = IPv6Address("2001:0:ce49:7601:e866:efff:62c3:fffe")!
+  /// let address2 = IPv6Address("2608::0:0:0:3:5")!
+  /// let address3 = IPv6Address("::192.168.0.1")!
+  ///
+  /// address1.serialized
+  /// // "2001:0:ce49:7601:e866:efff:62c3:fffe" - ✅ Full address
+  /// address2.serialized
+  /// // "2608::3:5" - ✅ Compressed address
+  /// address3.serialized
+  /// // "::c0a8:1" - ✅ Hex notation
+  /// ```
+  ///
+  /// > Note:
+  /// > Some platforms make different decisions about whether certain IPv6 addresses should be formatted
+  /// > as embedded IPv4 in their implementations of `inet_ntop`. This serialization is an independent implementation,
+  /// > which is guaranteed to produce the same result on every platform (namely: hex notation).
+  ///
+  /// [rfc5952]: https://tools.ietf.org/html/rfc5952
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv6Address/init(_:)``
   ///
   public var serialized: String {
     var direct = serializedDirect
@@ -511,48 +816,247 @@ extension IPv6Address {
 // --------------------------------------------
 
 
-/// A 32-bit numerical identifier assigned to a device on an
-/// [Internet Protocol, version 4](https://tools.ietf.org/html/rfc791) network.
+/// A 32-bit numerical identifier assigned to a device on an [Internet Protocol, version 4][rfc791] network.
+///
+/// Construct an `IPv4Address` by initializing a value with an IP address string.
+/// Parsing is defined by the URL Standard, and supports all of the exotic shorthands
+/// supported by C's `inet_aton`. It allows for 1-4 parts, each of which may be an octal, decimal, or hex number.
+///
+/// ```swift
+/// let addr1 = IPv4Address("192.168.0.17")!  // ✅ "Dotted decimal"
+/// let addr2 = IPv4Address("0x7F.1")!        // ✅ 2 Hex components
+/// let addr3 = IPv4Address("0337.19.0xA")!   // ✅ Dec/Hex/Oct combined
+///
+/// // Or you can initialize from bytes/a 32-bit value directly.
+/// let addr4 = IPv4Address(octets: (192, 168, 15, 200))
+/// let addr5 = IPv4Address(value: 3232239560, .numeric)
+/// ```
+///
+/// To obtain an address' string representation, use the ``serialized`` property or simply initialize a `String`.
+/// This serialization uses dotted-decimal notation, as recommended by [RFC 4001][rfc4001],
+/// "Textual Conventions for Internet Network Addresses".
+///
+/// ```swift
+/// addr1.serialized  // "192.168.0.17"
+/// addr2.serialized  // "127.0.0.1"
+/// addr3.serialized  // "223.19.0.10"
+///
+/// String(addr4)     // "192.168.15.200"
+/// String(addr5)     // "192.168.15.200", yes addr4 == addr5.
+/// ```
+///
+/// ### Connecting to an Address
+///
+/// The thing you'll most likely want to do with an IP address is connect to it, by converting to either C's `in_addr`
+/// or NIO's `SocketAddress`. To do so, use the ``octets-swift.property`` property to access the address' raw bytes
+/// and copy them to the destination, or ``subscript(value:)`` to copy the address as a single 32-bit integer.
+///
+/// ```swift
+/// let address = IPv4Address()
+///
+/// // Converting to C's in_addr:
+/// let c_address = in_addr(s_addr: address[value: .binary])
+///
+/// // Creating an NIO SocketAddress:
+/// let nioAddress = withUnsafeByes(of: address.octets) { addressBytes in
+///   let buffer = ByteBuffer(bytes: addressBytes)
+///   return try! SocketAddress(packedIPAddress: buffer, port: /* Your choice */)
+/// }
+/// ```
+///
+/// ### Reading or Modifying an Address
+///
+/// The ``octets-swift.property`` property allows you to read and modify the address' raw bytes (or "octets").
+/// This can be useful if you're performing filtering or masking, or other low-level networking operations.
+/// It is preferred to work with IP addresses in terms of octets, as they avoid all questions about byte-ordering.
+///
+/// ```swift
+/// var address = IPv4Address("192.168.0.17")!
+/// address.octets.0  //  192
+/// address.octets.1  //  168
+/// address.octets.2  //    0
+/// address.octets.3  //   17
+///
+/// address.octets.1 = 111
+/// address.octets.2 = 101
+/// print(address)
+/// // ✅ "192.111.101.17"
+/// //         ^^^ ^^^
+/// ```
+///
+/// The ``subscript(value:)`` subscript allows you to read and modify the address' octets as a 32-bit integer.
+/// There are two ways to view the address at units larger than an octet - either as **binary data** for copying
+/// to/from memory, or **numeric integers**, whose value corresponds to what you see when printing the address
+/// as a string.
+///
+/// These correspond to the ``OctetArrangement/binary`` and ``OctetArrangement/numeric`` views of the address.
+///
+/// Unlike with IPv6 addresses, reading or writing an IPv4 address using larger pieces isn't that useful
+/// outside of copying to/from memory. You should prefer using octets to read or manipulate IPv4 addresses.
+///
+/// [rfc791]: https://tools.ietf.org/html/rfc791
+/// [rfc4001]: https://tools.ietf.org/html/rfc4001#page-7
+///
+/// ## Topics
+///
+/// ### Parsing an Address from a String
+///
+/// - ``IPv4Address/init(_:)``
+/// - ``IPv4Address/init(dottedDecimal:)``
+///
+/// - ``IPv4Address/init(utf8:)``
+/// - ``IPv4Address/init(dottedDecimalUTF8:)``
+///
+/// ### Obtaining an Address' String Representation
+///
+/// - ``IPv4Address/serialized``
+///
+/// ### Addresses as Bytes
+///
+/// - ``IPv4Address/init(octets:)``
+/// - ``IPv4Address/octets-swift.property``
+///
+/// ### Addresses as a 32-bit Integer
+///
+/// - ``IPv4Address/init(value:_:)``
+/// - ``IPv4Address/subscript(value:)``
+/// - ``OctetArrangement``
 ///
 public struct IPv4Address {
 
   public typealias Octets = (UInt8, UInt8, UInt8, UInt8)
 
   /// The octets of this address.
+  ///
+  /// The octets are the lowest-level, most basic interpretation of an address. They are also the simplest to work with,
+  /// as they have the same binary and numeric values on every machine. It is correct to both copy addresses
+  /// to/from memory as octets, and to use integer literals or other numeric integers with an address' octets.
+  ///
+  /// ```swift
+  /// var address = IPv4Address("192.168.0.17")!
+  /// address.octets.0  //  192
+  /// address.octets.1  //  168
+  /// address.octets.2  //    0
+  /// address.octets.3  //   17
+  ///
+  /// address.octets.1 = 111
+  /// address.octets.2 = 101
+  /// print(address)
+  /// // ✅ "192.111.101.17"
+  /// //         ^^^ ^^^
+  /// ```
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv4Address/subscript(value:)``
+  ///
   public var octets: Octets
 
-  /// Creates an address with the given octets.
+  /// Creates an address from its raw octets.
+  ///
+  /// The octets are the lowest-level, most basic interpretation of an address. They are also the simplest to work with,
+  /// as they have the same binary and numeric values on every machine. It is correct to both copy addresses
+  /// to/from memory as octets, and to use integer literals or other numeric integers with an address' octets.
+  ///
+  /// ```swift
+  /// var address = IPv4Address(octets: (192, 168, 0, 17))
+  /// address.octets.0  //  192
+  /// address.octets.1  //  168
+  /// address.octets.2  //    0
+  /// address.octets.3  //   17
+  ///
+  /// address.octets.1 = 111
+  /// address.octets.2 = 101
+  /// print(address)
+  /// // ✅ "192.111.101.17"
+  /// //         ^^^ ^^^
+  /// ```
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv4Address/init(_:)``
+  /// - ``IPv4Address/init(dottedDecimal:)``
+  /// - ``IPv4Address/init(value:_:)``
+  ///
   public init(octets: Octets = (0, 0, 0, 0)) {
     self.octets = octets
   }
 
-  /// Creates an address with the given 32-bit integer value.
+  /// Creates an address from a 32-bit integer.
   ///
-  /// - seealso: `OctetArrangement`
+  /// The 32-bit integer is interpreted according to the `octetArrangement` parameter. If it contains binary pieces
+  /// being copied from memory, specify that it has ``OctetArrangement/binary`` arrangement. If it is a number,
+  /// for example an integer literals or other numeric integer, specify that it has ``OctetArrangement/numeric``
+  /// arrangement.
+  ///
+  /// Unlike with IPv6 addresses, reading or writing an IPv4 address using larger pieces isn't that useful
+  /// outside of copying to/from memory. You should prefer using octets if assigning numerical meaning to
+  /// any part of an IPv4 address.
+  ///
+  /// ```swift
+  /// // This is an integer literal, so use the '.numeric' interpretation.
+  /// let address = IPv4Address(value: 3232235537, .numeric)
+  ///
+  /// // The numeric value is what we see in the string and octets.
+  /// print(address)     // "192.168.0.17"
+  /// address.octets.0   //  192
+  /// address.octets.1   //  168
+  /// address.octets.2   //    0
+  /// address.octets.3   //   17
+  ///
+  /// // Binary values should only be used when copying to/from memory.
+  /// // For example, copying from C's in_addr:
+  /// let c_address: in_addr = ...
+  /// let address = IPv4Address(value: c_address.s_addr, .binary)
+  /// ```
+  ///
   /// - parameters:
-  ///     - value:             The integer value of the address.
-  ///     - octetArrangement:  How the octets of `value` are arranged:
-  ///                          <ul>
-  ///                          <li>If `numeric`, the integer is assumed to be in "host byte order", and its octets will be rearranged if necessary.</li>
-  ///                          <li>If `binary`, the integer is assumed to be in "network byte order", and its octets will be stored in the order
-  ///                              they are in.</li>
-  ///                          </ul>
+  ///   - value:            The integer value of the address.
+  ///   - octetArrangement: The way in which the value should be interpreted.
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv4Address/init(_:)``
+  /// - ``IPv4Address/init(octets:)``
   ///
   public init(value: UInt32, _ octetArrangement: OctetArrangement) {
     self.init()
     self[value: octetArrangement] = value
   }
 
-  /// The address, expressed as 16-bit integer pieces.
+  /// The octets of this address, as a 32-bit integer.
   ///
-  /// - seealso: `OctetArrangement`
+  /// The 32-bit integer is accepted and returned according to the `octetArrangement` parameter. If it is
+  /// a binary value being copied to/from memory, specify that it has ``OctetArrangement/binary`` arrangement.
+  /// If it is a number, for example an integer literal or other numeric integer, specify that it has
+  /// ``OctetArrangement/numeric`` arrangement.
+  ///
+  /// Unlike with IPv6 addresses, reading or writing an IPv4 address using larger pieces isn't that useful
+  /// outside of copying to/from memory. You should prefer using octets if assigning numerical meaning to
+  /// any part of an IPv4 address.
+  ///
+  /// ```swift
+  /// // This is an integer literal, so use the '.numeric' interpretation.
+  /// let address = IPv4Address(value: 3232235537, .numeric)
+  ///
+  /// // The numeric value is what we see in the string and octets.
+  /// print(address)     // "192.168.0.17"
+  /// address.octets.0   //  192
+  /// address.octets.1   //  168
+  /// address.octets.2   //    0
+  /// address.octets.3   //   17
+  ///
+  /// // Binary values should only be used when copying to/from memory.
+  /// // For example, copying to C's in_addr:
+  /// let c_address: in_addr = in_addr(s_addr: address[value: .binary])
+  /// ```
+  ///
   /// - parameters:
-  ///     - octetArrangement:  How the octets of `value` are arranged:
-  ///                          <ul>
-  ///                          <li>If `numeric`, the integer is assumed to be in "host byte order", and its octets will be rearranged if necessary.</li>
-  ///                          <li>If `binary`, the integer is assumed to be in "network byte order", and its octets will be stored in the order
-  ///                              they are in.</li>
-  ///                          </ul>
+  ///   - octetArrangement: The way in which the value should be interpreted.
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv4Address/octets-swift.property``
   ///
   public subscript(value octetArrangement: OctetArrangement) -> UInt32 {
     get {
@@ -630,60 +1134,83 @@ extension IPv4Address: Codable {
 
 extension IPv4Address {
 
-  /// Parses an IPv4 address from a String.
+  /// Parses an IPv4 address string.
   ///
-  /// The following formats are recognized:
+  /// The behavior of this parser is defined by the URL Standard, and supports all of the exotic shorthands
+  /// supported by C's `inet_aton`. It allows for 1-4 parts, each of which may be an octal, decimal, or hex number.
   ///
-  ///  - _a.b.c.d_, where each numeric part defines the value of the address' octet at that position.
-  ///  - _a.b.c_, where _a_ and _b_ define the address' first 2 octets, and _c_ is interpreted as a 16-bit integer whose most and least significant bytes define
-  ///    the address' 3rd and 4th octets respectively.
-  ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
-  ///    significant.
-  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose bytes define the octets of the address in order from most to least significant.
-  ///
-  /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
-  /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
-  ///
-  /// Examples:
+  /// ```swift
+  /// IPv4Address("192.168.0.17")!  // ✅ "Dotted decimal"
+  /// IPv4Address("0x7F.1")!        // ✅ 2 Hex components
+  /// IPv4Address("0337.19.0xA")!   // ✅ Dec/Hex/Oct combined
   /// ```
-  /// IPv4Address("0x7f.0.0.1")!.octets == (0x7f, 0x00, 0x00, 0x01) == "127.0.0.1"
-  /// IPv4Address("10.1.0x12.")!.octets == (0x0a, 0x01, 0x00, 0x12) == "10.1.0.18"
-  /// IPv4Address("0300.0xa80032")!.octets == (0xc0, 0xa8, 0x00, 0x32) == "192.168.0.50"
-  /// IPv4Address("0x8Badf00d")!.octets == (0x8b, 0xad, 0xf0, 0x0d) == "139.173.240.13"
+  ///
+  /// These exotic address formats are generally discouraged, but are supported for web compatibility.
+  /// Use the ``init(dottedDecimal:)`` initializer instead to limit supported formats to the 4-piece "dotted-decimal"
+  /// notation.
+  ///
+  /// ```swift
+  /// IPv4Address(dottedDecimal: "192.168.0.17")! // ✅ "Dotted decimal"
+  /// IPv4Address(dottedDecimal: "0x7F.1")        // ❌ nil
+  /// IPv4Address(dottedDecimal: "0337.19.0xA")   // ❌ nil
   /// ```
+  ///
+  /// ### Accepted Formats
+  ///
+  /// This parser supports the same formats as C's `aton`, which are:
+  ///
+  ///  - term `a.b.c.d`: where each numeric part defines the value of the address' octet at that position.
+  ///  - term `a.b.c`: where _a_ and _b_ define the address' first 2 octets, and _c_ is interpreted as a 16-bit integer
+  ///    whose most and least significant bytes define the address' 3rd and 4th octets respectively.
+  ///  - term `a.b`: where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer
+  ///    whose bytes define the remaining octets from most to least significant.
+  ///  - term `a`: where _a_ is interpreted as a 32-bit integer whose bytes define the octets of the address
+  ///    in order from most to least significant.
+  ///
+  /// The numeric parts may be written in octal (prefixed with a `0`), decimal, or hexadecimal
+  /// (prefixed with `0x` or `0X`). Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
   ///
   /// - parameters:
   ///     - description: The string to parse.
   ///
+  /// ## See Also
+  ///
+  /// - ``IPv4Address/serialized``
+  ///
   @inlinable @inline(__always)
-  public init?<Source>(_ description: Source) where Source: StringProtocol {
+  public init?<StringType>(_ description: StringType) where StringType: StringProtocol {
     self.init(utf8: description.utf8)
   }
 
-  /// Parses an IPv4 address from the given collection of UTF-8 code-units.
+  /// Parses an IPv4 address string from a collection of UTF-8 code-units.
   ///
-  /// The following formats are recognized:
+  /// This initializer constructs an IPv4 address from raw UTF-8 bytes rather than requiring they be stored
+  /// as a `String`. It uses precisely the same parsing algorithm as ``init(_:)``.
   ///
-  ///  - _a.b.c.d_, where each numeric part defines the value of the address' octet at that position.
-  ///  - _a.b.c_, where _a_ and _b_ define the address' first 2 octets, and _c_ is interpreted as a 16-bit integer whose most and least significant bytes define
-  ///    the address' 3rd and 4th octets respectively.
-  ///  - _a.b_, where _a_ defines the address' first octet, and _b_ is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
-  ///    significant.
-  ///  - _a_, where _a_ is interpreted as a 32-bit integer whose bytes define the octets of the address in order from most to least significant.
+  /// The following example demonstrates loading a file as a Foundation `Data` object, and parsing each line
+  /// as an IPv4 address string directly from the binary text. Doing this saves allocating a String
+  /// and UTF-8 validation. Since all valid address strings are ASCII, validating UTF-8 is redundant.
   ///
-  /// The numeric parts may be written in decimal, octal (prefixed with a `0`), or hexadecimal (prefixed with `0x`, case-insensitive).
-  /// Additionally, a single trailing '.' is permitted (e.g. `a.b.c.d.`).
+  /// ```swift
+  /// let fileContents: Data = getFileContents()
   ///
-  /// Examples:
+  /// for lineBytes = fileContents.lazy.split(0x0A /* ASCII line feed */) {
+  ///   // ℹ️ Initialize from binary text.
+  ///   let address = IPv4Address(utf8: lineBytes)
+  ///   ...
+  /// }
   /// ```
-  /// IPv4Address("0x7f.0.0.1".utf8)!.octets == (0x7f, 0x00, 0x00, 0x01) == "127.0.0.1"
-  /// IPv4Address("10.1.0x12.".utf8)!.octets == (0x0a, 0x01, 0x00, 0x12) == "10.1.0.18"
-  /// IPv4Address("0300.0xa80032".utf8)!.octets == (0xc0, 0xa8, 0x00, 0x32) == "192.168.0.50"
-  /// IPv4Address("0x8Badf00d".utf8)!.octets == (0x8b, 0xad, 0xf0, 0x0d) == "139.173.240.13"
-  /// ```
+  ///
+  /// > Note:
+  /// > This is not the same as constructing an `IPv4Address` from its raw bytes.
+  /// > The bytes provided to this function must contain a formatted address string.
   ///
   /// - parameters:
   ///     - utf8: The string to parse, as a collection of UTF-8 code-units.
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv4Address/serialized``
   ///
   @inlinable @inline(__always)
   public init?<UTF8Bytes>(utf8: UTF8Bytes) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -845,15 +1372,27 @@ extension IPv4Address {
 
 extension IPv4Address {
 
-  /// Parses an IPv4 address from a String.
+  /// Parses an IPv4 address string in dotted-decimal notation.
   ///
-  /// This simplified parser only recognises the 4-piece decimal notation ("a.b.c.d"), also known as dotted-decimal notation.
+  /// This initializer is more selective than ``init(_:)``, and only recognizes IPv4 addresses
+  /// in 4-piece dotted-decimal notation. The more exotic formats supported by C's `aton` will
+  /// **not** be considered IPv4 addresses.
+  ///
+  /// ```swift
+  /// IPv4Address(dottedDecimal: "192.168.0.17")! // ✅ "Dotted decimal"
+  /// IPv4Address(dottedDecimal: "0x7F.1")        // ❌ nil
+  /// IPv4Address(dottedDecimal: "0337.19.0xA")   // ❌ nil
+  /// ```
   ///
   /// - parameters:
   ///     - string: The string to parse.
   ///
+  /// ## See Also
+  ///
+  /// - ``IPv4Address/serialized``
+  ///
   @inlinable
-  public init?<S>(dottedDecimal string: S) where S: StringProtocol {
+  public init?<StringType>(dottedDecimal string: StringType) where StringType: StringProtocol {
     let _parsed =
       string.utf8.withContiguousStorageIfAvailable {
         IPv4Address(dottedDecimalUTF8: $0.boundsChecked)
@@ -862,12 +1401,35 @@ extension IPv4Address {
     self = parsed
   }
 
-  /// Parses an IPv4 address from a buffer of UTF-8 codeunits.
+  /// Parses an IPv4 address string in dotted-decimal notation, from a collection of UTF-8 code-units.
   ///
-  /// This simplified parser only recognises the 4-piece decimal notation ("a.b.c.d"), also known as dotted-decimal notation.
+  /// This initializer constructs an IPv4 address from raw UTF-8 bytes rather than requiring they be stored
+  /// as a `String`. It uses precisely the same parsing algorithm as ``init(dottedDecimal:)``.
+  ///
+  /// The following example demonstrates loading a file as a Foundation `Data` object, and parsing each line
+  /// as an IPv4 address string directly from the binary text. Doing this saves allocating a String
+  /// and UTF-8 validation. Since all valid address strings are ASCII, validating UTF-8 is redundant.
+  ///
+  /// ```swift
+  /// let fileContents: Data = getFileContents()
+  ///
+  /// for lineBytes = fileContents.lazy.split(0x0A /* ASCII line feed */) {
+  ///   // ℹ️ Initialize from binary text.
+  ///   let address = IPv4Address(dottedDecimalUTF8: lineBytes)
+  ///   ...
+  /// }
+  /// ```
+  ///
+  /// > Note:
+  /// > This is not the same as constructing an `IPv4Address` from its raw bytes.
+  /// > The bytes provided to this function must contain a formatted address string.
   ///
   /// - parameters:
   ///     - utf8: The string to parse, as a collection of UTF-8 code-units.
+  ///
+  /// ## See Also
+  ///
+  /// - ``IPv4Address/serialized``
   ///
   @inlinable
   public init?<UTF8Bytes>(dottedDecimalUTF8 utf8: UTF8Bytes) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -919,7 +1481,27 @@ extension IPv4Address {
 
 extension IPv4Address {
 
-  /// The textual representation of this address, in dotted decimal notation, as defined by [RFC 4001](https://tools.ietf.org/html/rfc4001#page-7).
+  /// The canonical textual representation of this address.
+  ///
+  /// This serialization uses dotted-decimal notation, as recommended by [RFC 4001][rfc4001],
+  /// "Textual Conventions for Internet Network Addresses".
+  ///
+  /// ```swift
+  /// let address1 = IPv4Address("192.168.0.17")!
+  /// let address2 = IPv4Address("0x7F.1")!
+  /// let address3 = IPv4Address("0337.19.0xA")!
+  ///
+  /// address1.serialized  // "192.168.0.17" ✅ "Dotted decimal"
+  /// address2.serialized  // "127.0.0.1"    ✅ 4 components
+  /// address3.serialized  // "223.19.0.10"
+  /// ```
+  ///
+  /// [rfc4001]: https://tools.ietf.org/html/rfc4001#page-7
+  ///
+	/// ## See Also
+  ///
+  /// - ``IPv4Address/init(_:)``
+  /// - ``IPv4Address/init(dottedDecimal:)``
   ///
   public var serialized: String {
     var direct = serializedDirect

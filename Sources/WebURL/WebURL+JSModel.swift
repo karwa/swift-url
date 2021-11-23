@@ -14,60 +14,169 @@
 
 extension WebURL {
 
-  /// An interface to this URL whose properties have the same behaviour as the JavaScript `URL` class described in the [URL Standard][whatwg-url-class].
+  /// A read-write view of this URL with the same API as JavaScript's `URL` class.
   ///
-  /// The other APIs exposed by `WebURL` are preferred over this interface, as they are designed to better match the expectations of Swift developers.
-  /// JavaScript is JavaScript, and what is useful or expected functionality in that language may be undesirable and surprising in contexts where Swift is used.
-  /// It is also subject to legacy and browser interoperability considerations which do not apply to the `WebURL` API.
+  /// This view matches the API of JavaScript's `URL` class as defined by the [WHATWG URL Standard][whatwg-url-class],
+  /// and is validated using the `web-platform-tests` suite of cross-browser tests. It is designed to support
+  /// developers porting applications from JavaScript, or who have cross JavaScript-Swift codebases.
   ///
-  /// The primary purpose of this API is to facilitate testing (this API is tested directly against the common web-platform-tests used by major browsers to
-  /// ensure compliance with the standard), and to aid developers porting applications from JavaScript or other languages, or interoperating with them,
-  /// since this functionality exposed by this interface matches the JavaScript `URL` class.
+  /// We recommend that developers who do not have a strong need for JavaScript's exact API stick to using
+  /// `WebURL`'s component properties directly rather than through this view. The differences between `WebURL`
+  /// and JavaScript are minimal: a slightly more ergonomic value returned for some components,
+  /// and some more predictable edge-case behavior. These differences are documented below.
   ///
-  /// The main differences between the Swift `WebURL` API and the JavaScript `URL` class are:
+  /// This view allows modifying the URL's components, making it simple to isolate areas where the JavaScript
+  /// API is required.
   ///
-  /// - `WebURL` uses `nil` to represent not-present values, rather than using empty strings.
+  /// ```swift
+  /// // This demonstrates filtering of tabs and newlines,
+  /// // which is something JS does but WebURL normally does not do.
+  /// var url = WebURL("https://example.com/foo")!
+  /// url.jsModel.search = "\t\thello\n"
+  /// url.fragment
+  /// // ✅ "hello"
   ///
-  ///   This can be a more accurate description of components which keep their delimiter even when empty.
-  ///   For example, in JavaScript, the URLs "http://example.com/" and "http://example.com/?" both return an empty string for the `search` property,
-  ///   even though the "?" query delimiter is present in one of the strings and not in the other. This has secondary effects, such as
-  ///   `url.search = url.search` potentially changing the serialized URL string. `WebURL` models the former as `nil` (to mean "not present"),
-  ///   and the latter as an empty string, to more accurately describe the structure of the URL. URLs are confusing and complex enough.
+  /// // You can use the JSModel for multiple operations and
+  /// // return to the WebURL model when finished.
+  /// var jsURL = url.jsModel
+  /// // ...(some operations)
+  /// return jsURL.swiftModel
+  /// ```
   ///
-  /// - `WebURL` does not include delimiters in its components.
+  /// ## Differences Between WebURL and JavaScript
   ///
-  ///    For example, the query string's leading "?" is part of the JavaScript URL class's `.search` property, but _not_ part of `WebURL`'s `.query` property.
-  ///    We assume that most consumers of the query or fragment strings are going to drop this delimiter as the first thing that they do, and it also happens
-  ///    to match the behaviour of Foundation's `URL` type.
+  /// This view behaves like JavaScript in all of the described situations. When we mention WebURL's behavior,
+  /// we are referring to the component properties available directly on the `WebURL` type (not through this view).
   ///
-  ///    For setters, JavaScript also drops a leading "?" or "#" delimiter when setting the `search` or `hash`. `WebURL` does not - the value you provide
-  ///    is the value that will be set, with percent-encoding if necessary to make it work.
+  /// Note that the JavaScript property named "protocol" is named "scheme" in this view,
+  /// as it can be awkward to work with a property named "protocol" in Swift.
   ///
-  ///    Note that this only applies to 3 components, all of which have different names between JavaScript's URL class and `WebURL`
-  ///    (`protocol` vs `scheme`, `search` vs `query`, `hash` vs `fragment`).
+  /// ### More Noticeable
   ///
-  /// - `WebURL` does not filter ASCII whitespace characters in component setters.
+  /// 1. `WebURL` components do not include delimiters.
   ///
-  ///    In JavaScript, you can set `url.search = "\t\thello\n"`, and the tabs and newlines will be silently removed.
-  ///    `WebURL` percent-encodes those characters, like it does for other disallowed characters, so they are maintained in the component's value.
+  ///    Considering the URL `"http://example.com?foo#bar"`, the components returned by each API would be:
   ///
-  /// - `WebURL` does not ignore trailing content when setting a component.
+  ///    | JS Name    | Example | WebURL Name | Example |
+  ///    | ---------- | ------- | ----------- | ------- |
+  ///    | `protocol` | `http:` | `scheme`    | `http`  |
+  ///    | `search`   | `?foo`  | `query`     | `foo`   |
+  ///    | `hash`     | `#bar`  | `fragment`  | `bar`   |
   ///
-  ///    In the following example, JavaScript's `URL` class finds a hostname at the start of the given new value - but the new value also includes a path and query.
-  ///    JavaScript detects these, but silently drops them while succesfully changing the hostname. This happens for many (but not all) of the setters in the
-  ///    JavaScript model.
+  ///    This difference only applies to the above 3 components; both models do not include delimiters for
+  ///    other components. Most consumers of these values are going to immediately drop the delimiter anyway,
+  ///    so WebURL just does it for you. Additionally, it matches the behavior of Foundation's `URL` type,
+  ///    which makes transitioning code to WebURL a little bit easier.
   ///
-  ///    ```javascript
-  ///    var url = new URL("http://example.com/hello/world?weather=sunny");
-  ///    url.hostname = "test.com/some/path?query";
-  ///    url.href; // "http://test.com/hello/world?weather=sunny"
+  /// ### Adjustments to Edge-Cases
+  ///
+  /// 1. `WebURL` uses `nil` to signal that a value is not present, rather than an empty string.
+  ///
+  ///    This is a more accurate description of components which keep their delimiter even when empty.
+  ///    For example, consider the following URLs:
+  ///
+  ///    - `http://example.com/`
+  ///    - `http://example.com/?`
+  ///
+  ///    According to the URL Standard, these URLs are different; however, JavaScript's `search` property returns
+  ///    an empty string for both. In fact, these URLs return identical values for _every_ component in JS,
+  ///    and yet still the overall URLs compare as not equal to each other. This has some subtle secondary effects,
+  ///    such as `url.search = url.search` potentially changing the URL.
+  ///
+  ///    `WebURL` avoids this by saying that the first URL has a `nil` query (to mean "not present"),
+  ///    and the latter has an empty query. This has the nice property that every unique URL has
+  ///    a unique combination of URL components.
+  ///
+  /// 2. `WebURL` does not filter ASCII whitespace characters in component setters.
+  ///
+  ///    In JavaScript, tabs and newlines are silently filtered when setting a URL component:
+  ///
+  ///    ```js
+  ///    // JavaScript
+  ///    url.search = "\t\thello\n";
+  ///    url.search; // "hello"
   ///    ```
   ///
-  ///    Continuing with the theme of `WebURL` component setters being stricter about setting precisely the string that you give them, this operation would
-  ///    fail if setting `WebURL.hostname`, as "/" is a forbidden host code-point.
+  ///    `WebURL` does not; instead, these characters will be percent-encoded as other disallowed characters are.
+  ///    URLs are complex enough; why add things?
   ///
-  /// If these deviations sound pretty reasonable to you, and you do not have a compelling need for something which exactly matches the JavaScript model,
-  /// use the `WebURL` interface instead.
+  /// 3. `WebURL` does not ignore trailing content when setting a component.
+  ///
+  ///    Many properties in the JavaScript model do this. It's totally weird, and surely nobody will miss it.
+  ///
+  ///    ```js
+  ///    // JavaScript
+  ///    var url      = new URL("https://example.com/");
+  ///    url.protocol = "ftp://foobar.org/";
+  ///    url.href;
+  ///    // "ftp://example.com"
+  ///    //  ^^^
+  ///    ```
+  ///
+  ///    This operation would fail with WebURL, because `"ftp://foobar.org/"` is not a valid scheme.
+  ///
+  /// [whatwg-url-class]: https://url.spec.whatwg.org/#url-class
+  ///
+  /// ## Topics
+  ///
+  /// ### Reading and Writing a URL's Components
+  ///
+  /// - ``WebURL/WebURL/JSModel-swift.struct/scheme``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/username``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/password``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/hostname``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/host``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/port``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/pathname``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/search``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/hash``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/href``
+  /// - ``WebURL/WebURL/JSModel-swift.struct/origin``
+  ///
+  /// ### Returning to WebURL
+  ///
+  /// - ``WebURL/WebURL/JSModel-swift.struct/swiftModel``
+  ///
+  /// ### View Type
+  ///
+  /// - ``WebURL/WebURL/JSModel-swift.struct``
+  ///
+  public var jsModel: JSModel {
+    get {
+      JSModel(storage: storage)
+    }
+    _modify {
+      var view = JSModel(storage: storage)
+      storage = _tempStorage
+      defer { storage = view.storage }
+      yield &view
+    }
+    set {
+      storage = newValue.storage
+    }
+  }
+
+  /// A read-write view of a URL with the same API as JavaScript's `URL` class.
+  ///
+  /// This view matches the definition of JavaScript's `URL` class in the [URL Standard][whatwg-url-class],
+  /// and is validated using the `web-platform-tests` suite of cross-browser tests. It is designed to support
+  /// developers porting applications from JavaScript, or who have cross JavaScript-Swift codebases.
+  ///
+  /// We recommend that developers who do not have a strong need for JavaScript's exact API stick to using
+  /// `WebURL` directly rather than through this view. The differences between `WebURL` and JavaScript are
+  /// minimal: a slightly more ergonomic value returned for some components, and some more predictable edge-case
+  /// behavior.
+  ///
+  /// To access this interface, use the URL's ``WebURL/jsModel-swift.property`` property.
+  ///
+  /// ```swift
+  /// let url = WebURL("https://example.com/foo?bar#baz")!
+  /// url.query          // "foo"  - WebURL property.
+  /// url.jsModel.search // "?foo" - JS property.
+  /// ```
+  ///
+  /// > Tip:
+  /// > The documentation for this type can be found at: ``WebURL/jsModel-swift.property``.
   ///
   /// [whatwg-url-class]: https://url.spec.whatwg.org/#url-class
   ///
@@ -81,7 +190,8 @@ extension WebURL {
 
     /// Constructs a new URL by parsing `string` against the given `base` URL string.
     ///
-    /// If `base` is `nil`, this is equivalent to `WebURL(string)`. Otherwise, it is equivalent to `WebURL(base)?.resolve(string)`.
+    /// If `base` is `nil`, this is equivalent to `WebURL(string)`.
+    /// Otherwise, it is equivalent to `WebURL(base)?.resolve(string)`.
     ///
     public init?(_ string: String, base: String?) {
       if let baseString = base {
@@ -99,33 +209,9 @@ extension WebURL {
   }
 }
 
-extension WebURL {
-
-  /// An interface to this URL whose properties have the same behaviour as the JavaScript `URL` class described in the [URL Standard][whatwg-url-class].
-  ///
-  /// See the documentation for the `WebURL.JSModel` type for more information.
-  ///
-  /// [whatwg-url-class]: https://url.spec.whatwg.org/#url-class
-  ///
-  public var jsModel: JSModel {
-    get {
-      JSModel(storage: storage)
-    }
-    _modify {
-      var view = JSModel(storage: storage)
-      storage = _tempStorage
-      defer { storage = view.storage }
-      yield &view
-    }
-    set {
-      storage = newValue.storage
-    }
-  }
-}
-
 extension WebURL.JSModel {
 
-  /// The `WebURL` interface to this URL, with properties and functionality tailored to Swift developers.
+  /// The `WebURL` interface to this URL.
   ///
   public var swiftModel: WebURL {
     get {
@@ -235,7 +321,8 @@ extension WebURL.JSModel {
 
   /// Gets and sets the protocol portion of the URL.
   ///
-  ///  - Note: This property is called `protocol` in Javascript.
+  /// > Note:
+  /// > This property is called `protocol` in Javascript.
   ///
   public var scheme: String {
     get {
@@ -253,7 +340,9 @@ extension WebURL.JSModel {
   }
 
   /// Gets and sets the host name portion of the URL.
-  /// The key difference between `url.host` and `url.hostname` is that `url.hostname` does not include the port.
+  ///
+  /// > Tip:
+  /// > The key difference between `url.host` and `url.hostname` is that `url.hostname` does not include the port.
   ///
   public var hostname: String {
     get {
@@ -275,6 +364,9 @@ extension WebURL.JSModel {
   }
 
   /// Gets the host portion of the URL.
+  ///
+  /// > Tip:
+  /// > The key difference between `url.host` and `url.hostname` is that `url.hostname` does not include the port.
   ///
   public var host: String {
     guard let hostname = storage.utf8.hostname else { return "" }

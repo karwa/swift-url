@@ -14,7 +14,84 @@
 
 extension WebURL {
 
-  /// A mutable view of the `application/x-www-form-urlencoded` key-value pairs in this URL's `query`.
+  /// A read-write view of the URL's form-encoded query parameters.
+  ///
+  /// This view interprets a URL's query string as an `application/x-www-form-urlencoded` list of key-value pairs.
+  /// Keys and values are automatically form-decoded when they are returned and encoded when they are inserted.
+  ///
+  /// You can get or set the value for a key by accessing it as a property, or by using the
+  /// ``FormEncodedQueryParameters/get(_:)`` or ``FormEncodedQueryParameters/set(_:to:)`` functions.
+  ///
+  /// ```swift
+  /// var url = WebURL("http://example.com/currency/convert?from=EUR&to=USD")!
+  /// url.formParams.from // ✅ "EUR"
+  /// url.formParams.to   // ✅ "USD"
+  ///
+  /// url.formParams.from = "GBP"
+  /// print(url)
+  /// // ✅ "http://example.com/currency/convert?from=GBP&to=USD"
+  /// //                                         ^^^^^^^^
+  /// url.formParams.amount = "20"
+  /// print(url)
+  /// // ✅ "http://example.com/currency/convert?from=GBP&to=USD&amount=20"
+  /// //                                                         ^^^^^^^^^
+  /// ```
+  ///
+  /// Additionally, you can insert multiple key-value pairs using the
+  /// ``FormEncodedQueryParameters/append(contentsOf:)-3zb6r`` function or `+=` operator, and iterate over
+  /// all key-value pairs using the ``FormEncodedQueryParameters/allKeyValuePairs`` sequence.
+  ///
+  /// ```swift
+  /// var url = WebURL("http://example.com/currency/convert")
+  /// url.formParams += [
+  ///   ("amount", "200"),
+  ///   ("from", "EUR"),
+  ///   ("to", "GBP")
+  /// ]
+  /// print(url)
+  /// // ✅ "http://example.com/currency/convert?amount=200&from=EUR&to=GBP"
+  /// //                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ///
+  /// for (key, value) in url.formParams.allKeyValuePairs {
+  ///   // ("amount", "200"), ("from", "EUR"), ("to", "GBP")
+  /// }
+  /// ```
+  ///
+  /// Be aware that modifying the query through this view will re-encode the _entire_ query using form-encoding.
+  /// This matches the behavior of JavaScript's `URLSearchParams` class, defined in the WHATWG URL Standard.
+  ///
+  /// > Note:
+  /// > Keys are found in the URL's query even if they are form-encoded,
+  /// > but non-ASCII keys require an exact Unicode scalar match.
+  ///
+  /// ## Topics
+  ///
+  /// ### Getting the Value of a Key
+  ///
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/get(_:)``
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/getAll(_:)``
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/contains(_:)``
+  ///
+  /// ### Setting the Value of a Key
+  ///
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/set(_:to:)``
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/remove(_:)``
+  ///
+  /// ### Appending Key-Value Pairs
+  ///
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/append(_:value:)``
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/append(contentsOf:)-3zb6r``
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/append(contentsOf:)-3vyt6``
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/append(contentsOf:)-194p2``
+  ///
+  /// ### All Key-Value Pairs
+  ///
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/allKeyValuePairs``
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters/removeAll()``
+  ///
+  /// ### View Type
+  ///
+  /// - ``WebURL/WebURL/FormEncodedQueryParameters``
   ///
   public var formParams: FormEncodedQueryParameters {
     get {
@@ -35,52 +112,30 @@ extension WebURL {
     }
   }
 
-  /// A view of the `application/x-www-form-urlencoded` key-value pairs in a URL's `query`.
+  /// A read-write view of a URL's form-encoded query parameters.
   ///
-  /// The `formParams` view allows you to conveniently get and set the values for particular keys by accessing them as members.
-  /// For keys which cannot be written as members, the `get` and `set` functions provide equivalent functionality.
-  /// The keys and values will be automatically encoded and decoded.
+  /// This view interprets a URL's query string as an `application/x-www-form-urlencoded` list of key-value pairs.
+  /// Keys and values are automatically form-decoded when they are returned and encoded when they are inserted.
+  ///
+  /// Access a URL's form-encoded query parameters through its ``WebURL/formParams`` property.
   ///
   /// ```swift
   /// var url = WebURL("http://example.com/currency/convert?from=EUR&to=USD")!
-  /// assert(url.formParams.from == "EUR")
+  /// url.formParams.from // ✅ "EUR"
+  /// url.formParams.to   // ✅ "USD"
   ///
   /// url.formParams.from = "GBP"
-  /// assert(url.serialized() == "http://example.com/currency/convert?from=GBP&to=USD")
-  ///
+  /// print(url)
+  /// // ✅ "http://example.com/currency/convert?from=GBP&to=USD"
+  /// //                                         ^^^^^^^^
   /// url.formParams.amount = "20"
-  /// assert(url.serialized() == "http://example.com/currency/convert?from=GBP&to=USD&amount=20")
-  ///
-  /// url.formParams.to = "💵"
-  /// assert(url.serialized() == "http://example.com/currency/convert?from=GBP&to=%F0%9F%92%B5&amount=20")
+  /// print(url)
+  /// // ✅ "http://example.com/currency/convert?from=GBP&to=USD&amount=20"
+  /// //                                                         ^^^^^^^^^
   /// ```
   ///
-  /// Additionally, you can iterate over all of the key-value pairs using the `.allKeyValuePairs` property:
-  ///
-  /// ```swift
-  /// for (key, value) in url.formParams.allKeyValuePairs {
-  ///   // ("from", "GBP")
-  ///   // ("to", "💵")
-  ///   // ("amount", "20")
-  /// }
-  /// ```
-  ///
-  /// Key lookup (via `.contains`, `.get`, `.set`, etc) is not Unicode-aware. This means that the Unicode codepoints in the provided key must match
-  /// exactly with those in the query string after percent-decoding. This matches the behaviour of the `URLSearchParams` class defined in the URL standard.
-  ///
-  /// In the following example, the character "ñ" is not found when searching using a canonically-equivalent set of codepoints.
-  /// However, the `allKeyValuePairs` property provides the key using Swift's built-in `String` type, which does have Unicode-aware comparison:
-  ///
-  /// ```swift
-  /// let url = WebURL("http://example.com?jalape\u{006E}\u{0303}os=2")!
-  /// url.serialized() // "http://example.com/?jalapen%CC%83os=2"
-  /// url.formParams.get("jalape\u{006E}\u{0303}os") // "2"
-  /// url.formParams.get("jalape\u{00F1}os") // nil
-  /// url.formParams.allKeyValuePairs.first(where: { $0.0 == "jalape\u{00F1}os" }) // ("jalapeños", "2")
-  /// ```
-  ///
-  /// Also note that modifying any part of the query through this view will re-encode the _entire_ query as `application/x-www-form-urlencoded`.
-  /// Again, this matches the behaviour of `URLSearchParams` in the URL standard.
+  /// > Tip:
+  /// > The documentation for this type can be found at: ``WebURL/formParams``.
   ///
   @dynamicMemberLookup
   public struct FormEncodedQueryParameters {
@@ -140,7 +195,16 @@ extension WebURL.FormEncodedQueryParameters {
 
 extension WebURL.FormEncodedQueryParameters {
 
-  /// A `Sequence` allowing iteration over all form-encoded key-value pairs contained in this URL's query.
+  /// A `Sequence` of all key-value pairs in this URL's query.
+  ///
+  /// The keys and values returned by this sequence are form-decoded.
+  ///
+  /// ```swift
+  /// let url = WebURL("https://example.com/convert?amount=200&from=EUR&to=GBP")!
+  /// for (key, value) in url.formParams.allKeyValuePairs {
+  ///   // ("amount", "200"), ("from", "EUR"), ("to", "GBP")
+  /// }
+  /// ```
   ///
   public var allKeyValuePairs: KeyValuePairs {
     KeyValuePairs(params: self)
@@ -275,10 +339,19 @@ extension WebURL.FormEncodedQueryParameters {
 
 extension WebURL.FormEncodedQueryParameters {
 
-  /// Whether or not the query parameters contain a key-value pair whose key matches the given key.
+  /// Whether there are any values associated with a given key.
   ///
-  /// Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
-  /// in order to be considered a match.
+  /// ```swift
+  /// let url = WebURL("https://example.com/convert?amount=200&from=USD&to=EUR")!
+  /// //                                            ^^^^^^^^^^
+  ///
+  /// url.formParams.contains("amount") // ✅ true
+  /// url.formParams.contains("format") // ✅ false
+  /// ```
+  ///
+  /// > Note:
+  /// > Keys are found in the URL's query even if they are form-encoded,
+  /// > but non-ASCII keys require an exact Unicode scalar match.
   ///
   @inlinable
   public func contains<StringType>(_ key: StringType) -> Bool where StringType: StringProtocol {
@@ -287,10 +360,27 @@ extension WebURL.FormEncodedQueryParameters {
     return iter.next() != nil
   }
 
-  /// Returns the value from the first key-value pair whose key matches the given key. The returned value is form-decoded.
+  /// Returns the first value associated with a given key.
   ///
-  /// Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
-  /// in order to be considered a match.
+  /// If there are multiple values associated with the key, the first one is returned.
+  /// To obtain all values associated with a key, use ``getAll(_:)``.
+  /// The returned value is form-decoded.
+  ///
+  /// This function is equivalent to accessing the key using property syntax.
+  ///
+  /// ```swift
+  /// let url = WebURL("https://example.com/convert?amount=200&from=USD&to=EUR")!
+  /// //                                                       ^^^^^^^^
+  ///
+  /// url.formParams.get("from")
+  /// // ✅ "USD"
+  /// url.formParams.from
+  /// // ✅ "USD"
+  /// ```
+  ///
+  /// > Note:
+  /// > Keys are found in the URL's query even if they are form-encoded,
+  /// > but non-ASCII keys require an exact Unicode scalar match.
   ///
   @inlinable
   public func get<StringType>(_ key: StringType) -> String? where StringType: StringProtocol {
@@ -299,10 +389,23 @@ extension WebURL.FormEncodedQueryParameters {
     return iter.next().map { queryUTF8[$0.value].percentDecodedString(substitutions: .formEncoding) }
   }
 
-  /// Returns the values of all key-value pairs whose key matches the given key. The values are form-decoded.
+  /// Returns all values associated with a given key.
   ///
-  /// Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
-  /// in order to be considered a match.
+  /// The returned values are form-decoded, and their relative order is preserved.
+  ///
+  /// ```swift
+  /// let url = WebURL("https://example.com/books?cat=123&cat=456&format=json")!
+  /// //                                          ^^^^^^^ ^^^^^^^
+  ///
+  /// url.formParams.get("cat")
+  /// // "123"
+  /// url.formParams.getAll("cat")
+  /// // ✅ ["123", "456"]
+  /// ```
+  ///
+  /// > Note:
+  /// > Keys are found in the URL's query even if they are form-encoded,
+  /// > but non-ASCII keys require an exact Unicode scalar match.
   ///
   @inlinable
   public func getAll<StringType>(_ key: StringType) -> [String] where StringType: StringProtocol {
@@ -326,40 +429,96 @@ extension WebURL.FormEncodedQueryParameters {
 
 extension WebURL.FormEncodedQueryParameters {
 
-  /// Appends the given key-value pair.
+  /// Appends a key-value pair.
   ///
-  /// The key and value will be form-encoded before they are added to the query.
-  /// Even if the key is already present, no existing key-value pairs will be removed.
+  /// The key-value pair is added to the end of the URL's query; any values already
+  /// associated with the key will not be removed.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/books")!
+  ///
+  /// url.formParams.append("cat", value: "123")
+  /// print(url)
+  /// // ✅ "https://example.com/books?cat=123"
+  /// //                               ^^^^^^^
+  /// url.formParams.append("cat", value: "456")
+  /// print(url)
+  /// // ✅ "https://example.com/books?cat=123&cat=456"
+  /// //                                       ^^^^^^^
+  /// ```
+  ///
+  /// The key and value must **not** be form-encoded, as this view will apply its own form-encoding.
   ///
   @inlinable
   public mutating func append<StringType>(_ key: StringType, value: StringType) where StringType: StringProtocol {
     append(contentsOf: CollectionOfOne((key, value)))
   }
 
-  /// Removes all key-value pairs whose key matches the given key.
+  /// Removes all values associated with a given key.
   ///
-  /// Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
-  /// in order to be considered a match.
+  /// This is equivalent to setting the value associated with the key to `nil`.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/books?cat=123&cat=456&format=json")!
+  /// //                                          ^^^^^^^ ^^^^^^^
+  /// url.formParams.removeAll("cat")
+  /// print(url)
+  /// // ✅ "https://example.com/books?format=json"
+  /// //                               ^
+  /// ```
+  ///
+  /// > Note:
+  /// > Keys are found in the URL's query even if they are form-encoded,
+  /// > but non-ASCII keys require an exact Unicode scalar match.
   ///
   @inlinable
   public mutating func remove<StringType>(_ key: StringType) where StringType: StringProtocol {
     set(key, to: nil)
   }
 
-  /// Removes all key-value pairs. This is equivalent to setting the URL's `query` to `nil`.
+  /// Removes all key-value pairs.
+  ///
+  /// This is equivalent to setting the URL's ``WebURL/query`` to `nil`.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/convert?amount=200&from=EUR&to=GBP")!
+  /// url.formParams.removeAll()
+  /// print(url)
+  /// // ✅ "https://example.com/convert"
+  /// ```
   ///
   public mutating func removeAll() {
     try! storage.utf8.setQuery(toKnownFormEncoded: UnsafeBoundsCheckedBufferPointer?.none)
   }
 
-  /// If `key` is already present, sets the value of the first key-value pair whose key matches `key` to `newValue`.
-  /// Otherwise, appends `key` and `newValue` as a new key-value pair. If `newValue` is `nil`, all pairs whose key matches the given key are removed.
+  /// Associates a value with a given key.
   ///
-  /// The new value (and key, if it is appended) will be form-encoded before it is added to the query.
-  /// If multiple key-value pairs in the query match `key`, all other pairs besides the first one will be removed.
+  /// This function has the effect of removing all existing values associated with the key,
+  /// and, if `newValue` is not nil, inserting a new key-value pair where the first match used to be.
+  /// If the key was not previously associated with any value, the new key-value pair is inserted at the end
+  /// of the query.
   ///
-  /// Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
-  /// in order to be considered a match.
+  /// This function is equivalent to assigning a value using property syntax.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/books?cat=123&cat=456&format=json")!
+  /// //                                          ^^^^^^^ ^^^^^^^
+  ///
+  /// url.formParams.set("cat", to: "789")
+  /// print(url)
+  /// // ✅ "https://example.com/books?cat=789&format=json"
+  /// //                               ^^^^^^^
+  /// url.formParams.sort = "published-desc"
+  /// print(url)
+  /// // ✅ "https://example.com/books?cat=789&format=json&sort=published-desc"
+  /// //                                                   ^^^^^^^^^^^^^^^^^^^
+  /// ```
+  ///
+  /// The assigned value must **not** be form-encoded, as this view will apply its own form-encoding.
+  ///
+  /// > Note:
+  /// > Keys are found in the URL's query even if they are form-encoded,
+  /// > but non-ASCII keys require an exact Unicode scalar match.
   ///
   @inlinable
   public mutating func set<StringType>(
@@ -376,9 +535,35 @@ extension WebURL.FormEncodedQueryParameters {
 
 extension WebURL.FormEncodedQueryParameters {
 
-  /// Appends the given collection of key-value pairs.
+  /// Appends a collection of key-value pairs.
   ///
-  /// The keys and values will be form-encoded before they are added to the query.
+  /// The key-value pairs are added to the end of the URL's query; if the given keys already have values
+  /// associated with them, those associations will not be removed.
+  ///
+  /// This function is equivalent to the `+=` operator.
+  /// The following example demonstrates building a URL query by appending key-value pairs.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/convert")!
+  /// url.formParams.append(contentsOf: [
+  ///  ("amount", "200"),
+  ///  ("from", "USD"),
+  ///  ("to", "EUR")
+  /// ])
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR"
+  /// //                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ///
+  /// url.formParams += [
+  ///  ("lang", "en"),
+  ///  ("client", "app")
+  /// ]
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR&lang=en&client=app"
+  /// //                                                            ^^^^^^^^^^^^^^^^^^
+  /// ```
+  ///
+  /// The keys and values must **not** be form-encoded, as this view will apply its own form-encoding.
   ///
   @inlinable
   public mutating func append<CollectionType, StringType>(
@@ -388,9 +573,35 @@ extension WebURL.FormEncodedQueryParameters {
     storage.appendFormParamPairs(fromUnencoded: keyValuePairs.lazy.map { ($0.0.utf8, $0.1.utf8) })
   }
 
-  /// Appends the given collection of key-value pairs.
+  /// Appends a collection of key-value pairs.
   ///
-  /// The keys and values will be form-encoded before they are added to the query.
+  /// The key-value pairs are added to the end of the URL's query; if the given keys already have values
+  /// associated with them, those associations will not be removed.
+  ///
+  /// This operator is equivalent to the ``append(contentsOf:)-3zb6r`` function.
+  /// The following example demonstrates building a URL query by appending key-value pairs.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/convert")!
+  /// url.formParams.append(contentsOf: [
+  ///  ("amount", "200"),
+  ///  ("from", "USD"),
+  ///  ("to", "EUR")
+  /// ])
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR"
+  /// //                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ///
+  /// url.formParams += [
+  ///  ("lang", "en"),
+  ///  ("client", "app")
+  /// ]
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR&lang=en&client=app"
+  /// //                                                            ^^^^^^^^^^^^^^^^^^
+  /// ```
+  ///
+  /// The keys and values must **not** be form-encoded, as this view will apply its own form-encoding.
   ///
   @inlinable
   public static func += <CollectionType, StringType>(
@@ -401,9 +612,35 @@ extension WebURL.FormEncodedQueryParameters {
 
   // Unfortunately, (String, String) and (key: String, value: String) appear to be treated as different types.
 
-  /// Appends the given collection of key-value pairs.
+  /// Appends a collection of key-value pairs.
   ///
-  /// The keys and values will be form-encoded before they are added to the query.
+  /// The key-value pairs are added to the end of the URL's query; if the given keys already have values
+  /// associated with them, those associations will not be removed.
+  ///
+  /// This function is equivalent to the `+=` operator.
+  /// The following example demonstrates building a URL query by appending key-value pairs.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/convert")!
+  /// url.formParams.append(contentsOf: [
+  ///  (key: "amount", value: "200"),
+  ///  (key: "from", value: "USD"),
+  ///  (key: "to", value: "EUR")
+  /// ])
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR"
+  /// //                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ///
+  /// url.formParams += [
+  ///  (key: "lang", value: "en"),
+  ///  (key: "client", value: "app")
+  /// ]
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR&lang=en&client=app"
+  /// //                                                            ^^^^^^^^^^^^^^^^^^
+  /// ```
+  ///
+  /// The keys and values must **not** be form-encoded, as this view will apply its own form-encoding.
   ///
   @inlinable
   public mutating func append<CollectionType, StringType>(
@@ -416,9 +653,35 @@ extension WebURL.FormEncodedQueryParameters {
     append(contentsOf: keyValuePairs.lazy.map { ($0, $1) } as LazyMapCollection)
   }
 
-  /// Appends the given collection of key-value pairs.
+  /// Appends a collection of key-value pairs.
   ///
-  /// The keys and values will be form-encoded before they are added to the query.
+  /// The key-value pairs are added to the end of the URL's query; if the given keys already have values
+  /// associated with them, those associations will not be removed.
+  ///
+  /// This operator is equivalent to the ``append(contentsOf:)-3vyt6`` function.
+  /// The following example demonstrates building a URL query by appending key-value pairs.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/convert")!
+  /// url.formParams.append(contentsOf: [
+  ///  (key: "amount", value: "200"),
+  ///  (key: "from", value: "USD"),
+  ///  (key: "to", value: "EUR")
+  /// ])
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR"
+  /// //                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ///
+  /// url.formParams += [
+  ///  (key: "lang", value: "en"),
+  ///  (key: "client", value: "app")
+  /// ]
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR&lang=en&client=app"
+  /// //                                                            ^^^^^^^^^^^^^^^^^^
+  /// ```
+  ///
+  /// The keys and values must **not** be form-encoded, as this view will apply its own form-encoding.
   ///
   @inlinable
   public static func += <CollectionType, StringType>(
@@ -434,13 +697,40 @@ extension WebURL.FormEncodedQueryParameters {
   // Add an overload for Dictionary, so that its key-value pairs at least get a predictable order.
   // There is no way to enforce an order for Dictionary, so this isn't breaking anybody's expectations.
 
-  /// Appends the key-value pairs of the given `Dictionary`.
+  /// Appends a `Dictionary` of key-value pairs.
   ///
-  /// The keys and values will be form-encoded before they are added to the query.
+  /// The key-value pairs are added to the end of the URL's query; if the given keys already have values
+  /// associated with them, those associations will not be removed.
   ///
-  /// - Note: Since `Dictionary`'s contents are not ordered, this method will first sort the key-value pairs by name before they are appended
-  ///         (using the standard library's Unicode-aware comparison function), in order to produce a predictable, repeatable result.
-  ///         If this order is not desired, sort the key-value pairs before appending them.
+  /// This function is equivalent to the `+=` operator.
+  /// The following example demonstrates building a URL query by appending key-value pairs.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/convert")!
+  /// url.formParams.append(contentsOf: [
+  ///  "amount" : "200",
+  ///  "from"   : "USD",
+  ///  "to"     : "EUR"
+  /// ])
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR"
+  /// //                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ///
+  /// url.formParams += [
+  ///  "lang"   : "en",
+  ///  "client" : "app"
+  /// ]
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR&client=app&lang=en"
+  /// //                                                            ^^^^^^^^^^^^^^^^^^
+  /// ```
+  ///
+  /// The keys and values must **not** be form-encoded, as this view will apply its own form-encoding.
+  ///
+  /// > Note:
+  /// > Since `Dictionary`'s contents are not ordered, this method will sort the key-value pairs by key name
+  /// > before appending (using the standard library's Unicode-aware comparison), in order to produce a repeatable
+  /// > result.
   ///
   @inlinable
   public mutating func append<StringType>(
@@ -449,13 +739,40 @@ extension WebURL.FormEncodedQueryParameters {
     append(contentsOf: keyValuePairs.sorted(by: { lhs, rhs in lhs.key < rhs.key }))
   }
 
-  /// Appends the key-value pairs of the given `Dictionary`.
+  /// Appends a `Dictionary` of key-value pairs.
   ///
-  /// The keys and values will be form-encoded before they are added to the query.
+  /// The key-value pairs are added to the end of the URL's query; if the given keys already have values
+  /// associated with them, those associations will not be removed.
   ///
-  /// - Note: Since `Dictionary`'s contents are not ordered, this method will first sort the key-value pairs by name before they are appended
-  ///         (using the standard library's Unicode-aware comparison function), in order to produce a predictable, repeatable result.
-  ///         If this order is not desired, sort the key-value pairs before appending them.
+  /// This operator is equivalent to the ``append(contentsOf:)-194p2`` function.
+  /// The following example demonstrates building a URL query by appending key-value pairs.
+  ///
+  /// ```swift
+  /// var url = WebURL("https://example.com/convert")!
+  /// url.formParams.append(contentsOf: [
+  ///  "amount" : "200",
+  ///  "from"   : "USD",
+  ///  "to"     : "EUR"
+  /// ])
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR"
+  /// //                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ///
+  /// url.formParams += [
+  ///  "lang"   : "en",
+  ///  "client" : "app"
+  /// ]
+  /// print(url)
+  /// // ✅ "https://example.com/convert?amount=200&from=USD&to=EUR&client=app&lang=en"
+  /// //                                                            ^^^^^^^^^^^^^^^^^^
+  /// ```
+  ///
+  /// The keys and values must **not** be form-encoded, as this view will apply its own form-encoding.
+  ///
+  /// > Note:
+  /// > Since `Dictionary`'s contents are not ordered, this method will sort the key-value pairs by key name
+  /// > before appending (using the standard library's Unicode-aware comparison), in order to produce a repeatable
+  /// > result.
   ///
   @inlinable
   public static func += <StringType>(

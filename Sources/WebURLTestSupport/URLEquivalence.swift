@@ -182,7 +182,7 @@ public func checkSemanticEquivalence(_ srcURL: URL, _ webURL: WebURL, failures: 
     // 2. '.standardized' is sometimes inaccurate (see: SR-14145, SR-15504, SR-15505).
     // 3. WebURL's path normalization is not the same as Foundation's '.standardized'.
     //    It includes things like Windows drive letter quirks in file URLs, on all platforms, and special
-    //    behaviour for HTTP path normalization as required for web compatibility.
+    //    behavior for HTTP path normalization as required for web compatibility.
     //    The different normalization is not really incorrect (it's what people expect when creating a WebURL from a URL),
     //    as long as we check it came from the same source path.
     //

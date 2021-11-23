@@ -14,12 +14,16 @@
 
 /// A set of ASCII code-points which should be percent-encoded.
 ///
-/// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
-/// and is most commonly used to escape special characters in URLs. Bytes within the ASCII range are encoded according
-/// to the encode-set's ``shouldPercentEncode(ascii:)`` method, and bytes which are not ASCII code-points are always
-/// percent-encoded.
+/// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or `0xC8`, to `"%C8"`),
+/// and is most commonly used to escape special characters in URLs. Data is encoded using an _encode-set_, which
+/// determines whether a particular ASCII byte should be encoded. Non-ASCII bytes are always percent-encoded.
 ///
-/// The following example demonstrates an encode-set which encodes ASCII single and double quotation marks:
+/// To percent-encode a string or some data, use the `.percentEncoded(using:)` or `.lazy.percentEncoded(using:)`
+/// functions respectively. Similarly, the `.percentDecoded()` function can be used to decode a percent-encoded string.
+///
+/// The URL Standard defines many encode-sets, and you may define your own by conforming to this protocol
+/// and implementing the ``shouldPercentEncode(ascii:)`` method. The following example demonstrates an encode-set
+/// which encodes single and double ASCII quotation marks:
 ///
 /// ```swift
 /// struct NoQuotes: PercentEncodeSet {
@@ -29,22 +33,71 @@
 ///   }
 /// }
 ///
-/// #"Quoth the Raven "Nevermore.""#.percentEncoded(using: NoQuotes()) // "Quoth the Raven %22Nevermore.%22"
+/// #"Quoth the Raven "Nevermore.""#.percentEncoded(using: NoQuotes())
+/// // "Quoth the Raven %22Nevermore.%22"
+/// "Quoth the Raven %22Nevermore.%22".percentDecoded()
+/// // "Quoth the Raven "Nevermore.""
+///
+/// #""He's over there", said Mary"#.percentEncoded(using: NoQuotes())
+/// // "%22He%27s over there%22, said Mary"
+/// "%22He%27s over there%22, said Mary".percentDecoded()
+/// // ""He's over there", said Mary"
 /// ```
 ///
-/// Form-encoding is a legacy variant of percent-encoding, including a ``SubstitutionMap`` which replaces spaces with the "+" character.
-/// Whilst you may define your own encode-sets with custom substitution maps, doing so is often unwise.
+/// **Form-encoding** is a legacy variant of percent-encoding, which includes a ``SubstitutionMap`` that replaces
+/// spaces with the "+" character. Whilst you may define encode-sets with custom substitution maps, doing so
+/// is discouraged.
+///
+/// ## Topics
+///
+/// ### Encode Sets from the URL Standard
+///
+/// - ``WebURL/PercentEncodeSet/urlComponentSet``
+/// - ``WebURL/PercentEncodeSet/formEncoding``
+/// - ``WebURL/PercentEncodeSet/c0ControlSet``
+/// - ``WebURL/PercentEncodeSet/userInfoSet``
+/// - ``WebURL/PercentEncodeSet/pathSet``
+/// - ``WebURL/PercentEncodeSet/querySet``
+/// - ``WebURL/PercentEncodeSet/specialQuerySet``
+/// - ``WebURL/PercentEncodeSet/fragmentSet``
+/// - ``WebURL/URLEncodeSet``
+///
+/// ### Requirements for Custom Encode Sets
+///
+/// - ``WebURL/PercentEncodeSet/shouldPercentEncode(ascii:)``
+///
+/// ### Substitution Maps
+///
+/// - ``WebURL/PercentEncodeSet/substitutions-swift.property-fk3r``
+/// - ``WebURL/PercentEncodeSet/Substitutions-swift.associatedtype``
+/// - ``WebURL/NoSubstitutions``
+/// - ``WebURL/SubstitutionMap``
 ///
 public protocol PercentEncodeSet {
 
   typealias _Member = _StaticMember<Self>
 
-  /// Whether or not the given ASCII `codePoint` should be percent-encoded.
+  /// Whether or not an ASCII code-point should be percent-encoded.
+  ///
+  /// If this function returns true, percent encoding will replace this byte with the ASCII string `"%XX"`, where
+  /// `XX` is the byte's value in hexadecimal.
+  ///
+  /// ```swift
+  /// struct NoSpaces: PercentEncodeSet {
+  ///   func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+  ///     codePoint == Character(" ").asciiValue!
+  ///   }
+  /// }
+  ///
+  /// "Hello, world!".percentEncoded(using: NoSpaces())
+  /// // "Hello,%20world!"
+  /// ```
+  ///
+  /// If this function returns false and this encode-set includes a legacy substitution map,
+  /// the byte may be substituted. Otherwise, it will be copied to the output.
   ///
   /// - parameters:
-  ///   - codePoint: An ASCII code-point. Always in the range `0...127`.
-  ///
-  /// - returns: Whether or not `codePoint` should be percent-encoded.
+  ///   - codePoint: An ASCII code-point. Results for values > 127 are not specified.
   ///
   func shouldPercentEncode(ascii codePoint: UInt8) -> Bool
 
@@ -53,21 +106,27 @@ public protocol PercentEncodeSet {
   /// This is a legacy feature to support form-encoding; modern percent-encoding does not use substitutions.
   /// Should you have reason to create a custom substitution map, please observe the following guidelines:
   ///
-  /// 1. The set of code-points to percent-encode and substitute must not overlap.
-  ///   There must be no code-point `x` for which `substitutions.substitute(ascii: x) != nil` and
-  ///   `shouldPercentEncode(ascii: x) == true`.
+  /// 1. No code-point may be both percent-encoded and substituted. For any code-point `x`, only one of the following
+  ///    must be true:
   ///
-  /// 2. Substitute code-points _returned_ by `substitute(ascii:)` should be percent-encoded.
-  ///   In other words, if `y = substitutions.substitute(ascii: x)`, `shouldPercentEncode(ascii: y)` should be `true`.
+  ///     - `substitutions.substitute(ascii: x) != nil`, or
+  ///     - `shouldPercentEncode(ascii: x)`
+  ///
+  /// 2. Substitute code-points _returned_ by `substitute(ascii:)` must be percent-encoded. In other words,
+  ///
+  ///     - If `y = substitutions.substitute(ascii: x)` and `y != nil`,
+  ///     - `shouldPercentEncode(ascii: y)` must be `true`.
   ///
   /// For example, form-encoding substitutes spaces with the "+" character.
-  /// It would be incorrect for that encode-set to say that the space character should be both substituted _and_ percent-encoded (#1 above),
-  /// and it must ensure that actual "+" characters in the source data are percent-encoded, so all "+" characters in the result can be interpreted as encoded spaces
-  /// (#2 above).
+  /// It would be incorrect for that encode-set to say that the space character should be
+  /// both substituted and percent-encoded (#1 above), and it must ensure that _actual_ "+" characters
+  /// in the source data are percent-encoded (#2 above), so it is free to use "+" to encode spaces.
   ///
   associatedtype Substitutions: SubstitutionMap = NoSubstitutions
 
-  /// The substitution map which applies to ASCII code-points that are not percent-encoded.
+  /// The substitution map used by this encode-set.
+  ///
+  /// This is a legacy feature to support form-encoding; modern percent-encoding does not use substitutions.
   ///
   var substitutions: Substitutions { get }
 }
@@ -82,25 +141,29 @@ extension PercentEncodeSet where Substitutions == NoSubstitutions {
 
 /// A bidirectional map of ASCII code-points.
 ///
-/// Some legacy encodings require certain ASCII code-points to be replaced.
-/// For example, the `application/x-www-form-urlencoded` encoding does not percent-encode ASCII spaces (0x20) as "%20",
-/// and instead replaces them with a "+" (0x2B). The following example shows a potential implementation of this encoding:
+/// This is a legacy feature to support form-encoding; regular percent-encode sets do not use substitutions.
+/// For example, form-encoding does not percent-encode ASCII spaces (0x20) as "%20", and instead replaces them
+/// with a "+" (0x2B). The following example demonstrates a potential implementation of this encoding:
 ///
 /// ```swift
 /// struct FormEncoding: PercentEncodeSet {
 ///
 ///   func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
-///     if codePoint == 0x20 { return false } // do not percent-encode spaces, substitute instead.
-///     if codePoint == 0x2B { return true }  // percent-encode actual "+"s in the source.
+///     // Do not percent-encode spaces, substitute instead.
+///     if codePoint == 0x20 { return false }
+///     // Percent-encode actual "+"s in the source.
+///     if codePoint == 0x2B { return true }
 ///     // other codepoints...
 ///   }
 ///
 ///   struct Substitutions: SubstitutionMap {
 ///     func substitute(ascii codePoint: UInt8) -> UInt8? {
-///       codePoint == 0x20 ? 0x2B : nil // Substitute spaces with "+".
+///       // Substitute spaces with "+".
+///       codePoint == 0x20 ? 0x2B : nil
 ///     }
 ///     func unsubstitute(ascii codePoint: UInt8) -> UInt8? {
-///       codePoint == 0x2B ? 0x20 : nil // Unsubstitute "+" to space.
+///       // Unsubstitute "+" to space.
+///       codePoint == 0x2B ? 0x20 : nil
 ///     }
 ///   }
 ///
@@ -108,34 +171,55 @@ extension PercentEncodeSet where Substitutions == NoSubstitutions {
 /// }
 /// ```
 ///
+/// Most percent-encode sets use ``NoSubstitutions`` as their substitution map.
+///
+/// ## Topics
+///
+/// ### Substitution Maps Used By URLs
+///
+/// - ``WebURL/SubstitutionMap/none``
+/// - ``WebURL/SubstitutionMap/formEncoding``
+///
+/// ### Requirements for Creating a Custom Substitution Map
+///
+/// - ``WebURL/SubstitutionMap/substitute(ascii:)``
+/// - ``WebURL/SubstitutionMap/unsubstitute(ascii:)``
+///
 public protocol SubstitutionMap {
 
   typealias _Member = _StaticMember<Self>
 
-  /// Returns the substitute to use for the given code-point, or `nil` if the code-point does not require substitution.
+  /// Returns the substitute to use for an ASCII code-point.
   ///
-  /// The ASCII percent sign (`0x25`) and alpha characters (`0x41...0x5A` and `0x61...0x7A`) must not be substituted.
+  /// In order to ensure accurate encoding, any code-points returned by this function must be percent-encoded by all
+  /// ``PercentEncodeSet``s which use this substitution map.
   ///
-  /// In order to ensure lossless encoding, any code-points returned as substitutes should be percent-encoded by the
-  /// substitution map's parent encoder and restored by the inverse function, ``unsubstitute(ascii:)``.
+  /// Some code-points must not be substituted:
+  ///
+  /// | Code Point(s)               | Values        |
+  /// | ----------------------------| ------------- |
+  /// | Percent sign, `%`           |     `0x25`    |
+  /// | Digits, `0-9`               | `0x30...0x39` |
+  /// | Uppercase hex alphas, `A-F` | `0x41...0x46` |
+  /// | Lowercase hex alphas, `a-f` | `0x41...0x46` |
   ///
   /// - parameters:
-  ///   - codePoint: An ASCII code-point from unencoded data. Always in the range `0...127`.
+  ///   - codePoint: An ASCII code-point. Results for values > 127 are not specified.
   ///
-  /// - returns: The code-point to emit instead of `codePoint`, or `nil` if `codePoint` should not be substituted.
-  ///            Substitute code-points must always be in the range `0...127`.
+  /// - returns: The code-point to emit instead of `codePoint`, or `nil` if no substitution is required.
+  ///            Substitute code-points must always be ASCII.
   ///
   func substitute(ascii codePoint: UInt8) -> UInt8?
 
-  /// Returns the code-point restored from the given substitute code-point, or `nil` if the given code-point is not a substitute.
+  /// Restores a code-point from its substitute.
   ///
-  /// In order to ensure lossless encoding, this function should restore all code-points substituted by ``substitute(ascii:)``.
+  /// This function restores all code-points substituted by ``substitute(ascii:)``.
   ///
   /// - parameters:
-  ///   - codePoint: An ASCII codepoint from encoded data. Always in the range `0...127`.
+  ///   - codePoint: An ASCII code-point. Results for values > 127 are not specified.
   ///
-  /// - returns: The code-point to emit instead of `codePoint`, or `nil` if `codePoint` is not a substitute recognized by this substitution map.
-  ///            Restored code-points must always be in the range `0...127`.
+  /// - returns: The code-point restored from `codePoint`, or `nil` if `codePoint` is not a substitute.
+  ///            Restored code-points must always be ASCII.
   ///
   func unsubstitute(ascii codePoint: UInt8) -> UInt8?
 }
@@ -148,29 +232,34 @@ public protocol SubstitutionMap {
 
 /// A `Collection` which percent-encodes elements from its `Source` on-demand using a given `EncodeSet`.
 ///
-/// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string "%C8"),
-/// and is most commonly used to escape special characters in URLs. Bytes which are not ASCII code-points are always percent-encoded,
-/// and bytes within the ASCII range are encoded according to the encode-set's `shouldPercentEncode(ascii:)` method.
-///
-/// Encode-sets may also include a ``SubstitutionMap``. If a code-point is not percent-encoded, the substitution map may
-/// replace it with a different character. Content encoded with substitutions must be decoded using the same substitution map it was created with.
+/// Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or `0xC8`, to `"%C8"`),
+/// and is most commonly used to escape special characters in URLs. Data is encoded using a ``PercentEncodeSet``, which
+/// determines whether a particular ASCII byte should be encoded. Non-ASCII bytes are always percent-encoded.
+/// The elements of this collection are guaranteed to be ASCII code-units, and hence valid UTF-8.
 ///
 /// To encode a source collection, use the extension methods provided on `LazyCollectionProtocol`:
 ///
 /// ```swift
-/// // Encode arbitrary data as an ASCII string.
-/// let image: Data = ...
-/// image.lazy.percentEncoded(using: .urlComponentSet) // ASCII bytes, decoding to "%BAt_%E0%11%22%EB%10%2C%7F..."
+/// // Lazy encoding is especially useful when writing data to a buffer,
+/// // as it avoids allocating additional memory.
+/// var buffer: Data = ...
+/// let image:  Data = ...
+/// buffer.append(contentsOf: image.lazy.percentEncoded(using: .urlComponentSet))
+/// // buffer = [...] "%BAt_%E0%11%22%EB%10%2C%7F" [...]
 ///
 /// // Encode-sets determine which characters are encoded, and some perform substitutions.
 /// let bytes = "hello, world!".utf8
 /// bytes.lazy.percentEncoded(using: .urlComponentSet)
 ///   .elementsEqual("hello%2C%20world!".utf8) // ✅
+/// //                        ^^^     ^
 /// bytes.lazy.percentEncoded(using: .formEncoding)
 ///   .elementsEqual("hello%2C+world%21".utf8) // ✅
+/// //                        ^     ^^^
 /// ```
 ///
-/// The elements of this collection are guaranteed to be ASCII code-units, and hence valid UTF-8.
+/// Encode-sets may also include a ``SubstitutionMap``. If a code-point is not percent-encoded, the substitution map may
+/// replace it with a different character. Content encoded with substitutions must be decoded using the same
+/// substitution map it was created with.
 ///
 public struct LazilyPercentEncoded<Source, EncodeSet>: Collection, LazyCollectionProtocol
 where Source: Collection, Source.Element == UInt8, EncodeSet: PercentEncodeSet {
@@ -385,15 +474,18 @@ extension LazilyPercentEncoded {
     return didEncode
   }
 
-  /// Returns the total length of the encoded UTF-8 bytes, and whether or not any code-units were altered by the `EncodeSet`.
-  /// The length is calculated using arithmetic which wraps on overflow.
+  /// Returns the total length of the encoded UTF-8 bytes, and whether or not any code-units were altered
+  /// by the `EncodeSet`. The length is calculated using arithmetic which wraps on overflow.
   ///
-  /// This is useful for estimating an allocation size required to hold the contents, but **does not** eliminate the need to bounds-check
-  /// when writing to that allocation.
+  /// This is useful for estimating an allocation size required to hold the contents, but **does not** eliminate
+  /// the need to bounds-check when writing to that allocation.
   ///
-  /// Ultimately, any user-supplied generic collection must be treated as potentially buggy, including returning a different number of elements each time it is iterated.
-  /// It is unacceptable even for bugs like that to lead to memory-safety errors, therefore this value must **only** be interpreted as an estimated/expected size,
-  /// and not relied upon for safety (although it is acceptable to `fatalError` if the actual size differs from this expected size).
+  /// Ultimately, any user-supplied generic collection must be treated as potentially buggy,
+  /// including returning a different number of elements each time it is iterated.
+  /// It is unacceptable even for bugs like that to lead to memory-safety errors,
+  /// therefore this value must **only** be interpreted as an estimated/expected size,
+  /// and not relied upon for safety (although it is acceptable to `fatalError` if the actual size differs
+  /// from this expected size).
   ///
   @inlinable @inline(never)
   internal var unsafeEncodedLength: (count: UInt, needsEncoding: Bool) {
@@ -601,50 +693,75 @@ extension StringProtocol {
 
 /// A `Collection` which percent-decodes elements from its `Source` on-demand.
 ///
-/// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+/// Percent-decoding transforms certain ASCII sequences to bytes (`"%AB"` to the byte value `0xAB`, or 171),
+/// and is most commonly used to decode content from URLs. The elements of this collection are raw bytes,
+/// potentially including NULL bytes or invalid UTF-8.
 ///
-/// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
-/// use ``LazilyPercentDecodedWithSubstitutions``, providing the correct ``SubstitutionMap``,
-/// to accurately decode form-encoded content.
-///
-/// To decode a source collection containing a percent-encoded or form-encoded string, use the extension methods provided on `LazyCollectionProtocol`:
+/// To decode a source collection containing a percent-encoded string,
+/// use the extension methods provided on `LazyCollectionProtocol`:
 ///
 /// ```swift
-/// // The bytes, containing a string with percent-encoding.
-/// let source: [UInt8] = [0x25, 0x36, 0x31, 0x25, 0x36, 0x32, 0x25, 0x36, 0x33]
-/// String(decoding: source, as: UTF8.self) // "%61%62%63"
+/// // Lazy decoding is especially useful for looking through decoded content.
+/// // When used with WebURL's UTF8View, you can process encoded URL components
+/// // without allocating additional memory.
+/// let someURLs: [WebURL] = [
+///   WebURL("https://root@example.com/")!,
+///   WebURL("https://%72oot@example.com/")!,
+///   WebURL("https://r%6F%6Ft@example.com/")!
+/// ]
+/// for url in someURLs {
+///   guard let usernameUTF8 = url.utf8.username else {
+///     continue // No username.
+///   }
+///   if usernameUTF8.lazy.percentDecoded().elementsEqual("root".utf8) {
+///     throw InvalidUsernameError()
+///   }
+/// }
 ///
-/// // In this case, the decoded bytes contain the ASCII string "abc".
-/// source.lazy.percentDecoded().elementsEqual("abc".utf8) // ✅
+/// // Any Collection of bytes can be lazily decoded, including
+/// // String's UTF8View, Foundation's Data, NIO's ByteBuffer, etc.
+/// "%61%62%63".utf8
+///   .lazy.percentDecoded()
+///   .elementsEqual("abc".utf8) // ✅
 /// ```
 ///
-/// The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.
+/// > Note: This type does not reverse substitutions made by form-encoding.
+/// > Use ``LazilyPercentDecodedWithSubstitutions`` providing the ``SubstitutionMap/formEncoding``
+/// > substitution map, to lazily decode form-encoded content.
 ///
 public typealias LazilyPercentDecoded<Source> = LazilyPercentDecodedWithSubstitutions<Source, NoSubstitutions>
 where Source: Collection, Source.Element == UInt8
 
-/// A `Collection` which percent-decodes elements from its `Source` on-demand, and reverses substitutions made by a ``SubstitutionMap``.
+/// A `Collection` which percent-decodes elements from its `Source` on-demand,
+/// and reverses substitutions made by a ``SubstitutionMap``.
 ///
-/// Percent-decoding transforms certain ASCII sequences to bytes ("%AB" to the byte value 171, or 0xAB).
+/// Percent-decoding transforms certain ASCII sequences to bytes (`"%AB"` to the byte value `0xAB`, or 171),
+/// and is most commonly used to decode content from URLs. The elements of this collection are raw bytes,
+/// potentially including NULL bytes or invalid UTF-8.
 ///
-/// Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
-/// ``SubstitutionMap`` to accurately decode form-encoded content.
-///
-/// To decode a source collection containing a percent-encoded or form-encoded string, use the extension methods provided on `LazyCollectionProtocol`:
+/// This type supports decoding content containing legacy substitutions (such as form-encoding).
+/// To decode a source collection, use the extension methods provided on `LazyCollectionProtocol`:
 ///
 /// ```swift
-/// // The bytes, containing a string with UTF-8 form-encoding.
-/// let source: [UInt8] = [
-///   0x68, 0x25, 0x43, 0x32, 0x25, 0x41, 0x33, 0x6C, 0x6C, 0x6F, 0x2B, 0x77, 0x6F, 0x72, 0x6C, 0x64
-/// ]
-/// String(decoding: source, as: UTF8.self) // "h%C2%A3llo+world"
+/// // Lazy decoding is especially useful for looking through decoded content.
+/// // When used with WebURL's UTF8View, you can process encoded URL components
+/// // without allocating additional memory.
+/// let url = WebURL("https://example.com/?user=karl&the+m%65ssage=h%C2%A3llo+world")!
 ///
-/// // Specify the `.formEncoding` substitution map to decode the contents.
-/// source.lazy.percentDecoded(substitutions: .formEncoding)
-///   .elementsEqual("h£llo world".utf8) // ✅
+/// var buffer: [UInt8] = []
+/// guard let queryUTF8 = url.utf8.query else {
+///   return
+/// }
+/// // Splits the query in to key-value pairs, and lazily form-decodes the
+/// // key and value without allocating.
+/// for keyValuePairUTF8 in query.lazy.split("&") {
+///   let (key, value) = keyValuePairUTF8.splitOnce(at: "=")
+///   if key.lazy.percentDecoded(substitutions: .formEncoding).elementsEqual("the message") {
+///     buffer.append(contentsOf: value.lazy.percentDecoded(substitutions: .formEncoding))
+///   }
+/// }
+/// // buffer = "h£llo world"
 /// ```
-///
-/// The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.
 ///
 public struct LazilyPercentDecodedWithSubstitutions<Source, Substitutions>: Collection, LazyCollectionProtocol
 where Source: Collection, Source.Element == UInt8, Substitutions: SubstitutionMap {
@@ -794,7 +911,7 @@ where Source: Collection, Source.Element == UInt8, Substitutions: SubstitutionMa
 extension LazilyPercentDecodedWithSubstitutions.Index where Source: BidirectionalCollection {
 
   /// Decodes the octet whose final code-unit precedes the given index in the given `source` collection.
-  /// The index's predeccessor may be obtained by creating another index ending at the index's `range.lowerBound`.
+  /// The index's predecessor may be obtained by creating another index ending at the index's `range.lowerBound`.
   ///
   @inlinable
   internal init(endingAt i: Source.Index, in source: Source, startIndex: Self, subsMap: Substitutions) {
@@ -871,7 +988,7 @@ extension Collection where Element == UInt8 {
   ///
   /// - important: The returned string may include NULL bytes or other values which your program might not expect.
   ///   Percent-encoding has frequently been used to perform path traversal attacks, SQL injection, and exploit similar vulnerabilities
-  ///   stemming from unvalidated input (somtimes under multiple levels of encoding). Ensure you do not over-decode your data,
+  ///   stemming from unvalidated input (sometimes under multiple levels of encoding). Ensure you do not over-decode your data,
   ///   and every time you _do_ decode some data, you must consider the result to be **entirely unvalidated**,
   ///   even if the source contents were previously validated.
   ///
@@ -964,7 +1081,7 @@ extension LazyCollectionProtocol where Element == UInt8 {
   ///   .elementsEqual("h£llo world".utf8) // ✅
   /// ```
   ///
-  /// The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.
+  /// The elements of this collection are raw bytes, potentially including NULL bytes or invalid UTF-8.
   ///
   @inlinable @inline(__always)
   public func percentDecoded<Substitutions>(
@@ -994,7 +1111,7 @@ extension LazyCollectionProtocol where Element == UInt8 {
   ///   .elementsEqual("h£llo world".utf8) // ✅
   /// ```
   ///
-  /// The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.
+  /// The elements of this collection are raw bytes, potentially including NULL bytes or invalid UTF-8.
   ///
   @inlinable @inline(__always) @_disfavoredOverload
   public func percentDecoded<Substitutions>(
@@ -1023,7 +1140,7 @@ extension LazyCollectionProtocol where Element == UInt8 {
   /// source.lazy.percentDecoded().elementsEqual("abc".utf8) // ✅
   /// ```
   ///
-  /// The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.
+  /// The elements of this collection are raw bytes, potentially including NULL bytes or invalid UTF-8.
   ///
   @inlinable @inline(__always)
   public func percentDecoded() -> LazilyPercentDecoded<Elements> {
@@ -1053,7 +1170,7 @@ extension StringProtocol {
   /// assert(decodedImage.elementsEqual(originalImage)) // ✅
   /// ```
   ///
-  /// The returned data contains raw bytes, potenially including NULL bytes or invalid UTF-8.
+  /// The returned data contains raw bytes, potentially including NULL bytes or invalid UTF-8.
   ///
   @inlinable
   public func percentDecodedBytesArray<Substitutions: SubstitutionMap>(substitutions: Substitutions) -> [UInt8] {
@@ -1080,7 +1197,7 @@ extension StringProtocol {
   /// assert(decodedImage.elementsEqual(originalImage)) // ✅
   /// ```
   ///
-  /// The returned data contains raw bytes, potenially including NULL bytes or invalid UTF-8.
+  /// The returned data contains raw bytes, potentially including NULL bytes or invalid UTF-8.
   ///
   @inlinable @inline(__always)
   public func percentDecodedBytesArray<Substitutions: SubstitutionMap>(
@@ -1114,7 +1231,7 @@ extension StringProtocol {
   /// }
   /// ```
   ///
-  /// The returned data contains raw bytes, potenially including NULL bytes or invalid UTF-8.
+  /// The returned data contains raw bytes, potentially including NULL bytes or invalid UTF-8.
   ///
   @inlinable @inline(__always)
   public func percentDecodedBytesArray() -> [UInt8] {
@@ -1147,7 +1264,7 @@ extension StringProtocol {
   ///
   /// - important: The returned string may include NULL bytes or other values which your program might not expect.
   ///   Percent-encoding has frequently been used to perform path traversal attacks, SQL injection, and exploit similar vulnerabilities
-  ///   stemming from unvalidated input (somtimes under multiple levels of encoding). Ensure you do not over-decode your data,
+  ///   stemming from unvalidated input (sometimes under multiple levels of encoding). Ensure you do not over-decode your data,
   ///   and every time you _do_ decode some data, you must consider the result to be **entirely unvalidated**,
   ///   even if the source contents were previously validated.
   ///
@@ -1179,7 +1296,7 @@ extension StringProtocol {
   ///
   /// - important: The returned string may include NULL bytes or other values which your program might not expect.
   ///   Percent-encoding has frequently been used to perform path traversal attacks, SQL injection, and exploit similar vulnerabilities
-  ///   stemming from unvalidated input (somtimes under multiple levels of encoding). Ensure you do not over-decode your data,
+  ///   stemming from unvalidated input (sometimes under multiple levels of encoding). Ensure you do not over-decode your data,
   ///   and every time you _do_ decode some data, you must consider the result to be **entirely unvalidated**,
   ///   even if the source contents were previously validated.
   ///
@@ -1211,7 +1328,7 @@ extension StringProtocol {
   ///
   /// - important: The returned string may include NULL bytes or other values which your program might not expect.
   ///   Percent-encoding has frequently been used to perform path traversal attacks, SQL injection, and exploit similar vulnerabilities
-  ///   stemming from unvalidated input (somtimes under multiple levels of encoding). Ensure you do not over-decode your data,
+  ///   stemming from unvalidated input (sometimes under multiple levels of encoding). Ensure you do not over-decode your data,
   ///   and every time you _do_ decode some data, you must consider the result to be **entirely unvalidated**,
   ///   even if the source contents were previously validated.
   ///
@@ -1234,7 +1351,8 @@ extension StringProtocol {
 
   extension SubstitutionMap where Self == NoSubstitutions {
 
-    /// No substitutions. This is the substitution map used by all encode-sets specified in the URL standard, except form-encoding.
+    /// No substitutions. This is the default for all regular percent-encode sets; substitutions are a legacy
+    /// feature used only by form-encoding.
     ///
     @inlinable
     public static var none: NoSubstitutions { .init() }
@@ -1242,9 +1360,14 @@ extension StringProtocol {
 
   extension SubstitutionMap where Self == URLEncodeSet.FormEncoding.Substitutions {
 
-    /// Substitutions applicable to the [application/x-www-form-urlencoded][form-encoded] percent-encode set.
+    /// Form-encoding. This substitution map is used to encode or decode
+    /// [application/x-www-form-urlencoded][form-encoded] content.
     ///
-    /// [form-encoded]: https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set
+    /// [form-encoded]: https://url.spec.whatwg.org/#application/x-www-form-urlencoded
+    ///
+    /// ## See Also
+    ///
+    /// - ``WebURL/PercentEncodeSet/formEncoding``
     ///
     @inlinable
     public static var formEncoding: URLEncodeSet.FormEncoding.Substitutions { .init() }
@@ -1258,20 +1381,31 @@ extension StringProtocol {
 
 extension _StaticMember where Base: SubstitutionMap {
 
-  /// No substitutions. This applies to all encode-sets specified in the URL standard, except form-encoding.
+  /// No substitutions. This is the default for all regular percent-encode sets; substitutions are a legacy
+  /// feature used only by form-encoding.
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``SubstitutionMap/none``.
   ///
   @inlinable
   public static var none: _StaticMember<NoSubstitutions> { .init(.init()) }
 
-  /// Substitutions applicable to the [application/x-www-form-urlencoded][form-encoded] percent-encode set.
+  /// Form-encoding. This substitution map is used to encode or decode
+  /// [application/x-www-form-urlencoded][form-encoded] content.
   ///
-  /// [form-encoded]: https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set
+  /// [form-encoded]: https://url.spec.whatwg.org/#application/x-www-form-urlencoded
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``SubstitutionMap/formEncoding``.
   ///
   @inlinable
   public static var formEncoding: _StaticMember<URLEncodeSet.FormEncoding.Substitutions> { .init(.init()) }
 }
 
-/// A substitution map which does not substitute/unsubstitute any code-points.
+/// A substitution map which does not substitute any code-points.
+///
+/// This is the default substitution map for all regular percent-encode sets;
+/// substitutions are a legacy feature used only by form-encoding.
 ///
 public struct NoSubstitutions: SubstitutionMap {
 
@@ -1298,7 +1432,11 @@ public struct NoSubstitutions: SubstitutionMap {
 
   extension PercentEncodeSet where Self == URLEncodeSet.C0Control {
 
-    /// The [C0 control](https://url.spec.whatwg.org/#c0-control-percent-encode-set) percent-encode set.
+    /// The ASCII C0 Controls and U+007F DELETE.
+    ///
+    /// This encode-set is [defined][definition] by the URL Standard.
+    ///
+    /// [definition]: https://url.spec.whatwg.org/#c0-control-percent-encode-set
     ///
     @inlinable
     public static var c0ControlSet: URLEncodeSet.C0Control { .init() }
@@ -1306,7 +1444,12 @@ public struct NoSubstitutions: SubstitutionMap {
 
   extension PercentEncodeSet where Self == URLEncodeSet.Fragment {
 
-    /// The [fragment](https://url.spec.whatwg.org/#fragment-percent-encode-set) percent-encode set.
+    /// The fragment percent-encode set.
+    ///
+    /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+    /// content for the URL's ``WebURL/fragment`` component.
+    ///
+    /// [definition]: https://url.spec.whatwg.org/#fragment-percent-encode-set
     ///
     @inlinable
     public static var fragmentSet: URLEncodeSet.Fragment { .init() }
@@ -1314,7 +1457,12 @@ public struct NoSubstitutions: SubstitutionMap {
 
   extension PercentEncodeSet where Self == URLEncodeSet.Query {
 
-    /// The [query](https://url.spec.whatwg.org/#query-percent-encode-set) percent-encode set.
+    /// The query percent-encode set used for non-special schemes.
+    ///
+    /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+    /// content for the URL's ``WebURL/query`` component for non-special schemes.
+    ///
+    /// [definition]: https://url.spec.whatwg.org/#query-percent-encode-set
     ///
     @inlinable
     public static var querySet: URLEncodeSet.Query { .init() }
@@ -1322,7 +1470,12 @@ public struct NoSubstitutions: SubstitutionMap {
 
   extension PercentEncodeSet where Self == URLEncodeSet.SpecialQuery {
 
-    /// The [special query](https://url.spec.whatwg.org/#special-query-percent-encode-set) percent-encode set.
+    /// The query percent-encode set used for special schemes.
+    ///
+    /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+    /// content for the URL's ``WebURL/query`` component for special schemes.
+    ///
+    /// [definition]: https://url.spec.whatwg.org/#special-query-percent-encode-set
     ///
     @inlinable
     public static var specialQuerySet: URLEncodeSet.SpecialQuery { .init() }
@@ -1330,7 +1483,44 @@ public struct NoSubstitutions: SubstitutionMap {
 
   extension PercentEncodeSet where Self == URLEncodeSet.Path {
 
-    /// The [path](https://url.spec.whatwg.org/#path-percent-encode-set) percent-encode set.
+    /// The path percent-encode set used for special schemes.
+    ///
+    /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+    /// content for the URL's ``WebURL/path`` component for special schemes.
+    ///
+    /// > Note:
+    /// > This encode-set is used to percent-encode an individual parsed path component,
+    /// > and does not include the path delimiter characters themselves. This makes it, counter-intuitively,
+    /// > **unsuitable for encoding strings you wish to include in a URL's path**.
+    /// > Instead, use the ``WebURL/PercentEncodeSet/urlComponentSet``.
+    /// >
+    /// > ```swift
+    /// > func getURL_bad(_ username: String) -> String {
+    /// >   var url  = WebURL("https://example.com")!
+    /// >   url.path = "/users/" + username.percentEncoded(using: .pathSet) + "/profile"
+    /// >   return url
+    /// > }
+    /// > getURL_bad("AC/DC")
+    /// > // ❌ "https://example.com/users/AC/DC/profile"
+    /// > //                               ^^^^^
+    /// > getURL_bad("../about")
+    /// > // ❌ "https://example.com/about/profile"
+    /// > //                        ^^^^^^^^^^^^^^
+    /// >
+    /// > func getURL_good(_ username: String) -> String {
+    /// >   var url  = WebURL("https://example.com")!
+    /// >   url.path = "/users/" + username.percentEncoded(using: .urlComponentSet) + "/profile"
+    /// >   return url
+    /// > }
+    /// > getURL_good("AC/DC")
+    /// > // ✅ "https://example.com/users/AC%2FDC/profile"
+    /// > //                               ^^^^^^^
+    /// > getURL_good("../about")
+    /// > // ✅ "https://example.com/users/..%2Fabout/profile"
+    /// > //                               ^^^^^^^^^^
+    /// > ```
+    ///
+    /// [definition]: https://url.spec.whatwg.org/#path-percent-encode-set
     ///
     @inlinable
     public static var pathSet: URLEncodeSet.Path { .init() }
@@ -1338,7 +1528,12 @@ public struct NoSubstitutions: SubstitutionMap {
 
   extension PercentEncodeSet where Self == URLEncodeSet.UserInfo {
 
-    /// The [userinfo](https://url.spec.whatwg.org/#userinfo-percent-encode-set) percent-encode set.
+    /// The userinfo percent-encode set.
+    ///
+    /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+    /// content for the URL's ``WebURL/username`` and ``WebURL/password`` components.
+    ///
+    /// [definition]: https://url.spec.whatwg.org/#userinfo-percent-encode-set
     ///
     @inlinable
     public static var userInfoSet: URLEncodeSet.UserInfo { .init() }
@@ -1346,7 +1541,38 @@ public struct NoSubstitutions: SubstitutionMap {
 
   extension PercentEncodeSet where Self == URLEncodeSet.Component {
 
-    /// The [component](https://url.spec.whatwg.org/#component-percent-encode-set) percent-encode set.
+    /// The component percent-encode set. This set includes almost all special characters, making
+    /// it suitable for encoding arbitrary strings at runtime for use in any URL component.
+    ///
+    /// This encode-set is [defined][definition] by the URL Standard, and is used for the JavaScript API
+    /// `encodeURIComponent`.
+    ///
+    /// Since this encode-set includes almost all special characters, it is simpler to list the characters
+    /// it **does not** encode. The allowed characters are:
+    ///
+    /// | Description             | Characters |
+    /// | ----------------------- | ---------- |
+    /// | Exclamation Mark        |     `!`    |
+    /// | Apostrophe/Single-quote |     `'`    |
+    /// | Parentheses             |    `()`    |
+    /// | Asterisk                |     `*`    |
+    /// | Minus                   |     `-`    |
+    /// | Period                  |     `.`    |
+    /// | Digits                  |    `0-9`   |
+    /// | Uppercase alphas        |    `A-Z`   |
+    /// | Underscore              |     `_`    |
+    /// | Lowercase alphas        |    `a-z`   |
+    /// | Tilde                   |     `~`    |
+    ///
+    /// The component encode-set is a good default to use when you need to exactly preserve a string containing
+    /// arbitrary user input and include it in a URL component.
+    ///
+    /// Note however that even this small number of allowed characters is sometimes still too many when URLs are
+    /// included in documents. Unescaped single quotes in URLs can be used to perform truncation attacks,
+    /// for example in JavaScript strings, and unescaped asterisks and underscores might be parsed as Markdown styling
+    /// annotations (for example, Xcode considers "`scheme://x/abc**cd`" as starting bold text).
+    ///
+    /// [definition]: https://url.spec.whatwg.org/#component-percent-encode-set
     ///
     @inlinable
     public static var urlComponentSet: URLEncodeSet.Component { .init() }
@@ -1354,8 +1580,33 @@ public struct NoSubstitutions: SubstitutionMap {
 
   extension PercentEncodeSet where Self == URLEncodeSet.FormEncoding {
 
-    /// The [application/x-www-form-urlencoded](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set)
-    /// percent-encode set.
+    /// Form-encoding. This encode-set is used to encode [application/x-www-form-urlencoded][form-encoded]
+    /// content. It is unique in that it performs substitutions as well as percent-encoding.
+    ///
+    /// When creating form-encoded content, ensure that the receiver is also expecting form-encoded content.
+    /// Form-encoding uses a legacy variant of percent-encoding that is not compatible with regular decoding
+    /// due to its use of substitutions.
+    ///
+    /// When decoding form-encoded content, specify the ``SubstitutionMap/formEncoding`` substitution map.
+    ///
+    /// ```swift
+    /// "hello world!".percentEncoded(using: .formEncoding)
+    /// // ✅ "hello+world%21"
+    ///
+    /// // ℹ️ Make sure to decode with `.formEncoding` substitutions!
+    /// "hello+world%21".percentDecoded()
+    /// // ❌ "hello+world!"
+    /// //          ^
+    /// "hello+world%21".percentDecoded(substitutions: .formEncoding)
+    /// // ✅ "hello world!"
+    /// //          ^
+    /// ```
+    ///
+    /// [form-encoded]: https://url.spec.whatwg.org/#application/x-www-form-urlencoded
+    ///
+    /// ## See Also
+    ///
+    /// - ``WebURL/SubstitutionMap/formEncoding``
     ///
     @inlinable
     public static var formEncoding: URLEncodeSet.FormEncoding { .init() }
@@ -1369,43 +1620,127 @@ public struct NoSubstitutions: SubstitutionMap {
 
 extension _StaticMember where Base: PercentEncodeSet {
 
-  /// The [C0 control](https://url.spec.whatwg.org/#c0-control-percent-encode-set) percent-encode set.
+  /// The ASCII C0 Controls and U+007F DELETE.
+  ///
+  /// This encode-set is [defined][definition] by the URL Standard.
+  ///
+  /// [definition]: https://url.spec.whatwg.org/#c0-control-percent-encode-set
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``PercentEncodeSet/c0ControlSet``.
   ///
   @inlinable
   public static var c0ControlSet: _StaticMember<URLEncodeSet.C0Control> { .init(.init()) }
 
-  /// The [fragment](https://url.spec.whatwg.org/#fragment-percent-encode-set) percent-encode set.
+  /// The fragment percent-encode set.
+  ///
+  /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+  /// content for the URL's ``WebURL/fragment`` component.
+  ///
+  /// [definition]: https://url.spec.whatwg.org/#fragment-percent-encode-set
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``PercentEncodeSet/fragmentSet``.
   ///
   @inlinable
   public static var fragmentSet: _StaticMember<URLEncodeSet.Fragment> { .init(.init()) }
 
-  /// The [query](https://url.spec.whatwg.org/#query-percent-encode-set) percent-encode set.
+  /// The query percent-encode set used for non-special schemes.
+  ///
+  /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+  /// content for the URL's ``WebURL/query`` component for non-special schemes.
+  ///
+  /// [definition]: https://url.spec.whatwg.org/#query-percent-encode-set
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``PercentEncodeSet/querySet``.
   ///
   @inlinable
   public static var querySet: _StaticMember<URLEncodeSet.Query> { .init(.init()) }
 
-  /// The [special query](https://url.spec.whatwg.org/#special-query-percent-encode-set) percent-encode set.
+  /// The query percent-encode set used for special schemes.
+  ///
+  /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+  /// content for the URL's ``WebURL/query`` component for special schemes.
+  ///
+  /// [definition]: https://url.spec.whatwg.org/#special-query-percent-encode-set
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``PercentEncodeSet/specialQuerySet``.
   ///
   @inlinable
   public static var specialQuerySet: _StaticMember<URLEncodeSet.SpecialQuery> { .init(.init()) }
 
-  /// The [path](https://url.spec.whatwg.org/#path-percent-encode-set) percent-encode set.
+  /// The path percent-encode set used for special schemes.
+  ///
+  /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+  /// content for the URL's ``WebURL/path`` component for special schemes.
+  ///
+  /// > Note:
+  /// > This encode-set is used to percent-encode an individual parsed path component,
+  /// > and does not include the path delimiter characters themselves. This makes it, counter-intuitively,
+  /// > **unsuitable for encoding strings you wish to include in a URL's path**.
+  /// > Instead, use the ``WebURL/PercentEncodeSet/urlComponentSet``.
+  ///
+  /// [definition]: https://url.spec.whatwg.org/#path-percent-encode-set
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``PercentEncodeSet/pathSet``.
   ///
   @inlinable
   public static var pathSet: _StaticMember<URLEncodeSet.Path> { .init(.init()) }
 
-  /// The [userinfo](https://url.spec.whatwg.org/#userinfo-percent-encode-set) percent-encode set.
+  /// The userinfo percent-encode set.
+  ///
+  /// This encode-set is [defined][definition] by the URL Standard, and is used to encode
+  /// content for the URL's ``WebURL/username`` and ``WebURL/password`` components.
+  ///
+  /// [definition]: https://url.spec.whatwg.org/#userinfo-percent-encode-set
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``PercentEncodeSet/userInfoSet``.
   ///
   @inlinable
   public static var userInfoSet: _StaticMember<URLEncodeSet.UserInfo> { .init(.init()) }
 
-  /// The [component](https://url.spec.whatwg.org/#component-percent-encode-set) percent-encode set.
+  /// The component percent-encode set. This set includes almost all special characters, making
+  /// it suitable for encoding arbitrary strings at runtime for use in any URL component.
+  ///
+  /// This encode-set is [defined][definition] by the URL Standard, and is used for the JavaScript API
+  /// `encodeURIComponent`.
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``PercentEncodeSet/urlComponentSet``.
   ///
   @inlinable
   public static var urlComponentSet: _StaticMember<URLEncodeSet.Component> { .init(.init()) }
 
-  /// The [application/x-www-form-urlencoded](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set)
-  /// percent-encode set.
+  /// Form-encoding. This encode-set is used to encode [application/x-www-form-urlencoded][form-encoded]
+  /// content. It is unique in that it performs substitutions as well as percent-encoding.
+  ///
+  /// When creating form-encoded content, ensure that the receiver is also expecting form-encoded content.
+  /// Form-encoding uses a legacy variant of percent-encoding that is not compatible with regular decoding
+  /// due to its use of substitutions.
+  ///
+  /// When decoding form-encoded content, specify the ``SubstitutionMap/formEncoding`` substitution map.
+  ///
+  /// ```swift
+  /// "hello world!".percentEncoded(using: .formEncoding)
+  /// // ✅ "hello+world%21"
+  ///
+  /// // ℹ️ Make sure to decode with `.formEncoding` substitutions!
+  /// "hello+world%21".percentDecoded()
+  /// // ❌ "hello+world!"
+  /// //          ^
+  /// "hello+world%21".percentDecoded(substitutions: .formEncoding)
+  /// // ✅ "hello world!"
+  /// //          ^
+  /// ```
+  ///
+  /// [form-encoded]: https://url.spec.whatwg.org/#application/x-www-form-urlencoded
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers. Please refer to ``PercentEncodeSet/formEncoding``.
   ///
   @inlinable
   public static var formEncoding: _StaticMember<URLEncodeSet.FormEncoding> { .init(.init()) }
@@ -1414,7 +1749,7 @@ extension _StaticMember where Base: PercentEncodeSet {
 // URL encode-set implementations.
 
 // ARM and x86 seem to have wildly different performance characteristics.
-// The lookup table seems to be about 8-12% better than bitshifting on x86, but can be 90% slower on ARM.
+// The lookup table seems to be about 8-12% better than bit-shifting on x86, but can be 90% slower on ARM.
 @usableFromInline
 internal protocol DualImplementedPercentEncodeSet: PercentEncodeSet {
   static func shouldEscape_binary(ascii codePoint: UInt8) -> Bool
@@ -1434,10 +1769,15 @@ internal func __shouldPercentEncode<Encoder>(
 
 /// A namespace for percent-encode sets defined by the URL Standard.
 ///
+/// These types are generally not referred to directly; instead, use the static members available
+/// on ``PercentEncodeSet``.
+///
 public enum URLEncodeSet {}
 
 extension URLEncodeSet {
 
+  /// The C0 Control percent-encode set. See the static member ``WebURL/PercentEncodeSet/c0ControlSet`` for details.
+  ///
   public struct C0Control: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
     @inlinable
@@ -1471,6 +1811,8 @@ extension URLEncodeSet {
     }
   }
 
+  /// The fragment percent-encode set. See the static member ``WebURL/PercentEncodeSet/fragmentSet`` for details.
+  ///
   public struct Fragment: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
     @inlinable
@@ -1499,6 +1841,8 @@ extension URLEncodeSet {
     }
   }
 
+  /// The query percent-encode set. See the static member ``WebURL/PercentEncodeSet/querySet`` for details.
+  ///
   public struct Query: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
     @inlinable
@@ -1527,6 +1871,9 @@ extension URLEncodeSet {
     }
   }
 
+  /// The special-query percent-encode set. See the static member ``WebURL/PercentEncodeSet/specialQuerySet``
+  /// for details.
+  ///
   public struct SpecialQuery: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
     @inlinable
@@ -1555,6 +1902,8 @@ extension URLEncodeSet {
     }
   }
 
+  /// The path percent-encode set. See the static member ``WebURL/PercentEncodeSet/pathSet`` for details.
+  ///
   public struct Path: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
     @inlinable
@@ -1583,6 +1932,8 @@ extension URLEncodeSet {
     }
   }
 
+  /// The userinfo percent-encode set. See the static member ``WebURL/PercentEncodeSet/userInfoSet`` for details.
+  ///
   public struct UserInfo: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
     @inlinable
@@ -1611,8 +1962,7 @@ extension URLEncodeSet {
     }
   }
 
-  /// This encode-set is not used for any particular component, but can be used to encode data which is compatible with the escaping for
-  /// the path, query, and fragment. It should give the same results as Javascript's `.encodeURIComponent()` method.
+  /// The component percent-encode set. See the static member ``WebURL/PercentEncodeSet/urlComponentSet`` for details.
   ///
   public struct Component: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
@@ -1642,6 +1992,8 @@ extension URLEncodeSet {
     }
   }
 
+  /// Form-encoding. See the static member ``WebURL/PercentEncodeSet/formEncoding`` for details.
+  /// 
   public struct FormEncoding: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
     @inlinable

@@ -14,6 +14,76 @@
 
 /// A description of a file path's structure.
 ///
+/// A format describes the structure and normalization rules of a file path, as well as the
+/// properties of binary paths supported by WebURL. They are used to interpret or prepare file paths
+/// for a particular system.
+///
+/// ```swift
+/// // ℹ️ POSIX paths (for macOS, iOS, Linux, etc) require the .posix format.
+/// try WebURL(filePath: "/usr/bin/swift", format: .posix)
+///   // ✅ "file:///usr/bin/swift"
+/// try WebURL(filePath: "/usr/bin/swift", format: .windows)
+///   // ❌ Not a valid Windows path (no drive letter).
+///
+/// // ℹ️ Windows paths require the .windows format.
+/// try WebURL(filePath: #"C:\Windows\"#, format: .windows)
+///   // ✅ "file:///C:/Windows/"
+/// try WebURL(filePath: #"C:\Windows\"#, format: .posix)
+///   // ❌ Interpreted as a relative path by POSIX (no "/").
+///
+/// // ℹ️ Use .native for the current machine's format (.native is usually the default).
+/// try WebURL(filePath: NSTemporaryDirectory(), format: .native)
+///   // ✅ A known native path.
+/// ```
+///
+/// Currently, two file path formats are supported: ``posix`` and ``windows``. Their documentation provides
+/// detailed information and references about the kinds of paths which are supported, and how to interoperate
+/// with the platform's binary path format.
+///
+/// Most of the time you should specify the ``native`` format, which resolves to the appropriate value
+/// for the compile target.
+///
+/// > Tip:
+/// > If you're only working with paths for the local system, we recommend using swift-system's `FilePath` type.
+/// > The `WebURLSystemExtras` module contains WebURL <-> FilePath conversions which handle the details of each
+/// > system's path format for you, and help you write portable, correct code.
+/// >
+/// > ```swift
+/// > // This works on both POSIX systems and Windows
+/// > // (although the file locations need adapting).
+/// > import WebURL
+/// > import System
+/// > import WebURLSystemExtras
+/// >
+/// > // Start with a file URL.
+/// > let url = WebURL("file:///private/tmp/my%20file.dat")!
+/// >
+/// > // Reconstruct the file path.
+/// > let path = try FilePath(url: url)
+/// >
+/// > // Open the file and write some data.
+/// > let descriptor = try FileDescriptor.open(path, .readWrite, options: .create, permissions: [.ownerReadWrite, .otherRead])
+/// > try descriptor.writeAll("hello, world!".utf8)
+/// > try descriptor.close()
+/// > ```
+///
+/// ## Topics
+///
+/// ### Supported Formats
+///
+/// - ``FilePathFormat/posix``
+/// - ``FilePathFormat/windows``
+/// - ``FilePathFormat/native``
+///
+/// ### Errors
+///
+/// - ``FilePathFromURLError``
+/// - ``URLFromFilePathError``
+///
+/// ## See Also
+///
+/// - ``WebURL/init(filePath:format:)``
+///
 public struct FilePathFormat: Equatable, Hashable, CustomStringConvertible {
 
   @usableFromInline
@@ -32,19 +102,41 @@ public struct FilePathFormat: Equatable, Hashable, CustomStringConvertible {
 
   /// A path which is compatible with the POSIX standard.
   ///
-  /// ## Format
+  /// ## Path Format & Normalization
   ///
   /// The format and interpretation of POSIX-style paths is documented by [IEEE Std 1003.1][POSIX-4-13].
   ///
-  /// ## Code Units
+  /// Consecutive separators can be normalized to a single separator, except that 2 separators at the start
+  /// of the path cannot be collapsed. This means that:
   ///
-  /// The path separator is `/` (code-unit value `0x2F`),
-  /// and the current/parent directory is represented by `.`/`..` respectively (where `.` is the code-unit with value `0x2E`).
-  /// All other code-units are not defined and must be preserved exactly.
+  /// - `/usr/bin`,
+  /// - `/usr//bin`, and
+  /// - `/usr///bin`
   ///
-  /// ## Normalization
+  /// Are all the same path, but `//usr/bin` is considered a different path.
   ///
-  /// Consecutive separators have the same meaning as a single separator, except if the path starts with exactly 2 separators.
+  /// As the contents of path components have no defined meaning, they must not be altered by any normalization
+  /// procedure.
+  ///
+  /// ## Binary Path Encoding
+  ///
+  /// This section describes how binary file paths are obtained from the Operating System and how their bytes
+  /// are interpreted by WebURL functions.
+  ///
+  /// The following byte values have particular meaning in POSIX-style paths.
+  ///
+  /// | Code Unit       | ASCII Character | Purpose                                       |
+  /// | --------------- | :-------------: | --------------------------------------------- |
+  /// | `0x00`          |       -         | End of String                                 |
+  /// | `0x2E`          |      `.`        | Current directory (1x); Parent directory (2x) |
+  /// | `0x2F`          |      `/`        | Path separator                                |
+  ///
+  /// All other values are not specified and do not necessarily have any meaning beyond opaque bytes.
+  /// Some systems enforce these to be Unicode code-points in UTF-8, but that must not be assumed.
+  ///
+  /// As such, this format defines an 8-bit binary file path to be in an **unspecified, filesystem-safe encoding**,
+  /// where "filesystem-safe" means that the above byte values have no purpose other than that described by the table.
+  ///
   ///
   /// [POSIX-4-13]: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html#tag_04_13
   ///
@@ -55,50 +147,158 @@ public struct FilePathFormat: Equatable, Hashable, CustomStringConvertible {
 
   /// A path which is compatible with those used by Microsoft Windows.
   ///
-  /// ## Format
+  /// ## Path Formats & Normalization
   ///
-  /// There are many, many Windows path formats. This object represents the most common ones:
+  /// There are many, many Windows path formats. This format value represents the most common ones:
+  /// DOS paths, UNC paths, and Long paths.
   ///
-  /// - DOS paths: `C:\Users\Alice\Desktop\family.jpg`
-  /// - UNC paths: `\\us-west.example.com\files\meeting-notes-june.docx`
-  /// - DOS long paths: `\\?\C:\Users\Bob\Documents\...`
-  /// - UNC long paths: `\\?\UNC\europe.example.com\jim\...`
+  /// | Kind           | Example                                               |
+  /// |----------------|-------------------------------------------------------|
+  /// | DOS path       | `C:\Users\Alice\Desktop\family.jpg`                   |
+  /// | UNC path       | `\\us-west.example.com\files\meeting-notes-june.docx` |
+  /// | Long DOS path  | `\\?\C:\Users\Bob\Documents\...`                      |
+  /// | Long UNC path  | `\\?\UNC\europe.example.com\jim\...`                  |
   ///
-  /// The precise format and interpretation of these paths is documented by Microsoft:
-  /// - [File path formats on Windows systems][MS-PathFormat]
-  /// - [Naming Files, Paths, and Namespaces][MS-FileNaming]
-  /// - [UNC Path specification][MS-UNCSPEC]
+  /// Each of these has different sets of allowed characters and normalization rules, which are summarized
+  /// in subsequent sections. This information has been collected from a variety of sources which may be worth
+  /// consulting for further clarification:
   ///
-  /// ## Code Units
+  /// - [Microsoft: File path formats on Windows systems][MS-PathFormat]
+  /// - [Microsoft: Naming Files, Paths, and Namespaces][MS-FileNaming]
+  /// - [Microsoft: UNC Path specification][MS-UNCSPEC]
+  /// - [Project Zero: The Definitive Guide on Win32 to NT Path Conversion][PRZ-NTPaths]
   ///
-  /// The code-units of Windows file paths natively represent Unicode code-points. Windows provides APIs which encode these paths using
-  /// either UTF-16 code-units, or ANSI code-units in the system's active code-page (a form of extended ASCII). In either case, the numeric
-  /// values of code-units in the ASCII range may be interpreted as ASCII characters.
-  /// File and directory names are not normalized, so the sequence of Unicode code-points must be preserved exactly.
+  /// ### DOS Paths
   ///
-  /// The preferred path separator is `\` (code-unit value `0x5C`), although some formats also accept `/` (`0x2F`).
-  /// The current/parent directory is represented by `.`/`..` respectively (where `.` is the code-unit with value `0x2E`).
+  /// DOS paths begin with a drive letter and path separator.
+  /// Both forward-slashes and back-slashes are accepted as path separators.
   ///
-  /// Non-ASCII code-units in path components are treated as opaque. An exception is UNC paths, where the hostname component must be UTF-8.
+  /// Windows has a notion of a "current drive", and each drive has its own "current directory".
+  /// This means there are lots of kinds of relative paths:
   ///
-  /// ## Normalization
+  /// | Path                         | Description                                              |
+  /// | ---------------------------- | -------------------------------------------------------- |
+  /// | `C:\Users\Alice\picture.jpg` | A path from the root of the `C:` drive (fully-qualified) |
+  /// | `\Users\Alice\picture.jpg`   | A path from the root of the current drive                |
+  /// | `D:picture.jpg`              | A path from the current directory of the `D:` drive      |
+  /// | `picture.jpg`                | A path from the current directory of the current drive   |
   ///
-  /// Consecutive separators have the same meaning as a single separator, except if the path starts with exactly 2 separators.
-  /// Trailing ASCII periods and spaces may be trimmed from path components - a file named `foo.` cannot be expressed using regular DOS paths.
-  /// Long paths are not normalized, so they can express the file name `foo.`. However, many Windows APIs will normalize them regardless.
+  /// ### UNC Paths
   ///
-  /// See [File path formats on Windows systems][MS-PathFormat] for a description of Windows' path normalization procedure.
+  /// UNC paths begin with a two-separator prefix, followed by a server name, share name, and a path within the share.
+  /// Both forward-slashes and back-slashes are accepted as path separators.
+  ///
+  /// **Example**: `\\us-west.example.com\files\meeting-notes-june.docx`
+  /// - **Server**: `us-west.example.com`
+  /// - **Share**: `files`
+  /// - **Path**: `\meeting-notes-june.docx`
+  ///
+  /// UNC paths are always fully-qualified. It is possible to resolve relative references against them,
+  /// but there is no concept of a "relative UNC path".
+  ///
+  /// For both DOS and UNC paths, consecutive separators can be normalized to a single separator (except for the
+  /// double-slash prefix in UNC paths).
+  ///
+  /// Trailing ASCII periods and spaces may be trimmed from path components, in accordance with
+  /// [Microsoft's documentation][MS-PathFormat]. It is not possible to express files named "`foo.`"
+  /// with these paths, and even trying can be dangerous.
+  ///
+  /// ### Long paths
+  ///
+  /// Regular Windows paths are typically limited to 260 characters; in order to overcome this limit, an alternative
+  /// "long path" format can be used. These have the prefix "`\\?\`", and are a kind of low-level path handled by
+  /// something called the "object manager". They can point to devices and more abstract things, but also support
+  /// locations with drive letters and UNC locations.
+  ///
+  /// | Path                                              | Description                      |
+  /// | ------------------------------------------------- | -------------------------------- |
+  /// | `\\?\C:\Users\Alice\...`                          | Long file path with drive letter |
+  /// | `\\?\UNC\us-west.example.com\files\...`           | Long UNC path                    |
+  /// | `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1` | Abstract Win32 path              |
+  ///
+  /// The strict definition of these paths is that the back-slash (`\`, `0x5C`) is the path separator,
+  /// and **all other characters** (even `NULL`s) are unreserved and may be used in path components.
+  ///
+  /// This has some interesting implications, and forces us to accept the following limitations:
+  ///
+  /// - "`..`" components are forbidden.
+  ///
+  ///   In this case, they do not mean parent traversal, but actually a file _named_ "`..`". This cannot be expressed
+  ///   in a URL (even with percent-encoding). Also, Windows APIs are not consistent, and will sometimes interpret
+  ///   these as parent traversal regardless, and this ambiguity could be a potential security risk.
+  ///   No commonly-used filesystem or network protocol on Windows supports these file or directory names anyway.
+  ///
+  /// - Forward slashes are forbidden.
+  ///
+  ///   They represent files with literal forward slashes in their name. Again, Windows APIs are not consistent,
+  ///   and will sometimes interpret these as path separators regardless, which can be a security risk.
+  ///   No commonly-used filesystem or network protocol on Windows supports these file or directory names anyway.
+  ///
+  /// In practice, they should not affect well-formed long paths. Additionally, this `FilePathFormat` limits the allowed
+  /// Win32 paths to those which are actually "long file paths":
+  ///
+  /// - Long file paths with drive letters
+  /// - Long UNC paths
+  ///
+  /// Paths such as `\\?\GLOBALROOT\Device\...` are not supported. Due to this limiting accepted paths to those used
+  /// in filesystem contexts, the following normalization procedure is considered safe:
+  ///
+  /// - Empty and "`.`" components will be removed.
+  ///
+  ///   Empty components have no meaning on any filesystem, and all commonly-used filesystems on Windows
+  ///   (including FAT, exFAT, NTFS, and ReFS) forbid files and directories named "`.`". SMB/CIFS and NFS
+  ///   (the most common protocols used with UNC) likewise define that "`.`" components refer to the current directory.
+  ///
+  /// ## Binary Path Encoding
+  ///
+  /// This section describes how binary file paths are obtained from the Operating System and how their bytes
+  /// are interpreted by WebURL functions.
+  ///
+  /// Windows file paths are defined as containing Unicode code-points. However, Windows for the most part
+  /// does not verify that Unicode text is valid, nor does it employ canonical equivalence for path lookups.
+  /// This means that path components may contain invalid text (such as lone surrogates), and their code-points
+  /// must be preserved exactly. Reserved code-points are within the ASCII range.
+  ///
+  /// | Code-Point(s)            | Character(s) | Purpose                                        |
+  /// | ------------------------ | ------------ | ---------------------------------------------- |
+  /// | REVERSE SOLIDUS, U+005C  |    `\`       | Path separator                                 |
+  /// | SOLIDUS, U+002F          |    `/`       | Path separator (DOS and UNC only)              |
+  /// | FULL STOP, U+002E        |    `.`       | Current directory (1x); Parent directory (2x)  |
+  /// | QUESTION MARK, U+003F    |    `?`       | Element of Long Path prefix ("`\\?\`")         |
+  /// | Alphas from Basic Latin  | `a-z,A-Z`    | Drive letters (DOS and Long DOS only)          |
+  /// | COLON, U+003A            |    `:`       | Drive-letter delimiter (DOS and Long DOS only) |
+  ///
+  /// As such, this format defines an 8-bit binary file path to be in an **unspecified, ASCII-compatible encoding**.
+  /// Effectively, ASCII bytes will be considered as alphas, colons, slashes, spaces, etc., and all other bytes
+  /// within a path component are considered opaque. There is one exception: the hostname of a UNC or Long UNC path
+  /// must be valid UTF-8/ASCII, as it is subject to domain normalization (IDNA).
+  ///
+  /// The Windows API exposes file paths using UTF-16 code-units, which can be transcoded to/from UTF-8 losslessly.
+  /// This is the preferred process, as UTF-8 supports all Unicode code-points and is expected by other systems.
+  /// Handling invalid Unicode is, unfortunately, left as an exercise for the reader.
+  /// There have been some creative solutions to this problem, such as the pseudo-encoding ["WTF-8"][WTF-8]
+  /// (the "Wobbly Transformation Format"), which encodes these code-points in UTF-8 style regardless.
+  /// It is admittedly a hack, but it can be useful in isolated systems.
+  /// If in doubt, throw a ``URLFromFilePathError/transcodingFailure``.
+  ///
+  /// The definition of "unspecified, ASCII-compatible encoding" also happens to include ANSI encodings,
+  /// such as Latin-1 or Windows-31J. It may be necessary to produce such URLs when interoperating
+  /// with legacy systems, but their use is discouraged in favor of Unicode.
   ///
   /// [MS-PathFormat]: https://web.archive.org/web/20210714174116/https://docs.microsoft.com/en-us/dotnet/standard/io/file-path-formats
   /// [MS-FileNaming]: https://web.archive.org/web/20210716121600/https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+  /// [PRZ-NTPaths]: https://web.archive.org/web/20210323091740/https://googleprojectzero.blogspot.com/2016/02/the-definitive-guide-on-win32-to-nt.html
   /// [MS-UNCSPEC]: https://web.archive.org/web/20210708165404/https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/62e862f4-2a51-452e-8eeb-dc4ff5ee33cc
+  /// [WTF-8]: https://simonsapin.github.io/wtf-8/
   ///
   @inlinable
   public static var windows: FilePathFormat {
     FilePathFormat(.windows)
   }
 
-  /// The native path style used by the current operating system.
+  /// The native path style used by the compile target.
+  ///
+  /// If building for a Windows platform, this returns ``windows``. Otherwise, it returns ``posix``.
   ///
   @inlinable
   public static var native: FilePathFormat {
@@ -125,96 +325,180 @@ public struct FilePathFormat: Equatable, Hashable, CustomStringConvertible {
 
 extension WebURL {
 
-  /// Creates a `file:` URL representation of a file path.
+  /// Creates a URL representation of a file path.
   ///
-  /// The given path must be absolute according to the given `FilePathFormat`, and not contain any components
-  /// which traverse to their parent directories (`..` components). Some minimal normalization is applied, according to the path format.
+  /// In order to create a file URL, the file path must satisfy two conditions:
   ///
-  /// Note that even though a `String` may be a valid _source_ of a file path, some paths may be corrupted when storing or manipulating them as a `String`.
-  /// Therefore, this library does not offer a corresponding API to reconstruct a file path as a `String`.
+  /// - It must be a syntactically valid, non-relative path according to the ``FilePathFormat``.
   ///
-  /// Instead, developers are encouraged to use the `FilePath` type from the `swift-system` package.
-  /// The `FilePath(url: WebURL)` initializer available in the `WebURLSystemExtras` module is the best way to reconstruct a file path
-  /// from its URL representation.
+  ///   ```swift
+  ///   // ℹ️ POSIX-style paths (Apple OSes, Linux, etc)
+  ///   try WebURL(filePath: "/usr/bin/swift", format: .posix)
+  ///     // ✅ "file:///usr/bin/swift"
+  ///   try WebURL(filePath: "/tmp/my file.dat", format: .posix)
+  ///     // ✅ "file:///tmp/my%20file.dat"
+  ///
+  ///   // ℹ️ Windows-style paths
+  ///   try WebURL(filePath: #"C:\Users\Alice\Desktop\family.jpg"#, format: .windows)
+  ///     // ✅ "file:///C:/Users/Alice/Desktop/family.jpg"
+  ///   try WebURL(filePath: #"\\Janes-PC\Music\awesome song.mp3"#, format: .windows)
+  ///     // ✅ "file://janes-pc/Music/awesome%20song.mp3"
+  ///
+  ///   // ℹ️ Use .native for the current machine's format (this is the default).
+  ///   try WebURL(filePath: NSTemporaryDirectory())
+  ///     // ✅ "file:///var/folders/ds/..." on macOS.
+  ///
+  ///   try WebURL(filePath: "file.txt", format: .posix)
+  ///     // ❌ Relative path on POSIX (no leading "/").
+  ///   try WebURL(filePath: "/usr/bin", format: .windows)
+  ///     // ❌ Relative path on Windows (no drive letter).
+  ///   ```
+  ///
+  /// - It must not contain any components which refer to their parent directories ("`..`" components).
+  ///
+  ///   ```swift
+  ///   try WebURL(filePath: "/usr/bin/../../etc/passwd", format: .posix)
+  ///   // ❌ Parent traversal.
+  ///   try WebURL(filePath: #"C:\Users\Alice\Desktop\..\Music"#, format: .windows)
+  ///   // ❌ Parent traversal.
+  ///   ```
+  ///
+  /// Otherwise, a ``URLFromFilePathError`` error will be thrown which can be used to provide diagnostics.
+  ///
+  /// Some minimal normalization is applied to the path according to the ``FilePathFormat`` (for example,
+  /// collapsing duplicate slashes, such as `/usr//bin` -> `/usr/bin`), and percent-encoding is added where required.
+  ///
+  /// Note that while a `String` may be a valid source of a file path, in general file paths are binary
+  /// rather than textual, and some paths may be corrupted if stored as a `String`.
+  /// For this reason, WebURL only reconstructs file paths from URLs in _binary form_.
+  ///
+  /// > Tip:
+  /// > To work with binary file paths, we recommend developers use a dedicated file path type,
+  /// > such as swift-system's `FilePath`. The `FilePath(url: WebURL)` initializer from `WebURLSystemExtras` is
+  /// > the best way to reconstruct a file path from its URL representation.
+  /// >
+  /// > ```swift
+  /// > import WebURL
+  /// > import System
+  /// > import WebURLSystemExtras
+  /// >
+  /// > // Start with a file URL.
+  /// > let url = WebURL("file:///private/tmp/my%20file.dat")!
+  /// >
+  /// > // Reconstruct the file path.
+  /// > let path = try FilePath(url: url)
+  /// >
+  /// > // Open the file and write some data.
+  /// > let descriptor = try FileDescriptor.open(path, .readWrite, options: .create, permissions: [.ownerReadWrite, .otherRead])
+  /// > try descriptor.writeAll("hello, world!".utf8)
+  /// > try descriptor.close()
+  /// > ```
   ///
   /// - parameters:
   ///   - filePath: The file path from which to create the file URL.
-  ///   - format: The way in which `filePath` should be interpreted; either `.posix`, `.windows`, or `.native` (default).
+  ///   - format:   The way in which `filePath` should be interpreted.
+  ///               The default is ``FilePathFormat/native``, which resolves to the appropriate value for the
+  ///               compile target.
   ///
-  /// - throws: `URLFromFilePathError`
+  /// - throws: ``URLFromFilePathError``
   ///
-  public init<S>(
-    filePath: S, format: FilePathFormat = .native
-  ) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
+  /// ## See Also
+  ///
+  /// - ``WebURL/WebURL/binaryFilePath(from:format:nullTerminated:)``
+  /// - ``WebURL/FilePathFormat``
+  ///
+  public init<StringType>(
+    filePath: StringType, format: FilePathFormat = .native
+  ) throws where StringType: StringProtocol, StringType.UTF8View: BidirectionalCollection {
     self = try WebURL.fromBinaryFilePath(filePath.utf8, format: format)
   }
 }
 
 extension WebURL {
 
-  /// Creates a `file:` URL representation of the given file path.
+  /// Creates a URL representation of a binary file path.
   ///
-  /// This is a low-level API, which accepts a file path as a collection of 8-bit code-units and paths to be represented which
-  /// are not valid UTF-8 text. Generally, users should prefer `swift-system`'s `FilePath` type to store file paths rather than storing
-  /// them as collections of code-units, and the `WebURL(filePath: FilePath)` initializer in the `WebURLSystemExtras` module
-  /// is the preferred interface to this function.
+  /// In order to create a file URL, the file path must satisfy two conditions:
   ///
-  /// ## Supported paths
+  /// - It must be a syntactically valid, non-relative binary path according to the ``FilePathFormat``, and
+  /// - It must not contain any components which traverse to their parent directories ("`..`" components).
   ///
-  /// The given path must be absolute (fully-qualified) according to the given `FilePathFormat`, and not contain any components
-  /// which traverse to their parent directories (`..` components). It also may not include `NULL` bytes, so the terminator of null-terminated
-  /// string should not be included in the given collection of code-units.
+  /// Additionally, it must not contain `NULL` bytes, so the terminator of a null-terminated string should
+  /// not be included in the binary file path. Otherwise, a ``URLFromFilePathError`` error will be thrown
+  /// which can be used to provide diagnostics.
   ///
-  /// These restrictions are considered a feature. URLs have no way of expressing relative paths, so such paths would first have to be resolved against
-  /// a base path or working directory. Components which traverse upwards in the filesystem and unexpected NULL bytes are common sources of
-  /// [security vulnerabilities][OWASP-PathTraversal]. Best practice is to first resolve and normalize such paths before turning them in to URLs,
-  /// so you have an opportunity to check where the path actually points to.
+  /// Some minimal normalization is applied to the path according to the ``FilePathFormat`` (for example,
+  /// collapsing duplicate slashes, such as `/usr//bin` -> `/usr/bin`), and percent-encoding is added where required.
   ///
-  /// ## Windows long paths
+  /// ### Encoding
   ///
-  /// This function supports Win32 file namespace paths (a.k.a. "long" paths) which start with a drive letter or point to a UNC location.
-  /// These paths are identified by the prefix `\\?\`. Note that this prefix is not preserved in the resulting URL or any paths created from that URL.
+  /// The given ``FilePathFormat`` determines how the binary file path is interpreted. Each format contains
+  /// documentation and references explaining which bytes are reserved or not, and how to obtain a binary path
+  /// from the Operating System.
   ///
-  /// In a deliberate departure from Microsoft's documentation, empty and `.` components will be resolved in these paths.
-  /// Other path components will not be trimmed or otherwise altered. This library considers this minimal structural normalization to be safe,
-  /// given that support is restricted to paths with drive letters or UNC locations. Empty components have no meaning on any filesystem,
-  /// and all commonly-used filesystems on Windows (including FAT, exFAT, NTFS, and ReFS) forbid files and directories named `.`.
-  /// SMB/CIFS and NFS (the most common protocols used with UNC) likewise define that `.` components refer to the current directory.
+  /// The TL;DR is:
   ///
-  /// Additionally, `..` components and forward slashes are forbidden, as they represent components literally named `..` or with forward slashes in
-  /// their name. However, Windows APIs are not consistent, and will sometimes interpret these as traversal instructions or path separators regardless.
-  /// This ambiguity means that accepting such components could lead to hidden directory traversal and other security vulnerabilities.
-  /// Again, no commonly-used filesystem on Windows supports these file or directory names anyway, and the network protocols listed above also forbid them.
+  /// - On POSIX systems (Apple OSes, Linux, Android), file and directory names are considered binary data rather
+  ///   than textual. The most direct way to obtain a binary path is to use a C string (minus the null terminator).
+  ///   See ``FilePathFormat/posix`` for more.
   ///
-  /// ## Encoding
+  /// - On Windows, the platform APIs work with paths as UTF-16. Use these and transcode to UTF-8 to obtain an
+  ///   8-bit binary path. They might contain invalid Unicode, but there's no good answer as to what to do about that.
+  ///   Throwing a ``URLFromFilePathError/transcodingFailure`` error is reasonable. See ``FilePathFormat/windows`` .
   ///
-  /// While we may usually think of file and directory names strings of text, some operating systems do not treat them that way.
-  /// Behaviours vary greatly between operating systems, from fully-defined code-units which are normalized by the system (Apple OSes),
-  /// to fully-defined code-units which are not normalized (Windows), to opaque, numeric code-units with no defined interpretation (Linux, general POSIX).
+  /// ```swift
+  /// // This example demonstrates use on POSIX systems;
+  /// // Windows developers should use the '-W' family of platform functions and convert to UTF-8.
+  /// // Or use swift-system's FilePath.
+  /// import Darwin // or Glibc, etc.
   ///
-  /// In order to process a path, we need to at least understand its structure. The provided `FilePathFormat` determines how the code-units will be interpreted -
-  /// e.g. which values are reserved as path separators, which normalization rules apply, and whether or not the code-units can be interpreted as textual code-points.
+  /// // Start with a C path.
+  /// let cwd: UnsafeMutablePointer<CChar> = getcwd(nil, 0)!
+  /// defer { free(cwd) }
   ///
-  /// POSIX paths generally cannot be transcoded and should be provided to the function in their native 8-bit encoding.
-  /// Windows paths should be transcoded from their native UTF-16 to UTF-8.
-  /// Windows paths may also be provided in the system-specific ANSI encoding, but this is discouraged as the resulting URL will contain
-  /// percent-encoded ANSI code-points which are not portable. This should only be done when legacy considerations demand it.
+  /// // Use 'realpath' to normalize.
+  /// let normalCwd: UnsafeMutablePointer<CChar> = realpath(cwd, nil)!
+  /// defer { free(normalCwd) }
   ///
-  /// ## Normalization
+  /// // Handle signed CChar by rebinding.
+  /// let normalCwdLen = strlen(normalCwd)
+  /// let url: WebURL = try normalCwd.withMemoryRebound(to: UInt8.self, capacity: normalCwdLen) {
+  ///   // Do not include the null terminator.
+  ///   let buffer = UnsafeBufferPointer(start: UnsafePointer($0), count: normalCwdLen)
+  ///   return try WebURL.fromBinaryFilePath(buffer)
+  ///   // ✅ "file:///private/tmp"
+  /// }
+  /// ```
   ///
-  /// Some basic lexical normalization is applied to the path, according to the given `FilePathFormat`.
+  /// > Tip:
+  /// > To work with binary file paths, we recommend developers use a dedicated file path type,
+  /// > such as swift-system's `FilePath`. The `WebURL(filePath: FilePath)` initializer from `WebURLSystemExtras` is
+  /// > the best way to construct a file URL from a binary file path. It handles the transcoding on Windows mentioned
+  /// > above, and provides simple APIs to check that a binary path is absolute and contains no "`..`" components.
+  /// >
+  /// > ```swift
+  /// > import WebURL
+  /// > import System
+  /// > import WebURLSystemExtras
+  /// >
+  /// > let cString = getcwd(nil, 0)
+  /// > defer { free(cString) }
+  /// >
+  /// > var path = FilePath(cString: cString)
+  /// > path.lexicallyNormalize()
+  /// > let url = try WebURL(filePath: path)
+  /// > // ✅ "file:///private/tmp"
+  /// > ```
   ///
-  /// For example, empty path components may be collapsed and some file or directory names trimmed.
-  /// Refer to the documentation for `FilePathFormat` for information about the kinds of normalization which each format defines.
-  ///
-  /// [OWASP-PathTraversal]: https://owasp.org/www-community/attacks/Path_Traversal
+  /// [WTF-8]: https://simonsapin.github.io/wtf-8/
   ///
   /// - parameters:
-  ///   - path:   The file path, as a `Collection` of 8-bit code-units.
-  ///   - format: The way in which `path` should be interpreted; either `.posix`, `.windows`, or `.native` (default).
+  ///   - path:   The binary file path, as a collection of 8-bit code-units.
+  ///   - format: The way in which `path` should be interpreted.
+  ///             The default is ``FilePathFormat/native``, which resolves to the correct format for the
+  ///             compile target.
   ///
-  /// - returns: A URL with the `file` scheme which can be used to reconstruct the given path.
-  /// - throws: `URLFromFilePathError`
+  /// - throws: ``URLFromFilePathError``
   ///
   @inlinable
   public static func fromBinaryFilePath<Bytes>(
@@ -227,7 +511,23 @@ extension WebURL {
   }
 }
 
-/// The reason why a file URL could not be created from a given file path.
+/// The reason why a file URL could not be created from a file path.
+///
+/// ## Topics
+///
+/// ### All Paths
+///
+/// - ``URLFromFilePathError/emptyInput``
+/// - ``URLFromFilePathError/nullBytes``
+/// - ``URLFromFilePathError/relativePath``
+/// - ``URLFromFilePathError/upwardsTraversal``
+///
+/// ### Windows Paths
+///
+/// - ``URLFromFilePathError/invalidHostname``
+/// - ``URLFromFilePathError/invalidPath``
+/// - ``URLFromFilePathError/unsupportedWin32NamespacedPath``
+/// - ``URLFromFilePathError/transcodingFailure``
 ///
 public struct URLFromFilePathError: Error, Equatable, Hashable, CustomStringConvertible {
 
@@ -250,45 +550,121 @@ public struct URLFromFilePathError: Error, Equatable, Hashable, CustomStringConv
     self._err = _err
   }
 
-  /// The given path is empty.
+  /// The file path is empty.
   ///
   @inlinable
   public static var emptyInput: URLFromFilePathError {
     URLFromFilePathError(.emptyInput)
   }
 
-  /// The given path contains ASCII `NULL` bytes.
+  /// The file path contains ASCII `NULL` bytes.
   ///
-  /// `NULL` bytes are forbidden, to protect against injected truncation.
+  /// `NULL` bytes are forbidden to protect against injected truncation. If the file path is a null-terminated string,
+  /// remove the null terminator prior to calling ``WebURL/fromBinaryFilePath(_:format:)``.
+  ///
+  /// ```swift
+  /// let cString: UnsafePointer<CChar> = ...
+  /// let len = strlen(cString)
+  ///
+  /// // Handle signed CChar by rebinding.
+  /// let url = try cString.withMemoryRebound(to: UInt8.self, capacity: len) {
+  ///   // Do not include the null terminator.
+  ///   let buffer = UnsafeBufferPointer(start: $0, count: len)
+  ///   return try WebURL.fromBinaryFilePath(buffer) // ✅
+  /// }
+  /// ```
   ///
   @inlinable
   public static var nullBytes: URLFromFilePathError {
     URLFromFilePathError(.nullBytes)
   }
 
-  /// The given path is not absolute/fully-qualified.
+  /// The file path is relative.
   ///
-  /// Each path format has different kinds of relative paths. Use APIs provided by the platform, or the `swift-system` library, to resolve the input
-  /// as an absolute path. Be advised that some kinds of relative path resolution may not be thread-safe; consult your chosen path API for details.
+  /// Each ``FilePathFormat`` has different kinds of relative paths, and some formats have many kinds.
+  /// Consult the format's documentation for more information.
+  ///
+  /// To resolve a path, use the APIs provided by the platform (such as `realpath` on POSIX, or `GetFullPathNameW`
+  /// on Windows), or another library. Swift-system's `FilePath` type contains operations such as `push(FilePath)`,
+  /// which allows you to resolve a relative path, and `lexicallyResolving(FilePath)`, which additionally ensures
+  /// that the result does not escape the base path.
+  ///
+  /// ```swift
+  /// import System
+  ///
+  /// let relativePath: FilePath = "file.txt"
+  /// try WebURL(filePath: relativePath)
+  /// // ❌ Relative path
+  ///
+  /// // Resolve the relative path against a base path;
+  /// // in this case the current working directory.
+  /// let baseCString = getcwd(nil, 0)!
+  /// defer { free(baseCString) }
+  /// guard let resolvedPath = FilePath(cString: baseCString).lexicallyResolving(relativePath) else {
+  ///   // Unexpectedly escaped the base path!
+  ///   fatalError()
+  /// }
+  ///
+  /// try WebURL(filePath: resolvedPath)
+  /// // ✅ "file:///private/tmp/file.txt"
+  /// ```
   ///
   @inlinable
   public static var relativePath: URLFromFilePathError {
     URLFromFilePathError(.relativePath)
   }
 
-  /// The given path contains one or more `..` components.
+  /// The file path contains `..` components.
   ///
-  /// These components are forbidden, to protect against directory traversal attacks. Use APIs provided by the platform, or the `swift-system` library,
-  /// to resolve the path. Users are advised to check that the path has not escaped the expected area of the filesystem after it has been resolved.
+  /// Consider the following POSIX-style path:
+  ///
+  /// ```swift
+  /// try WebURL(filePath: "/usr/bin/../../etc/passwd")
+  /// // ❌ Upwards traversal
+  /// ```
+  ///
+  /// It can be quite easy for ".." components to enter a path string if it consists (even partially) of components
+  /// which an attacker can influence. The URL Standard requires paths in URLs to be fully resolved, and automatically
+  /// collapsing this path is considered a potential security risk.
+  ///
+  /// Instead, resolve the path yourself, and check that it points to where you intended it to go. You can use
+  /// swift-system's `FilePath` type to resolve a path:
+  ///
+  /// ```swift
+  /// import System
+  ///
+  /// let templates = FilePath("/opt/my_app/templates/")
+  ///
+  /// // Resolve a relative path (perhaps containing user input),
+  /// // and check it does not escape the base path.
+  /// let badPath   = templates.lexicallyResolving("../../../etc/passwd")
+  /// // ❌ - escapes the path
+  /// let badPath2  = templates.lexicallyResolving("/etc/passwd")
+  /// // ❌ - escapes the path (absolute path)
+  /// let goodPath  = templates.lexicallyResolving("floral_light")
+  /// // ✅ "/opt/my_app/templates/floral_light"
+  ///
+  /// // Or check that a lexically-normalized path is contained
+  /// // within another normalized path (this does not follow symlinks).
+  /// let templateName = "../../etc/passwd" // Given by attacker.
+  /// let templatePath = "/opt/my_app/templates/" + templateName
+  ///
+  /// let normalizedPath = FilePath(templatePath).lexicallyNormalized()
+  /// guard normalizedPath.starts(with: "/opt/my_app/templates/") else {
+  ///   throw BadPathError()
+  /// }
+  /// // ✅
+  /// ```
   ///
   @inlinable
   public static var upwardsTraversal: URLFromFilePathError {
     URLFromFilePathError(.upwardsTraversal)
   }
 
-  /// The given path refers to a file on a remote host, but the hostname is not valid or cannot be represented in a URL.
+  /// The file path refers to a remote host, but the hostname is not valid or is unsupported.
   ///
-  /// Note that currently, only ASCII domains, IPv4, and IPv6 addresses are supported. Domains may not include [forbidden host code-points][URL-FHCP].
+  /// Note that currently, only ASCII domains, IPv4, and IPv6 addresses are supported.
+  /// Domains may not include [forbidden host code-points][URL-FHCP].
   ///
   /// [URL-FHCP]: https://url.spec.whatwg.org/#forbidden-host-code-point
   ///
@@ -297,12 +673,11 @@ public struct URLFromFilePathError: Error, Equatable, Hashable, CustomStringConv
     URLFromFilePathError(.invalidHostname)
   }
 
-  /// The given path is ill-formed, prohibiting a URL representation from being formed.
+  /// The file path is ill-formed.
   ///
-  /// Some `FilePathFormat`s have sub-formats with particular requirements, which may be necessary in order to decide which kind of URL to form.
-  /// For instance, Win32 file namespace paths (a.k.a. "long" paths) require a device component following the `\\?\` prefix.
-  ///
+  /// Win32 file namespace paths (a.k.a. "long" paths) require a device component followed by a backslash.
   /// Examples of invalid Win32 file namespace paths:
+  ///
   /// - `\\?\` (no path following prefix)
   /// - `\\?\\` (device name is empty)
   /// - `\\?\C:` (no trailing slash after device name)
@@ -313,14 +688,17 @@ public struct URLFromFilePathError: Error, Equatable, Hashable, CustomStringConv
     URLFromFilePathError(.invalidPath)
   }
 
-  /// The given path is a Win32 file namespace path (a.k.a. "long" path), but references an object for which a URL representation cannot be formed.
+  /// The file path uses an unsupported Win32 file namespace.
   ///
-  /// Win32 file namespace paths have a variety of ways to reference files - for instance, both `\\?\BootPartition\Users\`
-  /// and `\\?\HarddiskVolume2\Users\` might resolve to `\\?\C:\Users\`. These more exotic paths are currently not supported.
+  /// Win32 file namespace paths have a variety of ways to reference files - for instance,
+  /// both `\\?\BootPartition\Users\` and `\\?\HarddiskVolume2\Users\` might resolve to `\\?\C:\Users\`.
+  /// They might also refer to abstract objects whose paths have little in the way of defined semantics.
+  /// These more exotic paths are not supported.
   ///
-  /// Win32 file namespace paths are documented as opting-out from typical path normalization, meaning that characters such as forward slashes
-  /// represent literal slashes in a file or directory name. Some Windows APIs respect this, while others do not, meaning that these characters are ambiguous
-  /// and can potentially lead to security vulnerabilities via smuggled path components. For this reason, they are not supported.
+  /// Long paths must either include a drive letter, or reference a UNC location.
+  ///
+  /// - `\\?\C:\Users\` ✅
+  /// - `\\?\UNC\someserver.com\someshare\files\spreadsheet.xlsx` ✅
   ///
   @inlinable
   public static var unsupportedWin32NamespacedPath: URLFromFilePathError {
@@ -330,11 +708,16 @@ public struct URLFromFilePathError: Error, Equatable, Hashable, CustomStringConv
   // '.transcodingFailure' is thrown by higher-level functions (e.g. System.FilePath -> WebURL),
   // but defined as part of URLFromFilePathError.
 
-  /// Transcoding the given path for inclusion in a URL failed.
+  /// The file path could not be transcoded.
   ///
-  /// File URLs can preserve the precise bytes of their path components by means of percent-encoding.
-  /// However, when the platform's native path representation uses non-8-bit code-units, those elements must be transcoded
-  /// to an 8-bit encoding suitable for percent-encoding.
+  /// Binary file paths must be in an ASCII-compatible (8-bit) encoding. If the platform's native
+  /// path representation uses a different encoding, it needs to be transcoded.
+  ///
+  /// On Windows, the platform's native path representation uses a 16-bit encoding of Unicode code-points,
+  /// and in general this can be transcoded to UTF-8 losslessly. However, in very rare cases the path may contain
+  /// invalid Unicode text (such as lone surrogates), which it is not possible to transcode.
+  ///
+  /// There is, unfortunately, no good answer to this.
   ///
   @inlinable
   public static var transcodingFailure: URLFromFilePathError {
@@ -557,42 +940,89 @@ internal func _urlFromFilePath_windows_UNC<Bytes>(
 
 extension WebURL {
 
-  /// Reconstructs a file path from its URL representation.
+  /// Reconstructs a binary file path from a URL.
   ///
-  /// This is a low-level function, which returns a file path as an array of 8-bit code-units. Correct usage requires detailed knowledge
-  /// of character sets and text encodings, and users should generally prefer higher-level APIs, such as `FilePath(url: WebURL)`
-  /// from the `WebURLSystemExtras` module.
+  /// In order to create a file path, the URL must satisfy two conditions:
   ///
-  /// ## Accepted URLs
+  /// - It must be a file URL, containing a semantically valid, non-relative path according to the ``FilePathFormat``.
+  /// - It must not contain any percent-encoded directory separators or NULL bytes.
   ///
-  /// This function only accepts URLs with a `file` scheme, whose paths do not contain percent-encoded path separators or `NULL` bytes.
-  /// For the `windows` format, the reconstructed path must be fully-qualified - meaning that it is either a UNC path, or begins with a drive-letter.
-  /// Note that not all URLs are compatible with all path formats. For example, there is no obvious way to construct a `posix` path to a remote host.
+  /// Otherwise, a ``FilePathFromURLError`` error will be thrown which can be used to provide diagnostics.
   ///
-  /// ## Encoding
+  /// Some minimal normalization is applied to the path according to the ``FilePathFormat`` (for example,
+  /// collapsing duplicate slashes, such as `/usr//bin` -> `/usr/bin`), and percent-encoding is removed.
   ///
-  /// This function returns an array of 8-bit code-units, formed by percent-decoding the URL's contents.
+  /// ### Encoding
   ///
-  /// - To use the returned path on a POSIX system, request null-terminated code-units and map/reinterpret them to the platform's `CChar` type.
-  ///   POSIX requires that the C `char` type be 8 bits, so this is safe. As paths on POSIX systems are opaque octets, the path should be used as-is.
+  /// Binary paths consist of bytes decoded from the URL. Depending on the platform's file path encoding,
+  /// some interpretation may be necessary.
   ///
-  /// - To use the returned path on a Windows system, some transcoding may be necessary as the system natively uses 16-bit code-units.
-  ///   This can be difficult, as in general there is no way to know how the file path was encoded, or how to interpret the bytes as textual code-points.
-  ///   A good strategy is to first interpret the bytes as UTF-8 and transcode to UTF-16. Should that fail, assume that code-units are from the
-  ///   system's active code-page and use the `MultiByteToWideChar` function to produce a UTF-16 file path.
+  /// - On POSIX (Apple, Linux, etc) systems, the returned path may be used directly (without transcoding).
+  ///   Request a null-terminated binary file path, then use the array's pointer as a C string when interacting
+  ///   with the operating system.
   ///
-  /// ## Normalization
+  /// - On Windows, we need to turn the bytes in to a set of Unicode code-points, in UTF-16 encoding.
   ///
-  /// Some minimal normalization is applied to the path, such as removing empty path components.
-  /// Unlike the `WebURL.fromBinaryFilePath` function, Windows path components are never trimmed.
+  ///   To do that, we need to guess how these bytes we received from some URL might be encoded.
+  ///   A good strategy is to first try transcoding from UTF-8 since it is self-validating and widely used,
+  ///   and if that fails, fall back to trying ANSI code-pages, including the system-specific "active" code-page.
+  ///   The platform's `MultiByteToWideChar` function is able to map these encodings to Unicode.
+  ///
+  /// ```swift
+  /// // This example demonstrates use on POSIX systems;
+  /// // Windows developers should convert to UTF-16 and use the '-W' family of platform functions.
+  /// // Or use swift-system's FilePath.
+  /// import Darwin // or Glibc, etc.
+  /// let openFn: (UnsafePointer<CChar>, Int32, mode_t) -> Int32 = Darwin.open
+  ///
+  /// // Start with a file URL.
+  /// let url = WebURL("file:///private/tmp/my%20file.dat")!
+  ///
+  /// // Reconstruct the binary file path.
+  /// let binaryPath = try WebURL.binaryFilePath(from: url, nullTerminated: true)
+  ///
+  /// // Handle signed CChar by rebinding.
+  /// binaryPath.withUnsafeBufferPointer {
+  ///   $0.withMemoryRebound(to: CChar.self) { cString in
+  ///     // Use the C string to interact with the OS.
+  ///     let descriptor = openFn(cString.baseAddress!, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IROTH)
+  ///     // ... write to file
+  ///     close(descriptor)
+  ///   }
+  /// }
+  /// ```
+  ///
+  /// > Tip:
+  /// > To work with binary file paths, we recommend developers use a dedicated file path type,
+  /// > such as swift-system's `FilePath`. The `FilePath(url: WebURL)` initializer from `WebURLSystemExtras` is
+  /// > the best way to construct a file path from a URL. It automatically handles platform-specific details
+  /// > such as transcoding on Windows.
+  /// >
+  /// > ```swift
+  /// > import WebURL
+  /// > import System
+  /// > import WebURLSystemExtras
+  /// >
+  /// > // Start with a file URL.
+  /// > let url = WebURL("file:///private/tmp/my%20file.dat")!
+  /// >
+  /// > // Reconstruct the file path.
+  /// > let path = try FilePath(url: url)
+  /// >
+  /// > // Open the file and write some data.
+  /// > let descriptor = try FileDescriptor.open(path, .readWrite, options: .create, permissions: [.ownerReadWrite, .otherRead])
+  /// > try descriptor.writeAll("hello, world!".utf8)
+  /// > try descriptor.close()
+  /// > ```
   ///
   /// - parameters:
   ///   - url:    The file URL.
-  ///   - format: The path format which should be constructed; either `.posix`, `.windows`, or `.native` (default).
-  ///   - nullTerminated: Whether the reconstructed file path bytes should include a null-terminator.
+  ///   - format: The kind of path to construct.
+  ///             The default is ``FilePathFormat/native``, which resolves to the correct format for the
+  ///             compile target.
+  ///   - nullTerminated: Whether the returned binary file path should include a null-terminator.
   ///
-  /// - returns: The reconstructed file path bytes from `url`.
-  /// - throws: `FilePathFromURLError`
+  /// - throws: ``FilePathFromURLError``
   ///
   @inlinable
   public static func binaryFilePath(
@@ -605,7 +1035,25 @@ extension WebURL {
   }
 }
 
-/// The reason why a file path could not be created from a given URL.
+/// The reason why a file path could not be created from a URL.
+///
+/// ## Topics
+///
+/// ### All URLs and Paths
+///
+/// - ``FilePathFromURLError/notAFileURL``
+/// - ``FilePathFromURLError/encodedPathSeparator``
+/// - ``FilePathFromURLError/encodedNullBytes``
+///
+/// ### POSIX Paths
+///
+/// - ``FilePathFromURLError/unsupportedNonLocalFile``
+///
+/// ### Windows Paths
+///
+/// - ``FilePathFromURLError/unsupportedHostname``
+/// - ``FilePathFromURLError/windowsPathIsNotFullyQualified``
+/// - ``FilePathFromURLError/transcodingFailure``
 ///
 public struct FilePathFromURLError: Error, Equatable, Hashable, CustomStringConvertible {
 
@@ -628,61 +1076,128 @@ public struct FilePathFromURLError: Error, Equatable, Hashable, CustomStringConv
     self._err = _err
   }
 
-  /// The given URL is not a `file:` URL.
+  /// The URL is not a `file:` URL.
   ///
   @inlinable
   public static var notAFileURL: FilePathFromURLError {
     FilePathFromURLError(.notAFileURL)
   }
 
-  /// The given URL contains a percent-encoded path separator.
+  /// The URL contains a percent-encoded path separator.
   ///
-  /// Typically, percent-encoded bytes in a URL are decoded when generating a file path, as percent-encoding is a URL feature that has no meaning to
-  /// a filesystem. However, if the decoded byte would be interpreted as a path separator in the given `FilePathFormat`,
-  /// decoding it would pose a security risk as it could be used to smuggle extra path components, including ".." components.
+  /// Consider the following example:
+  ///
+  /// ```swift
+  /// let url  = WebURL("file:///tmp/files/filename%2F..%2F..%2F..%2Fetc%2Fpasswd")!
+  /// let path = try WebURL.binaryFilePath(from: url, nullTerminated: true)
+  /// // ❌ - encoded path separator.
+  /// // This would otherwise return "/tmp/files/filename/../../../etc/passwd"
+  /// ```
+  ///
+  /// When a path component contains percent-encoding, it means the encoded byte is contained literally within
+  /// the component. However, path separators by definition cannot be contained within a path component, so
+  /// the path is invalid and potentially dangerous to decode.
+  ///
+  /// The path separators are defined by the ``FilePathFormat``. For POSIX paths, "%2F" (forward-slash) is prohibited,
+  /// and for Windows, both "%2F" and "%5C" (backwards-slash) are prohibited, as both are accepted as path separators.
   ///
   @inlinable
   public static var encodedPathSeparator: FilePathFromURLError {
     FilePathFromURLError(.encodedPathSeparator)
   }
 
-  /// The given URL contains a percent-encoded `NULL` byte.
+  /// The URL contains a percent-encoded NULL byte.
   ///
-  /// Typically, percent-encoded bytes in a URL are decoded when generating a file path, as percent-encoding is a URL feature that has no meaning to
-  /// a filesystem. However, if the decoded byte is a `NULL` byte, many systems would interpret that as the end of the path, which poses a security risk
-  /// as parts of the path could unexpectedly be discarded.
+  /// Consider the following example:
+  ///
+  /// ```swift
+  /// let url  = WebURL("file:///tmp/files/filename.doc%00.pdf")!
+  /// let path = try WebURL.binaryFilePath(from: url, nullTerminated: true)
+  /// // ❌ - encoded null byte.
+  /// // This would otherwise return "/tmp/files/filename.doc<null>.pdf"
+  /// ```
+  ///
+  /// When a path component contains percent-encoding, it means the encoded byte is contained literally within
+  /// the component. Technically, a path could contain NULL bytes, providing it was only accessed using counted
+  /// strings, but the prevalence of C interfaces using NULL-terminated strings makes it impractical and dangerous.
+  ///
+  /// Given the above string, `"/tmp/files/filename.doc<null>.pdf"`, a Swift application would interpret this
+  /// as accessing a PDF file, but if it travels through a C interface, the path may be truncated and
+  /// the operating system would read a DOC file. Attackers can use this to bypass validation routines.
   ///
   @inlinable
   public static var encodedNullBytes: FilePathFromURLError {
     FilePathFromURLError(.encodedNullBytes)
   }
 
-  /// The given URL refers to a file on a remote host, but they are not supported by the given `FilePathFormat`.
+  /// The URL contains a hostname, but the path format does not support hostnames.
   ///
-  /// For example, on POSIX systems, remote filesystems tend to be mounted at locations in the local filesystem, rather than using a special path format.
-  /// This means it is not obvious how to express a path to a remote filesystem using the `posix` path format.
+  /// Consider the following example:
+  ///
+  /// ```swift
+  /// let url = WebURL("file://janes-pc/docs/spring-summer-21.xlsx")!
+  /// url.hostname // "janes-pc"
+  /// url.path     // "/docs/spring-summer-21.xlsx"
+  ///
+  /// let windowsPath = try WebURL.binaryFilePath(from: url, format: .windows, nullTerminated: true)
+  /// // ✅ - "\\janes-pc\docs\spring-summer-21.xlsx"
+  /// // This is supported by Windows' UNC path syntax.
+  ///
+  /// let posixPath = try WebURL.binaryFilePath(from: url, format: .posix, nullTerminated: true)
+  /// // ❌ - Unsupported non-local file
+  /// // POSIX systems tend to work in a different way.
+  /// // They mount remote filesystems like local folders.
+  /// // e.g. "/Volumes/docs/spring-summer-21.xlsx"
+  /// ```
+  ///
+  /// Hostnames don't have any obvious meaning to the POSIX filesystem, and ignoring them
+  /// also isn't great (it would mean `"file://www.apple.com/etc/passwd"` accesses your local files,
+  /// just like `"file:///etc/passwd"`), so they are considered an error.
+  ///
+  /// If you have reason to ignore a file's hostname, set the URL's ``WebURL/hostname`` property to the empty string.
   ///
   @inlinable
   public static var unsupportedNonLocalFile: FilePathFromURLError {
     FilePathFromURLError(.unsupportedNonLocalFile)
   }
 
-  /// Creating a path with the given URL's hostname is not supported.
+  /// The URL's hostname is reserved by the path format.
   ///
-  /// `FilePathFormat`s which support remote hosts sometimes reserve particular hostnames.
-  /// For instance, Windows UNC paths with the hostname `.` are interpreted as referring to local devices (e.g. `\\.\COM1`).
-  /// For security reasons, URLs representing such paths are not decoded.
+  /// For instance, Windows UNC paths with the hostname "`.`" would be interpreted by the system
+  /// as referring to a local device (e.g. `\\.\COM1`). These are not files, and creating such paths
+  /// is prohibited by the ``FilePathFormat``.
   ///
   @inlinable
   public static var unsupportedHostname: FilePathFromURLError {
     FilePathFromURLError(.unsupportedHostname)
   }
 
-  /// The given URL does not represent a fully-qualified Windows path.
+  /// The URL does not contain a fully-qualified Windows path.
   ///
-  /// file URLs should always represent absolute locations on the filesystem.
-  /// For Windows platforms, this means it would be incorrect for a file URL to result in anything other than a fully-qualified path.
-  /// Windows paths are fully-qualified if they are UNC paths (i.e. have hostnames), or if their first component is a drive letter with a trailing separator.
+  /// Local paths must have a drive letter, followed by a path separator.
+  ///
+  /// ```swift
+  /// var url  = WebURL("file:///C:/Users/Alice/")
+  /// var path = try WebURL.binaryFilePath(from: url, format: .windows, nullTerminated: true)
+  /// // ✅ - "C:\Users\Alice\"
+  ///
+  /// url  = WebURL("file:///Users/Alice/")!
+  /// path = try WebURL.binaryFilePath(from: url, format: .windows, nullTerminated: true)
+  /// // ❌ - Not fully-qualified. No drive letter.
+  ///
+  /// url  = WebURL("file:///C:Users/Alice/")!
+  /// path = try WebURL.binaryFilePath(from: url, format: .windows, nullTerminated: true)
+  /// // ❌ - Not fully-qualified. This is a relative path on Windows.
+  ///
+  /// url  = WebURL("file:///C:")!
+  /// path = try WebURL.binaryFilePath(from: url, format: .windows, nullTerminated: true)
+  /// // ❌ - Not fully-qualified. This is a relative path on Windows.
+  /// ```
+  ///
+  /// If you need to repair a URL's path, consider using the ``WebURL/pathComponents-swift.property`` view.
+  ///
+  /// The ``FilePathFormat/windows`` documentation includes more information and resources
+  /// about the various kinds of relative paths on Windows.
   ///
   @inlinable
   public static var windowsPathIsNotFullyQualified: FilePathFromURLError {
@@ -692,11 +1207,24 @@ public struct FilePathFromURLError: Error, Equatable, Hashable, CustomStringConv
   // '.transcodingFailure' is thrown by higher-level functions (e.g. URL -> System.FilePath),
   // but defined as part of FilePathFromURLError.
 
-  /// The path created from the URL could not be transcoded to the system's encoding.
+  /// The URL's binary file path could not be transcoded.
   ///
-  /// File URLs can preserve the precise bytes of their path components by means of percent-encoding.
-  /// However, when the platform's native path representation uses non-8-bit code-units, those elements must be transcoded
-  /// from the percent-encoded 8-bit values to the system's native encoding.
+  /// Binary paths consist of bytes decoded from the URL. Depending on the platform's file path encoding,
+  /// some interpretation may be necessary.
+  ///
+  /// On Windows, we need to turn the bytes in to a set of Unicode code-points, in UTF-16 encoding.
+  /// To do that, we need to guess how these bytes we received from some URL might be encoded.
+  /// A good strategy is to first try transcoding from UTF-8 since it is self-validating and ubiquitous,
+  /// and if that fails, fall back to trying other ANSI code-pages, including the system-specific "active" code-page.
+  /// The platform's `MultiByteToWideChar` function is able to map these encodings to Unicode.
+  ///
+  /// This error is thrown by libraries such as `WebURLSystemExtras` when all else fails - the path isn't
+  /// UTF-8, isn't in the system's ANSI code-page, nor any other fallback encodings they tried (if any).
+  ///
+  /// > Tip:
+  /// > If you know the encoding used to create the file URL, you can transcode the binary file path to UTF-16 manually.
+  /// > Make sure to pay special attention to any code-points which map to path separators or periods
+  /// > (for ".." components).
   ///
   @inlinable
   public static var transcodingFailure: FilePathFromURLError {
@@ -924,7 +1452,7 @@ internal struct WindowsPathEncodeSet: PercentEncodeSet {
   @inlinable
   internal func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
     // Encode:
-    // - The `%` sign itself. Filesystem paths do not contain percent-encoding, and any character seqeuences which
+    // - The `%` sign itself. Filesystem paths do not contain percent-encoding, and any character sequences which
     //   look like percent-encoding are just coincidences.
     codePoint == ASCII.percentSign.codePoint
     // - Colons (`:`). These are interpreted as Windows drive letter delimiters; but *actual* drive letters
@@ -952,7 +1480,7 @@ internal struct POSIXPathEncodeSet: PercentEncodeSet {
   @inlinable
   internal func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
     // Encode:
-    // - The '%' sign itself. Filesystem paths do not contain percent-encoding, and any character seqeuences which
+    // - The '%' sign itself. Filesystem paths do not contain percent-encoding, and any character sequences which
     //   look like percent-encoding are just coincidences.
     codePoint == ASCII.percentSign.codePoint
     // - Backslashes (`\`). They are allowed in POSIX paths and are not separators.

@@ -591,7 +591,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     )
   }
 
-  /// A path parser which writes a properly percent-encoded, normalised URL path string
+  /// A path parser which writes a properly percent-encoded, normalized URL path string
   /// in to a correctly-sized, uninitialized buffer. Use `PathMetrics` to calculate the buffer's required size.
   ///
   @usableFromInline

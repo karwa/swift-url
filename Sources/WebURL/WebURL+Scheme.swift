@@ -157,7 +157,7 @@ extension WebURL.SchemeKind {
 
   /// Whether or not this scheme is considered "special".
   ///
-  /// URLs with special schemes may have additional constraints or normalisation rules.
+  /// URLs with special schemes may have additional constraints or normalization rules.
   ///
   @inlinable
   internal var isSpecial: Bool {

@@ -20,7 +20,7 @@
 extension WebURL {
 
   /// Special-purpose APIs intended for use by `WebURL*Extras` libraries or `WebURLTestSupport` only.
-  /// Please **do not use** these APIs. They may disappear, or their behaviour may change, at any time.
+  /// Please **do not use** these APIs. They may disappear, or their behavior may change, at any time.
   ///
   public struct _SPIs {
     @usableFromInline
@@ -33,7 +33,7 @@ extension WebURL {
   }
 
   /// Special-purpose APIs intended for use by `WebURL*Extras` libraries or `WebURLTestSupport` only.
-  /// Please **do not use** these APIs. They may disappear, or their behaviour may change, at any time.
+  /// Please **do not use** these APIs. They may disappear, or their behavior may change, at any time.
   ///
   @inlinable
   public var _spis: _SPIs {
