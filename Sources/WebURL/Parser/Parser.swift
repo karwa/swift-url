@@ -454,13 +454,14 @@ extension ParsedURLString.ProcessedMapping {
         hasAuthority = true
         writer.writeAuthoritySigil()
         writer.writeKnownAuthorityString(
-          baseAuthority, usernameLength: $1, passwordLength: $2, hostnameLength: $3, portLength: $4
+          baseAuthority, kind: $1, usernameLength: $2, passwordLength: $3, hostnameLength: $4, portLength: $5
         )
       }
 
     } else if schemeKind == .file {
       // 'file:' URLs have an implicit authority. [URL Standard: "file host" state]
       writer.writeAuthoritySigil()
+      writer.writeHostname(lengthIfKnown: 0, kind: .empty) { $0(EmptyCollection()) }
       hasAuthority = true
     }
 

@@ -112,6 +112,14 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
   @usableFromInline
   internal var schemeKind: WebURL.SchemeKind
 
+  /// A summary of this URL's `host`.
+  ///
+  /// `HostKind` only contains information about which kind of host this URL has. All hosts with the same kind are represented as the same,
+  /// so comparing the `hostKind` doesn't necessarily mean that they have the same host.
+  ///
+  @usableFromInline
+  internal var __hostKind: Optional<WebURL.HostKind>
+
   /// Whether this URL's path is opaque.
   ///
   /// An opaque path is just a string, rather than a list of components (e.g. `mailto:bob@example.com` or `javascript:alert("hello")`.
@@ -139,6 +147,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     firstPathComponentLength: SizeType,
     sigil: Sigil?,
     schemeKind: WebURL.SchemeKind,
+    hostKind: WebURL.HostKind?,
     hasOpaquePath: Bool,
     queryIsKnownFormEncoded: Bool
   ) {
@@ -153,6 +162,7 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     self.firstPathComponentLength = firstPathComponentLength
     self.__sigil = sigil
     self.schemeKind = schemeKind
+    self.__hostKind = hostKind
     self.hasOpaquePath = hasOpaquePath
     self.queryIsKnownFormEncoded = queryIsKnownFormEncoded
   }
@@ -177,6 +187,25 @@ internal struct URLStructure<SizeType: FixedWidthInteger> {
     set {
       // We're not seeing the same expensive runtime calls for the setter, so there's nothing to work around here.
       __sigil = newValue
+    }
+  }
+
+  /// A summary of this URL's `host`.
+  ///
+  /// `HostKind` only contains information about which kind of host this URL has. All hosts with the same kind are represented as the same,
+  /// so comparing the `hostKind` doesn't necessarily mean that they have the same host.
+  ///
+  @inlinable @inline(__always)
+  internal var hostKind: Optional<WebURL.HostKind> {
+    get {
+      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
+      // and use the spare bits.
+      guard let offset = MemoryLayout.offset(of: \Self.__hostKind) else { return __hostKind }
+      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<WebURL.HostKind>.self) }
+    }
+    set {
+      // We're not seeing the same expensive runtime calls for the setter, so there's nothing to work around here.
+      __hostKind = newValue
     }
   }
 }
@@ -451,6 +480,7 @@ extension URLStructure {
       firstPathComponentLength: SizeType(other.firstPathComponentLength),
       sigil: other.sigil,
       schemeKind: other.schemeKind,
+      hostKind: other.hostKind,
       hasOpaquePath: other.hasOpaquePath,
       queryIsKnownFormEncoded: other.queryIsKnownFormEncoded
     )
@@ -476,6 +506,7 @@ extension URLStructure {
       firstPathComponentLength: 0,
       sigil: nil,
       schemeKind: .other,
+      hostKind: nil,
       hasOpaquePath: true,
       queryIsKnownFormEncoded: false
     )
@@ -491,7 +522,7 @@ extension URLStructure {
       && portLength == other.portLength && pathLength == other.pathLength
       && firstPathComponentLength == other.firstPathComponentLength && queryLength == other.queryLength
       && fragmentLength == other.fragmentLength && sigil == other.sigil && schemeKind == other.schemeKind
-      && hasOpaquePath == other.hasOpaquePath
+      && hostKind == other.hostKind && hasOpaquePath == other.hasOpaquePath
   }
 
   /// Performs debug-mode checks to ensure that this URL structure does not contain invalid combinations of values.
@@ -520,12 +551,13 @@ extension URLStructure {
 
       switch sigil {
       case .authority:
-        break
+        assert(hostKind != nil, "Cannot have nil hostKind with authority")
       case .path:
         assert(firstPathComponentLength == 1, "Path sigil present, but path does not begin with an empty component")
         assert(pathLength > 1, "Path sigil present, but path is too short to need one")
         fallthrough
       default:
+        assert(hostKind == nil, "A URL without authority has a nil hostKind")
         assert(usernameLength == 0, "A URL without authority cannot have a username")
         assert(passwordLength == 0, "A URL without authority cannot have a password")
         assert(hostnameLength == 0, "A URL without authority cannot have a hostname")
@@ -539,6 +571,23 @@ extension URLStructure {
         assert(sigil == .authority, "URLs with special schemes must have an authority")
         assert(pathLength != 0, "URLs with special schemes must have a path")
         assert(!hasOpaquePath, "URLs with special schemes cannot have opaque paths")
+      }
+
+      switch hostKind {
+      case .ipv4Address, .domain:
+        assert(schemeKind.isSpecial, "Only URLs with special schemes can have IPv4 or domain hosts")
+        assert(hostnameLength > 0, "IPv4/domain hostKinds cannot have empty hostnames")
+      case .empty:
+        if schemeKind.isSpecial {
+          assert(schemeKind == .file, "The only special URL which allows empty hostnames is file")
+        }
+        assert(hostnameLength == 0, "Empty hostKind must have zero-length hostname")
+      case .ipv6Address:
+        assert(hostnameLength > 2, "IPv6 literals must be more than 2 characters")
+      case .opaque:
+        assert(hostnameLength > 0, "Opaque hostKinds cannot have empty hostnames")
+      case .none:
+        assert(hostnameLength == 0, "Nil hostKind must have zero-length hostname")
       }
 
       if cannotHaveCredentialsOrPort {
@@ -750,17 +799,18 @@ extension URLStorage {
   internal func withUTF8OfAllAuthorityComponents<T>(
     _ body: (
       _ authorityString: UnsafeBufferPointer<UInt8>?,
+      _ hostKind: WebURL.HostKind?,
       _ usernameLength: Int,
       _ passwordLength: Int,
       _ hostnameLength: Int,
       _ portLength: Int
     ) -> T
   ) -> T {
-    guard let range = structure.rangeOfAuthorityString else { return body(nil, 0, 0, 0, 0) }
+    guard let range = structure.rangeOfAuthorityString else { return body(nil, nil, 0, 0, 0, 0) }
     // Note: ManagedArrayBuffer.withUnsafeBufferPointer(range:) is bounds-checked.
     return codeUnits.withUnsafeBufferPointer(range: range.toCodeUnitsIndices()) { buffer in
       body(
-        buffer,
+        buffer, structure.hostKind,
         Int(structure.usernameLength), Int(structure.passwordLength),
         Int(structure.hostnameLength), Int(structure.portLength)
       )
@@ -779,7 +829,7 @@ internal let _tempStorage = URLStorage(
   structure: URLStructure(
     schemeLength: 2, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
     portLength: 0, pathLength: 0, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 0,
-    sigil: nil, schemeKind: .other, hasOpaquePath: true, queryIsKnownFormEncoded: true),
+    sigil: nil, schemeKind: .other, hostKind: nil, hasOpaquePath: true, queryIsKnownFormEncoded: true),
   initializingCodeUnitsWith: { buffer in
     buffer[0] = ASCII.a.codePoint
     buffer[1] = ASCII.colon.codePoint

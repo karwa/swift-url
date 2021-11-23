@@ -252,6 +252,7 @@ extension URLStorage {
         // nil -> empty string. Insert authority sigil, overwriting path sigil if present.
         case .some:
           newStructure.sigil = .authority
+          newStructure.hostKind = .empty
           return replaceSubrange(
             structure.rangeForReplacingSigil,
             withUninitializedSpace: Sigil.authority.length,
@@ -271,6 +272,7 @@ extension URLStorage {
             PathComponentParser.doesNormalizedPathRequirePathSigil(codeUnits[$0])
           } ?? false
           newStructure.sigil = needsPathSigil ? .path : .none
+          newStructure.hostKind = nil
           return withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in
             commands += .replace(
               structure.rangeForReplacingSigil,
@@ -281,6 +283,7 @@ extension URLStorage {
           }
         // hostname -> empty string. Preserve existing sigil, only remove the hostname contents.
         case .some:
+          newStructure.hostKind = .empty
           removeSubrange(hostnameRange, newStructure: newStructure)
           return .success
         }
@@ -303,6 +306,7 @@ extension URLStorage {
     }
 
     newStructure.sigil = .authority
+    newStructure.hostKind = newLengthCounter.hostKind
     newStructure.hostnameLength = newValueLength
 
     return withUnsafeSmallStack_2(of: ReplaceSubrangeOperation.self) { commands in

@@ -419,45 +419,55 @@ extension WebURLTests {
     // [Deviation] Swift model allows setting hostname to nil (removing it, not just making it empty).
     // Special schemes do not allow 'nil' hostnames.
     XCTAssertEqual(url.scheme, "http")
+    XCTAssertEqual(url.hostKind, .domain)
     XCTAssertThrowsSpecific(URLSetterError.schemeDoesNotSupportNilOrEmptyHostnames) {
       try url.setHostname(String?.none)
     }
     XCTAssertEqual(url.serialized(), "http://example.com/")
+    XCTAssertEqual(url.hostKind, .domain)
     XCTAssertURLIsIdempotent(url)
 
     // 'file' allows empty hostnames, but not 'nil' hostnames.
     url = WebURL("file:///some/path")!
     XCTAssertEqual(url.hostname, "")
+    XCTAssertEqual(url.hostKind, .empty)
     XCTAssertEqual(url.scheme, "file")
     XCTAssertEqual(url.serialized(), "file:///some/path")
     XCTAssertThrowsSpecific(URLSetterError.schemeDoesNotSupportNilOrEmptyHostnames) {
       try url.setHostname(String?.none)
     }
     XCTAssertEqual(url.serialized(), "file:///some/path")
+    XCTAssertEqual(url.hostKind, .empty)
     XCTAssertURLIsIdempotent(url)
 
     // Non-special schemes allow 'nil' hostnames.
     url = WebURL("unix:///some/path")!
+    XCTAssertEqual(url.hostKind, .empty)
     XCTAssertNoThrow(try url.setHostname(String?.none))
+    XCTAssertNil(url.hostKind)
     XCTAssertEqual(url.serialized(), "unix:/some/path")
     XCTAssertURLIsIdempotent(url)
     // But not if they already have credentials or ports.
     url = WebURL("unix://user:pass@example/some/path")!
     XCTAssertEqual(url.hostname, "example")
     XCTAssertEqual(url.username, "user")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertThrowsSpecific(URLSetterError.cannotSetEmptyHostnameWithCredentialsOrPort) {
       try url.setHostname(String?.none)
     }
     XCTAssertEqual(url.serialized(), "unix://user:pass@example/some/path")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertURLIsIdempotent(url)
 
     url = WebURL("unix://example:99/some/path")!
     XCTAssertEqual(url.hostname, "example")
     XCTAssertEqual(url.port, 99)
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertThrowsSpecific(URLSetterError.cannotSetEmptyHostnameWithCredentialsOrPort) {
       try url.setHostname(String?.none)
     }
     XCTAssertEqual(url.serialized(), "unix://example:99/some/path")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertURLIsIdempotent(url)
     // When setting a hostname to/from 'nil', we may need to add/remove a path sigil.
     do {
@@ -465,6 +475,7 @@ extension WebURLTests {
         XCTAssertEqual(url.serialized(), "web+demo:/.//not-a-host/test")
         XCTAssertEqual(url.storage.structure.sigil, .path)
         XCTAssertEqual(url.hostname, nil)
+        XCTAssertEqual(url.hostKind, nil)
         XCTAssertEqual(url.path, "//not-a-host/test")
         XCTAssertURLIsIdempotent(url)
       }
@@ -472,6 +483,7 @@ extension WebURLTests {
         XCTAssertEqual(url.serialized(), "web+demo://\(hostname)//not-a-host/test")
         XCTAssertEqual(url.storage.structure.sigil, .authority)
         XCTAssertEqual(url.hostname, hostname)
+        XCTAssertEqual(url.hostKind, hostname.isEmpty ? .empty : .opaque)
         XCTAssertEqual(url.path, "//not-a-host/test")
         XCTAssertURLIsIdempotent(url)
       }
@@ -492,6 +504,7 @@ extension WebURLTests {
     // [Throw] Cannot set hostname on URLs with opaque paths.
     url = WebURL("mailto:bob")!
     XCTAssertNil(url.hostname)
+    XCTAssertNil(url.hostKind)
     XCTAssertTrue(url.hasOpaquePath)
     XCTAssertEqual(url.serialized(), "mailto:bob")
     XCTAssertThrowsSpecific(URLSetterError.cannotSetHostWithOpaquePath) {
@@ -503,48 +516,58 @@ extension WebURLTests {
     // [Throw] Cannot set empty hostname on special schemes.
     url = WebURL("http://example.com/p1/p2")!
     XCTAssertEqual(url.hostname, "example.com")
+    XCTAssertEqual(url.hostKind, .domain)
     XCTAssertEqual(url.serialized(), "http://example.com/p1/p2")
     XCTAssertThrowsSpecific(URLSetterError.schemeDoesNotSupportNilOrEmptyHostnames) {
       try url.setHostname("")
     }
     XCTAssertEqual(url.serialized(), "http://example.com/p1/p2")
+    XCTAssertEqual(url.hostKind, .domain)
     XCTAssertURLIsIdempotent(url)
 
     // [Throw] Cannot set empty hostname if the URL contains credentials or port.
     url = WebURL("foo://user@example.com/p1/p2")!
     XCTAssertEqual(url.username, "user")
     XCTAssertEqual(url.hostname, "example.com")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertEqual(url.serialized(), "foo://user@example.com/p1/p2")
     XCTAssertThrowsSpecific(URLSetterError.cannotSetEmptyHostnameWithCredentialsOrPort) {
       try url.setHostname("")
     }
     XCTAssertEqual(url.serialized(), "foo://user@example.com/p1/p2")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertURLIsIdempotent(url)
 
     url = WebURL("foo://example.com:8080/p1/p2")!
     XCTAssertEqual(url.port, 8080)
     XCTAssertEqual(url.hostname, "example.com")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertEqual(url.serialized(), "foo://example.com:8080/p1/p2")
     XCTAssertThrowsSpecific(URLSetterError.cannotSetEmptyHostnameWithCredentialsOrPort) {
       try url.setHostname("")
     }
     XCTAssertEqual(url.serialized(), "foo://example.com:8080/p1/p2")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertURLIsIdempotent(url)
 
     // [Throw] Invalid hostnames.
     url = WebURL("foo://example.com/")!
     XCTAssertEqual(url.hostname, "example.com")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertEqual(url.serialized(), "foo://example.com/")
     XCTAssertThrowsSpecific(URLSetterError.invalidHostname) { try url.setHostname("@") }
     XCTAssertEqual(url.serialized(), "foo://example.com/")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertURLIsIdempotent(url)
 
     XCTAssertThrowsSpecific(URLSetterError.invalidHostname) { try url.setHostname("/a/b/c") }
     XCTAssertEqual(url.serialized(), "foo://example.com/")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertURLIsIdempotent(url)
 
     XCTAssertThrowsSpecific(URLSetterError.invalidHostname) { try url.setHostname("[:::]") }
     XCTAssertEqual(url.serialized(), "foo://example.com/")
+    XCTAssertEqual(url.hostKind, .opaque)
     XCTAssertURLIsIdempotent(url)
   }
 
@@ -919,6 +942,7 @@ extension WebURLTests {
     // Non-IP hostnames in special URLs are always domains.
     do {
       let url = WebURL("http://example.com/aPath?aQuery#andFragment, too")!
+      XCTAssertEqual(url.hostKind, .domain)
       if case .domain("example.com") = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
       } else {
@@ -929,6 +953,7 @@ extension WebURLTests {
     // Non-IP hostnames in non-special URLs are always opaque hostnames.
     do {
       let url = WebURL("foo://example.com/aPath?aQuery#andFragment, too")!
+      XCTAssertEqual(url.hostKind, .opaque)
       if case .opaque("example.com") = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
       } else {
@@ -939,6 +964,7 @@ extension WebURLTests {
     // Special URLs detect IPv4 addresses.
     do {
       let url = WebURL("http://0xbadf00d/aPath?aQuery#andFragment, too")!
+      XCTAssertEqual(url.hostKind, .ipv4Address)
       if case .ipv4Address(.init(octets: (11, 173, 240, 13))) = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
       } else {
@@ -948,6 +974,7 @@ extension WebURLTests {
     // Non-special URLs do not.
     do {
       let url = WebURL("foo://11.173.240.13/aPath?aQuery#andFragment, too")!
+      XCTAssertEqual(url.hostKind, .opaque)
       if case .opaque("11.173.240.13") = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
       } else {
@@ -958,6 +985,7 @@ extension WebURLTests {
     // Both special and non-special URLs detect IPv6 addresses.
     do {
       let url = WebURL("http://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
+      XCTAssertEqual(url.hostKind, .ipv6Address)
       if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
       } else {
@@ -966,6 +994,7 @@ extension WebURLTests {
     }
     do {
       let url = WebURL("foo://[::127.0.0.1]/aPath?aQuery#andFragment, too")!
+      XCTAssertEqual(url.hostKind, .ipv6Address)
       if case .ipv6Address(.init(pieces: (0, 0, 0, 0, 0, 0, 0x7f00, 0x0001), .numeric)) = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
       } else {
@@ -976,6 +1005,7 @@ extension WebURLTests {
     // File and non-special URLs may have empty hostnames.
     do {
       let url = WebURL("file:///usr/bin/swift")!
+      XCTAssertEqual(url.hostKind, .empty)
       if case .empty = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
         XCTAssertEqual(url.host?.serialized, "")
@@ -985,6 +1015,7 @@ extension WebURLTests {
     }
     do {
       let url = WebURL("foo:///some/path")!
+      XCTAssertEqual(url.hostKind, .empty)
       if case .empty = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
         XCTAssertEqual(url.host?.serialized, "")
@@ -996,6 +1027,7 @@ extension WebURLTests {
     // Path-only and URLs with opaque paths do not have hosts.
     do {
       let url = WebURL("foo:/path/only")!
+      XCTAssertNil(url.hostKind)
       if case .none = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
         XCTAssertFalse(url.hasOpaquePath)
@@ -1005,6 +1037,7 @@ extension WebURLTests {
     }
     do {
       let url = WebURL("foo:some non-path")!
+      XCTAssertNil(url.hostKind)
       if case .none = url.host {
         XCTAssertEqual(url.host?.serialized, url.hostname)
         XCTAssertTrue(url.hasOpaquePath)

@@ -23,7 +23,7 @@ extension WebURL {
   /// Two URLs with the same `SchemeKind` may have different schemes if the scheme is not special.
   ///
   @usableFromInline
-  enum SchemeKind {
+  internal enum SchemeKind {
     case ftp
     case file
     case http

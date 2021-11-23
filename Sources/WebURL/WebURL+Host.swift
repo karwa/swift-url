@@ -14,6 +14,17 @@
 
 extension WebURL {
 
+  /// The kind of host contained in a URL.
+  ///
+  @usableFromInline
+  internal enum HostKind {
+    case ipv4Address
+    case ipv6Address
+    case domain
+    case opaque
+    case empty
+  }
+
   /// A host is a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
   /// Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.
   ///
@@ -92,6 +103,7 @@ extension WebURL.Host: CustomStringConvertible {
 
 #if swift(>=5.5) && canImport(_Concurrency)
   extension WebURL.Host: Sendable {}
+  extension WebURL.HostKind: Sendable {}
 #endif
 
 
