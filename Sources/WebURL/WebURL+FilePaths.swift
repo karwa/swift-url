@@ -898,7 +898,7 @@ internal var _emptyFileURL: WebURL {
       structure: URLStructure(
         schemeLength: 5, usernameLength: 0, passwordLength: 0, hostnameLength: 0,
         portLength: 0, pathLength: 1, queryLength: 0, fragmentLength: 0, firstPathComponentLength: 1,
-        sigil: .authority, schemeKind: .file, hasOpaquePath: false, queryIsKnownFormEncoded: true),
+        sigil: .authority, schemeKind: .file, hostKind: .empty, hasOpaquePath: false, queryIsKnownFormEncoded: true),
       initializingCodeUnitsWith: { buffer in
         ("file:///" as StaticString).withUTF8Buffer { buffer.fastInitialize(from: $0) }
       }

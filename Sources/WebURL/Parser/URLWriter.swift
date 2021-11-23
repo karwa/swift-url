@@ -89,7 +89,7 @@ internal protocol URLWriter: HostnameWriter {
   /// Note that `hostnameWriter` is not guaranteed to be invoked.
   ///
   mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ hostnameWriter: (PieceWriter<T>) -> Void
+    lengthIfKnown: Int?, kind: WebURL.HostKind?, _ hostnameWriter: (PieceWriter<T>) -> Void
   ) where T: Collection, T.Element == UInt8
 
   /// Appends the port separator character (`:`), followed by the textual representation of the given port number, to the URL string.
@@ -104,7 +104,7 @@ internal protocol URLWriter: HostnameWriter {
   /// - important: `passwordLength` and `portLength` include their required leading separators (so a port component of `:8080` has a length of 5).
   ///
   mutating func writeKnownAuthorityString(
-    _ authority: UnsafeBufferPointer<UInt8>,
+    _ authority: UnsafeBufferPointer<UInt8>, kind: WebURL.HostKind?,
     usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
   )
 
@@ -344,10 +344,12 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
   @inlinable
   internal mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ hostnameWriter: (PieceWriter<T>) -> Void
+    lengthIfKnown: Int?, kind: WebURL.HostKind?, _ hostnameWriter: (PieceWriter<T>) -> Void
   ) where T: Collection, T.Element == UInt8 {
 
     assert(structure.hostnameLength == 0)
+    assert(structure.hostKind == nil)
+    structure.hostKind = kind
     if let knownLength = lengthIfKnown {
       structure.hostnameLength = UInt(bitPattern: knownLength)
       requiredCapacity &+= structure.hostnameLength
@@ -368,12 +370,14 @@ internal struct StructureAndMetricsCollector: URLWriter {
 
   @inlinable
   internal mutating func writeKnownAuthorityString(
-    _ authority: UnsafeBufferPointer<UInt8>,
+    _ authority: UnsafeBufferPointer<UInt8>, kind: WebURL.HostKind?,
     usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
   ) {
 
     assert(structure.usernameLength == 0 && structure.passwordLength == 0)
     assert(structure.hostnameLength == 0 && structure.portLength == 0)
+    assert(structure.hostKind == nil)
+    structure.hostKind = kind
     structure.usernameLength = UInt(bitPattern: usernameLength)
     structure.passwordLength = UInt(bitPattern: passwordLength)
     structure.hostnameLength = UInt(bitPattern: hostnameLength)
@@ -550,7 +554,7 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
 
   @inlinable
   internal mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ hostnameWriter: (PieceWriter<T>) -> Void
+    lengthIfKnown: Int?, kind: WebURL.HostKind?, _ hostnameWriter: (PieceWriter<T>) -> Void
   ) where T: Collection, T.Element == UInt8 {
     hostnameWriter { _writeBytes($0) }
   }
@@ -568,7 +572,7 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
 
   @inlinable
   internal mutating func writeKnownAuthorityString(
-    _ authority: UnsafeBufferPointer<UInt8>,
+    _ authority: UnsafeBufferPointer<UInt8>, kind: WebURL.HostKind?,
     usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
   ) {
     _writeBytes(authority)
@@ -642,7 +646,7 @@ internal protocol HostnameWriter {
   /// The content must already be percent-encoded/IDNA-transformed and not include any separators.
   ///
   mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ hostnameWriter: ((T) -> Void) -> Void
+    lengthIfKnown: Int?, kind: WebURL.HostKind?, _ hostnameWriter: ((T) -> Void) -> Void
   ) where T: Collection, T.Element == UInt8
 }
 
@@ -659,21 +663,43 @@ internal struct HostnameLengthCounter: HostnameWriter {
   @usableFromInline
   internal private(set) var requiredCapacity: UInt
 
+  @usableFromInline
+  internal private(set) var __hostKind: Optional<WebURL.HostKind>
+
   @inlinable
   internal init() {
     self.requiredCapacity = 0
+    self.__hostKind = nil
   }
 
   @inlinable
   internal mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ writerFunc: ((T) -> Void) -> Void
+    lengthIfKnown: Int?, kind: WebURL.HostKind?, _ writerFunc: ((T) -> Void) -> Void
   ) where T: Collection, T.Element == UInt8 {
+    hostKind = kind
     if let knownLength = lengthIfKnown {
       requiredCapacity = UInt(bitPattern: knownLength)
       return
     }
     writerFunc { piece in
       requiredCapacity &+= UInt(bitPattern: piece.count)
+    }
+  }
+
+  // This is a workaround to avoid expensive 'outlined init with take' calls.
+  // https://bugs.swift.org/browse/SR-15215
+  // https://forums.swift.org/t/expensive-calls-to-outlined-init-with-take/52187
+  @inlinable @inline(__always)
+  internal var hostKind: Optional<WebURL.HostKind> {
+    get {
+      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
+      // and use the spare bits.
+      guard let offset = MemoryLayout.offset(of: \Self.__hostKind) else { return __hostKind }
+      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<WebURL.HostKind>.self) }
+    }
+    set {
+      // We're not seeing the same expensive runtime calls for the setter, so there's nothing to work around here.
+      __hostKind = newValue
     }
   }
 }
@@ -696,7 +722,7 @@ internal struct UnsafeBufferHostnameWriter: HostnameWriter {
 
   @inlinable
   internal mutating func writeHostname<T>(
-    lengthIfKnown: Int?, _ writerFunc: ((T) -> Void) -> Void
+    lengthIfKnown: Int?, kind: WebURL.HostKind?, _ writerFunc: ((T) -> Void) -> Void
   ) where T: Collection, T.Element == UInt8 {
     writerFunc { piece in
       // This will never over-write the buffer.

@@ -151,7 +151,12 @@ extension WebURL {
   // Required by the parser.
   @inlinable
   internal var schemeKind: WebURL.SchemeKind {
-    storage.schemeKind
+    storage.structure.schemeKind
+  }
+
+  @inlinable
+  internal var hostKind: HostKind? {
+    storage.structure.hostKind
   }
 }
 

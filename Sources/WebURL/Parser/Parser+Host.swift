@@ -268,26 +268,26 @@ extension ParsedHost {
 
     switch self {
     case .empty:
-      writer.writeHostname(lengthIfKnown: 0) { $0(EmptyCollection()) }
+      writer.writeHostname(lengthIfKnown: 0, kind: .empty) { $0(EmptyCollection()) }
 
     case .asciiDomain(let domainInfo):
       if domainInfo.needsDecodeOrLowercasing {
-        writer.writeHostname(lengthIfKnown: domainInfo.decodedCount) {
+        writer.writeHostname(lengthIfKnown: domainInfo.decodedCount, kind: .domain) {
           $0(ASCII.Lowercased(bytes.lazy.percentDecoded()))
         }
       } else {
-        writer.writeHostname(lengthIfKnown: domainInfo.decodedCount) {
+        writer.writeHostname(lengthIfKnown: domainInfo.decodedCount, kind: .domain) {
           $0(bytes)
         }
       }
 
     case .opaque(let hostnameInfo):
       if hostnameInfo.needsPercentEncoding {
-        writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount) { writePiece in
+        writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount, kind: .opaque) { writePiece in
           _ = bytes.lazy.percentEncoded(using: .c0ControlSet).write(to: writePiece)
         }
       } else {
-        writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount) { writePiece in
+        writer.writeHostname(lengthIfKnown: hostnameInfo.encodedCount, kind: .opaque) { writePiece in
           writePiece(bytes)
         }
       }
@@ -295,7 +295,7 @@ extension ParsedHost {
     // For IPv4/v6 addresses, it's actually faster not to use 'lengthIfKnown' because it means
     // hoisting '.serializedDirect' outside of 'writeHostname', and for some reason that's a lot slower.
     case .ipv4Address(let addr):
-      writer.writeHostname(lengthIfKnown: nil) { (writePiece: (UnsafeRawBufferPointer) -> Void) in
+      writer.writeHostname(lengthIfKnown: nil, kind: .ipv4Address) { (writePiece: (UnsafeRawBufferPointer) -> Void) in
         var serialized = addr.serializedDirect
         withUnsafeBytes(of: &serialized.buffer) { bufferBytes in
           writePiece(UnsafeRawBufferPointer(start: bufferBytes.baseAddress, count: Int(serialized.count)))
@@ -303,7 +303,7 @@ extension ParsedHost {
       }
 
     case .ipv6Address(let addr):
-      writer.writeHostname(lengthIfKnown: nil) { (writePiece: (UnsafeRawBufferPointer) -> Void) in
+      writer.writeHostname(lengthIfKnown: nil, kind: .ipv6Address) { (writePiece: (UnsafeRawBufferPointer) -> Void) in
         var serialized = addr.serializedDirect
         withUnsafeBytes(of: &serialized.buffer) { bufferBytes in
           var bracket = ASCII.leftSquareBracket.codePoint
