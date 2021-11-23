@@ -23,9 +23,11 @@ extension WebURL {
   /// Please **do not use** these APIs. They may disappear, or their behaviour may change, at any time.
   ///
   public struct _SPIs {
-    fileprivate var _url: WebURL
+    @usableFromInline
+    internal var _url: WebURL
 
-    fileprivate init(_url: WebURL) {
+    @inlinable
+    internal init(_url: WebURL) {
       self._url = _url
     }
   }
@@ -33,6 +35,7 @@ extension WebURL {
   /// Special-purpose APIs intended for use by `WebURL*Extras` libraries or `WebURLTestSupport` only.
   /// Please **do not use** these APIs. They may disappear, or their behaviour may change, at any time.
   ///
+  @inlinable
   public var _spis: _SPIs {
     get { _SPIs(_url: self) }
     set { self = newValue._url }
@@ -49,6 +52,7 @@ extension WebURL._SPIs {
 
   /// Whether or not this URL's scheme is considered "special".
   ///
+  @inlinable
   public var _isSpecial: Bool {
     _url.schemeKind.isSpecial
   }
@@ -86,5 +90,30 @@ extension WebURL._SPIs {
       absolutePathsCopyWindowsDriveFromBase: false  // no baseURL
     )
     return writer.path
+  }
+}
+
+extension WebURL._SPIs {
+
+  public enum _HostKind {
+    case ipv4Address
+    case ipv6Address
+    case domain
+    case opaque
+    case empty
+  }
+
+  /// Returns the kind of host this URL has.
+  ///
+  @inlinable
+  public var _hostKind: _HostKind? {
+    switch _url.hostKind {
+    case .ipv4Address: return .ipv4Address
+    case .ipv6Address: return .ipv6Address
+    case .domain: return .domain
+    case .opaque: return .opaque
+    case .empty: return .empty
+    case .none: return .none
+    }
   }
 }
