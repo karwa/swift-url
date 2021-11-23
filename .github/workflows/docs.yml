@@ -9,21 +9,107 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v1
-      - name: Generate Documentation
-        uses: karwa/swift-doc@linux-fixes
+      # 1. Checkout the package (we need a full clone in order to get tags).
+      #    This must be the root folder for 'github-pages-deploy-action' to work.
+      - name: Checkout Package
+        uses: actions/checkout@v2
         with:
-          inputs: "Sources/WebURL"
-          module-name: WebURL
-          output: "Documentation"
-          base-url: "/swift-url/"
-          format: html
-          excluded-symbols: docs-excluded-symbols
+          fetch-depth: 0
+
+      # 2. Download and Install Swift 5.5.1
+      - name: Download Swift 5.5.1
+        run: wget -q https://download.swift.org/swift-5.5.1-release/ubuntu2004/swift-5.5.1-RELEASE/swift-5.5.1-RELEASE-ubuntu20.04.tar.gz
+      - name: Extract Swift 5.5.1
+        run: tar xzf swift-5.5.1-RELEASE-ubuntu20.04.tar.gz
+      - name: Add Swift toolchain to PATH
+        run: |
+          echo "$GITHUB_WORKSPACE/swift-5.5.1-RELEASE-ubuntu20.04/usr/bin" >> $GITHUB_PATH
+
+      # 3. Checkout and build Swift-DocC (TODO: Remove once docc is included in the toolchain DL)
+      - name: Checkout swift-docc
+        uses: actions/checkout@v2
+        with:
+          repository: karwa/swift-docc
+          ref: main
+          path: swift-docc
+      - name: Cache DocC
+        id: cache-docc
+        uses: actions/cache@v2
+        with:
+          key: swift-url-docc-build
+          path: swift-docc/.build
+      - name: Build swift-docc
+        if: ${{ !steps.cache-docc.outputs.cache-hit }}
+        run: |
+          cd swift-docc; swift build --product docc -c release; cd ..
+
+      # 4. Checkout and build custom Swift-DocC-Render
+      - name: Checkout swift-docc-render
+        uses: actions/checkout@v2
+        with:
+          repository: karwa/swift-docc-render
+          ref: main
+          path: swift-docc-render
+      - name: Build swift-docc-render
+        run: |
+          cd swift-docc-render; npm install && npm run build; cd ..
+
+      # 5. Checkout the gh-pages branch (we want to add to what is already there)
+      - name: Checkout gh-pages Branch
+        uses: actions/checkout@v2
+        with:
+          ref: gh-pages
+          path: docs-out
+
+      # 6. Generate docs for main branch, replacing the existing docs for main.
+      - name: (main) Clear existing docs
+        run: rm -rf docs-out/.git && rm -rf docs-out/main && mkdir -p docs-out/main
+      - name: (main) Generate SymbolGraph
+        run: |
+          mkdir -p .build/symbol-graphs && swift build --target WebURL -Xswiftc -emit-symbol-graph -Xswiftc -emit-symbol-graph-dir -Xswiftc .build/symbol-graphs
+      - name: (main) Build Documentation
+        run: |
+          export DOCC_HTML_DIR="$(pwd)/swift-docc-render/dist" && swift-docc/.build/release/docc convert Sources/WebURL/WebURL.docc --fallback-display-name WebURL --fallback-bundle-identifier com.karwa.WebURL --fallback-bundle-version 0.0.0 --additional-symbol-graph-dir .build/symbol-graphs --transform-for-static-hosting --static-hosting-base-path /swift-url-docs-test/main --output-path docs-out/main
+      
+      # 7. Find out if documentation has already been generated for the latest tag.
+      - name: (latest-tag) Find the Latest Tag
+        run: |
+          echo "latest-tag=$(git tag -l | tail -1)" >> $GITHUB_ENV
+      - name: (latest-tag) Check if Documentation Exists
+        run: |
+          [ -d docs-out/${{ env.latest-tag }} ] && echo "latest-tag-has-docs=1" >> $GITHUB_ENV
+
+      # 8. If there is no documentation for the latest tag, build it.
+      - name: (latest-tag) Checkout Package
+        if: ${{ !env.latest-tag-has-docs }}
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ env.latest-tag }}
+          path: latest-tag
+          clean: false
+      - name: (latest tag) Generate SymbolGraph 
+        if: ${{ !env.latest-tag-has-docs }}
+        run: |
+          pushd latest-tag && mkdir -p .build/symbol-graphs && swift build --target WebURL -Xswiftc -emit-symbol-graph -Xswiftc -emit-symbol-graph-dir -Xswiftc .build/symbol-graphs && popd
+      - name: (latest tag) Create Output Directory
+        if: ${{ !env.latest-tag-has-docs }}
+        run: |
+          mkdir -p docs-out/${{ env.latest-tag }}
+      - name: (latest tag) Build Documentation
+        if: ${{ !env.latest-tag-has-docs }}
+        run: |
+          pushd latest-tag && export DOCC_HTML_DIR="$(pwd)/../swift-docc-render/dist" && ../swift-docc/.build/release/docc convert Sources/WebURL/WebURL.docc --fallback-display-name WebURL --fallback-bundle-identifier com.karwa.WebURL --fallback-bundle-version ${{ env.latest-tag }} --additional-symbol-graph-dir .build/symbol-graphs --transform-for-static-hosting --static-hosting-base-path /swift-url-docs-test/${{ env.latest-tag }} --output-path ../docs-out/${{ env.latest-tag }} && popd
+      - name: (latest tag) Update symlink
+        if: ${{ !env.latest-tag-has-docs }}
+        run: |
+          pushd docs-out && ln -sfn ${{ env.latest-tag }} latest && popd
+      
+      # 9. Publish the result
       - name: Fix permissions
-        run: 'sudo chown --recursive $USER Documentation'
+        run: 'sudo chown --recursive $USER docs-out'
       - name: Publish documentation to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@4.1.1
+        uses: JamesIves/github-pages-deploy-action@4.1.7
         with:
           branch: gh-pages
-          folder: Documentation
+          folder: docs-out
           single-commit: true
