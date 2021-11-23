@@ -28,6 +28,7 @@ LazilyPercentDecodedWithSubstitutions.Index
 WebURL.PathComponents.Index
 WebURL.FormEncodedQueryParameters.KeyValuePairs.Iterator
 Collection._longestSubrange(equalTo:)
+WebURL._SPIs
 
 IPv4Address.ParserResult
 IPv4Address.parse(utf8:)

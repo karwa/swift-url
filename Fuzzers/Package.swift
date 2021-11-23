@@ -21,7 +21,11 @@ let package = Package(
   products: [
     // Parses a single input as a URL string.
     // Valid URLs are re-parsed to ensure parsing/serialization is idempotent.
-    .executable(name: "url-parse-reparse", targets: ["url-parse-reparse"])
+    .executable(name: "url-parse-reparse", targets: ["url-parse-reparse"]),
+
+    // Parses a single input as a Swift String, then a Foundation URL.
+    // If successful, converts the URL to a WebURL and checks for semantic equivalence.
+    .executable(name: "foundation-to-web", targets: ["foundation-to-web"]),
   ],
   dependencies: [
     .package(name: "swift-url", path: "..")
@@ -31,6 +35,15 @@ let package = Package(
       name: "url-parse-reparse",
       dependencies: [.product(name: "WebURL", package: "swift-url")],
       swiftSettings: [.unsafeFlags(["-parse-as-library", "-sanitize=fuzzer,address"])]
-    )
+    ),
+    .target(
+      name: "foundation-to-web",
+      dependencies: [
+        .product(name: "WebURL", package: "swift-url"),
+        .product(name: "WebURLFoundationExtras", package: "swift-url"),
+        .product(name: "WebURLTestSupport", package: "swift-url"),
+      ],
+      swiftSettings: [.unsafeFlags(["-parse-as-library", "-sanitize=fuzzer,address"])]
+    ),
   ]
 )

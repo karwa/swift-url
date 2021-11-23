@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Copyright The swift-url Contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,69 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# --------------------------------------------
-# A dictionary of tokens to aid fuzzers of URL parsers.
-# --------------------------------------------
 
-# Schemes
-"http"
-"https"
-"ws"
-"wss"
-"ftp"
-"file"
-"foo"
+if [ "$(uname)" == "Darwin" ]; then
+  # Apple's SDK toolchains do not include fuzzer support, but swift.org toolchains do.
+  xcrun -toolchain swift swift build -Xswiftc -sanitize=fuzzer,address -Xswiftc -g
+else
+  swift build -Xswiftc -sanitize=fuzzer,address -Xswiftc -g
+fi
 
-# Component delimiters
-"@"
-"%40"
-":"
-"%3A"
-"?"
-"%3F"
-"#"
-"%23"
-"["
-"%5B"
-"]"
-"%5D"
-
-# Slashes
-"/"
-"%2F"
-"\\"
-"%5C"
-"//"
-"%2F%2F"
-"\\\\"
-"%5C%5C"
-
-# Dots
-"."
-"%2E"
-".."
-"%2E%2E"
-
-# Percent sign
-"%"
-"%25"
-
-# Windows drive letters
-"C:"
-"C|"
-"/C|/.."
-
-# Known Ports
-":21"
-":80"
-":443"
-
-# Other parts
-".com"
-"%72"
-"%80"
-"%00"
-"%FF"
-"%82"
-";"
-"%3B"
+./.build/debug/foundation-to-web "$@"
