@@ -26,6 +26,10 @@ let package = Package(
     // FIXME: This should become a cross-import overlay once they exist and are supported by SwiftPM.
     .library(name: "WebURLSystemExtras", targets: ["WebURLSystemExtras"]),
 
+    // Integration with Foundation.
+    // FIXME: This should become a cross-import overlay once they exist and are supported by SwiftPM.
+    .library(name: "WebURLFoundationExtras", targets: ["WebURLFoundationExtras"]),
+
     // Test support library.
     // Various infrastructure components to run the URL web-platform-tests and other tests contained in JSON files.
     // Used by https://github.com/karwa/swift-url-tools to provide a GUI test runner.
@@ -48,10 +52,14 @@ let package = Package(
       dependencies: ["WebURL", .product(name: "SystemPackage", package: "swift-system")]
     ),
     .target(
+      name: "WebURLFoundationExtras",
+      dependencies: ["WebURL"]
+    ),
+    .target(
       name: "WebURLTestSupport",
       dependencies: ["WebURL"]
     ),
-		// Tests.
+    // Tests.
     .testTarget(
       name: "WebURLTests",
       dependencies: ["WebURL", "WebURLTestSupport", "Checkit"],
@@ -64,6 +72,11 @@ let package = Package(
     .testTarget(
       name: "WebURLSystemExtrasTests",
       dependencies: ["WebURLSystemExtras", "WebURL", .product(name: "SystemPackage", package: "swift-system")]
+    ),
+    .testTarget(
+      name: "WebURLFoundationExtrasTests",
+      dependencies: ["WebURLFoundationExtras", "WebURLTestSupport", "WebURL"],
+      resources: [.copy("Resources")]
     ),
   ]
 )
