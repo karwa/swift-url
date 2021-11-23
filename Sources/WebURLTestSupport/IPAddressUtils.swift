@@ -233,7 +233,7 @@ extension IPv6Address.Utils {
   ///   - 25% chance that it is not compressed
   ///
   /// This may be skewed a bit - some generated addresses will already be compressed, regardless of our
-  /// randomised toggle to inject compressable pieces.
+  /// randomized toggle to inject compressable pieces.
   ///
   /// The returned string describes the 16-bit pieces of the address in binary/big-endian/network byte order.
   ///

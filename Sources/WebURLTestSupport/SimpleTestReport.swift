@@ -14,7 +14,7 @@
 
 /// An object which captures data and results from individual tests, allowing for summary reports to be generated.
 ///
-/// Tests can be added and organised via functions such as  `performTest`, `markSection`, and `skipTest`, and summary
+/// Tests can be added and organized via functions such as  `performTest`, `markSection`, and `skipTest`, and summary
 /// data can be accessed via properties such as `hasUnexpectedResults` and `generateReport`.
 ///
 public struct SimpleTestReport {

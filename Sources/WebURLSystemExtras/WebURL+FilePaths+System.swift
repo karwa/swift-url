@@ -192,7 +192,7 @@ private protocol PlatformStringConversionsProtocol {
   //                       - For `fromMultiByte`, we expect UTF-8 but fall back to the system's code-page.
   //
   // This follows the principle of being strict when sending and lenient when receiving,
-  // and matches the behaviour of Chromium/Edge, so it should match the expectations of Windows users.
+  // and matches the behavior of Chromium/Edge, so it should match the expectations of Windows users.
   // https://github.com/chromium/chromium/blob/7417fc2bd5c8cf0e6dbf7ca4b599603c67d3edf3/net/base/filename_util.cc#L138
   //
   // The Windows system routines are WideCharToMultiByte and MultiByteToWideChar.

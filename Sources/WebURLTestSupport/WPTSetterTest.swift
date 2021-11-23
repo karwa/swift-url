@@ -159,7 +159,7 @@ extension WPTSetterTest {
     /// The URL did not contain the expected values after setting.
     public static var propertyMismatches: Self { .init(rawValue: 1 << 1) }
 
-    /// After setting, the URL was serialised and re-parsed, and produced a different result the second time around.
+    /// After setting, the URL was serialized and re-parsed, and produced a different result the second time around.
     public static var notIdempotent: Self { .init(rawValue: 1 << 2) }
   }
 }

@@ -22,7 +22,7 @@ import struct WebURL.FilePathFormat
 /// The contents of the file path test file.
 ///
 /// The single file contains the test data for 2 test suites, since they are closely related and you often want to check
-/// round-trip behaviour by including the same paths and URLs in both suites.
+/// round-trip behavior by including the same paths and URLs in both suites.
 ///
 public struct FilePathTestFile: Codable {
   public var file_path_to_url: FlatSectionedArray<FilePathToURLTests.TestCase>

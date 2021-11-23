@@ -49,8 +49,8 @@ Collection.urlFormEncodedString
 StringProtocol.percentEncoded(as:)
 StringProtocol.urlComponentEncoded
 StringProtocol.urlFormEncoded
-Lazily​Percent​Decoded​UTF8Without​Substitutions
-Lazily​Percent​Decoded​UTF8
+LazilyPercentDecodedUTF8WithoutSubstitutions
+LazilyPercentDecodedUTF8
 PercentDecodeSet_Namespace
 LazyCollectionProtocol.percentDecodedUTF8(from:)
 LazyCollectionProtocol.percentDecodedUTF8

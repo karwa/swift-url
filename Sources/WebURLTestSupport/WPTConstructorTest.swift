@@ -289,7 +289,7 @@ extension WPTConstructorTest {
     /// The parsed URL's properties do not match the expected values.
     public static var propertyMismatch: Self { .init(rawValue: 1 << 4) }
 
-    /// The URL was parsed, serialised, and re-parsed, and produced a different result the second time around.
+    /// The URL was parsed, serialized, and re-parsed, and produced a different result the second time around.
     public static var notIdempotent: Self { .init(rawValue: 1 << 5) }
   }
 }

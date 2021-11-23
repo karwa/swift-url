@@ -5,3 +5,4 @@
 /*.xcodeproj
 xcuserdata/
 Package.resolved
+.docc-build/
