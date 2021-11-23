@@ -31,6 +31,7 @@ let package = Package(
         name: "WebURLBenchmark",
         dependencies: [
           .product(name: "WebURL", package: "swift-url"),
+          .product(name: "WebURLFoundationExtras", package: "swift-url"),
           .product(name: "Benchmark", package: "Benchmark")
         ]
       )
