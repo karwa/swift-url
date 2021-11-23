@@ -32,5 +32,6 @@ Benchmark.main([
   constructor_specialNonFile,
   urlEncoded_Decoded,
   componentSetters,
-  pathComponents
+  pathComponents,
+  foundationToWeb,
 ])
