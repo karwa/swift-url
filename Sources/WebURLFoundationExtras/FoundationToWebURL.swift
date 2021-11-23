@@ -30,13 +30,15 @@ extension WebURL {
   /// The resulting `WebURL`'s components are normalized, meaning they are semantically equivalent to the corresponding
   /// components from the source `URL`. However, they may not be literally the same strings.
   ///
-  public init?(_ foundationURL: URL) {
+  public init?(_ nsURL: URL) {
 
-    guard let _ = foundationURL.scheme else {
+    var urlString = nsURL.absoluteString
+    urlString.makeContiguousUTF8()
+    self.init(urlString)
+
+    guard nsURL.scheme != nil else {
       return nil  // WebURL requires a scheme.
     }
-
-    self.init(foundationURL.absoluteString)
 
     guard !self.hasOpaquePath else {
       // Foundation tells us absolutely nothing about URLs with opaque paths (e.g. "mailto:").
@@ -50,7 +52,9 @@ extension WebURL {
     // - WebURL reads this as having username "@2" and host "2".
     // Check that the username and password contents are the same, and reject anything ambiguous.
 
-    switch (self.utf8.username, foundationURL.user) {
+    switch (self.utf8.username, nsURL.user) {
+    case (.none, .none):
+      break
     case (.some(let parsedUser), .some(let originalUser)):
       if !parsedUser.lazy.percentDecoded().elementsEqual(originalUser.utf8) {
         return nil
@@ -61,10 +65,10 @@ extension WebURL {
       }
     case (.some, .none):
       return nil
+    }
+    switch (self.utf8.password, nsURL.password) {
     case (.none, .none):
       break
-    }
-    switch (self.utf8.password, foundationURL.password) {
     case (.some(let parsedPassword), .some(let originalPassword)):
       if !parsedPassword.elementsEqual(originalPassword.utf8) {
         return nil
@@ -75,8 +79,6 @@ extension WebURL {
       }
     case (.some, .none):
       return nil
-    case (.none, .none):
-      break
     }
 
     // Between the 2 standards, one thing that can be ambiguous is which host a URL refers to.
@@ -86,50 +88,51 @@ extension WebURL {
     // For this reason, check that WebURL and Foundation URL agree about which component should
     // be considered the "host", and that normalization preserved the host's identity.
 
-    switch self.host {
-    case .ipv6Address(let parsedIPv6):
+    let nsURLHost = nsURL.host
+    switch self._spis._hostKind {
+    case .ipv6Address:
       // WebURL normalizes IP addresses, but this is considered a safe change,
       // because IPv6 literals are not otherwise valid hostnames.
       // Check that Foundation's host parses to the same address.
       guard
-        let originalIPv6 = foundationURL.host.flatMap(IPv6Address.init(_:)),
-        originalIPv6 == parsedIPv6
+        let originalIPv6 = nsURLHost.flatMap(IPv6Address.init(_:)),
+        originalIPv6 == IPv6Address(utf8: self.utf8.hostname!.dropFirst().dropLast())!
       else {
         return nil
       }
-    case .ipv4Address(let parsedIPv4):
+    case .ipv4Address:
       // WebURL normalizes IP addresses, but this is considered a safe change,
       // because only http(s)/ws(s)/ftp/file URLs may have IPv4 addresses,
       // and purely numeric TLDs are not usually valid.
       // Check that Foundation's host parses to the same address.
       guard
-        let originalIPv4 = foundationURL.host.flatMap(IPv4Address.init(_:)),
-        originalIPv4 == parsedIPv4
+        let originalIPv4 = nsURLHost.flatMap(IPv4Address.init(_:)),
+        originalIPv4 == IPv4Address(utf8: self.utf8.hostname!)!
       else {
         return nil
       }
-    case .domain(let parsedDomain):
+    case .domain:
       // WebURL normalizes domains. This is considered a safe change,
       // becuase it only supports ASCII domains, so normalization = lowercasing.
       // DNS names are not case-sensitive.
-      guard foundationURL.host?.lowercased().utf8.elementsEqual(parsedDomain.utf8.lazy.percentDecoded()) == true else {
+      guard nsURLHost?.lowercased().utf8.elementsEqual(self.utf8.hostname!.lazy.percentDecoded()) == true else {
         return nil
       }
-    case .opaque(let parsedOpaque):
+    case .opaque:
       // Opaque hostnames must be preserved exactly.
-      guard foundationURL.host?.utf8.elementsEqual(parsedOpaque.utf8.lazy.percentDecoded()) == true else {
+      guard nsURLHost?.utf8.elementsEqual(self.utf8.hostname!.lazy.percentDecoded()) == true else {
         return nil
       }
     case .empty:
       // If WebURL's host is empty, the original must be an empty or nil host.
       // This also blocks WebURL's usual "localhost" stripping for file URLs, which is not considered a safe change.
       // https://github.com/whatwg/url/issues/618
-      guard foundationURL.host?.isEmpty ?? true else {
+      guard nsURLHost?.isEmpty ?? true else {
         return nil
       }
     case .none:
       // Path-only URL, or opaque path (e.g. mailto:).
-      guard foundationURL.host == nil else {
+      guard nsURLHost == nil else {
         return nil
       }
     }
@@ -148,8 +151,10 @@ extension WebURL {
     // misinterprets which component should be the path.
 
     path: do {
-      if self.utf8.path.isEmpty != foundationURL.path.isEmpty {
-        if !self.utf8.path.isEmpty, foundationURL.path.isEmpty, foundationURL.appendingPathComponent("x").path.isEmpty {
+      let nsURLPath = nsURL.path
+      if self.utf8.path.isEmpty != nsURLPath.isEmpty {
+        // TODO: [Performance] Try to find a cheaper way than .appendingPathComponent
+        if !self.utf8.path.isEmpty, nsURLPath.isEmpty, nsURL.appendingPathComponent("x").path.isEmpty {
           // If we can append a path component and URL.path still returns an empty path,
           // we're probably seeing the percent-encoded non-UTF8 bug. For now, skip path validation.
           break path
