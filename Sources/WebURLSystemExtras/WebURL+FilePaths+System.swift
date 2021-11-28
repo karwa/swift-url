@@ -53,7 +53,7 @@ import WebURL
         try PlatformStringConversions.toMultiByte(UnsafeBufferPointer(start: platformStr, count: filePath.length + 1)) {
           guard let mbStr = $0 else { throw URLFromFilePathError.transcodingFailure }
           precondition(mbStr.last == 0, "Expected a null-terminated string")
-          return try WebURL.fromFilePathBytes(UnsafeBufferPointer(rebasing: mbStr.dropLast()), format: .native)
+          return try WebURL.fromBinaryFilePath(UnsafeBufferPointer(rebasing: mbStr.dropLast()), format: .native)
         }
       }
     }
@@ -75,7 +75,7 @@ import WebURL
     /// - throws: `FilePathFromURLError`
     ///
     public init(url: WebURL) throws {
-      self = try WebURL.filePathBytes(from: url, format: .native, nullTerminated: true).withUnsafeBufferPointer {
+      self = try WebURL.binaryFilePath(from: url, format: .native, nullTerminated: true).withUnsafeBufferPointer {
         try PlatformStringConversions.fromMultiByte($0) {
           guard let platformString = $0 else { throw FilePathFromURLError.transcodingFailure }
           return FilePath(platformString: platformString.baseAddress!)
@@ -113,7 +113,7 @@ import WebURL
         try PlatformStringConversions.toMultiByte(UnsafeBufferPointer(start: platformStr, count: filePath.length + 1)) {
           guard let mbStr = $0 else { throw URLFromFilePathError.transcodingFailure }
           precondition(mbStr.last == 0, "Expected a null-terminated string")
-          return try WebURL.fromFilePathBytes(UnsafeBufferPointer(rebasing: mbStr.dropLast()), format: .native)
+          return try WebURL.fromBinaryFilePath(UnsafeBufferPointer(rebasing: mbStr.dropLast()), format: .native)
         }
       }
     }
@@ -136,7 +136,7 @@ import WebURL
     /// - throws: `FilePathFromURLError`
     ///
     public init(url: WebURL) throws {
-      self = try WebURL.filePathBytes(from: url, format: .native, nullTerminated: true).withUnsafeBufferPointer {
+      self = try WebURL.binaryFilePath(from: url, format: .native, nullTerminated: true).withUnsafeBufferPointer {
         try PlatformStringConversions.fromMultiByte($0) {
           guard let platformString = $0 else { throw FilePathFromURLError.transcodingFailure }
           return FilePath(cString: platformString.baseAddress!)

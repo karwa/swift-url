@@ -490,3 +490,26 @@ extension StringProtocol {
     self.percentDecoded(substitutions: .formEncoding)
   }
 }
+
+
+// ------------------------------------------------
+// MARK: - Binary File Paths (renamed from: 0.2.1)
+// ------------------------------------------------
+
+
+extension WebURL {
+
+  @available(*, deprecated, renamed: "fromBinaryFilePath")
+  public static func fromFilePathBytes<Bytes>(
+    _ path: Bytes, format: FilePathFormat = .native
+  ) throws -> WebURL where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+    try fromBinaryFilePath(path, format: format)
+  }
+
+  @available(*, deprecated, renamed: "binaryFilePath")
+  public static func filePathBytes(
+    from url: WebURL, format: FilePathFormat = .native, nullTerminated: Bool
+  ) throws -> ContiguousArray<UInt8> {
+    ContiguousArray(try binaryFilePath(from: url, format: format, nullTerminated: nullTerminated))
+  }
+}

@@ -109,7 +109,7 @@ extension FilePathTests {
       XCTAssertEqual(String(cString: nullTerminated.map { CChar(bitPattern: $0) }), "/hi")
 
       XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
-        let _ = try WebURL.fromFilePathBytes(nullTerminated, format: .posix)
+        let _ = try WebURL.fromBinaryFilePath(nullTerminated, format: .posix)
       }
     }
 
@@ -123,7 +123,7 @@ extension FilePathTests {
       XCTAssertEqual(String(cString: includesNulls.map { CChar(bitPattern: $0) }), "/hi")
 
       XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
-        let _ = try WebURL.fromFilePathBytes(includesNulls, format: .posix)
+        let _ = try WebURL.fromBinaryFilePath(includesNulls, format: .posix)
       }
     }
 
@@ -135,14 +135,14 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"/fo���o/bar"#)
 
-      let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .posix)
+      let fileURL = try WebURL.fromBinaryFilePath(unpairedSurrogate, format: .posix)
 
       XCTAssertEqual(fileURL.serialized(), #"file:///fo%ED%A0%80o/bar"#)
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 2)
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, unpairedSurrogate)
     }
 
@@ -153,7 +153,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), "/caf��")
 
-      let fileURL = try WebURL.fromFilePathBytes(latin1, format: .posix)
+      let fileURL = try WebURL.fromBinaryFilePath(latin1, format: .posix)
 
       XCTAssertEqual(fileURL.serialized(), "file:///caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
@@ -163,7 +163,7 @@ extension FilePathTests {
       XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.startIndex], "caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.first, "caf��")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1)
     }
 
@@ -174,7 +174,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: greek, as: UTF8.self), "/hi���")
 
-      let fileURL = try WebURL.fromFilePathBytes(greek, format: .posix)
+      let fileURL = try WebURL.fromBinaryFilePath(greek, format: .posix)
 
       XCTAssertEqual(fileURL.serialized(), "file:///hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
@@ -184,7 +184,7 @@ extension FilePathTests {
       XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.startIndex], "hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.first, "hi���")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek)
     }
 
@@ -194,7 +194,7 @@ extension FilePathTests {
       allBytes.insert(contentsOf: 1...UInt8.max, at: 3)  // NULL bytes not allowed.
       XCTAssert(String(decoding: allBytes, as: UTF8.self).contains("�"))
 
-      let fileURL = try WebURL.fromFilePathBytes(allBytes, format: .posix)
+      let fileURL = try WebURL.fromBinaryFilePath(allBytes, format: .posix)
 
       XCTAssertEqual(
         fileURL.serialized(),
@@ -221,7 +221,7 @@ extension FilePathTests {
       )
       XCTAssertEqual(fileURL.pathComponents.count, 3)
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .posix, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .posix, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, allBytes)
     }
   }
@@ -247,7 +247,7 @@ extension FilePathTests {
       XCTAssertEqual(String(cString: nullTerminated.map { CChar(bitPattern: $0) }), #"C:\hi"#)
 
       XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
-        let _ = try WebURL.fromFilePathBytes(nullTerminated, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(nullTerminated, format: .windows)
       }
     }
 
@@ -262,7 +262,7 @@ extension FilePathTests {
       XCTAssertEqual(String(cString: includesNulls.map { CChar(bitPattern: $0) }), #"C:\hi"#)
 
       XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
-        let _ = try WebURL.fromFilePathBytes(includesNulls, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(includesNulls, format: .windows)
       }
     }
 
@@ -275,14 +275,14 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"C:\fo���o\bar"#)
 
-      let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(unpairedSurrogate, format: .windows)
 
       XCTAssertEqual(fileURL.serialized(), #"file:///C:/fo%ED%A0%80o/bar"#)
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, unpairedSurrogate)
     }
 
@@ -294,7 +294,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"C:\caf��"#)
 
-      let fileURL = try WebURL.fromFilePathBytes(latin1, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(latin1, format: .windows)
 
       XCTAssertEqual(fileURL.serialized(), "file:///C:/caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
@@ -304,7 +304,7 @@ extension FilePathTests {
       XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.indices.last!], "caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.last, "caf��")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1)
     }
 
@@ -316,7 +316,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: greek, as: UTF8.self), #"C:\hi���"#)
 
-      let fileURL = try WebURL.fromFilePathBytes(greek, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(greek, format: .windows)
 
       XCTAssertEqual(fileURL.serialized(), "file:///C:/hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
@@ -326,7 +326,7 @@ extension FilePathTests {
       XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.indices.last!], "hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.last, "hi���")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek)
     }
 
@@ -336,7 +336,7 @@ extension FilePathTests {
       allBytes.insert(contentsOf: 1...UInt8.max, at: 5)  // NULL bytes not allowed.
       XCTAssert(String(decoding: allBytes, as: UTF8.self).contains("�"))
 
-      let fileURL = try WebURL.fromFilePathBytes(allBytes, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(allBytes, format: .windows)
 
       XCTAssertEqual(
         fileURL.serialized(),
@@ -366,7 +366,7 @@ extension FilePathTests {
       // Unfortunately, this does not precisely round-trip due to trimming and Windows having 2 path separators,
       // but if we reverse those transformations, the round-trip result should then be the same as the original.
 
-      var roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
+      var roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .windows, nullTerminated: false)
       roundtripPath.insert(0x2E, at: 5 + 0x2E - 1)  // re-insert the trimmed '.'
       roundtripPath[5 + 0x2F - 1] = 0x2F  // URL paths have forward slashes, are turned to backslashes in path.
       XCTAssertEqualElements(roundtripPath, allBytes)
@@ -383,7 +383,7 @@ extension FilePathTests {
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"\\caf��\hi\bye\"#)
 
       XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
-        let _ = try WebURL.fromFilePathBytes(latin1, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(latin1, format: .windows)
       }
     }
 
@@ -398,7 +398,7 @@ extension FilePathTests {
       XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"\\ca���\hi\bye\"#)
 
       XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
-        let _ = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(unpairedSurrogate, format: .windows)
       }
     }
 
@@ -406,7 +406,7 @@ extension FilePathTests {
     do {
       let unicode = #"\\🦆\share\bread\"#
       XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
-        let _ = try WebURL.fromFilePathBytes(unicode.utf8, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(unicode.utf8, format: .windows)
       }
     }
   }
@@ -426,7 +426,7 @@ extension FilePathTests {
       XCTAssertEqual(String(cString: nullTerminated.map { CChar(bitPattern: $0) }), #"\\?\C:\hi"#)
 
       XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
-        let _ = try WebURL.fromFilePathBytes(nullTerminated, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(nullTerminated, format: .windows)
       }
     }
 
@@ -442,7 +442,7 @@ extension FilePathTests {
       XCTAssertEqual(String(cString: includesNulls.map { CChar(bitPattern: $0) }), #"\\?\C:\hi"#)
 
       XCTAssertThrowsSpecific(URLFromFilePathError.nullBytes) {
-        let _ = try WebURL.fromFilePathBytes(includesNulls, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(includesNulls, format: .windows)
       }
     }
 
@@ -456,14 +456,14 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"\\?\C:\fo���o\bar"#)
 
-      let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(unpairedSurrogate, format: .windows)
 
       XCTAssertEqual(fileURL.serialized(), #"file:///C:/fo%ED%A0%80o/bar"#)
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
       XCTAssertEqual(fileURL.pathComponents.count, 3)
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, unpairedSurrogate.dropFirst(4) /* \\?\ prefix */)
     }
 
@@ -476,7 +476,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"\\?\C:\caf��"#)
 
-      let fileURL = try WebURL.fromFilePathBytes(latin1, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(latin1, format: .windows)
 
       XCTAssertEqual(fileURL.serialized(), "file:///C:/caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
@@ -486,7 +486,7 @@ extension FilePathTests {
       XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.indices.last!], "caf%E9%DD")
       XCTAssertEqual(fileURL.pathComponents.last, "caf��")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, latin1.dropFirst(4) /* \\?\ prefix */)
     }
 
@@ -499,7 +499,7 @@ extension FilePathTests {
       ]
       XCTAssertEqual(String(decoding: greek, as: UTF8.self), #"\\?\C:\hi���"#)
 
-      let fileURL = try WebURL.fromFilePathBytes(greek, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(greek, format: .windows)
 
       XCTAssertEqual(fileURL.serialized(), "file:///C:/hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
@@ -509,7 +509,7 @@ extension FilePathTests {
       XCTAssertEqual(fileURL.pathComponents[raw: fileURL.pathComponents.indices.last!], "hi%E1%E2%E3")
       XCTAssertEqual(fileURL.pathComponents.last, "hi���")
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, greek.dropFirst(4) /* \\?\ prefix */)
     }
 
@@ -519,7 +519,7 @@ extension FilePathTests {
       allBytes.insert(contentsOf: [1...0x2E, 0x30...UInt8.max].joined(), at: 9)  // NULL and 0x2F not allowed.
       XCTAssert(String(decoding: allBytes, as: UTF8.self).contains("�"))
 
-      let fileURL = try WebURL.fromFilePathBytes(allBytes, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(allBytes, format: .windows)
 
       XCTAssertEqual(
         fileURL.serialized(),
@@ -549,7 +549,7 @@ extension FilePathTests {
       // Unlike the non-Win32 namespaced variant, no trimming is performed and forward-slashes aren't allowed.
       // That means the path does actually round-trip! (I mean, besides the \\?\ prefix, which we can't preserve).
 
-      let roundtripPath = try WebURL.filePathBytes(from: fileURL, format: .windows, nullTerminated: false)
+      let roundtripPath = try WebURL.binaryFilePath(from: fileURL, format: .windows, nullTerminated: false)
       XCTAssertEqualElements(roundtripPath, allBytes.dropFirst(4) /* \\?\ prefix */)
     }
 
@@ -566,7 +566,7 @@ extension FilePathTests {
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), #"\\?\UNC\caf��\hi\bye\"#)
 
       XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
-        let _ = try WebURL.fromFilePathBytes(latin1, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(latin1, format: .windows)
       }
     }
 
@@ -583,7 +583,7 @@ extension FilePathTests {
       XCTAssertEqual(String(decoding: unpairedSurrogate, as: UTF8.self), #"\\?\UNC\ca���\hi\bye\"#)
 
       XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
-        let _ = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(unpairedSurrogate, format: .windows)
       }
     }
 
@@ -591,7 +591,7 @@ extension FilePathTests {
     do {
       let unicode = #"\\?\UNC\🦆\share\bread\"#
       XCTAssertThrowsSpecific(URLFromFilePathError.invalidHostname) {
-        let _ = try WebURL.fromFilePathBytes(unicode.utf8, format: .windows)
+        let _ = try WebURL.fromBinaryFilePath(unicode.utf8, format: .windows)
       }
     }
   }
