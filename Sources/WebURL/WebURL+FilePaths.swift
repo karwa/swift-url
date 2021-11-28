@@ -146,7 +146,7 @@ extension WebURL {
   public init<S>(
     filePath: S, format: FilePathFormat = .native
   ) throws where S: StringProtocol, S.UTF8View: BidirectionalCollection {
-    self = try WebURL.fromFilePathBytes(filePath.utf8, format: format)
+    self = try WebURL.fromBinaryFilePath(filePath.utf8, format: format)
   }
 }
 
@@ -217,7 +217,7 @@ extension WebURL {
   /// - throws: `URLFromFilePathError`
   ///
   @inlinable
-  public static func fromFilePathBytes<Bytes>(
+  public static func fromBinaryFilePath<Bytes>(
     _ path: Bytes, format: FilePathFormat = .native
   ) throws -> WebURL where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
     switch format._fmt {
@@ -584,7 +584,7 @@ extension WebURL {
   /// ## Normalization
   ///
   /// Some minimal normalization is applied to the path, such as removing empty path components.
-  /// Unlike the `WebURL.fromFilePathBytes` function, Windows path components are never trimmed.
+  /// Unlike the `WebURL.fromBinaryFilePath` function, Windows path components are never trimmed.
   ///
   /// - parameters:
   ///   - url:    The file URL.
@@ -595,12 +595,12 @@ extension WebURL {
   /// - throws: `FilePathFromURLError`
   ///
   @inlinable
-  public static func filePathBytes(
+  public static func binaryFilePath(
     from url: WebURL, format: FilePathFormat = .native, nullTerminated: Bool
-  ) throws -> ContiguousArray<UInt8> {
+  ) throws -> [UInt8] {
     switch format._fmt {
-    case .posix: return try _filePathFromURL_posix(url, nullTerminated: nullTerminated).get()
-    case .windows: return try _filePathFromURL_windows(url, nullTerminated: nullTerminated).get()
+    case .posix: return Array(try _filePathFromURL_posix(url, nullTerminated: nullTerminated).get())
+    case .windows: return Array(try _filePathFromURL_windows(url, nullTerminated: nullTerminated).get())
     }
   }
 }

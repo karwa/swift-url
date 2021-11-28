@@ -128,7 +128,7 @@ final class SystemFilePathTests: XCTestCase {}
       ]
 
       // Create a file URL from the raw bytes.
-      let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(unpairedSurrogate, format: .windows)
       XCTAssertEqual(fileURL.serialized(), "file:///C:/fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/fo%ED%A0%80o/bar")
@@ -172,7 +172,7 @@ final class SystemFilePathTests: XCTestCase {}
       ]
 
       // Create a file URL from the raw bytes.
-      let fileURL = try WebURL.fromFilePathBytes(latin1, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(latin1, format: .windows)
       XCTAssertEqual(fileURL.serialized(), "file:///C:/caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/caf%E9%DD")
@@ -224,7 +224,7 @@ final class SystemFilePathTests: XCTestCase {}
       ]
 
       // Create a file URL from the raw bytes.
-      let fileURL = try WebURL.fromFilePathBytes(greek, format: .windows)
+      let fileURL = try WebURL.fromBinaryFilePath(greek, format: .windows)
       XCTAssertEqual(fileURL.serialized(), "file:///C:/hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/C:/hi%E1%E2%E3")
@@ -443,7 +443,7 @@ final class SystemFilePathTests: XCTestCase {}
       ]
 
       // Create a file URL from the raw bytes. No UTF-8 validation is performed.
-      let fileURL = try WebURL.fromFilePathBytes(unpairedSurrogate, format: .posix)
+      let fileURL = try WebURL.fromBinaryFilePath(unpairedSurrogate, format: .posix)
       XCTAssertEqual(fileURL.serialized(), "file:///fo%ED%A0%80o/bar")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/fo%ED%A0%80o/bar")
@@ -509,7 +509,7 @@ final class SystemFilePathTests: XCTestCase {}
       XCTAssertEqual(String(decoding: latin1, as: UTF8.self), "/caf��")
 
       // Create a file URL from the raw bytes. No UTF-8 validation is performed.
-      let fileURL = try WebURL.fromFilePathBytes(latin1, format: .posix)
+      let fileURL = try WebURL.fromBinaryFilePath(latin1, format: .posix)
       XCTAssertEqual(fileURL.serialized(), "file:///caf%E9%DD")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/caf%E9%DD")
@@ -539,7 +539,7 @@ final class SystemFilePathTests: XCTestCase {}
       XCTAssertEqual(String(decoding: greek, as: UTF8.self), "/hi���")
 
       // Create a file URL from the raw bytes. No UTF-8 validation is performed.
-      let fileURL = try WebURL.fromFilePathBytes(greek, format: .posix)
+      let fileURL = try WebURL.fromBinaryFilePath(greek, format: .posix)
       XCTAssertEqual(fileURL.serialized(), "file:///hi%E1%E2%E3")
       XCTAssertURLIsIdempotent(fileURL)
       XCTAssertURLComponents(fileURL, scheme: "file", hostname: "", path: "/hi%E1%E2%E3")

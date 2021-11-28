@@ -50,7 +50,7 @@ extension FilePathToURLTests.WebURLReportHarness: FilePathToURLTests.Harness {
     case .invalidHostname: return .invalidHostname
     case .invalidPath: return .invalidPath
     case .unsupportedWin32NamespacedPath: return .unsupportedWin32NamespacedPath
-    case .transcodingFailure: fatalError("WebURL.fromFilePathBytes should not be transcoding anything")
+    case .transcodingFailure: fatalError("WebURL.fromBinaryFilePath should not be transcoding anything")
     default: fatalError("Unknown error")
     }
   }
@@ -101,7 +101,7 @@ extension URLToFilePathTests.WebURLReportHarness: URLToFilePathTests.Harness {
     _ url: WebURL, format: FilePathFormat
   ) -> Result<String, URLToFilePathTests.FailureReason> {
     Result {
-      String(decoding: try WebURL.filePathBytes(from: url, format: format, nullTerminated: false), as: UTF8.self)
+      String(decoding: try WebURL.binaryFilePath(from: url, format: format, nullTerminated: false), as: UTF8.self)
     }.mapError { Self.errorToFailureReason($0 as! FilePathFromURLError) }
   }
 
@@ -113,7 +113,7 @@ extension URLToFilePathTests.WebURLReportHarness: URLToFilePathTests.Harness {
     case .unsupportedNonLocalFile: return .unsupportedNonLocalFile
     case .unsupportedHostname: return .unsupportedHostname
     case .windowsPathIsNotFullyQualified: return .relativePath
-    case .transcodingFailure: fatalError("WebURL.filePathBytes should not be transcoding anything")
+    case .transcodingFailure: fatalError("WebURL.binaryFilePath should not be transcoding anything")
     default: fatalError("Unknown error")
     }
   }
