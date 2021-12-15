@@ -346,7 +346,7 @@ extension StringProtocol {
 /// to accurately decode content encoded with substitutions.
 ///
 @available(*, deprecated, renamed: "LazilyPercentDecoded")
-public typealias Lazily​Percent​Decoded​UTF8Without​Substitutions<Source> = LazilyPercentDecoded<Source>
+public typealias LazilyPercentDecodedUTF8WithoutSubstitutions<Source> = LazilyPercentDecoded<Source>
 where Source: Collection, Source.Element == UInt8
 
 /// A `Collection` which percent-decodes elements from its `Source` on-demand, and reverses substitutions made by a ``SubstitutionMap``.
@@ -356,11 +356,12 @@ where Source: Collection, Source.Element == UInt8
 /// ``SubstitutionMap`` to accurately decode content encoded with substitutions.
 ///
 @available(*, deprecated, renamed: "LazilyPercentDecodedWithSubstitutions")
-public typealias Lazily​Percent​Decoded​UTF8<Source, Subs> = LazilyPercentDecodedWithSubstitutions<Source, Subs>
+public typealias LazilyPercentDecodedUTF8<Source, Subs> = LazilyPercentDecodedWithSubstitutions<Source, Subs>
 where Source: Collection, Source.Element == UInt8, Subs: SubstitutionMap
 
 /// A namespace for substitution maps used by percent-encode sets defined by the URL Standard.
 ///
+@available(*, deprecated)
 public struct PercentDecodeSet_Namespace {
   internal init() {}
 
