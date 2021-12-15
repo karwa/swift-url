@@ -131,13 +131,8 @@ extension WebURL.UTF8View: RandomAccessCollection {
   }
 
   @inlinable
-  public func index(_ i: Index, offsetBy distance: Index) -> Index {
+  public func index(_ i: Index, offsetBy distance: Int) -> Index {
     i &+ distance
-  }
-
-  @inlinable
-  public func formIndex(_ i: inout Index, offsetBy distance: Index) {
-    i &+= distance
   }
 
   @inlinable
