@@ -11,7 +11,7 @@ WebURL("file:///usr/bin/swift")                 // ✅ Typical file URL.
 WebURL("my.app:/settings/language?debug=true")  // ✅ Typical custom URL.
 ```
 
-`WebURL` aligns with the [latest URL Standard][URL-spec], which which governs how browsers and other
+`WebURL` aligns with the [latest URL Standard][URL-spec], which governs how browsers and other
 actors on the web platform should interpret URLs. To demonstrate, the following example includes a number of
 syntax mistakes: leading spaces, a mixed-case scheme and domain name, incorrect number of leading slashes,
 as well as unescaped internal spaces and Unicode characters. These sorts of mistakes are relatively common
