@@ -616,14 +616,14 @@ extension WebURL.PathComponents {
   /// Calling this method invalidates any existing indices for this URL.
   ///
   /// - parameter newComponent: The new component to add to end of the path.
-  /// - returns: A new range of indices corresponding to the location of the new component in the path.
+  /// - returns: The location of the new component in the path.
   ///
   @inlinable
   @discardableResult
   public mutating func append<Component>(
     _ newComponent: Component
-  ) -> Range<Index> where Component: StringProtocol {
-    append(contentsOf: CollectionOfOne(newComponent))
+  ) -> Index where Component: StringProtocol {
+    append(contentsOf: CollectionOfOne(newComponent)).lowerBound
   }
 
   /// Removes the component at the given index from the path.
@@ -699,13 +699,8 @@ extension WebURL.PathComponents {
   ///
   /// If the path is already a directory path, this method has no effect.
   ///
-  /// - returns: The index of the last component, which will be an empty component.
-  ///
-  @discardableResult
-  public mutating func ensureDirectoryPath() -> Index {
-    let range = append("")
-    assert(range.upperBound == endIndex)
-    return range.lowerBound
+  public mutating func ensureDirectoryPath() {
+    append("")
   }
 }
 
