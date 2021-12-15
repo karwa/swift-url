@@ -1,6 +1,6 @@
-// swift-tools-version:5.3
-// >> This should be identical to Package@swift-5.5.swift,
-// >> except that it adds ".docc" bundles to the targets' "exclude" paths.
+// swift-tools-version:5.5
+// >> This should be identical to Package.swift,
+// >> except that targets may include ".docc" bundles.
 
 // Copyright The swift-url Contributors.
 //
@@ -47,8 +47,7 @@ let package = Package(
   targets: [
     // Products.
     .target(
-      name: "WebURL",
-      exclude: ["WebURL.docc"]
+      name: "WebURL"
     ),
     .target(
       name: "WebURLSystemExtras",
