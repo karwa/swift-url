@@ -86,9 +86,9 @@ let url = WebURL("https://github.com/karwa/swift-url/issues/63")!
 for component in url.pathComponents {
    // "karwa", "swift-url", "issues", "63"
 }
-guard url.pathComponents.dropLast().last == "issues",
-      let issueNumber = url.pathComponents.last.flatMap(Int.init) else {
-      throw UnsupportedURLError()
+if url.pathComponents.dropLast().last == "issues",
+   let issueNumber = url.pathComponents.last.flatMap(Int.init) {
+  // issueNumber: Int = 63
 }
 
 var url = WebURL("https://info.myapp.com")!
