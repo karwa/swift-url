@@ -27,6 +27,294 @@ class WebURLTests: XCTestCase {}
 
 extension WebURLTests {
 
+  func testEquatableHashable() {
+    // The URL Standard defines URL equivalence ( https://url.spec.whatwg.org/#url-equivalence ).
+    // 2 URLs are equivalent if their serializations are the same.
+
+    // Note: We don't test that unequal URLs have different hashes (they may indeed collide - depends on the hasher),
+    //       but equal URLs should produce the same hash value.
+    func checkEqualHashValues(_ urlA: WebURL, _ urlB: WebURL) {
+      var hasherA = Hasher()
+      var hasherB = Hasher()
+      urlA.hash(into: &hasherA)
+      urlB.hash(into: &hasherB)
+      XCTAssertEqual(hasherA.finalize(), hasherB.finalize())
+    }
+
+    do {
+      let urlA = WebURL("http://example.com/foo/bar?baz#qux")!
+      let urlB = WebURL("http://example.com/foo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/foo/bar?baz#qux")
+      XCTAssertTrue(urlA == urlB)
+      XCTAssertFalse(urlA != urlB)
+      checkEqualHashValues(urlA, urlB)
+    }
+    do {
+      let urlA = WebURL("foo:/foo/bar?baz#qux")!
+      let urlB = WebURL("foo:/foo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "foo:/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "foo:/foo/bar?baz#qux")
+      XCTAssertTrue(urlA == urlB)
+      XCTAssertFalse(urlA != urlB)
+      checkEqualHashValues(urlA, urlB)
+    }
+    do {
+      let urlA = WebURL("opq:foo-bar-baz")!
+      let urlB = WebURL("opq:foo-bar-baz")!
+      XCTAssertEqual(urlA.serialized(), "opq:foo-bar-baz")
+      XCTAssertEqual(urlB.serialized(), "opq:foo-bar-baz")
+      XCTAssert(urlA.hasOpaquePath && urlB.hasOpaquePath)
+      XCTAssertTrue(urlA == urlB)
+      XCTAssertFalse(urlA != urlB)
+      checkEqualHashValues(urlA, urlB)
+    }
+    // Obviously different URLs.
+    do {
+      let urlA = WebURL("http://example.com/foo/bar?baz#qux")!
+      let urlB = WebURL("http://somewhereelse.com/foo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "http://somewhereelse.com/foo/bar?baz#qux")
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+    }
+    do {
+      let urlA = WebURL("foo:/foo/bar?baz#qux")!
+      let urlB = WebURL("foo:/bar/foo?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "foo:/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "foo:/bar/foo?baz#qux")
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+    }
+    do {
+      let urlA = WebURL("opq:foo-bar-baz")!
+      let urlB = WebURL("opq:baz-bar-foo")!
+      XCTAssertEqual(urlA.serialized(), "opq:foo-bar-baz")
+      XCTAssertEqual(urlB.serialized(), "opq:baz-bar-foo")
+      XCTAssert(urlA.hasOpaquePath && urlB.hasOpaquePath)
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+    }
+    // URLs where the only difference is percent-encoding.
+    do {
+      let urlA = WebURL("http://example.com/foo/bar?baz#qux")!
+      let urlB = WebURL("http://example.com/f%6Fo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/f%6Fo/bar?baz#qux")
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+      XCTAssert(urlA.path.percentDecoded() == urlB.path.percentDecoded())
+    }
+    do {
+      let urlA = WebURL("foo:/foo/bar?baz#qux")!
+      let urlB = WebURL("foo:/foo/bar?baz#qu%78")!
+      XCTAssertEqual(urlA.serialized(), "foo:/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "foo:/foo/bar?baz#qu%78")
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+      XCTAssert(urlA.fragment?.percentDecoded() == urlB.fragment?.percentDecoded())
+    }
+    do {
+      let urlA = WebURL("opq:foo-bar-baz")!
+      let urlB = WebURL("opq:foo-b%61r-baz")!
+      XCTAssertEqual(urlA.serialized(), "opq:foo-bar-baz")
+      XCTAssertEqual(urlB.serialized(), "opq:foo-b%61r-baz")
+      XCTAssert(urlA.hasOpaquePath && urlB.hasOpaquePath)
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+      XCTAssert(urlA.path.percentDecoded() == urlB.path.percentDecoded())
+    }
+    // Some components are case-normalized by the parser (scheme, certain hostnames),
+    // but other parts are case-sensitive.
+    do {
+      let urlA = WebURL("HTTP://EXamPLE.cOm/foo/bar")!
+      let urlB = WebURL("http://exAMple.CoM/foo/bar")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/foo/bar")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/foo/bar")
+      XCTAssertTrue(urlA == urlB)
+      XCTAssertFalse(urlA != urlB)
+      checkEqualHashValues(urlA, urlB)
+    }
+    do {
+      let urlA = WebURL("HTTP://EXamPLE.cOm/FOO/bar")!
+      let urlB = WebURL("http://exAMple.CoM/foo/bar")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/FOO/bar")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/foo/bar")
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+    }
+    do {
+      let urlA = WebURL("FOO://example.com/foo/bar")!
+      let urlB = WebURL("foo://example.com/foo/bar")!
+      XCTAssertEqual(urlA.serialized(), "foo://example.com/foo/bar")
+      XCTAssertEqual(urlB.serialized(), "foo://example.com/foo/bar")
+      XCTAssertTrue(urlA == urlB)
+      XCTAssertFalse(urlA != urlB)
+      checkEqualHashValues(urlA, urlB)
+    }
+    do {
+      let urlA = WebURL("foo://EXamPLE.cOm/foo/bar")!
+      let urlB = WebURL("foo://exAMple.CoM/foo/bar")!
+      XCTAssertEqual(urlA.serialized(), "foo://EXamPLE.cOm/foo/bar")
+      XCTAssertEqual(urlB.serialized(), "foo://exAMple.CoM/foo/bar")
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+    }
+    // Even capitalization in percent-encoding makes URLs non-equal (blame the standard!)
+    do {
+      let urlA = WebURL("http://example.com/f%6Fo/bar?baz#qux")!
+      let urlB = WebURL("http://example.com/f%6fo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/f%6Fo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/f%6fo/bar?baz#qux")
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+      XCTAssert(urlA.path.percentDecoded() == urlB.path.percentDecoded())
+    }
+    do {
+      let urlA = WebURL("foo:/foo/bar?baz#qux%ff")!
+      let urlB = WebURL("foo:/foo/bar?baz#qux%FF")!
+      XCTAssertEqual(urlA.serialized(), "foo:/foo/bar?baz#qux%ff")
+      XCTAssertEqual(urlB.serialized(), "foo:/foo/bar?baz#qux%FF")
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+      XCTAssert(urlA.fragment?.percentDecoded() == urlB.fragment?.percentDecoded())
+    }
+    do {
+      let urlA = WebURL("opq:foo-ba%D0-baz")!
+      let urlB = WebURL("opq:foo-ba%d0-baz")!
+      XCTAssertEqual(urlA.serialized(), "opq:foo-ba%D0-baz")
+      XCTAssertEqual(urlB.serialized(), "opq:foo-ba%d0-baz")
+      XCTAssert(urlA.hasOpaquePath && urlB.hasOpaquePath)
+      XCTAssertTrue(urlA != urlB)
+      XCTAssertFalse(urlA == urlB)
+      XCTAssert(urlA.path.percentDecoded() == urlB.path.percentDecoded())
+    }
+  }
+
+  func testComparable() {
+    // URLs should be compared using their serialization.
+
+    enum Order {
+      case ascending
+      case descending
+      case equal
+    }
+    func checkComparable(_ urlA: WebURL, _ urlB: WebURL, expected: Order) {
+      switch expected {
+      case .ascending:
+        XCTAssertFalse(urlA == urlB)
+        XCTAssertTrue(urlA < urlB)
+        XCTAssertTrue(urlB > urlA)
+        XCTAssertFalse(urlB < urlA)
+        XCTAssertFalse(urlA > urlB)
+      case .descending:
+        XCTAssertFalse(urlA == urlB)
+        XCTAssertTrue(urlA > urlB)
+        XCTAssertTrue(urlB < urlA)
+        XCTAssertFalse(urlB > urlA)
+        XCTAssertFalse(urlA < urlB)
+      case .equal:
+        XCTAssertTrue(urlA == urlB)
+        XCTAssertFalse(urlA < urlB)
+        XCTAssertFalse(urlB > urlA)
+        XCTAssertFalse(urlB < urlA)
+        XCTAssertFalse(urlA > urlB)
+      }
+    }
+
+    // Equal URLs.
+    do {
+      let urlA = WebURL("http://example.com/foo/bar?baz#qux")!
+      let urlB = WebURL("http://example.com/foo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/foo/bar?baz#qux")
+      checkComparable(urlA, urlB, expected: .equal)
+    }
+    do {
+      let urlA = WebURL("foo:/foo/bar?baz#qux")!
+      let urlB = WebURL("foo:/foo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "foo:/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "foo:/foo/bar?baz#qux")
+      checkComparable(urlA, urlB, expected: .equal)
+    }
+    do {
+      let urlA = WebURL("opq:foo-bar-baz")!
+      let urlB = WebURL("opq:foo-bar-baz")!
+      XCTAssertEqual(urlA.serialized(), "opq:foo-bar-baz")
+      XCTAssertEqual(urlB.serialized(), "opq:foo-bar-baz")
+      XCTAssert(urlA.hasOpaquePath && urlB.hasOpaquePath)
+      checkComparable(urlA, urlB, expected: .equal)
+    }
+    // Non-equal URLs.
+    do {
+      let urlA = WebURL("http://example.com/foo/bar?baz#qux")!
+      let urlB = WebURL("http://somewhereelse.com/foo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "http://somewhereelse.com/foo/bar?baz#qux")
+      checkComparable(urlA, urlB, expected: .ascending)
+    }
+    do {
+      let urlA = WebURL("foo:/foo/bar?baz#qux")!
+      let urlB = WebURL("foo:/bar/foo?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "foo:/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "foo:/bar/foo?baz#qux")
+      checkComparable(urlA, urlB, expected: .descending)
+    }
+    do {
+      let urlA = WebURL("opq:foo-bar-baz")!
+      let urlB = WebURL("opq:baz-bar-foo")!
+      XCTAssertEqual(urlA.serialized(), "opq:foo-bar-baz")
+      XCTAssertEqual(urlB.serialized(), "opq:baz-bar-foo")
+      XCTAssert(urlA.hasOpaquePath && urlB.hasOpaquePath)
+      checkComparable(urlA, urlB, expected: .descending)
+    }
+    // Percent-encoding.
+    do {
+      let urlA = WebURL("http://example.com/foo/bar?baz#qux")!
+      let urlB = WebURL("http://example.com/f%6Fo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/f%6Fo/bar?baz#qux")
+      checkComparable(urlA, urlB, expected: .descending)
+    }
+    do {
+      let urlA = WebURL("foo:/foo/bar?baz#qux")!
+      let urlB = WebURL("foo:/foo/bar?baz#qu%78")!
+      XCTAssertEqual(urlA.serialized(), "foo:/foo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "foo:/foo/bar?baz#qu%78")
+      checkComparable(urlA, urlB, expected: .descending)
+    }
+    // Case-sensitivity.
+    do {
+      let urlA = WebURL("HTTP://EXamPLE.cOm/FOO/bar")!
+      let urlB = WebURL("http://exAMple.CoM/foo/bar")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/FOO/bar")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/foo/bar")
+      checkComparable(urlA, urlB, expected: .ascending)
+    }
+    do {
+      let urlA = WebURL("foo://EXamPLE.cOm/foo/bar")!
+      let urlB = WebURL("foo://exAMple.CoM/foo/bar")!
+      XCTAssertEqual(urlA.serialized(), "foo://EXamPLE.cOm/foo/bar")
+      XCTAssertEqual(urlB.serialized(), "foo://exAMple.CoM/foo/bar")
+      checkComparable(urlA, urlB, expected: .ascending)
+    }
+    // Percent-encoding and case-sensitivity.
+    do {
+      let urlA = WebURL("http://example.com/f%6Fo/bar?baz#qux")!
+      let urlB = WebURL("http://example.com/f%6fo/bar?baz#qux")!
+      XCTAssertEqual(urlA.serialized(), "http://example.com/f%6Fo/bar?baz#qux")
+      XCTAssertEqual(urlB.serialized(), "http://example.com/f%6fo/bar?baz#qux")
+      checkComparable(urlA, urlB, expected: .ascending)
+    }
+    do {
+      let urlA = WebURL("foo:/foo/bar?baz#qux%ff")!
+      let urlB = WebURL("foo:/foo/bar?baz#qux%FF")!
+      XCTAssertEqual(urlA.serialized(), "foo:/foo/bar?baz#qux%ff")
+      XCTAssertEqual(urlB.serialized(), "foo:/foo/bar?baz#qux%FF")
+      checkComparable(urlA, urlB, expected: .descending)
+    }
+  }
+
   func testCustomStringConvertible() {
     // String.init(WebURL) should include the fragment. Is the same as calling .serialized()
     do {
@@ -38,6 +326,42 @@ extension WebURLTests {
       XCTAssertEqual(url.serialized(excludingFragment: true), "http://example.com/some/path?and&a&query")
       XCTAssertNotEqual(url.serialized(), url.serialized(excludingFragment: true))
     }
+  }
+
+  func testCodable() throws {
+    // WebURLs should be encoded as their serialization.
+    func checkJSONEncoding(_ url: WebURL) throws {
+      struct MyType: Equatable, Codable {
+        var someData: Int
+        var url: WebURL
+      }
+      let originalValue = MyType(someData: .random(in: 1..<1000), url: url)
+
+      // Encode the value, check that the JSON output is as expected.
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.withoutEscapingSlashes, .sortedKeys, .prettyPrinted]
+      let jsonString = String(decoding: try encoder.encode(originalValue), as: UTF8.self)
+      XCTAssertEqual(
+        jsonString,
+        #"""
+        {
+          "someData" : \#(originalValue.someData),
+          "url" : "\#(originalValue.url.serialized())"
+        }
+        """#
+      )
+      // Decode the JSON output, check that the result round-trips.
+      let decodedValue = try JSONDecoder().decode(MyType.self, from: Data(jsonString.utf8))
+      XCTAssertEqual(originalValue, decodedValue)
+    }
+
+    // Special/Non-Special/Opaque Path.
+    try checkJSONEncoding(WebURL("https://example.com/foo/bar?baz#qux")!)
+    try checkJSONEncoding(WebURL("foo:/bar/rab?baz#qux")!)
+    try checkJSONEncoding(WebURL("opq:bar-rab?baz#qux")!)
+    // Percent-encoding.
+    try checkJSONEncoding(WebURL("http://example.com/f%6Fo/bar?baz#qux")!)
+    try checkJSONEncoding(WebURL("foo:/foo/bar?baz#qux%FF")!)
   }
 }
 
