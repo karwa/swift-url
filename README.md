@@ -14,11 +14,12 @@ A new URL type for Swift.
 
 And of course, it's written in **100% Swift**.
 
-> [**NEW**] The documentation is currently being rewritten for DocC. You can check out the preview [here](https://karwa.github.io/swift-url-docs-test/main/documentation/weburl/).
->  It's still being worked on, but it's already much better than the existing docs.
+> [**NEW**] The documentation has been entirely rewritten for DocC!
+> It's hard to overstate what an enormous improvement it is - just check it out for yourself!
 
-- The [Getting Started](GettingStarted.md) guide contains an overview of how to use the `WebURL` type.
-- The [API Reference](https://karwa.github.io/swift-url/) contains more detail about specific functionality.
+The [Documentation](https://karwa.github.io/swift-url/main/documentation/weburl/) is the best place to learn about WebURL.
+  
+Note: The documentation at `/main/documentation/weburl` is built from the `main` branch, but you can also visit the stable documentation for a specific version (e.g. `/0.2.1/documentation/weburl`).
 
 # Using WebURL in your project
 
@@ -62,7 +63,7 @@ url.pathComponents += ["apple", "swift"]
 url // "https://github.com/apple/swift"
 ```
 
-Make sure to read the [Getting Started](GettingStarted.md) guide for an overview of what you can do with `WebURL`.
+Visit [the documentation](https://karwa.github.io/swift-url/main/documentation/weburl/weburl/) for an overview of what you can do with `WebURL`.
 
 ## Integration with swift-system
 
@@ -147,7 +148,7 @@ Looking beyond v1.0, the other features I'd like to add are:
   
 4. APIs for relative references.
 
-   All `WebURL`s are absolute URLs (following the standard), and relative references are currently only supported as strings via the [`WebURL.resolve(_:)` method](https://karwa.github.io/swift-url/WebURL/#weburl.resolve(_:)).
+   All `WebURL`s are absolute URLs (following the standard), and relative references are currently only supported as strings via the [`WebURL.resolve(_:)` method](https://karwa.github.io/swift-url/main/documentation/weburl/weburl/resolve(_:)).
 
    It would be valuable to a lot of applications (e.g. server frameworks) to add a richer API for reading and manipulating relative references, instead of using only strings. We may also want to calculate the difference between 2 URLs and return the result as a relative reference.
   
