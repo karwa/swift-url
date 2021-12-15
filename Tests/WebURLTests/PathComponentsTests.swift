@@ -1897,6 +1897,23 @@ extension PathComponentsTests {
       XCTAssertURLIsIdempotent(url)
     }
 
+    // Appending non-normalized Windows drive letter to root path (non-file).
+    do {
+      var url = WebURL("not-file://host/")!
+      XCTAssertEqualElements(url.pathComponents, [""])
+
+      let range = url.pathComponents.append(contentsOf: ["C|", "Windows", "System32", ""])
+      XCTAssertEqual(range.lowerBound, url.pathComponents.startIndex)
+      XCTAssertEqual(range.upperBound, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["C|", "Windows", "System32", ""])
+      XCTAssertEqualElements(url.pathComponents[range], ["C|", "Windows", "System32", ""])
+      XCTAssertEqual(url.path, "/C|/Windows/System32/")
+      XCTAssertEqual(url.pathComponents.count, 4)
+
+      XCTAssertEqual(url.serialized(), "not-file://host/C|/Windows/System32/")
+      XCTAssertURLIsIdempotent(url)
+    }
+
     // Appending ".." components.
     do {
       var url = WebURL("http://example.com/1/2/3")!
@@ -2284,6 +2301,169 @@ extension PathComponentsTests {
       XCTAssertEqual(url.pathComponents.count, 3)
 
       XCTAssertEqual(url.serialized(), "http://example.com/1/folder-%2561/3")
+      XCTAssertURLIsIdempotent(url)
+    }
+  }
+
+  func testAppendSingle() {
+
+    // Regular append on to non-root path.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      let idx = url.pathComponents.append("a")
+      XCTAssertEqual(idx, url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -1))
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "a"])
+      XCTAssertEqualElements(url.pathComponents[idx], "a")
+      XCTAssertEqual(url.path, "/1/2/3/a")
+      XCTAssertEqual(url.pathComponents.count, 4)
+
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/a")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending to root path.
+    do {
+      var url = WebURL("http://example.com/")!
+      XCTAssertEqualElements(url.pathComponents, [""])
+
+      let idx = url.pathComponents.append("hello")
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, ["hello"])
+      XCTAssertEqualElements(url.pathComponents[idx], "hello")
+      XCTAssertEqual(url.path, "/hello")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      XCTAssertEqual(url.serialized(), "http://example.com/hello")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending to a non-opaque, empty path.
+    do {
+      var url = WebURL("foo://example.com")!
+      XCTAssertEqualElements(url.pathComponents, [])
+      XCTAssertFalse(url.hasOpaquePath)
+
+      let idx = url.pathComponents.append("hello")
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, ["hello"])
+      XCTAssertEqualElements(url.pathComponents[idx], "hello")
+      XCTAssertEqual(url.path, "/hello")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      XCTAssertEqual(url.serialized(), "foo://example.com/hello")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending to directory path.
+    do {
+      var url = WebURL("http://example.com/foo/bar/")!
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", ""])
+
+      let idx = url.pathComponents.append("hello")
+      XCTAssertEqual(idx, url.pathComponents.index(url.pathComponents.startIndex, offsetBy: 2))
+      XCTAssertEqualElements(url.pathComponents, ["foo", "bar", "hello"])
+      XCTAssertEqualElements(url.pathComponents[idx], "hello")
+      XCTAssertEqual(url.path, "/foo/bar/hello")
+      XCTAssertEqual(url.pathComponents.count, 3)
+
+      XCTAssertEqual(url.serialized(), "http://example.com/foo/bar/hello")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending an empty component on to a root path (should be a no-op).
+    do {
+      var url = WebURL("foo:/")!
+      XCTAssertEqualElements(url.pathComponents, [""])
+
+      let idx = url.pathComponents.append("")
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, [""])
+      XCTAssertEqualElements(url.pathComponents[idx], "")
+      XCTAssertEqual(url.path, "/")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      XCTAssertEqual(url.serialized(), "foo:/")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending non-normalized Windows drive letter to root path.
+    do {
+      var url = WebURL("file://host/")!
+      XCTAssertEqualElements(url.pathComponents, [""])
+
+      let idx = url.pathComponents.append("C|")
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, ["C:"])
+      XCTAssertEqualElements(url.pathComponents[idx], "C:")
+      XCTAssertEqual(url.path, "/C:")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      XCTAssertEqual(url.serialized(), "file://host/C:")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending non-normalized Windows drive letter to root path (non-file).
+    do {
+      var url = WebURL("not-file://host/")!
+      XCTAssertEqualElements(url.pathComponents, [""])
+
+      let idx = url.pathComponents.append("C|")
+      XCTAssertEqual(idx, url.pathComponents.startIndex)
+      XCTAssertEqualElements(url.pathComponents, ["C|"])
+      XCTAssertEqualElements(url.pathComponents[idx], "C|")
+      XCTAssertEqual(url.path, "/C|")
+      XCTAssertEqual(url.pathComponents.count, 1)
+
+      XCTAssertEqual(url.serialized(), "not-file://host/C|")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending ".." components (should be a no-op).
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      let idx = url.pathComponents.append("..")
+      XCTAssertEqual(idx, url.pathComponents.endIndex)
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+      XCTAssertEqual(url.path, "/1/2/3")
+      XCTAssertEqual(url.pathComponents.count, 3)
+
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending components with slashes.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      let idx = url.pathComponents.append("/a")
+      XCTAssertEqual(idx, url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -1))
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "/a"])
+      XCTAssertEqualElements(url.pathComponents[idx], "/a")
+      XCTAssertEqual(url.path, "/1/2/3/%2Fa")
+      XCTAssertEqual(url.pathComponents.count, 4)
+
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/%2Fa")
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending components with non-percent-encoding "%XX" sequences.
+    do {
+      var url = WebURL("http://example.com/1/2/3")!
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3"])
+
+      let idx = url.pathComponents.append("folder-%61")
+      XCTAssertEqual(idx, url.pathComponents.index(url.pathComponents.endIndex, offsetBy: -1))
+      XCTAssertEqualElements(url.pathComponents, ["1", "2", "3", "folder-%61"])
+      XCTAssertEqualElements(url.pathComponents[idx], "folder-%61")
+      XCTAssertEqual(url.path, "/1/2/3/folder-%2561")
+      XCTAssertEqual(url.pathComponents.count, 4)
+
+      XCTAssertEqual(url.serialized(), "http://example.com/1/2/3/folder-%2561")
       XCTAssertURLIsIdempotent(url)
     }
   }
