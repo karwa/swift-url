@@ -1,7 +1,5 @@
 # ``WebURL/WebURL``
 
-A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.
-
 ## Overview
 
 
