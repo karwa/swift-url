@@ -14,7 +14,7 @@ A new URL type for Swift.
 
 And of course, it's written in **100% Swift**.
 
-> [**NEW**] The documentation is currently being rewritten for DocC. You can check out the preview [here](https://karwa.github.io/swift-url-docs-test/documentation/weburl/).
+> [**NEW**] The documentation is currently being rewritten for DocC. You can check out the preview [here](https://karwa.github.io/swift-url-docs-test/main/documentation/weburl/).
 >  It's still being worked on, but it's already much better than the existing docs.
 
 - The [Getting Started](GettingStarted.md) guide contains an overview of how to use the `WebURL` type.
