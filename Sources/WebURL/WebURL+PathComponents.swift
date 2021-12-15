@@ -176,9 +176,16 @@ extension WebURL.PathComponents: BidirectionalCollection {
     guard start <= end else {
       return -1 * distance(from: end, to: start)
     }
-    return storage.utf8[start.range.lowerBound..<end.range.lowerBound].lazy.filter {
-      $0 == ASCII.forwardSlash.codePoint
-    }.count
+    let pathSlice = storage.utf8[start.range.lowerBound..<end.range.lowerBound]
+    var n = 0
+    var idx = pathSlice.startIndex
+    while idx < pathSlice.endIndex {
+      if pathSlice[idx] == ASCII.forwardSlash.codePoint {
+        n &+= 1
+      }
+      pathSlice.formIndex(after: &idx)
+    }
+    return n
   }
 
   public func index(after i: Index) -> Index {
