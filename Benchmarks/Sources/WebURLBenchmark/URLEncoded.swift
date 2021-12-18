@@ -49,4 +49,16 @@ let urlEncoded_Decoded = BenchmarkSuite(name: "URLEncoded") { suite in
       blackHole(string.percentDecoded())
     }
   }
+
+  let urlDecoded_notEncoded_strings = [
+    #"This string does not contain any percent-encoding"#,
+    #"This is another string -- which also does not contain any percent-encoding"#,
+    #"This 🧵 does not contain any ٪-encoding"#,
+    #"This 🧵 does not contain any ٪-encoding -- This 🧵 does not contain any ٪-encoding -- This 🧵 does not contain any ٪-encoding"#
+  ]
+  suite.benchmark("String.urlDecoded.notEncoded") {
+    for string in urlDecoded_notEncoded_strings {
+      blackHole(string.percentDecoded())
+    }
+  }
 }

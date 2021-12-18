@@ -152,7 +152,7 @@ extension WebURL {
   ///
   /// > Tip:
   /// > The documentation for this type can be found at: ``WebURL/pathComponents-swift.property``.
-  /// 
+  ///
   public struct PathComponents {
 
     @usableFromInline

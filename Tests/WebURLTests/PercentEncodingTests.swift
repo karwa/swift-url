@@ -247,6 +247,64 @@ extension PercentEncodingTests {
     }
   }
 
+  func testPercentDecoded_fastPath() {
+
+    func checkFastPathResult<Substitutions: SubstitutionMap>(
+      _ str: String, map: Substitutions._Member, expectedCanSkip: Bool, _ expectedDecoded: String
+    ) {
+      var copy = str
+      let canSkipDecoding = copy.withUTF8 { map.base._canSkipDecoding($0) }
+      XCTAssertEqual(canSkipDecoding, expectedCanSkip)
+      if canSkipDecoding {
+        XCTAssertEqual(str.percentDecoded(substitutions: map), str)
+      }
+      XCTAssertEqual(str.percentDecoded(substitutions: map), expectedDecoded)
+    }
+
+    // For regular decoding (no substitutions), a percent-sign means the source data might be encoded.
+    checkFastPathResult(
+      "hello, world! Test&Symbols£$@[]{}\n><?", map: .none, expectedCanSkip: true,
+      "hello, world! Test&Symbols£$@[]{}\n><?"
+    )
+    checkFastPathResult(
+      "Perform addition using the '+' operator", map: .none, expectedCanSkip: true,
+      "Perform addition using the '+' operator"
+    )
+    checkFastPathResult(  // Not encoded, but contains a percent-sign so the fast-path assumes it might be.
+      "hello, world! Te%st&Symbols£$@[]{}\n><?", map: .none, expectedCanSkip: false,
+      "hello, world! Te%st&Symbols£$@[]{}\n><?"
+    )
+    checkFastPathResult(
+      "hello, world! Te%GGst&Symbols£$@[]{}\n><?", map: .none, expectedCanSkip: false,
+      "hello, world! Te%GGst&Symbols£$@[]{}\n><?"
+    )
+    checkFastPathResult(
+      "hello, world! Te%20st&Symbols£$@[]{}\n><?", map: .none, expectedCanSkip: false,
+      "hello, world! Te st&Symbols£$@[]{}\n><?"
+    )
+
+    // For form-decoding, a percent-sign or '+' character means the source data might be encoded.
+    checkFastPathResult(
+      "hello, world! Test&Symbols£$@[]{}\n><?", map: .formEncoding, expectedCanSkip: true,
+      "hello, world! Test&Symbols£$@[]{}\n><?"
+    )
+    checkFastPathResult(
+      "Perform addition using the '+' operator", map: .formEncoding, expectedCanSkip: false,
+      "Perform addition using the ' ' operator"
+    )
+    checkFastPathResult(  // Not encoded, but contains a percent-sign so the fast-path assumes it might be.
+      "hello, world! Te%st&Symbols£$@[]{}\n><?", map: .formEncoding, expectedCanSkip: false,
+      "hello, world! Te%st&Symbols£$@[]{}\n><?"
+    )
+    checkFastPathResult(
+      "hello, world! Te%GGst&Symbols£$@[]{}\n><?", map: .formEncoding, expectedCanSkip: false,
+      "hello, world! Te%GGst&Symbols£$@[]{}\n><?"
+    )
+    checkFastPathResult(
+      "hello, world! Te%20st&Symbols£$@[]{}\n><?", map: .formEncoding, expectedCanSkip: false,
+      "hello, world! Te st&Symbols£$@[]{}\n><?"
+    )
+  }
 
   func testPercentDecoded_noFormDecoding() {
     // Check that we only do percent-decoding, not form-decoding.

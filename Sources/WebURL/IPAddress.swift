@@ -1498,7 +1498,7 @@ extension IPv4Address {
   ///
   /// [rfc4001]: https://tools.ietf.org/html/rfc4001#page-7
   ///
-	/// ## See Also
+  /// ## See Also
   ///
   /// - ``IPv4Address/init(_:)``
   /// - ``IPv4Address/init(dottedDecimal:)``
