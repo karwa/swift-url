@@ -188,3 +188,60 @@ extension OtherUtilitiesTests {
     }
   }
 }
+
+extension OtherUtilitiesTests {
+
+  func testFastContains() {
+    func check(_ str: String, for byte: UInt8, expected: Bool) {
+      var copy = str
+      let fastResult = copy.withUTF8 { $0._fastContains(byte) }
+      let slowResult = copy.withUTF8 { $0.contains(byte) }
+      XCTAssertEqual(fastResult, slowResult)
+      XCTAssertEqual(fastResult, expected)
+    }
+
+    // Empty collections do not contain anything.
+    check("", for: 0, expected: false)
+    check("", for: 128, expected: false)
+    check("", for: .max, expected: false)
+
+    // ASCII: Check that every ASCII byte is correctly found/not found.
+    for char in UInt8.min ... .max {
+      check(
+        "12345678901234567890", for: char,
+        expected: ASCII(char).map { ASCII.ranges.digits.contains($0) } ?? false
+      )
+    }
+    for char in UInt8.min ... .max {
+      check(
+        "abcdefghijklmnopqrstuvwxyz", for: char,
+        expected: ASCII(char).map { ASCII.ranges.lowercaseAlpha.contains($0) } ?? false
+      )
+    }
+    for char in UInt8.min ... .max {
+      check(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ", for: char,
+        expected: ASCII(char).map { ASCII.ranges.uppercaseAlpha.contains($0) } ?? false
+      )
+    }
+
+    // Percent sign.
+    check("hello, world!", for: ASCII.percentSign.codePoint, expected: false)
+    check("%hello, world!", for: ASCII.percentSign.codePoint, expected: true)
+    check("hel%lo, world!", for: ASCII.percentSign.codePoint, expected: true)
+    check("hello,%world!", for: ASCII.percentSign.codePoint, expected: true)
+    check("hello, w%orld!", for: ASCII.percentSign.codePoint, expected: true)
+    check("hello, worl%d!", for: ASCII.percentSign.codePoint, expected: true)
+    check("hello, world!%", for: ASCII.percentSign.codePoint, expected: true)
+    check("hello,%wor%ld!%", for: ASCII.percentSign.codePoint, expected: true)
+    check(
+      "he||o, `world`! This is a bit of a <<longer>> string;\n it contains $€ver@l special characters, but still no percent~sign",
+      for: ASCII.percentSign.codePoint, expected: false
+    )
+
+    // Non-ASCII.
+    check("this 🐥is a test 🐥", for: ASCII.percentSign.codePoint, expected: false)
+    check("this 🐥is a test 🐥", for: ASCII.space.codePoint, expected: true)
+    check("this 🐥is a t%est 🐥", for: ASCII.percentSign.codePoint, expected: true)
+  }
+}

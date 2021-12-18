@@ -222,6 +222,22 @@ public protocol SubstitutionMap {
   ///            Restored code-points must always be ASCII.
   ///
   func unsubstitute(ascii codePoint: UInt8) -> UInt8?
+
+  /// Returns `true` if it can be trivially determined that the given source bytes do not require decoding.
+  ///
+  /// For ``NoSubstitutions``, this means the bytes do not contain any "%" signs.
+  /// For ``formEncoding``, this means the bytes do not contain any "%" signs or "+" signs.
+  /// For custom substitution maps, this returns `false`.
+  ///
+  func _canSkipDecoding(_ source: UnsafeBufferPointer<UInt8>) -> Bool
+}
+
+extension SubstitutionMap {
+
+  @inlinable @inline(__always)
+  public func _canSkipDecoding(_ source: UnsafeBufferPointer<UInt8>) -> Bool {
+    false
+  }
 }
 
 
@@ -994,8 +1010,12 @@ extension Collection where Element == UInt8 {
   ///
   @inlinable
   internal func percentDecodedString<Substitutions: SubstitutionMap>(substitutions: Substitutions) -> String {
-    withContiguousStorageIfAvailable {
-      String(discontiguousUTF8: $0.boundsChecked.lazy.percentDecoded(substitutions: substitutions))
+    withContiguousStorageIfAvailable { sourceBytes in
+      if substitutions._canSkipDecoding(sourceBytes) {
+        return String(decoding: sourceBytes, as: UTF8.self)
+      } else {
+        return String(discontiguousUTF8: sourceBytes.boundsChecked.lazy.percentDecoded(substitutions: substitutions))
+      }
     } ?? String(discontiguousUTF8: self.lazy.percentDecoded(substitutions: substitutions))
   }
 
@@ -1174,7 +1194,10 @@ extension StringProtocol {
   ///
   @inlinable
   public func percentDecodedBytesArray<Substitutions: SubstitutionMap>(substitutions: Substitutions) -> [UInt8] {
-    Array(utf8.lazy.percentDecoded(substitutions: substitutions))
+    if utf8.withContiguousStorageIfAvailable({ substitutions._canSkipDecoding($0) }) == true {
+      return Array(utf8)
+    }
+    return Array(utf8.lazy.percentDecoded(substitutions: substitutions))
   }
 
   // _StaticMember variant for pre-5.5 toolchains.
@@ -1270,7 +1293,10 @@ extension StringProtocol {
   ///
   @inlinable
   public func percentDecoded<Substitutions: SubstitutionMap>(substitutions: Substitutions) -> String {
-    utf8.percentDecodedString(substitutions: substitutions)
+    if utf8.withContiguousStorageIfAvailable({ substitutions._canSkipDecoding($0) }) == true {
+      return String(self)
+    }
+    return utf8.percentDecodedString(substitutions: substitutions)
   }
 
   // _StaticMember variant for pre-5.5 toolchains.
@@ -1343,6 +1369,11 @@ extension StringProtocol {
 // MARK: - Substitution Maps
 // --------------------------------------------
 
+
+/// Threshold for percent-decoding fast-path.
+/// If the source contains more bytes than this, it should be assumed to contain percent-decoding.
+/// If it contains fewer bytes, it's likely profitable to check whether decoding is really required or not.
+@usableFromInline let _percentDecodingFastPathThreshold = 200
 
 #if swift(>=5.5)
 
@@ -1417,6 +1448,11 @@ public struct NoSubstitutions: SubstitutionMap {
 
   @inlinable @inline(__always)
   public func unsubstitute(ascii codePoint: UInt8) -> UInt8? { nil }
+
+  @inlinable @inline(__always)
+  public func _canSkipDecoding(_ source: UnsafeBufferPointer<UInt8>) -> Bool {
+    source.count <= _percentDecodingFastPathThreshold && !source._fastContains(ASCII.percentSign.codePoint)
+  }
 }
 
 
@@ -1993,7 +2029,7 @@ extension URLEncodeSet {
   }
 
   /// Form-encoding. See the static member ``WebURL/PercentEncodeSet/formEncoding`` for details.
-  /// 
+  ///
   public struct FormEncoding: PercentEncodeSet, DualImplementedPercentEncodeSet {
 
     @inlinable
@@ -2034,6 +2070,12 @@ extension URLEncodeSet {
       @inlinable @inline(__always)
       public func unsubstitute(ascii codePoint: UInt8) -> UInt8? {
         codePoint == ASCII.plus.codePoint ? ASCII.space.codePoint : nil
+      }
+
+      @inlinable @inline(__always)
+      public func _canSkipDecoding(_ source: UnsafeBufferPointer<UInt8>) -> Bool {
+        source.count <= _percentDecodingFastPathThreshold
+          && !(source._fastContains(ASCII.percentSign.codePoint) || source._fastContains(ASCII.plus.codePoint))
       }
     }
 
