@@ -64,32 +64,38 @@ extension WebURL._SPIs {
   ///
   public func _simplyPathInContext(_ path: String) -> String {
 
-    struct StringWriter<InputString>: _PathParser
-    where InputString: BidirectionalCollection, InputString.Element == UInt8 {
-      var path: String = ""
+    struct StringWriter: _PathParser {
+      var utf8: [UInt8] = []
+
+      typealias InputString = UnsafeBoundsCheckedBufferPointer<UInt8>
       mutating func visitEmptyPathComponents(_ n: UInt) {
-        path = String(repeating: "/", count: Int(n)) + path
+        utf8.insert(contentsOf: repeatElement(ASCII.forwardSlash.codePoint, count: Int(n)), at: 0)
       }
       mutating func visitInputPathComponent(_ pathComponent: InputString.SubSequence) {
-        path = "/\(String(decoding: pathComponent, as: UTF8.self))\(path)"
+        utf8.insert(contentsOf: pathComponent, at: 0)
+        utf8.insert(ASCII.forwardSlash.codePoint, at: 0)
       }
       mutating func visitDeferredDriveLetter(_ pathComponent: (UInt8, UInt8), isConfirmedDriveLetter: Bool) {
-        path = "/\(withUnsafeBytes(of: pathComponent) { String(decoding: $0, as: UTF8.self) })\(path)"
+        withUnsafeBytes(of: pathComponent) { utf8.insert(contentsOf: $0, at: 0) }
+        utf8.insert(ASCII.forwardSlash.codePoint, at: 0)
       }
       func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence) {
         fatalError("Not used for joining paths")
       }
     }
 
-    var writer = StringWriter<String.UTF8View>()
-    writer.walkPathComponents(
-      pathString: path.utf8,
-      schemeKind: _url.schemeKind,
-      hasAuthority: _url.utf8.hostname != nil,
-      baseURL: nil,
-      absolutePathsCopyWindowsDriveFromBase: false  // no baseURL
-    )
-    return writer.path
+    return path._withContiguousUTF8 { pathUTF8 in
+      var writer = StringWriter()
+      writer.utf8.reserveCapacity(pathUTF8.count)
+      writer.walkPathComponents(
+        pathString: pathUTF8.boundsChecked,
+        schemeKind: _url.schemeKind,
+        hasAuthority: _url.utf8.hostname != nil,
+        baseURL: nil,
+        absolutePathsCopyWindowsDriveFromBase: false  // no baseURL
+      )
+      return String(decoding: writer.utf8, as: UTF8.self)
+    }
   }
 }
 

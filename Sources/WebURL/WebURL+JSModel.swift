@@ -329,13 +329,16 @@ extension WebURL.JSModel {
       swiftModel.scheme + ":"
     }
     set {
-      let trimmedAndFiltered: ASCII.NewlineAndTabFiltered<Substring.UTF8View>
-      if let terminatorIdx = newValue.firstIndex(of: ":") {
-        trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[..<newValue.index(after: terminatorIdx)].utf8)
-      } else {
-        trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[...].utf8)
+      newValue._withContiguousUTF8 { _newValue in
+        let newValue = _newValue.boundsChecked
+        let trimmedAndFiltered: ASCII.NewlineAndTabFiltered<UnsafeBoundsCheckedBufferPointer<UInt8>>
+        if let terminatorIdx = newValue.firstIndex(of: ASCII.colon.codePoint) {
+          trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[..<newValue.index(after: terminatorIdx)])
+        } else {
+          trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[...])
+        }
+        try? swiftModel.utf8.setScheme(trimmedAndFiltered)
       }
-      try? swiftModel.utf8.setScheme(trimmedAndFiltered)
     }
   }
 
@@ -349,17 +352,19 @@ extension WebURL.JSModel {
       swiftModel.hostname ?? ""
     }
     set {
-      let filtered = ASCII.NewlineAndTabFiltered(newValue.utf8)
-      var callback = IgnoreValidationErrors()
-      let schemeKind = swiftModel.schemeKind
-      guard let hostnameEnd = findEndOfHostnamePrefix(filtered, scheme: schemeKind, callback: &callback) else {
-        return
+      newValue._withContiguousUTF8 { newValue in
+        let filtered = ASCII.NewlineAndTabFiltered(newValue.boundsChecked)
+        var callback = IgnoreValidationErrors()
+        let schemeKind = swiftModel.schemeKind
+        guard let hostnameEnd = findEndOfHostnamePrefix(filtered, scheme: schemeKind, callback: &callback) else {
+          return
+        }
+        // Unlike other delimiters, including a port causes the entire operation to fail.
+        if hostnameEnd < filtered.endIndex, filtered[hostnameEnd] == ASCII.colon.codePoint {
+          return
+        }
+        try? swiftModel.utf8.setHostname(filtered[..<hostnameEnd])
       }
-      // Unlike other delimiters, including a port causes the entire operation to fail.
-      if hostnameEnd < filtered.endIndex, filtered[hostnameEnd] == ASCII.colon.codePoint {
-        return
-      }
-      try? swiftModel.utf8.setHostname(filtered[..<hostnameEnd])
     }
   }
 
@@ -407,7 +412,9 @@ extension WebURL.JSModel {
       swiftModel.path
     }
     set {
-      try? swiftModel.utf8.setPath(ASCII.NewlineAndTabFiltered(newValue.utf8))
+      newValue._withContiguousUTF8 { newValue in
+        try? swiftModel.utf8.setPath(ASCII.NewlineAndTabFiltered(newValue.boundsChecked))
+      }
     }
   }
 
@@ -426,11 +433,13 @@ extension WebURL.JSModel {
         swiftModel.query = nil
         return
       }
-      var newQuery = newValue[...]
-      if newValue.first?.asciiValue == ASCII.questionMark.codePoint {
-        newQuery = newValue.dropFirst()
+      newValue._withContiguousUTF8 { newValue in
+        var newQuery = newValue.boundsChecked
+        if newQuery.first == ASCII.questionMark.codePoint {
+          newQuery = newQuery.dropFirst()
+        }
+        try? swiftModel.utf8.setQuery(ASCII.NewlineAndTabFiltered(newQuery))
       }
-      try? swiftModel.utf8.setQuery(ASCII.NewlineAndTabFiltered(newQuery.utf8))
     }
   }
 
@@ -449,11 +458,13 @@ extension WebURL.JSModel {
         swiftModel.fragment = nil
         return
       }
-      var newFragment = newValue[...]
-      if newValue.first?.asciiValue == ASCII.numberSign.codePoint {
-        newFragment = newValue.dropFirst()
+      newValue._withContiguousUTF8 { newValue in
+        var newFragment = newValue.boundsChecked
+        if newFragment.first == ASCII.numberSign.codePoint {
+          newFragment = newFragment.dropFirst()
+        }
+        try? swiftModel.utf8.setFragment(ASCII.NewlineAndTabFiltered(newFragment))
       }
-      try? swiftModel.utf8.setFragment(ASCII.NewlineAndTabFiltered(newFragment.utf8))
     }
   }
 }

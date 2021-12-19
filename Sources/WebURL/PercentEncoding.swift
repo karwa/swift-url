@@ -673,7 +673,7 @@ extension StringProtocol {
   ///
   @inlinable
   public func percentEncoded<EncodeSet: PercentEncodeSet>(using encodeSet: EncodeSet) -> String {
-    utf8.percentEncodedString(using: encodeSet)
+    _withContiguousUTF8 { $0.percentEncodedString(using: encodeSet) }
   }
 
   // _StaticMember variant for pre-5.5 toolchains.
@@ -1194,10 +1194,12 @@ extension StringProtocol {
   ///
   @inlinable
   public func percentDecodedBytesArray<Substitutions: SubstitutionMap>(substitutions: Substitutions) -> [UInt8] {
-    if utf8.withContiguousStorageIfAvailable({ substitutions._canSkipDecoding($0) }) == true {
-      return Array(utf8)
+    _withContiguousUTF8 { utf8 in
+      if substitutions._canSkipDecoding(utf8) {
+        return Array(utf8)
+      }
+      return Array(utf8.lazy.percentDecoded(substitutions: substitutions))
     }
-    return Array(utf8.lazy.percentDecoded(substitutions: substitutions))
   }
 
   // _StaticMember variant for pre-5.5 toolchains.
@@ -1293,10 +1295,12 @@ extension StringProtocol {
   ///
   @inlinable
   public func percentDecoded<Substitutions: SubstitutionMap>(substitutions: Substitutions) -> String {
-    if utf8.withContiguousStorageIfAvailable({ substitutions._canSkipDecoding($0) }) == true {
-      return String(self)
+    _withContiguousUTF8 { utf8 in
+      if substitutions._canSkipDecoding(utf8) {
+        return String(self)
+      }
+      return utf8.percentDecodedString(substitutions: substitutions)
     }
-    return utf8.percentDecodedString(substitutions: substitutions)
   }
 
   // _StaticMember variant for pre-5.5 toolchains.

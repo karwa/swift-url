@@ -87,3 +87,61 @@ extension String {
     }
   }
 }
+
+
+// --------------------------------------------
+// MARK: - Contiguous UTF-8
+// --------------------------------------------
+// We do low-level string processing at the UTF-8 level, with functions that work with generic Collections of UInt8.
+// Those functions call withContiguousStorageIfAvailable, wrapping the provided buffer in a
+// UnsafeBoundsCheckedBufferPointer and forwarding to the actual implementation.
+// This is great for code-size: all contiguous data sources immediately drop down to a single generic specialization,
+// which includes bounds-checking.
+//
+// If the collection is ^not^ contiguous, we fall back to using it directly, and the compiler will create
+// a bespoke specialization. Generally, we don't expect many non-contiguous collections, so it's not a big deal.
+//
+// But there is one major exception: String.UTF8View. We know that, at runtime, almost all Strings will
+// be native Swift Strings, with contiguous UTF-8 storage - but statically, the compiler still emits a
+// specialization using String.UTF8View and storing String.Index-es, just in case it isn't.
+//
+// By using String.withUTF8 (not available on StringProtocol), we can use the native UTF-8 storage of a native
+// Swift String/Substring, while forcing bridged Strings to become native. This means that String always uses
+// the contiguous code-path, and we no longer need specializations for String.UTF8View.
+// The result is a 20% (!) reduction in code-size.
+// --------------------------------------------
+
+
+extension StringProtocol {
+
+  /// Calls `body` with this string's contents in a contiguous UTF-8 buffer.
+  ///
+  /// - If this is already a native String/Substring, its contiguous storage will be used directly.
+  /// - Otherwise, it will be copied to contiguous storage.
+  ///
+  @inlinable @inline(__always)
+  internal func _withContiguousUTF8<Result>(_ body: (UnsafeBufferPointer<UInt8>) throws -> Result) rethrows -> Result {
+    if let resultWithExistingStorage = try utf8.withContiguousStorageIfAvailable(body) {
+      return resultWithExistingStorage
+    }
+    var copy = String(self)
+    return try copy.withUTF8(body)
+  }
+}
+
+extension Optional where Wrapped: StringProtocol {
+
+  /// Calls `body` with this string's contents in a contiguous UTF-8 buffer.
+  ///
+  /// - If this value is `nil`, `body` is invoked with `nil`.
+  /// - If this is already a native String/Substring, its contiguous storage will be used directly.
+  /// - Otherwise, it will be copied to contiguous storage.
+  ///
+  @inlinable @inline(__always)
+  internal func _withContiguousUTF8<Result>(_ body: (UnsafeBufferPointer<UInt8>?) throws -> Result) rethrows -> Result {
+    switch self {
+    case .some(let string): return try string._withContiguousUTF8(body)
+    case .none: return try body(nil)
+    }
+  }
+}
