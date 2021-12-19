@@ -51,10 +51,12 @@ public struct WebURL {
   /// [URL-spec]: https://url.spec.whatwg.org/
   ///
   @inlinable @inline(__always)
-  public init?<StringType>(
-    _ string: StringType
-  ) where StringType: StringProtocol, StringType.UTF8View: BidirectionalCollection {
-    self.init(utf8: string.utf8)
+  public init?<StringType>(_ string: StringType) where StringType: StringProtocol {
+    if let result = string._withContiguousUTF8({ WebURL(utf8: $0) }) {
+      self = result
+    } else {
+      return nil
+    }
   }
 
   /// Parses a URL string from a collection of UTF-8 code-units.
@@ -126,10 +128,8 @@ public struct WebURL {
   /// [URL-spec]: https://url.spec.whatwg.org/
   ///
   @inlinable @inline(__always)
-  public func resolve<StringType>(
-    _ string: StringType
-  ) -> WebURL? where StringType: StringProtocol, StringType.UTF8View: BidirectionalCollection {
-    utf8.resolve(string.utf8)
+  public func resolve<StringType>(_ string: StringType) -> WebURL? where StringType: StringProtocol {
+    string._withContiguousUTF8 { utf8.resolve($0) }
   }
 }
 
@@ -759,7 +759,7 @@ extension WebURL {
   ///
   @inlinable
   public mutating func setScheme<StringType>(_ newScheme: StringType) throws where StringType: StringProtocol {
-    try utf8.setScheme(newScheme.utf8)
+    try newScheme._withContiguousUTF8 { try utf8.setScheme($0) }
   }
 
   /// Replaces this URL's ``username`` or throws an error.
@@ -789,7 +789,7 @@ extension WebURL {
   ///
   @inlinable
   public mutating func setUsername<StringType>(_ newUsername: StringType?) throws where StringType: StringProtocol {
-    try utf8.setUsername(newUsername?.utf8)
+    try newUsername._withContiguousUTF8 { try utf8.setUsername($0) }
   }
 
   /// Replaces this URL's ``password`` or throws an error.
@@ -819,7 +819,7 @@ extension WebURL {
   ///
   @inlinable
   public mutating func setPassword<StringType>(_ newPassword: StringType?) throws where StringType: StringProtocol {
-    try utf8.setPassword(newPassword?.utf8)
+    try newPassword._withContiguousUTF8 { try utf8.setPassword($0) }
   }
 
   /// Replaces this URL's ``hostname`` or throws an error.
@@ -849,10 +849,8 @@ extension WebURL {
   /// - ``WebURL/UTF8View/setHostname(_:)``
   ///
   @inlinable
-  public mutating func setHostname<StringType>(
-    _ newHostname: StringType?
-  ) throws where StringType: StringProtocol, StringType.UTF8View: BidirectionalCollection {
-    try utf8.setHostname(newHostname?.utf8)
+  public mutating func setHostname<StringType>(_ newHostname: StringType?) throws where StringType: StringProtocol {
+    try newHostname._withContiguousUTF8 { try utf8.setHostname($0) }
   }
 
   /// Replaces this URL's ``port`` or throws an error.
@@ -908,10 +906,8 @@ extension WebURL {
   /// - ``WebURL/UTF8View/setPath(_:)``
   ///
   @inlinable
-  public mutating func setPath<StringType>(
-    _ newPath: StringType
-  ) throws where StringType: StringProtocol, StringType.UTF8View: BidirectionalCollection {
-    try utf8.setPath(newPath.utf8)
+  public mutating func setPath<StringType>(_ newPath: StringType) throws where StringType: StringProtocol {
+    try newPath._withContiguousUTF8 { try utf8.setPath($0) }
   }
 
   /// Replaces this URL's ``query`` or throws an error.
@@ -939,7 +935,7 @@ extension WebURL {
   ///
   @inlinable
   public mutating func setQuery<StringType>(_ newQuery: StringType?) throws where StringType: StringProtocol {
-    try utf8.setQuery(newQuery?.utf8)
+    try newQuery._withContiguousUTF8 { try utf8.setQuery($0) }
   }
 
   /// Replaces this URL's ``fragment`` or throws an error.
@@ -967,6 +963,6 @@ extension WebURL {
   ///
   @inlinable
   public mutating func setFragment<StringType>(_ newFragment: StringType?) throws where StringType: StringProtocol {
-    try utf8.setFragment(newFragment?.utf8)
+    try newFragment._withContiguousUTF8 { try utf8.setFragment($0) }
   }
 }

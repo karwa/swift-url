@@ -358,7 +358,7 @@ extension _PathParser {
     // Complete parsing from input, handle drive letter quirks.
     // ========================================================
 
-    var baseDrive: WebURL.UTF8View.SubSequence? = nil
+    var baseDrive: Optional<WebURL.UTF8View.SubSequence> = nil
 
     if case .file = schemeKind {
       if let base = baseURL {
