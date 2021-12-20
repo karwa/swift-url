@@ -357,6 +357,12 @@ extension WebURL.UTF8View {
 // --------------------------------------------
 
 
+// Inlining:
+// The setter implementations in URLStorage are all `@inlinable @inline(never)`, so they will be specialized
+// but never inlined. The generic entrypoints here use `@inline(__always)`, so withContiguousStorageIfAvailable
+// can be eliminated and call the correct specialization directly.
+
+
 extension WebURL.UTF8View {
 
   /// A slice containing the scheme of this URL.
@@ -398,7 +404,7 @@ extension WebURL.UTF8View {
   ///
   /// - ``WebURL/WebURL/setScheme(_:)``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public mutating func setScheme<UTF8Bytes>(
     _ newScheme: UTF8Bytes
   ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -448,7 +454,7 @@ extension WebURL.UTF8View {
   ///
   /// - ``WebURL/WebURL/setUsername(_:)``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public mutating func setUsername<UTF8Bytes>(
     _ newUsername: UTF8Bytes?
   ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -503,7 +509,7 @@ extension WebURL.UTF8View {
   ///
   /// - ``WebURL/WebURL/setPassword(_:)``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public mutating func setPassword<UTF8Bytes>(
     _ newPassword: UTF8Bytes?
   ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -556,7 +562,7 @@ extension WebURL.UTF8View {
   ///
   /// - ``WebURL/WebURL/setHostname(_:)``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public mutating func setHostname<UTF8Bytes>(
     _ newHostname: UTF8Bytes?
   ) throws where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
@@ -627,7 +633,7 @@ extension WebURL.UTF8View {
   ///
   /// - ``WebURL/WebURL/setPath(_:)``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public mutating func setPath<UTF8Bytes>(
     _ newPath: UTF8Bytes
   ) throws where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
@@ -679,7 +685,7 @@ extension WebURL.UTF8View {
   ///
   /// - ``WebURL/WebURL/setQuery(_:)``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public mutating func setQuery<UTF8Bytes>(
     _ newQuery: UTF8Bytes?
   ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
@@ -734,7 +740,7 @@ extension WebURL.UTF8View {
   ///
   /// - ``WebURL/WebURL/setFragment(_:)``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public mutating func setFragment<UTF8Bytes>(
     _ newFragment: UTF8Bytes?
   ) throws where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
