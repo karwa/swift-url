@@ -131,7 +131,7 @@ internal struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> 
   ///
   /// - Note: This pointer is valid only for the duration of the call to `body`.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   internal func withUnsafeMutablePointerToHeader<R>(
     _ body: (UnsafeMutablePointer<Header>) throws -> R
   ) rethrows -> R {
@@ -142,7 +142,7 @@ internal struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> 
   ///
   /// - Note: This pointer is valid only for the duration of the call to `body`.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   internal func withUnsafeMutablePointerToElements<R>(
     _ body: (UnsafeMutablePointer<Element>) throws -> R
   ) rethrows -> R {
@@ -153,7 +153,7 @@ internal struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> 
   ///
   /// - Note: These pointers are valid only for the duration of the call to `body`.
   ///
-  @inlinable
+  @inlinable @inline(__always)
   internal func withUnsafeMutablePointers<R>(
     _ body: (UnsafeMutablePointer<Header>, UnsafeMutablePointer<Element>) throws -> R
   ) rethrows -> R {
@@ -439,12 +439,12 @@ extension ManagedArrayBuffer: RandomAccessCollection {
     i &- 1
   }
 
-  @inlinable
+  @inlinable @inline(__always)
   internal func withContiguousStorageIfAvailable<R>(_ body: (UnsafeBufferPointer<Element>) throws -> R) rethrows -> R? {
     try withUnsafeBufferPointer(body)
   }
 
-  @inlinable
+  @inlinable @inline(__always)
   internal mutating func withContiguousMutableStorageIfAvailable<R>(
     _ body: (inout UnsafeMutableBufferPointer<Element>) throws -> R
   ) rethrows -> R? {
@@ -520,7 +520,7 @@ extension ManagedArrayBuffer {
 
 extension ManagedArrayBuffer {
 
-  @inlinable
+  @inlinable @inline(__always)
   internal func withUnsafeBufferPointer<R>(
     _ body: (UnsafeBufferPointer<Element>) throws -> R
   ) rethrows -> R {
@@ -529,7 +529,7 @@ extension ManagedArrayBuffer {
     }
   }
 
-  @inlinable
+  @inlinable @inline(__always)
   internal mutating func withUnsafeMutableBufferPointer<R>(
     _ body: (inout UnsafeMutableBufferPointer<Element>) throws -> R
   ) rethrows -> R {
@@ -540,7 +540,7 @@ extension ManagedArrayBuffer {
     }
   }
 
-  @inlinable
+  @inlinable @inline(__always)
   internal func withUnsafeBufferPointer<R>(
     range: Range<Index>, _ block: (UnsafeBufferPointer<Element>) throws -> R
   ) rethrows -> R {
