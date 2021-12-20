@@ -13,6 +13,12 @@
 // limitations under the License.
 
 
+// Inlining:
+// The setter implementations in URLStorage are all `@inlinable @inline(never)`, so they will be specialized
+// but never inlined. They are accessed via generic entrypoints in UTF8View, which use `@inline(__always)`,
+// so withContiguousStorageIfAvailable can be eliminated and call the correct specialization directly.
+
+
 // --------------------------------------------
 // MARK: - Scheme
 // --------------------------------------------
