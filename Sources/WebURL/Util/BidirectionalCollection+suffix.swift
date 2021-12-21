@@ -32,18 +32,37 @@ extension BidirectionalCollection {
 
 extension BidirectionalCollection {
 
-  /// Returns the index closest to `endIndex` where the element at the returned index matches the given predicate.
+  /// Returns the index closest to `endIndex` whose element matches the given predicate.
   ///
-  /// The difference between this implementation and the one in the standard library is that this uses  `>` and `<` rather than `==` and `!=`
-  /// to compare indexes, which allows bounds-checking to be more throughly eliminated.
+  /// The difference between this implementation and the one in the standard library is
+  /// that this uses  `>` and `<` rather than `==` and `!=` to compare indexes,
+  /// which allows bounds-checking to be more throughly eliminated.
   ///
   @inlinable
   internal func fastLastIndex(where predicate: (Element) -> Bool) -> Index? {
     var i = endIndex
     while i > startIndex {
       formIndex(before: &i)
+      // Since endIndex > startIndex, and 'i' starts from endIndex and decrements if > startIndex,
+      // it will never underflow. Thus 'i < endIndex' must always be true.
+      // The compiler isn't smart enough to prove that, so it won't eliminate the bounds-check.
+      // It's better to add the (certainly predictable) branch rather than bork our codegen with a trap.
       if i < endIndex, predicate(self[i]) { return i }
     }
     return nil
+  }
+}
+
+extension BidirectionalCollection where Element: Equatable {
+
+  /// Returns the index closest to `endIndex` whose element is equal to the given element.
+  ///
+  /// The difference between this implementation and the one in the standard library is
+  /// that this uses  `>` and `<` rather than `==` and `!=` to compare indexes,
+  /// which allows bounds-checking to be more throughly eliminated.
+  ///
+  @inlinable
+  internal func fastLastIndex(of element: Element) -> Index? {
+    fastLastIndex(where: { $0 == element })
   }
 }

@@ -41,7 +41,7 @@
 //
 //-------------------------------------------------------------------------
 
-@inlinable
+@inlinable @inline(__always)
 func urlFromBytes<Bytes>(_ inputString: Bytes, baseURL: WebURL?) -> WebURL?
 where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
 
