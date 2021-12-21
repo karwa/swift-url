@@ -500,7 +500,11 @@ extension IPv6Address {
   ///
   @inlinable @inline(__always)
   public init?<StringType>(_ description: StringType) where StringType: StringProtocol {
-    self.init(utf8: description.utf8)
+    if let result = description._withContiguousUTF8({ IPv6Address(utf8: $0) }) {
+      self = result
+    } else {
+      return nil
+    }
   }
 
   /// Parses an IPv6 address string from a collection of UTF-8 code-units.
@@ -1179,7 +1183,11 @@ extension IPv4Address {
   ///
   @inlinable @inline(__always)
   public init?<StringType>(_ description: StringType) where StringType: StringProtocol {
-    self.init(utf8: description.utf8)
+    if let result = description._withContiguousUTF8({ IPv4Address(utf8: $0) }) {
+      self = result
+    } else {
+      return nil
+    }
   }
 
   /// Parses an IPv4 address string from a collection of UTF-8 code-units.
@@ -1391,14 +1399,13 @@ extension IPv4Address {
   ///
   /// - ``IPv4Address/serialized``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public init?<StringType>(dottedDecimal string: StringType) where StringType: StringProtocol {
-    let _parsed =
-      string.utf8.withContiguousStorageIfAvailable {
-        IPv4Address(dottedDecimalUTF8: $0.boundsChecked)
-      } ?? IPv4Address(dottedDecimalUTF8: string.utf8)
-    guard let parsed = _parsed else { return nil }
-    self = parsed
+    if let result = string._withContiguousUTF8({ IPv4Address(dottedDecimalUTF8: $0) }) {
+      self = result
+    } else {
+      return nil
+    }
   }
 
   /// Parses an IPv4 address string in dotted-decimal notation, from a collection of UTF-8 code-units.
@@ -1431,8 +1438,22 @@ extension IPv4Address {
   ///
   /// - ``IPv4Address/serialized``
   ///
-  @inlinable
+  @inlinable @inline(__always)
   public init?<UTF8Bytes>(dottedDecimalUTF8 utf8: UTF8Bytes) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+    let _parsed =
+      utf8.withContiguousStorageIfAvailable {
+        IPv4Address.parseDottedDecimal(utf8: $0.boundsChecked)
+      } ?? IPv4Address.parseDottedDecimal(utf8: utf8)
+    guard let parsed = _parsed else {
+      return nil
+    }
+    self = parsed
+  }
+
+  @inlinable
+  internal static func parseDottedDecimal<UTF8Bytes>(
+    utf8: UTF8Bytes
+  ) -> IPv4Address? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
     var numericAddress = UInt32(0)
     var idx = utf8.startIndex
@@ -1473,7 +1494,7 @@ extension IPv4Address {
     guard numbersSeen == 4 else {
       return nil  // not enough pieces.
     }
-    self = IPv4Address(value: numericAddress, .numeric)
+    return IPv4Address(value: numericAddress, .numeric)
   }
 }
 
