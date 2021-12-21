@@ -74,10 +74,10 @@ internal protocol _PathParser {
   ///
   mutating func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence)
 
-  /// A callback which is invoked when the parser yields a number of consecutive empty path components.
-  /// Note that this does not imply that path components yielded via other callbacks are non-empty.
+  /// A callback which is invoked when the parser yields an empty path component.
+  /// This does not imply that path components yielded via other callbacks are non-empty.
   ///
-  mutating func visitEmptyPathComponents(_ n: UInt)
+  mutating func visitEmptyPathComponent()
 
   /// An optional callback which is invoked when the parser encounters a non-fatal URL syntax oddity.
   ///
@@ -87,14 +87,6 @@ internal protocol _PathParser {
 }
 
 extension _PathParser {
-
-  /// A callback which is invoked when the parser yields an empty path component.
-  /// Note that this does not imply that path components yielded via other callbacks are non-empty.
-  ///
-  @inlinable
-  internal mutating func visitEmptyPathComponent() {
-    visitEmptyPathComponents(1)
-  }
 
   @inlinable @inline(__always)
   internal mutating func visitValidationError(_ error: ValidationError) {
@@ -635,8 +627,8 @@ extension PathMetrics {
     }
 
     @inlinable
-    internal mutating func visitEmptyPathComponents(_ n: UInt) {
-      metrics.requiredCapacity &+= n
+    internal mutating func visitEmptyPathComponent() {
+      metrics.requiredCapacity &+= 1
       metrics.firstComponentLength = 1
     }
 
@@ -731,13 +723,11 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     }
 
     @inlinable @inline(__always)
-    internal mutating func prependSlash(_ n: UInt = 1) {
-      precondition(front >= n)
-      // Since front >= n, the compiler can prove that Int(n) will not trap.
-      // However, it can't prove that 'front - n' won't underflow (even though it can't).
-      front &-= n
+    internal mutating func prependSlash() {
+      precondition(front >= 1)
+      front &-= 1
       buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: front))
-        .initialize(repeating: ASCII.forwardSlash.codePoint, count: Int(n))
+        .initialize(to: ASCII.forwardSlash.codePoint)
     }
 
     @inlinable
@@ -806,8 +796,8 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     }
 
     @inlinable
-    internal mutating func visitEmptyPathComponents(_ n: UInt) {
-      prependSlash(n)
+    internal mutating func visitEmptyPathComponent() {
+      prependSlash()
     }
 
     @inlinable
@@ -888,7 +878,7 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
   }
 
   @usableFromInline
-  internal mutating func visitEmptyPathComponents(_ n: UInt) {
+  internal mutating func visitEmptyPathComponent() {
     // Nothing to do.
   }
 
