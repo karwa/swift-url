@@ -68,8 +68,8 @@ extension WebURL._SPIs {
       var utf8: [UInt8] = []
 
       typealias InputString = UnsafeBoundsCheckedBufferPointer<UInt8>
-      mutating func visitEmptyPathComponents(_ n: UInt) {
-        utf8.insert(contentsOf: repeatElement(ASCII.forwardSlash.codePoint, count: Int(n)), at: 0)
+      mutating func visitEmptyPathComponent() {
+        utf8.insert(ASCII.forwardSlash.codePoint, at: 0)
       }
       mutating func visitInputPathComponent(_ pathComponent: InputString.SubSequence) {
         utf8.insert(contentsOf: pathComponent, at: 0)
