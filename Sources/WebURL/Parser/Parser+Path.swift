@@ -14,20 +14,32 @@
 
 /// An object which parses a path string.
 ///
-/// This protocol is an implementation detail. It defines a group of callbacks which are invoked by the `parsePathComponents` method
-/// and should not be called directly. Conforming types implement these callbacks, as well as another method/initializer which invokes `parsePathComponents` to
-/// compute any information the type requires about the path.
+/// This protocol is an implementation detail.
+/// It defines a group of callbacks invoked by the `parsePathComponents` method which should not be called directly.
+/// Conforming types implement these callbacks, as well as another method/initializer which invokes
+/// `parsePathComponents` to compute any information the type requires about the path.
 ///
-/// Conforming types should be aware that components are visited in reverse order. Given a path "a/b/c", the components visited would be "c", "b", and finally "a".
-/// All of the visited path components are present in the simplified path string, with all pushing/popping handled internally by the `parsePathComponents` method.
+/// Conforming types should be aware that components are visited in reverse order.
+/// Given a path "a/b/c", the components visited would be "c", "b", and finally "a".
+/// All of the visited path components are present in the simplified path string,
+/// with all pushing/popping handled internally by the `parsePathComponents` method.
 ///
 /// Visited path components may originate from 4 sources:
 ///
-/// - They may be slices of the string given as input. In order to be written as a normalized path string, their contents must be percent-encoded.
-/// - They may be slices of an existing, normalized path string, coming from a URL object given as the "base URL". In this case, things are a bit easier -
-///   These components require no further processing before they are incorporated in to a normalized path string, and are known to exist in contiguous storage.
-/// - They may be deferred potential drive letters. These are parsed from the input string and stored as a tuple of bytes. If these components are confirmed
+/// - They may be slices of the string given as input.
+///
+///   In order to be written as a normalized path string, their contents must be percent-encoded.
+///
+/// - They may be slices of an existing, normalized path string, coming from a URL object given as the "base URL".
+///
+///   In this case, things are a bit easier - these components require no further processing
+///   before they are incorporated in to a normalized path string, and are known to exist in contiguous storage.
+///
+/// - They may be deferred potential drive letters.
+///
+///   These are parsed from the input string and stored as a tuple of bytes. If these components are confirmed
 ///   to be drive letters, adjustments must be made to write them in their normalized form.
+///
 /// - They may be empty components injected by the parser.
 ///
 @usableFromInline
@@ -42,19 +54,20 @@ internal protocol _PathParser {
   ///
   mutating func visitInputPathComponent(_ pathComponent: InputString.SubSequence)
 
-  /// A callback which is invoked when the parser yields a deferred potential Windows drive letter from the input string.
-  /// These components may require normalization before writing.
+  /// A callback which is invoked when the parser yields a deferred potential Windows drive letter
+  /// from the input string. These components may require normalization before writing.
   ///
   /// - parameters:
   ///   - pathComponent:         The path component yielded by the parser.
-  ///   - isWindowsDriveLetter:  If `true`, the component is confirmed to be a Windows drive letter, and must be normalized
-  ///                            by writing the first byte followed by the ASCII character `:`.
+  ///   - isWindowsDriveLetter:  If `true`, the component is confirmed to be a Windows drive letter,
+  ///                            and must be normalized by writing the first byte followed by the ASCII character `:`.
   ///
   mutating func visitDeferredDriveLetter(_ pathComponent: (UInt8, UInt8), isConfirmedDriveLetter: Bool)
 
   /// A callback which is invoked when the parser yields a path component originating from the base URL's path.
-  /// These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters will already have been normalized.
-  /// They need no further processing, and may be written to the result as-is.
+  ///
+  /// These components are known to be contiguously stored, properly percent-encoded, and any Windows drive letters
+  /// will already have been normalized. They need no further processing, and may be written to the result as-is.
   ///
   /// - parameters:
   ///   - pathComponent: The path component yielded by the parser.
@@ -100,20 +113,23 @@ internal struct _PathParserState {
 
   /// The parser's current popcount.
   ///
-  /// The path parser considers path components in reverse order, in order to simplify arbitrarily long or complex paths with
-  /// high performance and without allocating additional storage. To do this, it keeps track of an integer popcount, which tells it
-  /// how many unpaired ".." components it has seen. When it sees a component, it first checks to see if the popcount is greater than 0 -
-  /// if it is, it means the component will be popped by a ".." later in the path (but which it has already seen, due to parsing in reverse).
+  /// The path parser considers path components in reverse order, in order to simplify arbitrarily long or complex paths
+  /// with high performance and without allocating dynamic storage. To do this, it keeps track of an integer popcount,
+  /// which tells it how many unpaired ".." components it has seen. When it sees a component, it first checks to see
+  /// if the popcount is greater than 0 - if it is, it means the component will be popped by a ".." later in the path
+  /// (but which it has already seen, due to parsing in reverse).
   ///
-  /// For instance, consider the path "/p1/p2/../p3/p4/p5/../../p6":
-  /// - First, the parser sees p6, and the popcount is at its initial value of 0. p6 is yielded.
-  /// - Next, it sees 2 ".." components. The popcount is incremented to 2.
-  /// - When it sees p5, the popcount is 2. It is not yielded, and the popcount is reduced to 1.
-  /// - When it sees p4, the popcount is 1. It is not yielded, and the popcount is reduced to 0.
-  /// - When it sees p3, the popcount is 0, so it is yielded.
-  /// - Similarly, p2 is not yielded, p1 is.
+  /// For instance, consider the path `"/p1/p2/../p3/p4/p5/../../p6"`:
   ///
-  /// Hence the final path is "/p1/p3/p6" - only, the parser discovers that information in reverse order ("p6", "p3", "p1").
+  /// - First, the parser sees `p6`, and the popcount is at its initial value of 0. `p6` is yielded.
+  /// - Next, it sees 2 `".."` components. The popcount is incremented to 2.
+  /// - When it sees `p5`, the popcount is 2. It is not yielded, and the popcount is reduced to 1.
+  /// - When it sees `p4`, the popcount is 1. It is not yielded, and the popcount is reduced to 0.
+  /// - When it sees `p3`, the popcount is 0, so it is yielded.
+  /// - Similarly, `p2` is not yielded, `p1` is.
+  ///
+  /// Hence the final path is `"/p1/p3/p6"` - only, the parser discovers that information in reverse order
+  /// `("p6", "p3", "p1")`.
   ///
   @usableFromInline
   internal var popcount: UInt
@@ -156,7 +172,7 @@ internal struct _PathParserState {
   /// and that component is a Windows drive letter. That means:
   ///
   /// 1. Windows drives cannot be popped (`C:/../../../foo` is simplified to `C:/foo`).
-  /// 2. Other components can appear before the drive, as long as they get popped-out later.
+  /// 2. Other components can appear _before_ the drive, as long as they get popped-out later.
   ///
   ///     For example, when parsing the path `abc/../C:`, at some point `C:` will land at `path[0]`,
   ///     and once it does, nothing can pop it out.
@@ -165,11 +181,16 @@ internal struct _PathParserState {
   ///     a drive (a "potential Windows drive letter"), but it turns out to have some components before it
   ///     (e.g. `abc/C|` or `//C|`), it isn't considered a drive.
   ///
-  /// So when we see a potential Windows drive letter, we defer the component and split popcount at that point (stashing it in the deferred component).
-  /// We need to work out what the left-hand side of the path component looks like before we can definitively say whether it is a drive.
-  /// - If it is (if nothing on the LHS yields a component), we discard the stashed popcount in accordance with #1, and yield the drive.
-  /// - If it isn't (if something on the LHS is going to yield), we flush the deferred component (popping it if its RHS popcount is > 0),
-  ///   and merge the remaining RHS and LHS popcounts.
+  /// So when we see a potential Windows drive letter, we defer the component and split popcount at that point
+  /// (stashing it in the deferred component). We need to work out what the left-hand side of the path component
+  /// looks like before we can definitively say whether it is a drive.
+  ///
+  /// - If nothing on the LHS yields a component, the potential drive letter is confirmed.
+  ///   We discard the stashed popcount in accordance with #1, and yield the drive.
+  ///
+  /// - If something on the LHS is going to yield, the potential drive letter rejected.
+  ///   We yield the potential drive as an ordinary component (or pop it, if the popcount on its RHS is > 0),
+  ///   and merge the remaining RHS and LHS popcounts so we can continue parsing.
   ///
   @usableFromInline
   internal struct DeferredDrive {
@@ -232,18 +253,24 @@ extension _PathParser {
   }
 
 
-  /// Parses the given path string, optionally relative to the path of a base URL object, and yields the simplified list of path components via callbacks
-  /// implemented on this `_PathParser`. The path components are yielded in *reverse order*.
+  /// Parses the given path string, optionally relative to the path of a base URL object,
+  /// and yields the simplified list of path components via callbacks implemented on this `_PathParser`.
+  /// The path components are yielded in **reverse order**.
   ///
-  /// To construct the simplified path string, start with an empty string. For each path component yielded by the parser, prepend `"/"` (ASCII forward slash),
-  /// followed by the path component's contents, to that string. Note that some path components may require adjustments such as percent-encoding
-  /// or drive letter normalization as described in the documentation for `_PathParser`.
+  /// To construct the simplified path string, start with an empty string.
+  /// For each path component yielded by the parser, prepend `"/"` (ASCII forward slash),
+  /// followed by the path component's contents, to that string. Note that some path components may require adjustments
+  /// such as percent-encoding or drive letter normalization as described in the documentation for `_PathParser`.
   ///
   /// For example, consider the input `"a/b/../c/"`, which normalizes to the path string `"/a/c/"`.
-  /// This method yields the components `["", "c", "a"]`, and path construction by prepending proceeds as follows: `"/" -> "/c/" -> "/a/c/"`.
+  /// This method yields the components `["", "c", "a"]`, and path construction by prepending proceeds as follows:
   ///
-  /// - note: The parser produces a non-empty path for almost all inputs. The only case in which this function does not yield a path
-  ///         is when the input is empty, the scheme is not special, and the URL has an authority (as these URLs are allowed to have empty paths).
+  /// `""` ➡️ `"/"` ➡️ `"/c/"` ➡️ `"/a/c/"`.
+  ///
+  /// > Note:
+  /// > The parser produces a non-empty path for almost all inputs. The only case in which this function
+  /// > does not yield a path is when the input is empty, the scheme is not special, and the URL has an authority
+  /// > (as these URLs are allowed to have empty paths).
   ///
   /// - parameters:
   ///   - input:        The path string to parse, as a collection of UTF-8 code-units.
@@ -260,7 +287,8 @@ extension _PathParser {
   ///     results in "file:///C:/hello", but the non-path-only URL "file:///hello" results in "file:///hello"
   ///     when parsed against the same base URL.
   ///
-  ///     In both cases the path parser only sees the string "/hello" as its input, so this behaviour must be decided by the URL parser.
+  ///     In both cases the path parser only sees the string "/hello" as its input, so this behavior
+  ///     must be decided by the URL parser.
   ///
   @inlinable
   internal mutating func parsePathComponents(
@@ -511,7 +539,8 @@ extension _PathParser {
 /// the size of the allocation required, although actually writing to that allocation must employ bounds-checking
 /// to ensure memory safety.
 ///
-/// Assuming the path string is able to be written in the measured capacity, the other metrics may also be assumed to be accurate.
+/// Assuming the path string is able to be written in the measured capacity,
+/// the other metrics may also be assumed to be accurate.
 ///
 @usableFromInline
 internal struct PathMetrics {
@@ -526,7 +555,8 @@ internal struct PathMetrics {
   @usableFromInline
   internal private(set) var firstComponentLength: UInt
 
-  /// Whether or not the path must be prefixed with a path sigil when it is written to a URL which does not have an authority sigil.
+  /// Whether or not the path must be prefixed with a path sigil when it is written
+  /// to a URL which does not have an authority sigil.
   ///
   @usableFromInline
   internal private(set) var requiresPathSigil: Bool
@@ -539,9 +569,11 @@ internal struct PathMetrics {
 
 extension PathMetrics {
 
-  /// Creates a `PathMetrics` object containing information about the shape of the given path-string if it were written in its simplified, normalized form.
+  /// Creates a `PathMetrics` object containing information about the shape of the given path-string if it
+  /// were written in its simplified, normalized form.
   ///
-  /// The metrics may also contain information about simplification/normalization steps which can be skipped when writing the path-string.
+  /// The metrics may also contain information about simplification/normalization steps which can be skipped
+  /// when writing the path-string.
   ///
   @inlinable
   internal init<UTF8Bytes>(
@@ -625,9 +657,9 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 
   /// Initializes this buffer to the simplified, normalized path parsed from `utf8`.
   ///
-  /// The buffer is written with bounds-checking; a runtime error will be triggered if an attempt is made to write beyond its bounds.
-  /// Additionally, a runtime error will be triggered if the buffer is not precisely sized to store the path string (i.e. with excess capacity).
-  /// The buffer's address may not be `nil`.
+  /// The buffer is written with bounds-checking; a runtime error will be triggered if an attempt is made
+  /// to write beyond its bounds. Additionally, a runtime error will be triggered if the buffer is not precisely sized
+  /// to store the path string (i.e. with excess capacity). The buffer's address may not be `nil`.
   ///
   /// - returns: The number of bytes written. This will be equal to `self.count`.
   ///
@@ -667,9 +699,9 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     internal let needsEscaping: Bool
 
     @inlinable
-    internal init(_doNotUse buffer: UnsafeMutableBufferPointer<UInt8>, front: Int, needsPercentEncoding: Bool) {
+    internal init(_doNotUse buffer: UnsafeMutableBufferPointer<UInt8>, front: UInt, needsPercentEncoding: Bool) {
       self.buffer = buffer
-      self.front = UInt(front)
+      self.front = front
       self.needsEscaping = needsPercentEncoding
     }
 
@@ -685,7 +717,8 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     ) -> Int {
       // Checking this now allows the implementation to safely use `.baseAddress.unsafelyUnwrapped`.
       precondition(buffer.baseAddress != nil)
-      var writer = _PathWriter(_doNotUse: buffer, front: buffer.endIndex, needsPercentEncoding: needsPercentEncoding)
+      let front = UInt(buffer.endIndex)
+      var writer = _PathWriter(_doNotUse: buffer, front: front, needsPercentEncoding: needsPercentEncoding)
       writer.parsePathComponents(
         pathString: input,
         schemeKind: schemeKind,
@@ -819,7 +852,8 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
 
   /// Checks for non-fatal syntax oddities in the given path string.
   ///
-  /// See the URL standard's "path state" or the type-level documentation for `PathStringValidator` for more information.
+  /// See the URL standard's "path state" or the type-level documentation for `PathStringValidator`
+  /// for more information.
   ///
   @inlinable
   internal static func validate(
@@ -894,7 +928,8 @@ extension PathComponentParser where T == Never {
 
 extension PathComponentParser where T: Collection, T.Element == UInt8 {
 
-  /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
+  /// A Windows drive letter is two code points,
+  /// of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
   ///
   /// https://url.spec.whatwg.org/#url-miscellaneous
   ///
@@ -909,7 +944,8 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
     return (byte0, byte1)
   }
 
-  /// A Windows drive letter is two code points, of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
+  /// A Windows drive letter is two code points,
+  /// of which the first is an ASCII alpha and the second is either U+003A (:) or U+007C (|).
   ///
   /// https://url.spec.whatwg.org/#url-miscellaneous
   ///
@@ -988,7 +1024,9 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
     return hasThreeBytes && buffer == _percentTwoE
   }
 
-  /// Returns a `DotPathComponent` if the given bytes contain one or two ASCII periods (including percent-encoded ASCII periods).
+  /// Returns a `DotPathComponent` if the given bytes contain one or two ASCII periods
+  /// (including percent-encoded ASCII periods).
+  ///
   /// For example, "." and "%2e" return `.singleDot`. "..", ".%2E", and "%2e%2E" return `.doubleDot`.
   ///
   @inlinable
@@ -1005,7 +1043,8 @@ extension PathComponentParser where T: Collection, T.Element == UInt8 {
 
 extension PathComponentParser where T: Collection, T.Element == UInt8 {
 
-  /// Returns `true` if the given normalized path requires a path sigil when written to a URL that does not have an authority sigil.
+  /// Returns `true` if the given normalized path requires a path sigil
+  /// when written to a URL that does not have an authority sigil.
   ///
   @inlinable
   internal static func doesNormalizedPathRequirePathSigil(_ path: T) -> Bool {
