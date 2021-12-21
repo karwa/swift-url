@@ -77,7 +77,7 @@ jobs:
           echo "latest-tag=$(git tag -l | tail -1)" >> $GITHUB_ENV
       - name: (latest-tag) Check if Documentation Exists
         run: |
-          [ -d docs-out/${{ env.latest-tag }} ] && echo "latest-tag-has-docs=1" >> $GITHUB_ENV
+          if [ -d "docs-out/${{ env.latest-tag }}" ]; then echo "latest-tag-has-docs=1" >> "$GITHUB_ENV"; fi
 
       # 8. If there is no documentation for the latest tag, build it.
       - name: (latest-tag) Checkout Package
