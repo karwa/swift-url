@@ -87,7 +87,7 @@ extension WebURL._SPIs {
     return path._withContiguousUTF8 { pathUTF8 in
       var writer = StringWriter()
       writer.utf8.reserveCapacity(pathUTF8.count)
-      writer.walkPathComponents(
+      writer.parsePathComponents(
         pathString: pathUTF8.boundsChecked,
         schemeKind: _url.schemeKind,
         hasAuthority: _url.utf8.hostname != nil,

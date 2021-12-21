@@ -14,12 +14,12 @@
 
 /// An object which parses a path string.
 ///
-/// This protocol is an implementation detail. It defines a group of callbacks which are invoked by the `walkPathComponents` method
-/// and should not be called directly. Conforming types implement these callbacks, as well as another method/initializer which invokes `walkPathComponents` to
+/// This protocol is an implementation detail. It defines a group of callbacks which are invoked by the `parsePathComponents` method
+/// and should not be called directly. Conforming types implement these callbacks, as well as another method/initializer which invokes `parsePathComponents` to
 /// compute any information the type requires about the path.
 ///
 /// Conforming types should be aware that components are visited in reverse order. Given a path "a/b/c", the components visited would be "c", "b", and finally "a".
-/// All of the visited path components are present in the simplified path string, with all pushing/popping handled internally by the `walkPathComponents` method.
+/// All of the visited path components are present in the simplified path string, with all pushing/popping handled internally by the `parsePathComponents` method.
 ///
 /// Visited path components may originate from 4 sources:
 ///
@@ -83,7 +83,7 @@ extension _PathParser {
     visitEmptyPathComponents(1)
   }
 
-  @inlinable
+  @inlinable @inline(__always)
   internal mutating func visitValidationError(_ error: ValidationError) {
     // No required action.
   }
@@ -97,11 +97,6 @@ extension _PathParser {
 
 @usableFromInline
 internal struct _PathParserState {
-
-  /// A potential Windows drive letter component which has been deferred for later processing.
-  ///
-  @usableFromInline
-  internal var deferredDrive: Optional<DeferredDrive>
 
   /// The parser's current popcount.
   ///
@@ -123,21 +118,35 @@ internal struct _PathParserState {
   @usableFromInline
   internal var popcount: UInt
 
-  /// Whether or not the parser has yielded any components.
-  ///
-  /// Most URLs require either an authority segment or non-opaque path,
-  /// therefore it is usually required that the path parser yields at least _something_.
-  ///
-  /// It is also important to track this flag when determining whether a path sigil is required.
+  /// A potential Windows drive letter component which has been deferred for later processing.
   ///
   @usableFromInline
-  internal var didYieldComponent: Bool
+  internal var deferredDrive: Optional<DeferredDrive>
+
+  #if DEBUG
+    /// Whether or not the parser has yielded any components.
+    ///
+    /// Most URLs require either an authority segment or non-opaque path,
+    /// therefore it is usually required that the path parser yields at least _something_.
+    ///
+    @usableFromInline
+    internal var didYieldComponent: Bool
+  #endif
 
   @inlinable
   internal init() {
-    self.deferredDrive = nil
     self.popcount = 0
-    self.didYieldComponent = false
+    self.deferredDrive = nil
+    #if DEBUG
+      self.didYieldComponent = false
+    #endif
+  }
+
+  @inlinable @inline(__always)
+  internal mutating func markComponentWasYielded() {
+    #if DEBUG
+      didYieldComponent = true
+    #endif
   }
 
   /// A potential Windows drive letter which has been deferred for later processing (only applies to file URLs).
@@ -169,29 +178,27 @@ internal struct _PathParserState {
     internal var stashedPopCount: UInt
 
     @usableFromInline
-    internal var isFirstComponentOfInputString: Bool
+    internal var bytes: (UInt8, UInt8)
 
     @usableFromInline
-    internal var bytes: (UInt8, UInt8)
+    internal var isFirstComponentOfInputString: Bool
 
     @inlinable
     internal init(stashedPopCount: UInt, isFirstComponentOfInputString: Bool, bytes: (UInt8, UInt8)) {
       self.stashedPopCount = stashedPopCount
-      self.isFirstComponentOfInputString = isFirstComponentOfInputString
       self.bytes = bytes
+      self.isFirstComponentOfInputString = isFirstComponentOfInputString
     }
   }
 }
 
 extension _PathParser {
 
-  // Note: When making these local functions inside 'walkPathComponents', the compiler fails to prove they
-  // don't escape and introduces heap allocations which dominate the performance of the entire parser.
-
-  /// If a potential Windows drive letter has been deferred, reject it and merge its popcount with the parser's current popcount.
+  /// If a potential Windows drive letter has been deferred, reject it and merge its popcount
+  /// with the parser's current popcount.
   ///
   @inlinable
-  internal mutating func rejectDeferredDriveAndRestorePopcount(_ state: inout _PathParserState) {
+  internal mutating func parser_rejectDeferredDriveAndRestorePopcount(_ state: inout _PathParserState) {
 
     guard var rejectedDrive = state.deferredDrive else {
       return
@@ -200,30 +207,27 @@ extension _PathParser {
 
     if rejectedDrive.stashedPopCount == 0 {
       visitDeferredDriveLetter(rejectedDrive.bytes, isConfirmedDriveLetter: false)
-      state.didYieldComponent = true
+      state.markComponentWasYielded()
     } else {
       rejectedDrive.stashedPopCount -= 1
     }
     state.popcount += rejectedDrive.stashedPopCount
   }
 
-  /// If a potential Windows drive letter has been deferred, confirm that it is indeed a drive. This can only happen when parsing is about to complete.
+  /// If a potential Windows drive letter has been deferred, confirm that it is indeed a drive.
+  /// This can only happen as the final step before finishing parsing.
   ///
   @inlinable
-  internal mutating func confirmDeferredDriveForEndOfParsing(_ state: inout _PathParserState) {
+  internal mutating func parser_confirmDeferredDriveAndEndParsing(_ state: _PathParserState) {
 
     guard let confirmedDrive = state.deferredDrive else {
-      if state.didYieldComponent == false {
-        // This should be impossible to reach. A non-empty path string which doesn't yield anything would
-        // need to pop, and would need to at least end in a "..", but the parser ensures that such paths end in a "/".
-        // Handle it to make *absolutely* sure we don't accidentally create a URL with 'nil' path from non-empty input.
-        assertionFailure("Finalizing a path without yielding or deferring anything?!")
-        visitEmptyPathComponent()
-        state.didYieldComponent = true
-      }
+      #if DEBUG
+        // A non-empty path string which doesn't yield anything would need to pop,
+        // meaning it must end with a ".." component -- but the parser ensures that such paths end in a "/".
+        assert(state.didYieldComponent, "Finalizing a path without yielding or deferring anything?!")
+      #endif
       return
     }
-
     visitDeferredDriveLetter(confirmedDrive.bytes, isConfirmedDriveLetter: true)
   }
 
@@ -258,8 +262,8 @@ extension _PathParser {
   ///
   ///     In both cases the path parser only sees the string "/hello" as its input, so this behaviour must be decided by the URL parser.
   ///
-  @inlinable @inline(never)
-  internal mutating func walkPathComponents(
+  @inlinable
+  internal mutating func parsePathComponents(
     pathString input: InputString,
     schemeKind: WebURL.SchemeKind,
     hasAuthority: Bool,
@@ -283,16 +287,14 @@ extension _PathParser {
       input.formIndex(after: &startOfFirstInputComponent)
     }
 
-    guard startOfFirstInputComponent < input.endIndex else {
-      // Fast path: the input string is a single separator, i.e. an absolute root path.
-      // The result is always a single "/", or the drive root if baseURL has a Windows drive letter.
+    guard
+      startOfFirstInputComponent < input.endIndex || (schemeKind == .file && absolutePathsCopyWindowsDriveFromBase)
+    else {
+      // Fast path: the input string is a single separator, (a root path). The result is a single "/".
+      // The only exception is path-only file URLs (absolutePathsCopyWindowsDriveFromBase == true),
+      // which will copy the base URL's drive letter if it has one. We let those continue via the normal path.
       visitEmptyPathComponent()
-      if case .file = schemeKind, let base = baseURL {
-        let firstComponentFromBase = base.utf8.pathComponent(base.storage.pathComponentsStartIndex)
-        if PathComponentParser.isNormalizedWindowsDriveLetter(firstComponentFromBase) {
-          visitBasePathComponent(firstComponentFromBase)
-        }
-      }
+      assert(baseURL == nil, "URL is absolute and APCWDFB is false; baseURL should be nil")
       return
     }
 
@@ -306,10 +308,18 @@ extension _PathParser {
     repeat {
       let separatorIndex = remainingInput.fastLastIndex { PathComponentParser.isPathSeparator($0, scheme: schemeKind) }
       // swift-format-ignore
-      let pathComponent = separatorIndex.map {
-        if input[$0] == ASCII.backslash.codePoint { visitValidationError(.unexpectedReverseSolidus) }
-        return remainingInput[Range(uncheckedBounds: (remainingInput.index(after: $0), remainingInput.endIndex))]
-      } ?? remainingInput
+      let pathComponent: InputString.SubSequence
+      if let separatorIndex = separatorIndex {
+        pathComponent =
+          remainingInput[Range(uncheckedBounds: (remainingInput.index(after: separatorIndex), remainingInput.endIndex))]
+        if separatorIndex < input.endIndex, input[separatorIndex] == ASCII.backslash.codePoint {
+          // 'separatorIndex < input.endIndex' is trivially true ('lastIndex' just read a separator from it),
+          // but the compiler still emits a bounds-check and trap.
+          visitValidationError(.unexpectedReverseSolidus)
+        }
+      } else {
+        pathComponent = remainingInput
+      }
 
       if let dotComponent = PathComponentParser.parseDotPathComponent(pathComponent) {
         if case .doubleDot = dotComponent {
@@ -317,11 +327,11 @@ extension _PathParser {
         }
         if pathComponent.endIndex == input.endIndex {
           visitEmptyPathComponent()
-          state.didYieldComponent = true
+          state.markComponentWasYielded()
         }
 
       } else if case .file = schemeKind, let drive = PathComponentParser.parseWindowsDriveLetter(pathComponent) {
-        rejectDeferredDriveAndRestorePopcount(&state)
+        parser_rejectDeferredDriveAndRestorePopcount(&state)
         state.deferredDrive = .init(
           stashedPopCount: state.popcount,
           isFirstComponentOfInputString: pathComponent.startIndex == startOfFirstInputComponent,
@@ -333,13 +343,13 @@ extension _PathParser {
         state.popcount -= 1
 
       } else if state.deferredDrive != nil {
-        rejectDeferredDriveAndRestorePopcount(&state)
+        parser_rejectDeferredDriveAndRestorePopcount(&state)
         continue  // Re-check this component with the new popcount.
 
       } else {
         assert(state.deferredDrive == nil)
         visitInputPathComponent(pathComponent)
-        state.didYieldComponent = true
+        state.markComponentWasYielded()
       }
 
       // swift-format-ignore
@@ -349,64 +359,110 @@ extension _PathParser {
 
     } while remainingInput.startIndex < remainingInput.endIndex
 
-    assert(
-      state.deferredDrive != nil || state.didYieldComponent,
-      "Since the input path was not empty, we must have either deferred or yielded something from it."
-    )
+    #if DEBUG
+      assert(
+        state.deferredDrive != nil || state.didYieldComponent,
+        "Since the input path was not empty, we must have either deferred or yielded something from it."
+      )
+    #endif
 
-    // ========================================================
-    // Complete parsing from input, handle drive letter quirks.
-    // ========================================================
-
-    var baseDrive: Optional<WebURL.UTF8View.SubSequence> = nil
+    // ===================================
+    // Handle Windows drive letter quirks.
+    // ===================================
 
     if case .file = schemeKind {
-      if let base = baseURL {
-        let firstComponentFromBase = base.utf8.pathComponent(base.storage.pathComponentsStartIndex)
-        if PathComponentParser.isNormalizedWindowsDriveLetter(firstComponentFromBase) {
-          baseDrive = firstComponentFromBase
-        }
-      }
-      // If the first written component of the input string is a Windows drive letter, the path is never relative -
-      // even if it normally would be. [URL Standard: "file" state, "file slash" state]
-      if let deferredDrive = state.deferredDrive, deferredDrive.isFirstComponentOfInputString {
-        visitDeferredDriveLetter(deferredDrive.bytes, isConfirmedDriveLetter: true)
+      if parser_finalizeFilePath(
+        baseURL: baseURL, state: &state,
+        inputIsAbsolute: inputIsAbsolute,
+        absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase
+      ) {
         return
       }
-      // If the Windows drive is not the first written component of the input string, and the path is absolute,
-      // we still prefer to use the drive from the base URL. [URL Standard: "file slash" state]
-      if inputIsAbsolute, absolutePathsCopyWindowsDriveFromBase, let baseDrive = baseDrive {
-        rejectDeferredDriveAndRestorePopcount(&state)
-        visitBasePathComponent(baseDrive)
-        return
-      }
-    }
-
-    guard !inputIsAbsolute, let baseURL = baseURL, baseURL.storage.structure.pathLength > 0 else {
-      confirmDeferredDriveForEndOfParsing(&state)
-      return  // Absolute paths, and relative paths with no base URL, are finished now.
     }
 
     // ==================================
     // Add components from the Base Path.
     // ==================================
 
+    if !inputIsAbsolute, let baseURL = baseURL {
+      parseBasePathComponents(baseURL, state: state)
+    } else {
+      // Absolute paths, and relative paths with no base URL, are finished now.
+      _onFastPath()
+      parser_confirmDeferredDriveAndEndParsing(state)
+    }
+  }
+
+  /// Attempts to finalize the path of a "file:" URL after components have been consumed from the input string.
+  ///
+  /// - returns: Whether the path has been finalized. If `true`, the overall path is complete and the parser should
+  ///            not attempt to consume any components from the base URL.
+  ///
+  @inlinable
+  internal mutating func parser_finalizeFilePath(
+    baseURL: WebURL?, state: inout _PathParserState,
+    inputIsAbsolute: Bool, absolutePathsCopyWindowsDriveFromBase: Bool
+  ) -> Bool {
+
+    // If the first written component of the input string is a Windows drive letter,
+    // it is always treated like an absolute path. [URL Standard: "file" state, "file slash" state]
+    if let deferredDrive = state.deferredDrive, deferredDrive.isFirstComponentOfInputString {
+      visitDeferredDriveLetter(deferredDrive.bytes, isConfirmedDriveLetter: true)
+      return true
+    }
+
+    // If the first written component of the input string is *not* a Windows drive letter,
+    // it might still be relative to the base URL's Windows drive (even if the input string contains a drive elsewhere).
+    // For example: "file:/a/../C:/" with base "file:///D:/" -> "file:///D:/C:/".
+    // [URL Standard: "file slash" state]
+    if inputIsAbsolute, absolutePathsCopyWindowsDriveFromBase, let base = baseURL {
+      let firstComponentFromBase = base.utf8.pathComponent(base.storage.pathComponentsStartIndex)
+      if PathComponentParser.isNormalizedWindowsDriveLetter(firstComponentFromBase) {
+        parser_rejectDeferredDriveAndRestorePopcount(&state)
+        visitBasePathComponent(firstComponentFromBase)
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /// Consumes path components from the base URL, continuing from the state calculated by `parsePathComponents`.
+  ///
+  @inlinable
+  internal mutating func parseBasePathComponents(_ baseURL: WebURL, state: _PathParserState) {
+
+    var state = state
     let basePath = baseURL.utf8.path
 
-    // If the last component is the Windows drive at the start of the path, don't drop it - yield it and exit.
-    if let baseDrive = baseDrive, baseDrive.endIndex == basePath.endIndex {
-      rejectDeferredDriveAndRestorePopcount(&state)
-      visitBasePathComponent(baseDrive)
+    if basePath.isEmpty {
+      // Fast path: if the baseURL does not have a path, there is nothing to do.
+      parser_confirmDeferredDriveAndEndParsing(state)
       return
     }
 
-    // Drop the last base path component.
-    // Normalized non-empty base paths always have at least one component.
+    // Drop the last component from the base path.
+    // Normalized non-empty URL paths always have at least one component.
+
+    var baseDrive: Optional<WebURL.UTF8View.SubSequence> = nil
+
+    let firstComponentFromBase = baseURL.utf8.pathComponent(baseURL.storage.pathComponentsStartIndex)
+    if PathComponentParser.isNormalizedWindowsDriveLetter(firstComponentFromBase) {
+      // If the base path is a single Windows drive letter, don't drop it - yield it and exit.
+      if firstComponentFromBase.endIndex == basePath.endIndex {
+        parser_rejectDeferredDriveAndRestorePopcount(&state)
+        visitBasePathComponent(firstComponentFromBase)
+        return
+      }
+      // Save the drive location for later, so we don't have to re-parse it.
+      baseDrive = firstComponentFromBase
+    }
+
     var remainingBasePath = basePath[
-      Range(uncheckedBounds: (basePath.startIndex, basePath.lastIndex(of: ASCII.forwardSlash.codePoint)!))
+      Range(uncheckedBounds: (basePath.startIndex, basePath.fastLastIndex(of: ASCII.forwardSlash.codePoint)!))
     ]
 
-    while let separatorIndex = remainingBasePath.lastIndex(of: ASCII.forwardSlash.codePoint) {
+    while let separatorIndex = remainingBasePath.fastLastIndex(of: ASCII.forwardSlash.codePoint) {
       let pathComponent = remainingBasePath[
         Range(uncheckedBounds: (remainingBasePath.index(after: separatorIndex), remainingBasePath.endIndex))
       ]
@@ -416,7 +472,7 @@ extension _PathParser {
       switch pathComponent {
       // If we reached the base path's Windows drive letter, we can flush everything and end.
       case _ where separatorIndex == basePath.startIndex && baseDrive != nil:
-        rejectDeferredDriveAndRestorePopcount(&state)
+        parser_rejectDeferredDriveAndRestorePopcount(&state)
         visitBasePathComponent(baseDrive!)
         return
 
@@ -424,20 +480,20 @@ extension _PathParser {
         state.popcount -= 1
 
       case _ where state.deferredDrive != nil:
-        rejectDeferredDriveAndRestorePopcount(&state)
+        parser_rejectDeferredDriveAndRestorePopcount(&state)
         continue  // Re-check this component with the new popcount.
 
       default:
         assert(state.deferredDrive == nil)
         visitBasePathComponent(pathComponent)
-        state.didYieldComponent = true
+        state.markComponentWasYielded()
       }
 
       remainingBasePath = remainingBasePath[Range(uncheckedBounds: (remainingBasePath.startIndex, separatorIndex))]
     }
 
     assert(remainingBasePath.isEmpty, "Normalized non-empty base paths must start with a /")
-    confirmDeferredDriveForEndOfParsing(&state)
+    parser_confirmDeferredDriveAndEndParsing(state)
     // Finally done!
   }
 }
@@ -502,7 +558,7 @@ extension PathMetrics {
     self.requiresPathSigil = false
 
     var parser = _Parser<UTF8Bytes>(_emptyMetrics: self)
-    parser.walkPathComponents(
+    parser.parsePathComponents(
       pathString: utf8, schemeKind: schemeKind, hasAuthority: hasAuthority, baseURL: baseURL,
       absolutePathsCopyWindowsDriveFromBase: absolutePathsCopyWindowsDriveFromBase)
     parser.determineIfPathSigilRequired(hasAuthority: hasAuthority)
@@ -605,7 +661,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     internal let buffer: UnsafeMutableBufferPointer<UInt8>
 
     @usableFromInline
-    internal private(set) var front: Int
+    internal private(set) var front: UInt
 
     @usableFromInline
     internal let needsEscaping: Bool
@@ -613,7 +669,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     @inlinable
     internal init(_doNotUse buffer: UnsafeMutableBufferPointer<UInt8>, front: Int, needsPercentEncoding: Bool) {
       self.buffer = buffer
-      self.front = front
+      self.front = UInt(front)
       self.needsEscaping = needsPercentEncoding
     }
 
@@ -630,7 +686,7 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       // Checking this now allows the implementation to safely use `.baseAddress.unsafelyUnwrapped`.
       precondition(buffer.baseAddress != nil)
       var writer = _PathWriter(_doNotUse: buffer, front: buffer.endIndex, needsPercentEncoding: needsPercentEncoding)
-      writer.walkPathComponents(
+      writer.parsePathComponents(
         pathString: input,
         schemeKind: schemeKind,
         hasAuthority: hasAuthority,
@@ -641,14 +697,24 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
       return buffer.count
     }
 
-    @inlinable
+    @inlinable @inline(__always)
     internal mutating func prependSlash(_ n: UInt = 1) {
       precondition(front >= n)
       // Since front >= n, the compiler can prove that Int(n) will not trap.
-      // However, it can't prove that 'front - n' won't underflow (even though it can't, as n >= 0 due to unsigned).
-      front &-= Int(n)
-      buffer.baseAddress.unsafelyUnwrapped.advanced(by: front)
+      // However, it can't prove that 'front - n' won't underflow (even though it can't).
+      front &-= n
+      buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: front))
         .initialize(repeating: ASCII.forwardSlash.codePoint, count: Int(n))
+    }
+
+    @inlinable
+    internal mutating func prependEscapedPathComponent(_ pathComponent: UTF8Bytes.SubSequence) {
+      for byte in pathComponent.lazy.percentEncoded(using: .pathSet).reversed() {
+        precondition(front > 1)
+        front &-= 1
+        (buffer.baseAddress.unsafelyUnwrapped + Int(bitPattern: front)).initialize(to: byte)
+      }
+      prependSlash()
     }
 
     @inlinable
@@ -659,31 +725,32 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
         return
       }
       guard !needsEscaping else {
-        for byte in pathComponent.lazy.percentEncoded(using: .pathSet).reversed() {
-          precondition(front > 1)
-          front &-= 1
-          (buffer.baseAddress.unsafelyUnwrapped + front).initialize(to: byte)
-        }
-        prependSlash()
+        prependEscapedPathComponent(pathComponent)
         return
       }
       // swift-format-ignore
-      pathComponent.withContiguousStorageIfAvailable { componentContent in
+      let contiguousResult: ()? = pathComponent.withContiguousStorageIfAvailable { componentContent in
         let count = componentContent.count
         precondition(front > count && count >= 0)
-        let newFront = front &- count
+        let newFront = front &- UInt(bitPattern: count)
         _ = UnsafeMutableBufferPointer(
-          start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
+          start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: newFront)),
           count: count
         ).fastInitialize(from: componentContent)
         front = newFront
-      } ?? {
-        for byte in pathComponent.reversed() {
-          precondition(front > 1)
-          front &-= 1
-          (buffer.baseAddress.unsafelyUnwrapped + front).initialize(to: byte)
-        }
-      }()
+        // Manually inlined prependSlash().
+        front &-= 1
+        buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: front))
+          .initialize(to: ASCII.forwardSlash.codePoint)
+      }
+      if contiguousResult != nil {
+        return
+      }
+      for byte in pathComponent.reversed() {
+        precondition(front > 1)
+        front &-= 1
+        (buffer.baseAddress.unsafelyUnwrapped + Int(bitPattern: front)).initialize(to: byte)
+      }
       prependSlash()
     }
 
@@ -698,8 +765,8 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
 
       precondition(front > 2)
       front &-= 2
-      buffer.baseAddress.unsafelyUnwrapped.advanced(by: front).initialize(to: pathComponent.0)
-      buffer.baseAddress.unsafelyUnwrapped.advanced(by: front &+ 1).initialize(
+      buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: front)).initialize(to: pathComponent.0)
+      buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: front &+ 1)).initialize(
         to: isConfirmedDriveLetter ? ASCII.colon.codePoint : pathComponent.1
       )
       prependSlash()
@@ -714,9 +781,9 @@ extension UnsafeMutableBufferPointer where Element == UInt8 {
     internal mutating func visitBasePathComponent(_ pathComponent: WebURL.UTF8View.SubSequence) {
       let count = pathComponent.count
       precondition(front > count && count >= 0)
-      let newFront = front &- count
+      let newFront = front &- UInt(count)
       _ = UnsafeMutableBufferPointer(
-        start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: newFront),
+        start: buffer.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: newFront)),
         count: count
       ).fastInitialize(from: pathComponent)
       front = newFront
@@ -766,7 +833,7 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
       return
     }
     var visitor = PathStringValidator(_doNotUse: input, callback: &callback)
-    visitor.walkPathComponents(
+    visitor.parsePathComponents(
       pathString: input, schemeKind: schemeKind, hasAuthority: hasAuthority, baseURL: nil,
       absolutePathsCopyWindowsDriveFromBase: false)
   }
@@ -819,7 +886,7 @@ extension PathComponentParser where T == Never {
   ///
   @inlinable @inline(__always)
   internal static func isPathSeparator(_ codeUnit: UInt8, scheme: WebURL.SchemeKind) -> Bool {
-    ASCII(codeUnit) == .forwardSlash || (scheme.isSpecial && ASCII(codeUnit) == .backslash)
+    codeUnit == ASCII.forwardSlash.codePoint || (scheme.isSpecial && codeUnit == ASCII.backslash.codePoint)
   }
 }
 
