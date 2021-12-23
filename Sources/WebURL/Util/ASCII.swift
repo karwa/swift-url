@@ -26,8 +26,24 @@ internal struct ASCII {
 
 extension ASCII {
 
+  /// Creates an `ASCII` value without checking that it is really within the ASCII range.
+  /// This can have dangerous repercussions and **should not be used outside of the "ASCII.swift" file**.
+  ///
+  /// > Important:
+  /// > Some lookup tables assume an `ASCII` value's codePoint is within the range `0..<128`
+  /// > and will over-read their buffers if that is not true.
+  /// >
+  /// > Do not use this initializer if the value is not a literal, or a local UInt8 that was previously checked.
+  /// >
+  /// > In particular, note that elements of generic Collections **are not safe** - a user-supplied Collection
+  /// > might have bugs, and might return a different element on subsequent access to the same location.
+  /// > Even in that case where the source of the bug is external code, it would be unacceptable to violate
+  /// > memory safety.
+  /// >
+  /// > Use the checked (failable) initializers instead.
+  ///
   @inlinable @inline(__always)
-  internal init(_unchecked v: UInt8) {
+  internal init(_unsafeUnchecked v: UInt8) {
     assert(v & 0x7F == v, "Not an ASCII code point")
     self.codePoint = v
   }
@@ -35,13 +51,13 @@ extension ASCII {
   @inlinable @inline(__always)
   internal init?(_ v: UInt8) {
     guard v & 0x7F == v else { return nil }
-    self.init(_unchecked: v)
+    self.init(_unsafeUnchecked: v)
   }
 
   @inlinable @inline(__always)
   internal init?(flatMap v: UInt8?) {
     guard let byte = v, byte & 0x7F == byte else { return nil }
-    self.init(_unchecked: byte)
+    self.init(_unsafeUnchecked: byte)
   }
 }
 
@@ -75,141 +91,141 @@ extension ASCII: Comparable, Equatable, CustomStringConvertible {
 extension ASCII {
 
     // C0 Control Characters.
-    @inlinable static var null                  : ASCII { ASCII(_unchecked: 0x00) }
-    @inlinable static var startOfHeading        : ASCII { ASCII(_unchecked: 0x01) }
-    @inlinable static var startOfText           : ASCII { ASCII(_unchecked: 0x02) }
-    @inlinable static var endOfText             : ASCII { ASCII(_unchecked: 0x03) }
-    @inlinable static var endOfTransmission     : ASCII { ASCII(_unchecked: 0x04) }
-    @inlinable static var enquiry               : ASCII { ASCII(_unchecked: 0x05) }
-    @inlinable static var acknowledge           : ASCII { ASCII(_unchecked: 0x06) }
-    @inlinable static var bell                  : ASCII { ASCII(_unchecked: 0x07) }
-    @inlinable static var backspace             : ASCII { ASCII(_unchecked: 0x08) }
-    @inlinable static var horizontalTab         : ASCII { ASCII(_unchecked: 0x09) }
-    @inlinable static var lineFeed              : ASCII { ASCII(_unchecked: 0x0A) }
-    @inlinable static var verticalTab           : ASCII { ASCII(_unchecked: 0x0B) }
-    @inlinable static var formFeed              : ASCII { ASCII(_unchecked: 0x0C) }
-    @inlinable static var carriageReturn        : ASCII { ASCII(_unchecked: 0x0D) }
-    @inlinable static var shiftOut              : ASCII { ASCII(_unchecked: 0x0E) }
-    @inlinable static var shiftIn               : ASCII { ASCII(_unchecked: 0x0F) }
-    @inlinable static var dataLinkEscape        : ASCII { ASCII(_unchecked: 0x10) }
-    @inlinable static var deviceControl1        : ASCII { ASCII(_unchecked: 0x11) }
-    @inlinable static var deviceControl2        : ASCII { ASCII(_unchecked: 0x12) }
-    @inlinable static var deviceControl3        : ASCII { ASCII(_unchecked: 0x13) }
-    @inlinable static var deviceControl4        : ASCII { ASCII(_unchecked: 0x14) }
-    @inlinable static var negativeAcknowledge   : ASCII { ASCII(_unchecked: 0x15) }
-    @inlinable static var synchronousIdle       : ASCII { ASCII(_unchecked: 0x16) }
-    @inlinable static var endOfTransmissionBlock: ASCII { ASCII(_unchecked: 0x17) }
-    @inlinable static var cancel                : ASCII { ASCII(_unchecked: 0x18) }
-    @inlinable static var endOfMedium           : ASCII { ASCII(_unchecked: 0x19) }
-    @inlinable static var substitute            : ASCII { ASCII(_unchecked: 0x1A) }
-    @inlinable static var escape                : ASCII { ASCII(_unchecked: 0x1B) }
-    @inlinable static var fileSeparator         : ASCII { ASCII(_unchecked: 0x1C) }
-    @inlinable static var groupSeparator        : ASCII { ASCII(_unchecked: 0x1D) }
-    @inlinable static var recordSeparator       : ASCII { ASCII(_unchecked: 0x1E) }
-    @inlinable static var unitSeparator         : ASCII { ASCII(_unchecked: 0x1F) }
+    @inlinable static var null                  : ASCII { ASCII(_unsafeUnchecked: 0x00) }
+    @inlinable static var startOfHeading        : ASCII { ASCII(_unsafeUnchecked: 0x01) }
+    @inlinable static var startOfText           : ASCII { ASCII(_unsafeUnchecked: 0x02) }
+    @inlinable static var endOfText             : ASCII { ASCII(_unsafeUnchecked: 0x03) }
+    @inlinable static var endOfTransmission     : ASCII { ASCII(_unsafeUnchecked: 0x04) }
+    @inlinable static var enquiry               : ASCII { ASCII(_unsafeUnchecked: 0x05) }
+    @inlinable static var acknowledge           : ASCII { ASCII(_unsafeUnchecked: 0x06) }
+    @inlinable static var bell                  : ASCII { ASCII(_unsafeUnchecked: 0x07) }
+    @inlinable static var backspace             : ASCII { ASCII(_unsafeUnchecked: 0x08) }
+    @inlinable static var horizontalTab         : ASCII { ASCII(_unsafeUnchecked: 0x09) }
+    @inlinable static var lineFeed              : ASCII { ASCII(_unsafeUnchecked: 0x0A) }
+    @inlinable static var verticalTab           : ASCII { ASCII(_unsafeUnchecked: 0x0B) }
+    @inlinable static var formFeed              : ASCII { ASCII(_unsafeUnchecked: 0x0C) }
+    @inlinable static var carriageReturn        : ASCII { ASCII(_unsafeUnchecked: 0x0D) }
+    @inlinable static var shiftOut              : ASCII { ASCII(_unsafeUnchecked: 0x0E) }
+    @inlinable static var shiftIn               : ASCII { ASCII(_unsafeUnchecked: 0x0F) }
+    @inlinable static var dataLinkEscape        : ASCII { ASCII(_unsafeUnchecked: 0x10) }
+    @inlinable static var deviceControl1        : ASCII { ASCII(_unsafeUnchecked: 0x11) }
+    @inlinable static var deviceControl2        : ASCII { ASCII(_unsafeUnchecked: 0x12) }
+    @inlinable static var deviceControl3        : ASCII { ASCII(_unsafeUnchecked: 0x13) }
+    @inlinable static var deviceControl4        : ASCII { ASCII(_unsafeUnchecked: 0x14) }
+    @inlinable static var negativeAcknowledge   : ASCII { ASCII(_unsafeUnchecked: 0x15) }
+    @inlinable static var synchronousIdle       : ASCII { ASCII(_unsafeUnchecked: 0x16) }
+    @inlinable static var endOfTransmissionBlock: ASCII { ASCII(_unsafeUnchecked: 0x17) }
+    @inlinable static var cancel                : ASCII { ASCII(_unsafeUnchecked: 0x18) }
+    @inlinable static var endOfMedium           : ASCII { ASCII(_unsafeUnchecked: 0x19) }
+    @inlinable static var substitute            : ASCII { ASCII(_unsafeUnchecked: 0x1A) }
+    @inlinable static var escape                : ASCII { ASCII(_unsafeUnchecked: 0x1B) }
+    @inlinable static var fileSeparator         : ASCII { ASCII(_unsafeUnchecked: 0x1C) }
+    @inlinable static var groupSeparator        : ASCII { ASCII(_unsafeUnchecked: 0x1D) }
+    @inlinable static var recordSeparator       : ASCII { ASCII(_unsafeUnchecked: 0x1E) }
+    @inlinable static var unitSeparator         : ASCII { ASCII(_unsafeUnchecked: 0x1F) }
     // Special Characters.
-    @inlinable static var space              : ASCII { ASCII(_unchecked: 0x20) }
-    @inlinable static var exclamationMark    : ASCII { ASCII(_unchecked: 0x21) }
-    @inlinable static var doubleQuotationMark: ASCII { ASCII(_unchecked: 0x22) }
-    @inlinable static var numberSign         : ASCII { ASCII(_unchecked: 0x23) }
-    @inlinable static var dollarSign         : ASCII { ASCII(_unchecked: 0x24) }
-    @inlinable static var percentSign        : ASCII { ASCII(_unchecked: 0x25) }
-    @inlinable static var ampersand          : ASCII { ASCII(_unchecked: 0x26) }
-    @inlinable static var apostrophe         : ASCII { ASCII(_unchecked: 0x27) }
-    @inlinable static var leftParenthesis    : ASCII { ASCII(_unchecked: 0x28) }
-    @inlinable static var rightParenthesis   : ASCII { ASCII(_unchecked: 0x29) }
-    @inlinable static var asterisk           : ASCII { ASCII(_unchecked: 0x2A) }
-    @inlinable static var plus               : ASCII { ASCII(_unchecked: 0x2B) }
-    @inlinable static var comma              : ASCII { ASCII(_unchecked: 0x2C) }
-    @inlinable static var minus              : ASCII { ASCII(_unchecked: 0x2D) }
-    @inlinable static var period             : ASCII { ASCII(_unchecked: 0x2E) }
-    @inlinable static var forwardSlash       : ASCII { ASCII(_unchecked: 0x2F) }
+    @inlinable static var space              : ASCII { ASCII(_unsafeUnchecked: 0x20) }
+    @inlinable static var exclamationMark    : ASCII { ASCII(_unsafeUnchecked: 0x21) }
+    @inlinable static var doubleQuotationMark: ASCII { ASCII(_unsafeUnchecked: 0x22) }
+    @inlinable static var numberSign         : ASCII { ASCII(_unsafeUnchecked: 0x23) }
+    @inlinable static var dollarSign         : ASCII { ASCII(_unsafeUnchecked: 0x24) }
+    @inlinable static var percentSign        : ASCII { ASCII(_unsafeUnchecked: 0x25) }
+    @inlinable static var ampersand          : ASCII { ASCII(_unsafeUnchecked: 0x26) }
+    @inlinable static var apostrophe         : ASCII { ASCII(_unsafeUnchecked: 0x27) }
+    @inlinable static var leftParenthesis    : ASCII { ASCII(_unsafeUnchecked: 0x28) }
+    @inlinable static var rightParenthesis   : ASCII { ASCII(_unsafeUnchecked: 0x29) }
+    @inlinable static var asterisk           : ASCII { ASCII(_unsafeUnchecked: 0x2A) }
+    @inlinable static var plus               : ASCII { ASCII(_unsafeUnchecked: 0x2B) }
+    @inlinable static var comma              : ASCII { ASCII(_unsafeUnchecked: 0x2C) }
+    @inlinable static var minus              : ASCII { ASCII(_unsafeUnchecked: 0x2D) }
+    @inlinable static var period             : ASCII { ASCII(_unsafeUnchecked: 0x2E) }
+    @inlinable static var forwardSlash       : ASCII { ASCII(_unsafeUnchecked: 0x2F) }
     // Numbers.
-    @inlinable static var n0: ASCII { ASCII(_unchecked: 0x30) }
-    @inlinable static var n1: ASCII { ASCII(_unchecked: 0x31) }
-    @inlinable static var n2: ASCII { ASCII(_unchecked: 0x32) }
-    @inlinable static var n3: ASCII { ASCII(_unchecked: 0x33) }
-    @inlinable static var n4: ASCII { ASCII(_unchecked: 0x34) }
-    @inlinable static var n5: ASCII { ASCII(_unchecked: 0x35) }
-    @inlinable static var n6: ASCII { ASCII(_unchecked: 0x36) }
-    @inlinable static var n7: ASCII { ASCII(_unchecked: 0x37) }
-    @inlinable static var n8: ASCII { ASCII(_unchecked: 0x38) }
-    @inlinable static var n9: ASCII { ASCII(_unchecked: 0x39) }
+    @inlinable static var n0: ASCII { ASCII(_unsafeUnchecked: 0x30) }
+    @inlinable static var n1: ASCII { ASCII(_unsafeUnchecked: 0x31) }
+    @inlinable static var n2: ASCII { ASCII(_unsafeUnchecked: 0x32) }
+    @inlinable static var n3: ASCII { ASCII(_unsafeUnchecked: 0x33) }
+    @inlinable static var n4: ASCII { ASCII(_unsafeUnchecked: 0x34) }
+    @inlinable static var n5: ASCII { ASCII(_unsafeUnchecked: 0x35) }
+    @inlinable static var n6: ASCII { ASCII(_unsafeUnchecked: 0x36) }
+    @inlinable static var n7: ASCII { ASCII(_unsafeUnchecked: 0x37) }
+    @inlinable static var n8: ASCII { ASCII(_unsafeUnchecked: 0x38) }
+    @inlinable static var n9: ASCII { ASCII(_unsafeUnchecked: 0x39) }
     // Some punctuation.
-    @inlinable static var colon          : ASCII { ASCII(_unchecked: 0x3A) }
-    @inlinable static var semicolon      : ASCII { ASCII(_unchecked: 0x3B) }
-    @inlinable static var lessThanSign   : ASCII { ASCII(_unchecked: 0x3C) }
-    @inlinable static var equalSign      : ASCII { ASCII(_unchecked: 0x3D) }
-    @inlinable static var greaterThanSign: ASCII { ASCII(_unchecked: 0x3E) }
-    @inlinable static var questionMark   : ASCII { ASCII(_unchecked: 0x3F) }
-    @inlinable static var commercialAt   : ASCII { ASCII(_unchecked: 0x40) }
+    @inlinable static var colon          : ASCII { ASCII(_unsafeUnchecked: 0x3A) }
+    @inlinable static var semicolon      : ASCII { ASCII(_unsafeUnchecked: 0x3B) }
+    @inlinable static var lessThanSign   : ASCII { ASCII(_unsafeUnchecked: 0x3C) }
+    @inlinable static var equalSign      : ASCII { ASCII(_unsafeUnchecked: 0x3D) }
+    @inlinable static var greaterThanSign: ASCII { ASCII(_unsafeUnchecked: 0x3E) }
+    @inlinable static var questionMark   : ASCII { ASCII(_unsafeUnchecked: 0x3F) }
+    @inlinable static var commercialAt   : ASCII { ASCII(_unsafeUnchecked: 0x40) }
     // Upper-case letters.
-    @inlinable static var A: ASCII { ASCII(_unchecked: 0x41) }
-    @inlinable static var B: ASCII { ASCII(_unchecked: 0x42) }
-    @inlinable static var C: ASCII { ASCII(_unchecked: 0x43) }
-    @inlinable static var D: ASCII { ASCII(_unchecked: 0x44) }
-    @inlinable static var E: ASCII { ASCII(_unchecked: 0x45) }
-    @inlinable static var F: ASCII { ASCII(_unchecked: 0x46) }
-    @inlinable static var G: ASCII { ASCII(_unchecked: 0x47) }
-    @inlinable static var H: ASCII { ASCII(_unchecked: 0x48) }
-    @inlinable static var I: ASCII { ASCII(_unchecked: 0x49) }
-    @inlinable static var J: ASCII { ASCII(_unchecked: 0x4A) }
-    @inlinable static var K: ASCII { ASCII(_unchecked: 0x4B) }
-    @inlinable static var L: ASCII { ASCII(_unchecked: 0x4C) }
-    @inlinable static var M: ASCII { ASCII(_unchecked: 0x4D) }
-    @inlinable static var N: ASCII { ASCII(_unchecked: 0x4E) }
-    @inlinable static var O: ASCII { ASCII(_unchecked: 0x4F) }
-    @inlinable static var P: ASCII { ASCII(_unchecked: 0x50) }
-    @inlinable static var Q: ASCII { ASCII(_unchecked: 0x51) }
-    @inlinable static var R: ASCII { ASCII(_unchecked: 0x52) }
-    @inlinable static var S: ASCII { ASCII(_unchecked: 0x53) }
-    @inlinable static var T: ASCII { ASCII(_unchecked: 0x54) }
-    @inlinable static var U: ASCII { ASCII(_unchecked: 0x55) }
-    @inlinable static var V: ASCII { ASCII(_unchecked: 0x56) }
-    @inlinable static var W: ASCII { ASCII(_unchecked: 0x57) }
-    @inlinable static var X: ASCII { ASCII(_unchecked: 0x58) }
-    @inlinable static var Y: ASCII { ASCII(_unchecked: 0x59) }
-    @inlinable static var Z: ASCII { ASCII(_unchecked: 0x5A) }
+    @inlinable static var A: ASCII { ASCII(_unsafeUnchecked: 0x41) }
+    @inlinable static var B: ASCII { ASCII(_unsafeUnchecked: 0x42) }
+    @inlinable static var C: ASCII { ASCII(_unsafeUnchecked: 0x43) }
+    @inlinable static var D: ASCII { ASCII(_unsafeUnchecked: 0x44) }
+    @inlinable static var E: ASCII { ASCII(_unsafeUnchecked: 0x45) }
+    @inlinable static var F: ASCII { ASCII(_unsafeUnchecked: 0x46) }
+    @inlinable static var G: ASCII { ASCII(_unsafeUnchecked: 0x47) }
+    @inlinable static var H: ASCII { ASCII(_unsafeUnchecked: 0x48) }
+    @inlinable static var I: ASCII { ASCII(_unsafeUnchecked: 0x49) }
+    @inlinable static var J: ASCII { ASCII(_unsafeUnchecked: 0x4A) }
+    @inlinable static var K: ASCII { ASCII(_unsafeUnchecked: 0x4B) }
+    @inlinable static var L: ASCII { ASCII(_unsafeUnchecked: 0x4C) }
+    @inlinable static var M: ASCII { ASCII(_unsafeUnchecked: 0x4D) }
+    @inlinable static var N: ASCII { ASCII(_unsafeUnchecked: 0x4E) }
+    @inlinable static var O: ASCII { ASCII(_unsafeUnchecked: 0x4F) }
+    @inlinable static var P: ASCII { ASCII(_unsafeUnchecked: 0x50) }
+    @inlinable static var Q: ASCII { ASCII(_unsafeUnchecked: 0x51) }
+    @inlinable static var R: ASCII { ASCII(_unsafeUnchecked: 0x52) }
+    @inlinable static var S: ASCII { ASCII(_unsafeUnchecked: 0x53) }
+    @inlinable static var T: ASCII { ASCII(_unsafeUnchecked: 0x54) }
+    @inlinable static var U: ASCII { ASCII(_unsafeUnchecked: 0x55) }
+    @inlinable static var V: ASCII { ASCII(_unsafeUnchecked: 0x56) }
+    @inlinable static var W: ASCII { ASCII(_unsafeUnchecked: 0x57) }
+    @inlinable static var X: ASCII { ASCII(_unsafeUnchecked: 0x58) }
+    @inlinable static var Y: ASCII { ASCII(_unsafeUnchecked: 0x59) }
+    @inlinable static var Z: ASCII { ASCII(_unsafeUnchecked: 0x5A) }
     // More special characters.
-    @inlinable static var leftSquareBracket : ASCII { ASCII(_unchecked: 0x5B) }
-    @inlinable static var backslash         : ASCII { ASCII(_unchecked: 0x5C) }
-    @inlinable static var rightSquareBracket: ASCII { ASCII(_unchecked: 0x5D) }
-    @inlinable static var circumflexAccent  : ASCII { ASCII(_unchecked: 0x5E) }
-    @inlinable static var underscore        : ASCII { ASCII(_unchecked: 0x5F) }
-    @inlinable static var backtick          : ASCII { ASCII(_unchecked: 0x60) }
+    @inlinable static var leftSquareBracket : ASCII { ASCII(_unsafeUnchecked: 0x5B) }
+    @inlinable static var backslash         : ASCII { ASCII(_unsafeUnchecked: 0x5C) }
+    @inlinable static var rightSquareBracket: ASCII { ASCII(_unsafeUnchecked: 0x5D) }
+    @inlinable static var circumflexAccent  : ASCII { ASCII(_unsafeUnchecked: 0x5E) }
+    @inlinable static var underscore        : ASCII { ASCII(_unsafeUnchecked: 0x5F) }
+    @inlinable static var backtick          : ASCII { ASCII(_unsafeUnchecked: 0x60) }
     // Lower-case letters.
-    @inlinable static var a: ASCII { ASCII(_unchecked: 0x61) }
-    @inlinable static var b: ASCII { ASCII(_unchecked: 0x62) }
-    @inlinable static var c: ASCII { ASCII(_unchecked: 0x63) }
-    @inlinable static var d: ASCII { ASCII(_unchecked: 0x64) }
-    @inlinable static var e: ASCII { ASCII(_unchecked: 0x65) }
-    @inlinable static var f: ASCII { ASCII(_unchecked: 0x66) }
-    @inlinable static var g: ASCII { ASCII(_unchecked: 0x67) }
-    @inlinable static var h: ASCII { ASCII(_unchecked: 0x68) }
-    @inlinable static var i: ASCII { ASCII(_unchecked: 0x69) }
-    @inlinable static var j: ASCII { ASCII(_unchecked: 0x6A) }
-    @inlinable static var k: ASCII { ASCII(_unchecked: 0x6B) }
-    @inlinable static var l: ASCII { ASCII(_unchecked: 0x6C) }
-    @inlinable static var m: ASCII { ASCII(_unchecked: 0x6D) }
-    @inlinable static var n: ASCII { ASCII(_unchecked: 0x6E) }
-    @inlinable static var o: ASCII { ASCII(_unchecked: 0x6F) }
-    @inlinable static var p: ASCII { ASCII(_unchecked: 0x70) }
-    @inlinable static var q: ASCII { ASCII(_unchecked: 0x71) }
-    @inlinable static var r: ASCII { ASCII(_unchecked: 0x72) }
-    @inlinable static var s: ASCII { ASCII(_unchecked: 0x73) }
-    @inlinable static var t: ASCII { ASCII(_unchecked: 0x74) }
-    @inlinable static var u: ASCII { ASCII(_unchecked: 0x75) }
-    @inlinable static var v: ASCII { ASCII(_unchecked: 0x76) }
-    @inlinable static var w: ASCII { ASCII(_unchecked: 0x77) }
-    @inlinable static var x: ASCII { ASCII(_unchecked: 0x78) }
-    @inlinable static var y: ASCII { ASCII(_unchecked: 0x79) }
-    @inlinable static var z: ASCII { ASCII(_unchecked: 0x7A) }
+    @inlinable static var a: ASCII { ASCII(_unsafeUnchecked: 0x61) }
+    @inlinable static var b: ASCII { ASCII(_unsafeUnchecked: 0x62) }
+    @inlinable static var c: ASCII { ASCII(_unsafeUnchecked: 0x63) }
+    @inlinable static var d: ASCII { ASCII(_unsafeUnchecked: 0x64) }
+    @inlinable static var e: ASCII { ASCII(_unsafeUnchecked: 0x65) }
+    @inlinable static var f: ASCII { ASCII(_unsafeUnchecked: 0x66) }
+    @inlinable static var g: ASCII { ASCII(_unsafeUnchecked: 0x67) }
+    @inlinable static var h: ASCII { ASCII(_unsafeUnchecked: 0x68) }
+    @inlinable static var i: ASCII { ASCII(_unsafeUnchecked: 0x69) }
+    @inlinable static var j: ASCII { ASCII(_unsafeUnchecked: 0x6A) }
+    @inlinable static var k: ASCII { ASCII(_unsafeUnchecked: 0x6B) }
+    @inlinable static var l: ASCII { ASCII(_unsafeUnchecked: 0x6C) }
+    @inlinable static var m: ASCII { ASCII(_unsafeUnchecked: 0x6D) }
+    @inlinable static var n: ASCII { ASCII(_unsafeUnchecked: 0x6E) }
+    @inlinable static var o: ASCII { ASCII(_unsafeUnchecked: 0x6F) }
+    @inlinable static var p: ASCII { ASCII(_unsafeUnchecked: 0x70) }
+    @inlinable static var q: ASCII { ASCII(_unsafeUnchecked: 0x71) }
+    @inlinable static var r: ASCII { ASCII(_unsafeUnchecked: 0x72) }
+    @inlinable static var s: ASCII { ASCII(_unsafeUnchecked: 0x73) }
+    @inlinable static var t: ASCII { ASCII(_unsafeUnchecked: 0x74) }
+    @inlinable static var u: ASCII { ASCII(_unsafeUnchecked: 0x75) }
+    @inlinable static var v: ASCII { ASCII(_unsafeUnchecked: 0x76) }
+    @inlinable static var w: ASCII { ASCII(_unsafeUnchecked: 0x77) }
+    @inlinable static var x: ASCII { ASCII(_unsafeUnchecked: 0x78) }
+    @inlinable static var y: ASCII { ASCII(_unsafeUnchecked: 0x79) }
+    @inlinable static var z: ASCII { ASCII(_unsafeUnchecked: 0x7A) }
     // More special characters.
-    @inlinable static var leftCurlyBracket : ASCII { ASCII(_unchecked: 0x7B) }
-    @inlinable static var verticalBar      : ASCII { ASCII(_unchecked: 0x7C) }
-    @inlinable static var rightCurlyBracket: ASCII { ASCII(_unchecked: 0x7D) }
-    @inlinable static var tilde            : ASCII { ASCII(_unchecked: 0x7E) }
-    @inlinable static var delete           : ASCII { ASCII(_unchecked: 0x7F) }
+    @inlinable static var leftCurlyBracket : ASCII { ASCII(_unsafeUnchecked: 0x7B) }
+    @inlinable static var verticalBar      : ASCII { ASCII(_unsafeUnchecked: 0x7C) }
+    @inlinable static var rightCurlyBracket: ASCII { ASCII(_unsafeUnchecked: 0x7D) }
+    @inlinable static var tilde            : ASCII { ASCII(_unsafeUnchecked: 0x7E) }
+    @inlinable static var delete           : ASCII { ASCII(_unsafeUnchecked: 0x7F) }
 }
 
 
@@ -225,22 +241,22 @@ extension ASCII {
 
     @inlinable
     internal static var c0Control: Range<ASCII> {
-      ASCII(_unchecked: 0x00)..<ASCII(_unchecked: 0x20)
+      ASCII(_unsafeUnchecked: 0x00)..<ASCII(_unsafeUnchecked: 0x20)
     }
 
     @inlinable
     internal static var digits: Range<ASCII> {
-      ASCII(_unchecked: 0x30)..<ASCII(_unchecked: 0x3A)
+      ASCII(_unsafeUnchecked: 0x30)..<ASCII(_unsafeUnchecked: 0x3A)
     }
 
     @inlinable
     internal static var uppercaseAlpha: Range<ASCII> {
-      ASCII(_unchecked: 0x41)..<ASCII(_unchecked: 0x5B)
+      ASCII(_unsafeUnchecked: 0x41)..<ASCII(_unsafeUnchecked: 0x5B)
     }
 
     @inlinable
     internal static var lowercaseAlpha: Range<ASCII> {
-      ASCII(_unchecked: 0x61)..<ASCII(_unchecked: 0x7B)
+      ASCII(_unsafeUnchecked: 0x61)..<ASCII(_unsafeUnchecked: 0x7B)
     }
   }
 
@@ -255,7 +271,7 @@ extension ASCII {
   ///
   @inlinable
   internal var isAlpha: Bool {
-    let uppercased = ASCII(_unchecked: codePoint & 0b11011111)
+    let uppercased = ASCII(_unsafeUnchecked: codePoint & 0b11011111)
     return uppercased.isUppercaseAlpha
   }
 
@@ -333,7 +349,7 @@ extension ASCII {
   internal static func uppercaseHexDigit(of number: UInt8) -> ASCII {
     let table: StaticString = "0123456789ABCDEF"
     return table.withUTF8Buffer { table in
-      ASCII(_unchecked: table[Int(number & 0x0F)])
+      ASCII(_unsafeUnchecked: table[Int(number & 0x0F)])
     }
   }
 
@@ -343,7 +359,7 @@ extension ASCII {
   internal static func lowercaseHexDigit(of number: UInt8) -> ASCII {
     let table: StaticString = "0123456789abcdef"
     return table.withUTF8Buffer { table in
-      ASCII(_unchecked: table[Int(number & 0x0F)])
+      ASCII(_unsafeUnchecked: table[Int(number & 0x0F)])
     }
   }
 
@@ -548,14 +564,14 @@ extension ASCII {
   @inlinable
   internal var lowercased: ASCII {
     guard ASCII.ranges.uppercaseAlpha.contains(self) else { return self }
-    return ASCII(_unchecked: codePoint | 0b00100000)
+    return ASCII(_unsafeUnchecked: codePoint | 0b00100000)
   }
 
   /// A sequence of all possible ASCII characters.
   ///
   internal static var allCharacters: AnySequence<ASCII> {
     AnySequence(
-      sequence(first: ASCII(_unchecked: 0x00)) { character in
+      sequence(first: ASCII.null) { character in
         ASCII(character.codePoint + 1)
       }
     )
