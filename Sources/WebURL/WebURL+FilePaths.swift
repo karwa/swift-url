@@ -904,7 +904,7 @@ internal func _urlFromFilePath_windows_UNC<Bytes>(
     // The URL standard does not preserve "localhost" as a hostname in file URLs,
     // but removing it would turn a UNC path in to a local path.
     // As a workaround, replace it with "127.0.0.1". https://github.com/whatwg/url/issues/618
-    if ASCII.Lowercased(rawHost).elementsEqual("localhost".utf8) {
+    if isLocalhost(utf8: rawHost) {
       var ipv4String = IPv4Address(octets: (127, 0, 0, 1)).serializedDirect
       withUnsafeBytes(of: &ipv4String.buffer) { try! fileURL.utf8.setHostname($0.prefix(Int(ipv4String.count))) }
     } else {

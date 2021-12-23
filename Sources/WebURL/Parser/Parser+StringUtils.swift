@@ -125,8 +125,8 @@ internal func hasNonURLCodePoints<UTF8Bytes>(
   return false
 }
 
-/// Checks if `utf8`, which is a collection of UTF-8 code-units, contains any non-URL code-points or invalid percent encoding (e.g. "%XY").
-/// If it does, `callback` is informed with an appropriate `ValidationError`.
+/// Checks if `utf8`, which is a collection of UTF-8 code-units, contains any non-URL code-points
+/// or invalid percent encoding (e.g. "%XY"). If it does, `callback` is informed with an appropriate `ValidationError`.
 ///
 /// - Note: This method considers the percent sign ("%") to be a valid URL code-point.
 /// - Note: This method is a no-op if `callback` is an instance of `IgnoreValidationErrors`.
@@ -175,17 +175,43 @@ internal func indexAfterDoubleSolidusPrefix<UTF8Bytes>(
   return idx
 }
 
-@inlinable
-internal var _idnaPrefix: StaticString { "xn--" }
+@inlinable @inline(__always)
+internal var _idnaPrefix: UInt32 {
+  UInt32(
+    bigEndian: UInt32(ASCII.X.codePoint) &<< 24 | UInt32(ASCII.N.codePoint) &<< 16
+      | UInt32(ASCII.minus.codePoint) &<< 8 | UInt32(ASCII.minus.codePoint)
+  )
+}
 
-/// Returns `true` if `utf8` begins with the ASCII string "xn--", indicating that a domain's label is encoded by IDNA.
-/// Otherwise, `false`.
+/// Whether or not `utf8` begins with the ASCII string "xn--" (case-insensitive),
+/// indicating that it is a domain label is encoded by IDNA.
 ///
 @inlinable
 internal func hasIDNAPrefix<UTF8Bytes>(
   utf8: UTF8Bytes
 ) -> Bool where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
-  _idnaPrefix.withUTF8Buffer { utf8.starts(with: $0) }
+  let contiguousResult = utf8.withContiguousStorageIfAvailable { utf8 -> Bool in
+    guard utf8.count >= 4 else { return false }
+    var prefix = UnsafeRawPointer(utf8.baseAddress.unsafelyUnwrapped).loadUnaligned(as: UInt32.self)
+    prefix &= (0b11011111_11011111_11111111_11111111 as UInt32).bigEndian  // Make first 2 chars uppercase
+    return prefix == _idnaPrefix
+  }
+  if let contiguousResult = contiguousResult {
+    return contiguousResult
+  }
+  return ("xn--" as StaticString).withUTF8Buffer { ASCII.Lowercased(utf8).starts(with: $0) }
+}
+
+/// Whether or not `utf8` is equal to the ASCII string "localhost" (case-insensitive).
+///
+@inlinable
+internal func isLocalhost<UTF8Bytes>(
+  utf8: UTF8Bytes
+) -> Bool where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
+  // This function is used by file URLs, which generally have an empty hostname.
+  // It isn't worth doing anything fancy here.
+  guard !utf8.isEmpty else { return false }
+  return ("localhost" as StaticString).withUTF8Buffer { ASCII.Lowercased(utf8).elementsEqual($0) }
 }
 
 extension ASCII {
