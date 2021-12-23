@@ -30,9 +30,7 @@ extension UnsafeRawPointer {
     assert(_isPOD(T.self))
     var val: T = 0
     withUnsafeMutableBytes(of: &val) {
-      for i in Range(uncheckedBounds: (0, T.bitWidth / 8)) {
-        $0[i] = load(fromByteOffset: offset &+ i, as: UInt8.self)
-      }
+      $0.copyMemory(from: UnsafeRawBufferPointer(start: self, count: T.bitWidth / 8))
     }
     return val
   }

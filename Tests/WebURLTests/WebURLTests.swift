@@ -1447,4 +1447,21 @@ extension WebURLTests {
       XCTAssertFalse(seenOrigins.contains(myURL.origin))
     }
   }
+
+  func testIDNAFastPathIsCaseInsensitive() {
+    // Recently added to the WPT tests in https://github.com/web-platform-tests/wpt/pull/32177
+    // Since we don't support IDNA (yet), it's important that we double-check that all of these fail to parse.
+    XCTAssertNil(WebURL("http://xn--6qqa088eba/"))
+    XCTAssertNil(WebURL("http://XN--6qqa088eba/"))
+    XCTAssertNil(WebURL("http://Xn--6qqa088eba/"))
+    XCTAssertNil(WebURL("http://xN--6qqa088eba/"))
+
+    // Tabs and newlines for non-contiguous path.
+    XCTAssertNil(WebURL("http://x\tn-\n-6qqa088eba/"))
+    XCTAssertNil(WebURL("http://X\tN-\n-6qqa088eba/"))
+    XCTAssertNil(WebURL("http://X\tn-\n-6qqa088eba/"))
+    XCTAssertNil(WebURL("http://x\tN-\n-6qqa088eba/"))
+    // Tabs an newlines, but not IDNA ('ax--').
+    XCTAssertEqual(WebURL("http://ax\tn-\n-6qqa088eba/")?.serialized(), "http://axn--6qqa088eba/")
+  }
 }

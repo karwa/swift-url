@@ -41,7 +41,7 @@ extension ParsedHost {
     _ hostname: UTF8Bytes, schemeKind: WebURL.SchemeKind, callback: inout Callback
   ) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
-    guard hostname.isEmpty == false else {
+    guard !hostname.isEmpty else {
       self = .empty
       return
     }
@@ -60,65 +60,51 @@ extension ParsedHost {
       return
     }
 
-    guard schemeKind.isSpecial else {
-      guard let hostnameInfo = ParsedHost._tryParseOpaqueHostname(hostname, callback: &callback) else {
-        return nil
+    let result: Optional<ParsedHost>
+
+    if schemeKind.isSpecial {
+      let needsPercentDecoding =
+        hostname.withContiguousStorageIfAvailable {
+          $0._fastContains(ASCII.percentSign.codePoint)
+        } ?? true
+      if !needsPercentDecoding {
+        result = ParsedHost._parseDomainOrIPv4(
+          hostname, scheme: schemeKind, isPercentDecoded: false, callback: &callback
+        )
+      } else {
+        result = ParsedHost._parseDomainOrIPv4(
+          hostname.lazy.percentDecoded(), scheme: schemeKind, isPercentDecoded: true, callback: &callback
+        )
       }
-      self = .opaque(hostnameInfo)
-      return
+    } else {
+      result = ParsedHost._parseOpaqueHostname(hostname, callback: &callback).map { .opaque($0) }
     }
 
-    let domain = hostname.lazy.percentDecoded()
-
-    // TODO: [idna]
-    //
-    // > 6. Let asciiDomain be the result of running domain to ASCII on domain.
-    // > 7. If asciiDomain is failure, validation error, return failure.
-    //
-    // We don't have IDNA, so we need to reject:
-    // - domains with non-ASCII characters
-    // - domains which are ASCII but have IDNA-encoded "labels" (dot-separated components).
-    //   These require validation which we can't do yet.
-    //
-    // Which should leave us with pure ASCII domains, which don't depend on Unicode at all.
-    // For these, IDNA normalization/encoding is just lowercasing. At least that's something we can do...
-
-    switch ParsedHost._tryParseDomain(domain, callback: &callback) {
-    case .containsUnicodeOrIDNA:
+    if let result = result {
+      self = result
+    } else {
       return nil
-    case .forbiddenHostCodePoint:
-      return nil
-    case .endsInANumber:
-      guard let address = IPv4Address(utf8: domain) else {
-        return nil
-      }
-      self = .ipv4Address(address)
-      return
-    case .asciiDomain(let asciiDomainInfo):
-      if schemeKind == .file, ASCII.Lowercased(domain).elementsEqual("localhost".utf8) {
-        self = .empty
-        return
-      }
-      self = .asciiDomain(asciiDomainInfo)
     }
   }
 
   /// Parses the given opaque hostname, returning an `_OpaqueHostnameInfo` if the hostname is valid.
   ///
   @inlinable
-  internal static func _tryParseOpaqueHostname<UTF8Bytes, Callback>(
+  internal static func _parseOpaqueHostname<UTF8Bytes, Callback>(
     _ hostname: UTF8Bytes, callback: inout Callback
   ) -> _OpaqueHostnameInfo? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
     guard hostname.isEmpty == false else {
       return nil
     }
+
     var hostnameInfo = _OpaqueHostnameInfo(needsPercentEncoding: false, encodedCount: 0)
+
     for byte in hostname {
-      hostnameInfo.encodedCount += 1
+      hostnameInfo.encodedCount &+= 1
       guard let asciiChar = ASCII(byte) else {
         hostnameInfo.needsPercentEncoding = true
-        hostnameInfo.encodedCount += 2
+        hostnameInfo.encodedCount &+= 2
         continue  // Non-ASCII codepoints checked by 'validateURLCodePointsAndPercentEncoding', are not fatal.
       }
       if asciiChar.isForbiddenHostCodePoint, asciiChar != .percentSign {
@@ -127,25 +113,52 @@ extension ParsedHost {
       }
       if URLEncodeSet.C0Control().shouldPercentEncode(ascii: asciiChar.codePoint) {
         hostnameInfo.needsPercentEncoding = true
-        hostnameInfo.encodedCount += 2
+        hostnameInfo.encodedCount &+= 2
       }
     }
+
     validateURLCodePointsAndPercentEncoding(utf8: hostname, callback: &callback)
     return hostnameInfo
   }
 
-  /// Parses the given domain, returning information about which kind of domain it is, and some details which are useful to write a normalized version
-  /// of the domain.
+  /// Parses the given domain or IPv4 address.
   ///
   @inlinable
-  internal static func _tryParseDomain<UTF8Bytes, Callback>(
-    _ domain: LazilyPercentDecoded<UTF8Bytes>, callback: inout Callback
+  internal static func _parseDomainOrIPv4<UTF8Bytes, Callback>(
+    _ domain: UTF8Bytes, scheme: WebURL.SchemeKind, isPercentDecoded: Bool, callback: inout Callback
+  ) -> ParsedHost? where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
+
+    switch ParsedHost._parseASCIIDomain(domain, isPercentDecoded: isPercentDecoded, callback: &callback) {
+    case .containsUnicodeOrIDNA:
+      // TODO: Handle domains conaining Unicode or IDNA labels.
+      return nil
+    case .forbiddenHostCodePoint:
+      return nil
+    case .endsInANumber:
+      guard let address = IPv4Address(utf8: domain) else {
+        return nil
+      }
+      return .ipv4Address(address)
+    case .asciiDomain(let asciiDomainInfo):
+      if case .file = scheme, isLocalhost(utf8: domain) {
+        return .empty
+      }
+      return .asciiDomain(asciiDomainInfo)
+    }
+  }
+
+  /// Parses the given domain as ASCII, returning information about which kind of domain it is,
+  /// and some details which are useful to write a normalized version of the domain.
+  ///
+  @inlinable
+  internal static func _parseASCIIDomain<UTF8Bytes, Callback>(
+    _ domain: UTF8Bytes, isPercentDecoded: Bool, callback: inout Callback
   ) -> _DomainParseResult
   where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
-    var domainInfo = _ASCIIDomainInfo(decodedCount: 0, needsDecodeOrLowercasing: false)
+    var domainInfo = _ASCIIDomainInfo(decodedCount: 0, needsPercentDecoding: isPercentDecoded, needsLowercasing: false)
 
-    guard hasIDNAPrefix(utf8: domain) == false else {
+    guard !hasIDNAPrefix(utf8: domain) else {
       callback.validationError(.domainToASCIIFailure)
       return .containsUnicodeOrIDNA
     }
@@ -162,12 +175,12 @@ extension ParsedHost {
         callback.validationError(.hostForbiddenCodePoint)
         return .forbiddenHostCodePoint
       }
-      domainInfo.needsDecodeOrLowercasing =
-        (domainInfo.needsDecodeOrLowercasing || i.isDecodedOrUnsubstituted || char.isUppercaseAlpha)
+      domainInfo.needsLowercasing = domainInfo.needsLowercasing || char.isUppercaseAlpha
       domainInfo.decodedCount &+= 1
       domain.formIndex(after: &i)
+
       if char == .period {
-        guard hasIDNAPrefix(utf8: domain[i...]) == false else {
+        guard !hasIDNAPrefix(utf8: domain[Range(uncheckedBounds: (i, domain.endIndex))]) else {
           callback.validationError(.domainToASCIIFailure)
           return .containsUnicodeOrIDNA
         }
@@ -225,12 +238,16 @@ internal struct _ASCIIDomainInfo {
   internal var decodedCount: Int
 
   @usableFromInline
-  internal var needsDecodeOrLowercasing: Bool
+  internal var needsPercentDecoding: Bool
+
+  @usableFromInline
+  internal var needsLowercasing: Bool
 
   @inlinable
-  internal init(decodedCount: Int, needsDecodeOrLowercasing: Bool) {
+  internal init(decodedCount: Int, needsPercentDecoding: Bool, needsLowercasing: Bool) {
     self.decodedCount = decodedCount
-    self.needsDecodeOrLowercasing = needsDecodeOrLowercasing
+    self.needsPercentDecoding = needsPercentDecoding
+    self.needsLowercasing = needsLowercasing
   }
 }
 
@@ -271,7 +288,9 @@ extension ParsedHost {
       writer.writeHostname(lengthIfKnown: 0, kind: .empty) { $0(EmptyCollection()) }
 
     case .asciiDomain(let domainInfo):
-      if domainInfo.needsDecodeOrLowercasing {
+      // It isn't worth splitting "needs percent decoding" from "needs lowercasing".
+      // Only fast-path the case when no additional processing is required.
+      if domainInfo.needsPercentDecoding || domainInfo.needsLowercasing {
         writer.writeHostname(lengthIfKnown: domainInfo.decodedCount, kind: .domain) {
           $0(ASCII.Lowercased(bytes.lazy.percentDecoded()))
         }
