@@ -145,7 +145,7 @@ internal func validateURLCodePointsAndPercentEncoding<UTF8Bytes, Callback>(
     callback.validationError(.invalidURLCodePoint)
   }
   var percentSignSearchIdx = utf8.startIndex
-  while let percentSignIdx = utf8[percentSignSearchIdx...].firstIndex(where: { ASCII($0) == .percentSign }) {
+  while let percentSignIdx = utf8[percentSignSearchIdx...].fastFirstIndex(where: { ASCII($0) == .percentSign }) {
     percentSignSearchIdx = utf8.index(after: percentSignIdx)
     let nextTwo = utf8[percentSignIdx...].prefix(2)
     if nextTwo.count != 2 || !nextTwo.allSatisfy({ ASCII($0)?.isHexDigit ?? false }) {

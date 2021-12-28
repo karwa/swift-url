@@ -1511,7 +1511,7 @@ extension Collection where Element == UInt8 {
   internal func containsLiteralDotDotComponent(isSeparator: (UInt8) -> Bool) -> Bool {
     (".." as StaticString).withUTF8Buffer { dotdot in
       var componentStart = startIndex
-      while let separatorIndex = self[componentStart...].firstIndex(where: isSeparator) {
+      while let separatorIndex = self[componentStart...].fastFirstIndex(where: isSeparator) {
         guard !self[componentStart..<separatorIndex].elementsEqual(dotdot) else {
           return true
         }

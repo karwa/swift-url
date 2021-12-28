@@ -197,8 +197,8 @@ extension ParsedHost {
     if !lastLabel.isEmpty {
       if lastLabel.allSatisfy({ ASCII($0)?.isDigit == true }) {
         return .endsInANumber
-      } else if lastLabel.popFirst() == ASCII.n0.codePoint,
-        lastLabel.popFirst().flatMap({ ASCII($0)?.lowercased }) == .x,
+      } else if lastLabel.fastPopFirst() == ASCII.n0.codePoint,
+        lastLabel.fastPopFirst().flatMap({ ASCII($0)?.lowercased }) == .x,
         lastLabel.allSatisfy({ ASCII($0)?.isHexDigit == true })
       {
         return .endsInANumber

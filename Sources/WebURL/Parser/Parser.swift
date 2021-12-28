@@ -806,7 +806,7 @@ extension URLScanner {
     assert(!mapping.hasOpaquePath)
 
     // 2. Find the extent of the authority (i.e. the terminator between host and path/query/fragment).
-    let authority = input.prefix {
+    let authority = input.fastPrefix {
       switch ASCII($0) {
       case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?:
         return false
@@ -821,7 +821,7 @@ extension URLScanner {
 
     // 3. Find the extent of the credentials, if there are any, and where the host starts.
     var hostStartIndex = authority.startIndex
-    if let credentialsEndIndex = authority.lastIndex(of: ASCII.commercialAt.codePoint) {
+    if let credentialsEndIndex = authority.fastLastIndex(of: ASCII.commercialAt.codePoint) {
       callback.validationError(.unexpectedCommercialAt)
       hostStartIndex = input.index(after: credentialsEndIndex)
       guard hostStartIndex < authority.endIndex else {
@@ -830,7 +830,7 @@ extension URLScanner {
       }
 
       let credentials = authority[..<credentialsEndIndex]
-      let separatorIndex = credentials.firstIndex(of: ASCII.colon.codePoint) ?? credentials.endIndex
+      let separatorIndex = credentials.fastFirstIndex(of: ASCII.colon.codePoint) ?? credentials.endIndex
       mapping.usernameRange = credentials.startIndex..<separatorIndex
       if separatorIndex < credentials.endIndex {
         mapping.passwordRange = credentials.index(after: separatorIndex)..<credentials.endIndex
@@ -984,7 +984,9 @@ extension URLScanner {
     assert(!mapping.hasOpaquePath)
 
     // 2. Find the extent of the path.
-    let startOfNextComponent = input.firstIndex { ASCII($0) == .questionMark || ASCII($0) == .numberSign }
+    let startOfNextComponent = input.fastFirstIndex {
+      $0 == ASCII.questionMark.codePoint || $0 == ASCII.numberSign.codePoint
+    }
     let path = input[..<(startOfNextComponent ?? input.endIndex)]
 
     // 3. Validate the path's contents.
@@ -1020,7 +1022,7 @@ extension URLScanner {
     assert(mapping.fragmentRange == nil)
 
     // 2. Find the extent of the query
-    let startOfFrg = input.firstIndex(of: ASCII.numberSign.codePoint)
+    let startOfFrg = input.fastFirstIndex(of: ASCII.numberSign.codePoint)
 
     // 3. Validate the query-string.
     validateURLCodePointsAndPercentEncoding(utf8: input.prefix(upTo: startOfFrg ?? input.endIndex), callback: &callback)
@@ -1195,7 +1197,7 @@ extension URLScanner {
     // 2. Find the extent of the hostname.
     //    The hostname is not validated after this, as it will be checked by the host parser.
     let startOfNextComponent =
-      input.firstIndex { byte in
+      input.fastFirstIndex { byte in
         switch ASCII(byte) {
         case .forwardSlash?, .backslash?, .questionMark?, .numberSign?: return true
         default: return false
@@ -1268,7 +1270,7 @@ extension URLScanner {
     assert(mapping.hasOpaquePath)
 
     // 2. Find the extent of the path.
-    let startOfNextComponent = input.firstIndex { byte in
+    let startOfNextComponent = input.fastFirstIndex { byte in
       switch ASCII(byte) {
       case .questionMark?, .numberSign?: return true
       default: return false
@@ -1373,7 +1375,7 @@ extension URLScanner {
         if baseScheme.isSpecial {
           // [URL Standard: "special authority ignore slashes" state].
           cursor =
-            input[cursor...].firstIndex {
+            input[cursor...].fastFirstIndex {
               ASCII($0) != .forwardSlash && ASCII($0) != .backslash
             } ?? input.endIndex
         }
@@ -1501,7 +1503,7 @@ func parseScheme<UTF8Bytes>(
   _ input: UTF8Bytes
 ) -> (terminator: UTF8Bytes.Index, kind: WebURL.SchemeKind)? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-  let terminatorIdx = input.firstIndex { $0 == ASCII.colon.codePoint } ?? input.endIndex
+  let terminatorIdx = input.fastFirstIndex { $0 == ASCII.colon.codePoint } ?? input.endIndex
   let schemeName = input[Range(uncheckedBounds: (input.startIndex, terminatorIdx))]
   let kind = WebURL.SchemeKind(parsing: schemeName)
 
@@ -1537,7 +1539,7 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
   var mapping = ScannedRangesAndFlags<UTF8Bytes>()
 
   // See `URLScanner.scanAuthority`.
-  let hostname = input.prefix {
+  let hostname = input.fastPrefix {
     switch ASCII($0) {
     case ASCII.forwardSlash?, ASCII.questionMark?, ASCII.numberSign?:
       return false

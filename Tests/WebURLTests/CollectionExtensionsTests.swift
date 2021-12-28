@@ -132,3 +132,138 @@ extension CollectionExtensionsTests {
     }
   }
 }
+
+// Fast collection algorithms.
+
+extension CollectionExtensionsTests {
+
+  func testFastFirstIndex() {
+    do {
+      let elems = [1, 2, 3, 4, 5, 6]
+      XCTAssertEqual(elems.fastFirstIndex(where: { $0.isMultiple(of: 2) }), 1)
+      XCTAssertEqual(elems.fastFirstIndex(where: { $0.isMultiple(of: 3) }), 2)
+      XCTAssertEqual(elems.fastFirstIndex(where: { $0.isMultiple(of: 4) }), 3)
+      XCTAssertEqual(elems.fastFirstIndex(where: { $0.isMultiple(of: 9) }), nil)
+    }
+    do {
+      let elems = [1, 2, 3, 4, 4, 5, 4, 6]
+      XCTAssertEqual(elems.fastFirstIndex(of: 4), 3)
+      XCTAssertEqual(elems.fastFirstIndex(of: 10), nil)
+    }
+    do {
+      let elems: Array<Int> = []
+      XCTAssertNil(elems.fastFirstIndex(where: { _ in true }))
+    }
+  }
+
+  func testFastLastIndex() {
+    do {
+      let elems = [1, 2, 3, 4, 5, 6]
+      XCTAssertEqual(elems.fastLastIndex(where: { $0.isMultiple(of: 2) }), 5)
+      XCTAssertEqual(elems.fastLastIndex(where: { $0.isMultiple(of: 3) }), 5)
+      XCTAssertEqual(elems.fastLastIndex(where: { $0.isMultiple(of: 4) }), 3)
+      XCTAssertEqual(elems.fastLastIndex(where: { $0.isMultiple(of: 9) }), nil)
+    }
+    do {
+      let elems = [1, 2, 3, 4, 4, 5, 4, 6]
+      XCTAssertEqual(elems.fastLastIndex(of: 4), 6)
+      XCTAssertEqual(elems.fastLastIndex(of: 10), nil)
+    }
+    do {
+      let elems: Array<Int> = []
+      XCTAssertNil(elems.fastLastIndex(where: { _ in true }))
+    }
+  }
+
+  func testFastPrefix() {
+    // Match prefix.
+    do {
+      let elems = [2, 4, 6, 7, 8, 9]
+      let prefix = elems.fastPrefix(where: { $0.isMultiple(of: 2) })
+      XCTAssertEqual(prefix.startIndex, 0)
+      XCTAssertEqual(prefix.endIndex, 3)
+      XCTAssertEqualElements(prefix, [2, 4, 6])
+    }
+    // Match everything.
+    do {
+      let elems = [2, 4, 6, 8]
+      let prefix = elems.fastPrefix(where: { $0.isMultiple(of: 2) })
+      XCTAssertEqual(prefix.startIndex, 0)
+      XCTAssertEqual(prefix.endIndex, 4)
+      XCTAssertEqualElements(prefix, [2, 4, 6, 8])
+    }
+    // No prefix match.
+    do {
+      let elems = [2, 4, 6, 7, 8, 9]
+      let prefix = elems.fastPrefix(where: { !$0.isMultiple(of: 2) })
+      XCTAssertEqual(prefix.startIndex, 0)
+      XCTAssertEqual(prefix.endIndex, 0)
+      XCTAssertEqualElements(prefix, [])
+    }
+    // Empty collection.
+    do {
+      let elems: Array<Int> = []
+      let prefix = elems.fastPrefix(where: { _ in true })
+      XCTAssertEqual(prefix.startIndex, 0)
+      XCTAssertEqual(prefix.endIndex, 0)
+      XCTAssertEqualElements(prefix, [])
+    }
+  }
+
+  func testFastDrop() {
+    // Drop prefix.
+    do {
+      let elems = [2, 4, 6, 7, 8, 9]
+      let suffix = elems.fastDrop(while: { $0.isMultiple(of: 2) })
+      XCTAssertEqual(suffix.startIndex, 3)
+      XCTAssertEqual(suffix.endIndex, 6)
+      XCTAssertEqualElements(suffix, [7, 8, 9])
+    }
+    // Drop everything.
+    do {
+      let elems = [2, 4, 6, 8]
+      let suffix = elems.fastDrop(while: { $0.isMultiple(of: 2) })
+      XCTAssertEqual(suffix.startIndex, 4)
+      XCTAssertEqual(suffix.endIndex, 4)
+      XCTAssertEqualElements(suffix, [])
+    }
+    // Drop nothing.
+    do {
+      let elems = [2, 4, 6, 7, 8, 9]
+      let prefix = elems.fastDrop(while: { !$0.isMultiple(of: 2) })
+      XCTAssertEqual(prefix.startIndex, 0)
+      XCTAssertEqual(prefix.endIndex, 6)
+      XCTAssertEqualElements(prefix, [2, 4, 6, 7, 8, 9])
+    }
+    // Empty collection.
+    do {
+      let elems: Array<Int> = []
+      let suffix = elems.fastDrop(while: { _ in true })
+      XCTAssertEqual(suffix.startIndex, 0)
+      XCTAssertEqual(suffix.endIndex, 0)
+      XCTAssertEqualElements(suffix, [])
+    }
+  }
+
+  func testFastPopFirst() {
+    // Pop until all elements consumed.
+    do {
+      var elems = [2, 4, 6][...]
+      XCTAssertEqual(elems.fastPopFirst(), 2)
+      XCTAssertEqualElements(elems, [4, 6])
+      XCTAssertEqual(elems.fastPopFirst(), 4)
+      XCTAssertEqualElements(elems, [6])
+      XCTAssertEqual(elems.fastPopFirst(), 6)
+      XCTAssertTrue(elems.isEmpty)
+      XCTAssertEqual(elems.fastPopFirst(), nil)
+      XCTAssertEqual(elems.fastPopFirst(), nil)
+      XCTAssertEqual(elems.fastPopFirst(), nil)
+    }
+    // Empty collection.
+    do {
+      var elems: Array<Int>.SubSequence = [][...]
+      XCTAssertTrue(elems.isEmpty)
+      XCTAssertEqual(elems.fastPopFirst(), nil)
+    }
+  }
+}
