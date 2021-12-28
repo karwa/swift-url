@@ -99,13 +99,13 @@ extension ASCII.NewlineAndTabFiltered: Collection {
   @inlinable
   internal func index(after i: Index) -> Index {
     let next = base.index(after: i)
-    return base[Range(uncheckedBounds: (next, endIndex))].firstIndex { !ASCII.isNewlineOrTab($0) } ?? endIndex
+    return base[Range(uncheckedBounds: (next, endIndex))].fastFirstIndex { !ASCII.isNewlineOrTab($0) } ?? endIndex
   }
 
   @inlinable
   internal func formIndex(after i: inout Index) {
     base.formIndex(after: &i)
-    i = base[Range(uncheckedBounds: (i, endIndex))].firstIndex { !ASCII.isNewlineOrTab($0) } ?? endIndex
+    i = base[Range(uncheckedBounds: (i, endIndex))].fastFirstIndex { !ASCII.isNewlineOrTab($0) } ?? endIndex
   }
 }
 
@@ -115,14 +115,14 @@ extension ASCII.NewlineAndTabFiltered: BidirectionalCollection where Base: Bidir
   internal func index(before i: Index) -> Index {
     // Note that decrementing startIndex does not trap (BidirectionalCollection does not require it);
     // it just keeps returning startIndex.
-    return base[Range(uncheckedBounds: (startIndex, i))].lastIndex { !ASCII.isNewlineOrTab($0) } ?? startIndex
+    return base[Range(uncheckedBounds: (startIndex, i))].fastLastIndex { !ASCII.isNewlineOrTab($0) } ?? startIndex
   }
 
   @inlinable
   internal func formIndex(before i: inout Index) {
     // Note that decrementing startIndex does not trap (BidirectionalCollection does not require it);
     // it just keeps returning startIndex.
-    i = base[Range(uncheckedBounds: (startIndex, i))].lastIndex { !ASCII.isNewlineOrTab($0) } ?? startIndex
+    i = base[Range(uncheckedBounds: (startIndex, i))].fastLastIndex { !ASCII.isNewlineOrTab($0) } ?? startIndex
   }
 }
 

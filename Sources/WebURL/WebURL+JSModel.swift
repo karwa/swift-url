@@ -332,7 +332,7 @@ extension WebURL.JSModel {
       newValue._withContiguousUTF8 { _newValue in
         let newValue = _newValue.boundsChecked
         let trimmedAndFiltered: ASCII.NewlineAndTabFiltered<UnsafeBoundsCheckedBufferPointer<UInt8>>
-        if let terminatorIdx = newValue.firstIndex(of: ASCII.colon.codePoint) {
+        if let terminatorIdx = newValue.fastFirstIndex(of: ASCII.colon.codePoint) {
           trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[..<newValue.index(after: terminatorIdx)])
         } else {
           trimmedAndFiltered = ASCII.NewlineAndTabFiltered(newValue[...])

@@ -298,7 +298,7 @@ extension WebURL.FormEncodedQueryParameters {
         }
         var nextKVP: UTF8Bytes.SubSequence
         repeat {
-          if let nextKVPEnd = remaining.firstIndex(of: ASCII.ampersand.codePoint) {
+          if let nextKVPEnd = remaining.fastFirstIndex(of: ASCII.ampersand.codePoint) {
             nextKVP = remaining[..<nextKVPEnd]
             remaining = remaining[remaining.index(after: nextKVPEnd)...]
           } else if remaining.isEmpty == false {
@@ -311,7 +311,7 @@ extension WebURL.FormEncodedQueryParameters {
         // If there is no "=" sign, the standard requires that 'value' be the empty string.
         let key: Range<UTF8Bytes.Index>
         let value: Range<UTF8Bytes.Index>
-        if let keyValueSeparator = nextKVP.firstIndex(of: ASCII.equalSign.codePoint) {
+        if let keyValueSeparator = nextKVP.fastFirstIndex(of: ASCII.equalSign.codePoint) {
           key = nextKVP.startIndex..<keyValueSeparator
           value = nextKVP.index(after: keyValueSeparator)..<nextKVP.endIndex
         } else {

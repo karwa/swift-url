@@ -790,7 +790,7 @@ extension URLStorage {
     let pathRange = structure.rangeForReplacingCodeUnits(of: .path).toCodeUnitsIndices()
     guard pathRange.contains(componentStartOffset) else { return nil }
     assert(codeUnits[componentStartOffset] == ASCII.forwardSlash.codePoint, "UTF8 position not aligned to a component")
-    return codeUnits[componentStartOffset + 1..<pathRange.upperBound].firstIndex(of: ASCII.forwardSlash.codePoint)
+    return codeUnits[componentStartOffset + 1..<pathRange.upperBound].fastFirstIndex(of: ASCII.forwardSlash.codePoint)
       ?? pathRange.upperBound
   }
 
@@ -810,7 +810,7 @@ extension URLStorage {
       componentEndOffset == pathRange.upperBound || codeUnits[componentEndOffset] == ASCII.forwardSlash.codePoint,
       "UTF8 position not aligned to a path component"
     )
-    return codeUnits[pathRange.lowerBound..<componentEndOffset].lastIndex(of: ASCII.forwardSlash.codePoint)
+    return codeUnits[pathRange.lowerBound..<componentEndOffset].fastLastIndex(of: ASCII.forwardSlash.codePoint)
       ?? pathRange.lowerBound
   }
 }

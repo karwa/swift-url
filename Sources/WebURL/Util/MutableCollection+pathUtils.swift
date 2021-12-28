@@ -29,7 +29,7 @@ extension Collection {
   internal func firstConsecutiveElements(matching predicate: (Element) -> Bool) -> SubSequence? {
 
     var i = startIndex
-    while let firstMatch = self[i...].firstIndex(where: predicate) {
+    while let firstMatch = self[i...].fastFirstIndex(where: predicate) {
       let run = self[index(after: firstMatch)...].prefix(while: predicate)
       if !run.isEmpty {
         return self[firstMatch..<run.endIndex]
@@ -163,7 +163,7 @@ extension MutableCollection {
     var writeHead = readHead
     var isFirst = true
 
-    while let separatorIdx = self[readHead...].firstIndex(where: isSeparator) {
+    while let separatorIdx = self[readHead...].fastFirstIndex(where: isSeparator) {
       let trimmedSegment = trim(self[readHead..<separatorIdx], isFirst, false)
 
       readHead = trimmedSegment.startIndex
