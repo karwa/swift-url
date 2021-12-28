@@ -175,6 +175,11 @@ internal func indexAfterDoubleSolidusPrefix<UTF8Bytes>(
   return idx
 }
 
+@inlinable
+internal func isForwardSlashOrBackSlash(_ codeUnit: UInt8) -> Bool {
+  codeUnit == ASCII.forwardSlash.codePoint || codeUnit == ASCII.backslash.codePoint
+}
+
 @inlinable @inline(__always)
 internal var _idnaPrefix: UInt32 {
   UInt32(
