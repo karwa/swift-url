@@ -408,7 +408,6 @@ extension _PathParser {
       parseBasePathComponents(baseURL, state: state)
     } else {
       // Absolute paths, and relative paths with no base URL, are finished now.
-      _onFastPath()
       parser_confirmDeferredDriveAndEndParsing(state)
     }
   }
@@ -867,13 +866,13 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
 
   @usableFromInline
   internal mutating func visitInputPathComponent(_ pathComponent: UTF8Bytes.SubSequence) {
-    validateURLCodePointsAndPercentEncoding(utf8: pathComponent, callback: &callback.pointee)
+    _validateURLCodePointsAndPercentEncoding(utf8: pathComponent, callback: &callback.pointee)
   }
 
   @usableFromInline
   internal mutating func visitDeferredDriveLetter(_ pathComponent: (UInt8, UInt8), isConfirmedDriveLetter: Bool) {
     withUnsafeBufferPointerToElements(tuple: pathComponent) {
-      validateURLCodePointsAndPercentEncoding(utf8: $0, callback: &callback.pointee)
+      _validateURLCodePointsAndPercentEncoding(utf8: $0, callback: &callback.pointee)
     }
   }
 

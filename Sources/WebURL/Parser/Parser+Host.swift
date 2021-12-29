@@ -105,7 +105,7 @@ extension ParsedHost {
       guard let asciiChar = ASCII(byte) else {
         hostnameInfo.needsPercentEncoding = true
         hostnameInfo.encodedCount &+= 2
-        continue  // Non-ASCII codepoints checked by 'validateURLCodePointsAndPercentEncoding', are not fatal.
+        continue
       }
       if asciiChar.isForbiddenHostCodePoint, asciiChar != .percentSign {
         callback.validationError(.hostForbiddenCodePoint)
@@ -117,7 +117,6 @@ extension ParsedHost {
       }
     }
 
-    validateURLCodePointsAndPercentEncoding(utf8: hostname, callback: &callback)
     return hostnameInfo
   }
 

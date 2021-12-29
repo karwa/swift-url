@@ -132,7 +132,7 @@ internal func hasNonURLCodePoints<UTF8Bytes>(
 /// - Note: This method is a no-op if `callback` is an instance of `IgnoreValidationErrors`.
 ///
 @inlinable
-internal func validateURLCodePointsAndPercentEncoding<UTF8Bytes, Callback>(
+internal func _validateURLCodePointsAndPercentEncoding<UTF8Bytes, Callback>(
   utf8: @autoclosure () -> UTF8Bytes, callback: inout Callback
 ) where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
