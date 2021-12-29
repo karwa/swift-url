@@ -161,6 +161,14 @@ extension ParsedURLString {
 
   /// The validated URL information contained within a string.
   ///
+  /// A `ProcessedMapping` consists of ranges and flags scanned from the input string, and some parsed components
+  /// (such as the host and port number). The ranges indicate that the input was successfully scanned
+  /// (and hence has a valid structure), whilst the parsed components indicate that sections with additional meaning
+  /// have been successfully interpreted (and hence have valid contents).
+  ///
+  /// Since this is a large value, the most efficient way to obtain a mapping is to instantiate an empty instance
+  /// using `init()` and populate its values in-place by calling `parse(inputString:baseURL:callback:)`.
+  ///
   @usableFromInline
   internal struct ProcessedMapping {
 
@@ -173,20 +181,11 @@ extension ParsedURLString {
     @usableFromInline
     internal private(set) var __port: Optional<UInt16>
 
-    /// Constructs an empty ProcessedMapping.
-    ///
-    /// To populate the mapping, call the `parse` function.
-    ///
-    @inlinable
-    internal init() {
-      self.info = ScannedRangesAndFlags()
-      self.__parsedHost = nil
-      self.__port = nil
-    }
-
-    // Work around avoid expensive 'outlined init with take' calls.
+    // --------------------------------------------
+    // Work around to avoid expensive 'outlined init with take' calls
     // https://bugs.swift.org/browse/SR-15215
     // https://forums.swift.org/t/expensive-calls-to-outlined-init-with-take/52187
+    // --------------------------------------------
 
     @inlinable @inline(__always)
     internal var parsedHost: Optional<ParsedHost> {
@@ -215,176 +214,45 @@ extension ParsedURLString {
         __port = newValue
       }
     }
-  }
-}
 
-/// The positions of URL components found within a string, and the flags to interpret them.
-///
-/// After coming from the scanner, certain components require additional _content validation_, which can be performed by constructing a `ProcessedMapping`.
-///
-@usableFromInline
-internal struct ScannedRangesAndFlags<InputString> where InputString: Collection {
+    // --------------------------------------------
+    // End Workaround
+    // --------------------------------------------
 
-  /// The position of the scheme's content, if present, without trailing separators.
-  @usableFromInline
-  internal var schemeRange: Optional<Range<InputString.Index>>
-
-  /// The position of the authority section, if present, without leading or trailing separators.
-  @usableFromInline
-  internal var authorityRange: Optional<Range<InputString.Index>>
-
-  /// The position of the username content, if present, without leading or trailing separators.
-  @usableFromInline
-  internal var usernameRange: Optional<Range<InputString.Index>>
-
-  /// The position of the password content, if present, without leading or trailing separators.
-  @usableFromInline
-  internal var passwordRange: Optional<Range<InputString.Index>>
-
-  /// The position of the hostname content, if present, without leading or trailing separators.
-  @usableFromInline
-  internal var hostnameRange: Optional<Range<InputString.Index>>
-
-  /// The position of the port content, if present, without leading or trailing separators.
-  @usableFromInline
-  internal var portRange: Optional<Range<InputString.Index>>
-
-  /// The position of the path content, if present, without leading or trailing separators.
-  /// Note that the path's initial "/", if present, is not considered a separator.
-  @usableFromInline
-  internal var pathRange: Optional<Range<InputString.Index>>
-
-  /// The position of the query content, if present, without leading or trailing separators.
-  @usableFromInline
-  internal var queryRange: Optional<Range<InputString.Index>>
-
-  /// The position of the fragment content, if present, without leading or trailing separators.
-  @usableFromInline
-  internal var fragmentRange: Optional<Range<InputString.Index>>
-
-  // Flags.
-
-  /// The kind of scheme contained in `schemeRange`, if it is not `nil`.
-  @usableFromInline
-  internal var __schemeKind: Optional<WebURL.SchemeKind>
-
-  /// Whether this URL's path is opaque.
-  @usableFromInline
-  internal var hasOpaquePath: Bool
-
-  /// A flag for a quirk in the standard, which means that absolute paths in particular URL strings should copy the Windows drive from their base URL.
-  @usableFromInline
-  internal var absolutePathsCopyWindowsDriveFromBase: Bool
-
-  /// The components to copy from the base URL. If non-empty, there must be a base URL.
-  /// Only the scheme and path may overlap with components detected in the input string - for the former, it is a meaningless quirk of the control flow,
-  /// and the two schemes must be equal; for the latter, it means the two paths should be merged (i.e. that the input string's path is relative to the base URL's path).
-  @usableFromInline
-  internal var componentsToCopyFromBase: _CopyableURLComponentSet
-
-  @inlinable
-  internal init(
-    schemeRange: Range<InputString.Index>?,
-    authorityRange: Range<InputString.Index>?,
-    usernameRange: Range<InputString.Index>?,
-    passwordRange: Range<InputString.Index>?,
-    hostnameRange: Range<InputString.Index>?,
-    portRange: Range<InputString.Index>?,
-    pathRange: Range<InputString.Index>?,
-    queryRange: Range<InputString.Index>?,
-    fragmentRange: Range<InputString.Index>?,
-    schemeKind: WebURL.SchemeKind?,
-    hasOpaquePath: Bool,
-    absolutePathsCopyWindowsDriveFromBase: Bool,
-    componentsToCopyFromBase: _CopyableURLComponentSet
-  ) {
-    self.schemeRange = schemeRange
-    self.authorityRange = authorityRange
-    self.usernameRange = usernameRange
-    self.passwordRange = passwordRange
-    self.hostnameRange = hostnameRange
-    self.portRange = portRange
-    self.pathRange = pathRange
-    self.queryRange = queryRange
-    self.fragmentRange = fragmentRange
-    self.__schemeKind = schemeKind
-    self.hasOpaquePath = hasOpaquePath
-    self.absolutePathsCopyWindowsDriveFromBase = absolutePathsCopyWindowsDriveFromBase
-    self.componentsToCopyFromBase = componentsToCopyFromBase
-  }
-
-  @inlinable
-  internal init() {
-    self.init(
-      schemeRange: nil, authorityRange: nil, usernameRange: nil, passwordRange: nil,
-      hostnameRange: nil, portRange: nil, pathRange: nil, queryRange: nil, fragmentRange: nil,
-      schemeKind: nil, hasOpaquePath: false, absolutePathsCopyWindowsDriveFromBase: false,
-      componentsToCopyFromBase: []
-    )
-  }
-
-  // This is a workaround to avoid expensive 'outlined init with take' calls.
-  // https://bugs.swift.org/browse/SR-15215
-  // https://forums.swift.org/t/expensive-calls-to-outlined-init-with-take/52187
-
-  /// The kind of scheme contained in `schemeRange`, if it is not `nil`.
-  @inlinable @inline(__always)
-  internal var schemeKind: Optional<WebURL.SchemeKind> {
-    get {
-      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
-      // and use the spare bits.
-      guard let offset = MemoryLayout.offset(of: \Self.__schemeKind) else { return __schemeKind }
-      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<WebURL.SchemeKind>.self) }
+    /// Constructs an empty ProcessedMapping.
+    ///
+    /// To populate the mapping, call `parse(inputString:baseURL:callback:)`.
+    ///
+    @inlinable
+    internal init() {
+      self.info = ScannedRangesAndFlags()
+      self.__parsedHost = nil
+      self.__port = nil
     }
-    set {
-      // We're not seeing the same expensive runtime calls for the setter, so there's nothing to work around here.
-      __schemeKind = newValue
+
+    /// Populates a ProcessedMapping in-place. The mapping must be empty.
+    ///
+    /// This function scans the input string and parses any components which require content validation,
+    /// and returns whether or not parsing was succesful.
+    ///
+    @inlinable
+    internal mutating func parse<Callback: URLParserCallback>(
+      inputString: InputString,
+      baseURL: WebURL?,
+      callback: inout Callback
+    ) -> Bool {
+      URLScanner.scanURLString(&info, string: inputString, baseURL: baseURL, callback: &callback)
+        && parseScannedComponents(inputString: inputString, baseURL: baseURL, callback: &callback)
     }
   }
-}
-
-//swift-format-ignore
-/// A set of components to be copied from a URL.
-///
-/// - seealso: `ScannedRangesAndFlags.componentsToCopyFromBase`
-///
-@usableFromInline
-internal struct _CopyableURLComponentSet: OptionSet {
-
-  @usableFromInline
-  internal var rawValue: UInt8
-
-  @inlinable
-  internal init(rawValue: UInt8) {
-    self.rawValue = rawValue
-  }
-
-  @inlinable internal static var scheme: Self    { Self(rawValue: 1 << 0) }
-  @inlinable internal static var authority: Self { Self(rawValue: 1 << 1) }
-  @inlinable internal static var path: Self      { Self(rawValue: 1 << 2) }
-  @inlinable internal static var query: Self     { Self(rawValue: 1 << 3) }
 }
 
 extension ParsedURLString.ProcessedMapping {
 
-  @inlinable
-  internal mutating func parse<Callback: URLParserCallback>(
-    inputString: InputString,
-    baseURL: WebURL?,
-    callback: inout Callback
-  ) -> Bool {
-
-    URLScanner.scanURLString(&info, string: inputString, baseURL: baseURL, callback: &callback)
-      && process(inputString: inputString, baseURL: baseURL, callback: &callback)
-  }
-
-  /// Parses failable components discovered by the scanner.
-  ///
-  /// Successful construction of this mapping affirms that the URL components discovered by the scanner do not contain invalid content,
-  /// and may definitely be written to a `URLWriter` as a standard-compliant, normalized URL string.
+  /// Parses scanned components and returns whether or not they are valid.
   ///
   @inlinable
-  internal mutating func process<Callback>(
+  internal mutating func parseScannedComponents<Callback>(
     inputString: InputString,
     baseURL: WebURL?,
     callback: inout Callback
@@ -392,21 +260,25 @@ extension ParsedURLString.ProcessedMapping {
 
     info.checkInvariants(inputString, baseURL: baseURL)
 
-    if info.schemeKind == nil {
+    // Ensure info.schemeKind is not nil.
+    let schemeKind: WebURL.SchemeKind
+    if let scannedSchemeKind = info.schemeKind {
+      schemeKind = scannedSchemeKind
+    } else {
       guard let baseURL = baseURL, info.componentsToCopyFromBase.contains(.scheme) else {
         preconditionFailure("We must have a scheme")
       }
-      info.schemeKind = baseURL.schemeKind
+      schemeKind = baseURL.schemeKind
     }
 
     // Port.
     var port: UInt16?
     if let portRange = info.portRange, portRange.isEmpty == false {
       guard let parsedInteger = ASCII.parseDecimalU16(from: inputString[portRange]) else {
-        callback.validationError(.portOutOfRange)
+        callback.validationError(.portOutOfRange)  // Or invalid (e.g. contains non-digits).
         return false
       }
-      if parsedInteger != info.schemeKind!.defaultPort {
+      if parsedInteger != schemeKind.defaultPort {
         port = parsedInteger
       }
     }
@@ -414,12 +286,13 @@ extension ParsedURLString.ProcessedMapping {
     // Host.
     var parsedHost: ParsedHost?
     if let hostnameRange = info.hostnameRange {
-      parsedHost = ParsedHost(inputString[hostnameRange], schemeKind: info.schemeKind!, callback: &callback)
+      parsedHost = ParsedHost(inputString[hostnameRange], schemeKind: schemeKind, callback: &callback)
       guard parsedHost != nil else { return false }
     }
 
-    self.__parsedHost = parsedHost
-    self.__port = port
+    self.info.schemeKind = schemeKind
+    self.parsedHost = parsedHost
+    self.port = port
     return true
   }
 
@@ -615,6 +488,153 @@ extension ParsedURLString.ProcessedMapping {
 // MARK: - URL Scanner
 // --------------------------------------------
 
+
+/// The positions of URL components found within a string, and the flags to interpret them.
+///
+/// After scanning a URL string, certain components require additional _content validation_
+/// which can be performed by `ProcessedMapping.parseScannedComponents`.
+///
+@usableFromInline
+internal struct ScannedRangesAndFlags<InputString>
+where InputString: BidirectionalCollection, InputString.Element == UInt8 {
+
+  /// The position of the scheme, if present, without its trailing delimiter.
+  @usableFromInline
+  internal var schemeRange: Optional<Range<InputString.Index>>
+
+  /// The position of the authority section, if present, without any leading or trailing delimiters.
+  @usableFromInline
+  internal var authorityRange: Optional<Range<InputString.Index>>
+
+  /// The position of the username, if present, without any leading or trailing delimiters.
+  @usableFromInline
+  internal var usernameRange: Optional<Range<InputString.Index>>
+
+  /// The position of the password, if present, without any leading or trailing delimiters.
+  @usableFromInline
+  internal var passwordRange: Optional<Range<InputString.Index>>
+
+  /// The position of the hostname, if present, without any leading or trailing delimiters.
+  @usableFromInline
+  internal var hostnameRange: Optional<Range<InputString.Index>>
+
+  /// The position of the port, if present, without any leading or trailing delimiters.
+  @usableFromInline
+  internal var portRange: Optional<Range<InputString.Index>>
+
+  /// The position of the path, if present, without any leading or trailing delimiters.
+  /// Note that the path's initial "/", if present, is considered part of the path and not a delimiter.
+  @usableFromInline
+  internal var pathRange: Optional<Range<InputString.Index>>
+
+  /// The position of the query, if present, without any leading or trailing delimiters.
+  @usableFromInline
+  internal var queryRange: Optional<Range<InputString.Index>>
+
+  /// The position of the fragment, if present, without any leading or trailing delimiters.
+  @usableFromInline
+  internal var fragmentRange: Optional<Range<InputString.Index>>
+
+  // Flags.
+
+  /// The kind of scheme contained in `schemeRange`, if it is not `nil`.
+  @usableFromInline
+  internal var __schemeKind: Optional<WebURL.SchemeKind>
+
+  /// Whether this has an opaque path.
+  @usableFromInline
+  internal var hasOpaquePath: Bool
+
+  /// A flag which causes absolute paths in file URLs to copy the Windows drive from their base URL.
+  @usableFromInline
+  internal var absolutePathsCopyWindowsDriveFromBase: Bool
+
+  /// The components to copy from the base URL. If non-empty, there must be a base URL.
+  ///
+  /// Generally, a particular component is either present in the input string or copied from the base URL, but not both.
+  /// There are two exceptions:
+  ///
+  /// - The scheme
+  ///
+  ///   This arises from a quirk in the scanner's control-flow which isn't worth adjusting.
+  ///   When `schemeRange != nil` and `componentsToCopyFromBase.contains(.scheme)` are both true, the base URL's
+  ///   scheme and input string's scheme will already have been checked for equivalence.
+  ///
+  /// - The path
+  ///
+  ///   When `pathRange != nil` and `componentsToCopyFromBase.contains(.path)` are both true, it is a signal
+  ///   that the path from the input string and path from the base URL should be merged - i.e. that the input string's
+  ///   path is relative to the base URL's path.
+  ///
+  @usableFromInline
+  internal var componentsToCopyFromBase: _CopyableURLComponentSet
+
+  // --------------------------------------------
+  // Work around to avoid expensive 'outlined init with take' calls.
+  // https://bugs.swift.org/browse/SR-15215
+  // https://forums.swift.org/t/expensive-calls-to-outlined-init-with-take/52187
+  // --------------------------------------------
+
+  /// The kind of scheme contained in `schemeRange`, if it is not `nil`.
+  @inlinable @inline(__always)
+  internal var schemeKind: Optional<WebURL.SchemeKind> {
+    get {
+      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
+      // and use the spare bits.
+      guard let offset = MemoryLayout.offset(of: \Self.__schemeKind) else { return __schemeKind }
+      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<WebURL.SchemeKind>.self) }
+    }
+    set {
+      // We're not seeing the same expensive runtime calls for the setter, so there's nothing to work around here.
+      __schemeKind = newValue
+    }
+  }
+
+  // --------------------------------------------
+  // End workaround
+  // --------------------------------------------
+
+  /// Constructs an empty mapping.
+  ///
+  @inlinable
+  internal init() {
+    self.schemeRange = nil
+    self.authorityRange = nil
+    self.usernameRange = nil
+    self.passwordRange = nil
+    self.hostnameRange = nil
+    self.portRange = nil
+    self.pathRange = nil
+    self.queryRange = nil
+    self.fragmentRange = nil
+    self.__schemeKind = nil
+    self.hasOpaquePath = false
+    self.absolutePathsCopyWindowsDriveFromBase = false
+    self.componentsToCopyFromBase = []
+  }
+}
+
+//swift-format-ignore
+/// A set of components to be copied from a URL.
+///
+/// - seealso: `ScannedRangesAndFlags.componentsToCopyFromBase`
+///
+@usableFromInline
+internal struct _CopyableURLComponentSet: OptionSet {
+
+  @usableFromInline
+  internal var rawValue: UInt8
+
+  @inlinable
+  internal init(rawValue: UInt8) {
+    self.rawValue = rawValue
+  }
+
+  @inlinable internal static var scheme: Self    { Self(rawValue: 1 << 0) }
+  @inlinable internal static var authority: Self { Self(rawValue: 1 << 1) }
+  @inlinable internal static var path: Self      { Self(rawValue: 1 << 2) }
+  @inlinable internal static var query: Self     { Self(rawValue: 1 << 3) }
+}
 
 /// A namespace for URL scanning methods.
 ///
