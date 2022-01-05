@@ -91,7 +91,7 @@ import WebURL
 // --------------------------------------------
 
 
-#if (os(macOS) || os(iOS) || os(tvOS) || os(watchOS)) && canImport(System)
+#if (os(macOS) || os(iOS) || os(tvOS) || os(watchOS)) && canImport(System) && !os(iOS) /* FB9832953 - System.framework for iOS is broken in Xcode 13. Last tested: Xcode 13.2.1 */
   import System
 
   @available(macOS 11, iOS 14, tvOS 14, watchOS 7, *)
