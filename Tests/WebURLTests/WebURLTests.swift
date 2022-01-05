@@ -329,6 +329,9 @@ extension WebURLTests {
   }
 
   func testCodable() throws {
+    guard #available(tvOS 13, *) else {
+      throw XCTSkip("JSONEncoder.OutputFormatting.withoutEscapingSlashes requires tvOS 13 or newer")
+    }
     // WebURLs should be encoded as their serialization.
     func checkJSONEncoding(_ url: WebURL) throws {
       struct MyType: Equatable, Codable {
