@@ -41,7 +41,6 @@ let package = Package(
       dependencies: [
         .product(name: "WebURL", package: "swift-url"),
         .product(name: "WebURLFoundationExtras", package: "swift-url"),
-        .product(name: "WebURLTestSupport", package: "swift-url"),
       ],
       swiftSettings: [.unsafeFlags(["-parse-as-library", "-sanitize=fuzzer,address"])]
     ),

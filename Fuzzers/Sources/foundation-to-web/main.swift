@@ -15,7 +15,6 @@
 import Foundation
 import WebURL
 import WebURLFoundationExtras
-import WebURLTestSupport
 
 @_cdecl("LLVMFuzzerTestOneInput")
 public func foundation_to_web(_ start: UnsafePointer<UInt8>, _ count: Int) -> CInt {
@@ -29,18 +28,19 @@ public func foundation_to_web(_ start: UnsafePointer<UInt8>, _ count: Int) -> CI
   guard let webURL = WebURL(foundationURL) else {
     return 0  // WebURL didn't convert the URL. That's fine.
   }
-
-  // If WebURL does make a conversion, the result must be semantically equivalent
-  // according to the more thorough checks in WebURLTestSupport:
-  let failures = checkSemanticEquivalence(foundationURL, webURL)
-  guard failures.isEmpty else {
+  // If WebURL agrees to convert the URL, check equivalence without taking shortcuts.
+  var foundationURLString = foundationURL.absoluteString
+  let areEquivalent = foundationURLString.withUTF8 { foundationStringUTF8 in
+    WebURL._SPIs._checkEquivalence(webURL, foundationURL, foundationString: foundationStringUTF8, shortcuts: false)
+  }
+  guard areEquivalent else {
     fatalError(
-      #"""
-      Non-equivalent URLs:
-      - Foundation: "\#(foundationURL)"
-      - WebURL: "\#(webURL)"
-      - Failures: \#(failures)
-      """#
+      """
+      URLs are not equivalent:
+      - Input string: \(input)
+      - Foundation.URL: \(foundationURL)
+      - WebURL: \(webURL)
+      """
     )
   }
   // URLs appear to be equivalent. On to the next one.

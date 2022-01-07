@@ -503,6 +503,7 @@ extension WebURL {
   ///
   /// - ``WebURL/port``
   ///
+  @inlinable
   public var portOrKnownDefault: Int? {
     port ?? schemeKind.defaultPort.map { Int($0) }
   }
@@ -723,6 +724,7 @@ extension WebURL {
   /// - ``WebURL/pathComponents-swift.property``
   /// - ``WebURL/resolve(_:)``
   ///
+  @inlinable
   public var hasOpaquePath: Bool {
     storage.hasOpaquePath
   }
