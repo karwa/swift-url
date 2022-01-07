@@ -13,10 +13,25 @@
 // limitations under the License.
 
 import Foundation
-import WebURL
-import WebURLFoundationExtras
-import WebURLTestSupport
 import XCTest
+
+@testable import WebURL
+@testable import WebURLFoundationExtras
+
+/// Asserts that the given URLs contain an equivalent set of components,
+/// without taking any shortcuts or making assumptions that they originate from the same string.
+///
+fileprivate func XCTAssertEquivalentURLs(_ webURL: WebURL, _ foundationURL: URL, _ message: String = "") {
+  var urlString = foundationURL.absoluteString
+  let areEquivalent = urlString.withUTF8 {
+    WebURL._SPIs._checkEquivalence(webURL, foundationURL, foundationString: $0, shortcuts: false)
+  }
+  var prefix = message
+  if !prefix.isEmpty {
+    prefix += " -- "
+  }
+  XCTAssertTrue(areEquivalent, "\(prefix)Foundation: \(foundationURL) -- WebURL: \(webURL)")
+}
 
 final class FoundationToWebTests: XCTestCase {}
 
@@ -75,7 +90,7 @@ extension FoundationToWebTests {
   func testFoundationSuite() {
 
     #if os(Windows)
-      // On Windows, pipes are valid charcters which can be used
+      // On Windows, pipes are valid characters which can be used
       // to replace a ':'. See RFC 8089 Section E.2.2 for
       // details.
       //
@@ -88,54 +103,52 @@ extension FoundationToWebTests {
       let skippedPipeTest = "NSURLWithString-parse-absolute-escape-006-pipe-valid"
     #endif
     let skippedTests = [
-      "NSURLWithString-parse-ambiguous-url-001",  // TODO: Fix Test
+      "NSURLWithString-parse-ambiguous-url-001",  // Foundation's test is incorrect.
       skippedPipeTest,
     ]
 
     let expectedWebURLConversionFailures: Set<String> = [
-      // not even a URL - just a file path with no scheme.
+      // Not a URL - just a file path with no scheme.
       "NSURLWithString-parse-absolute-file-005",
-      // localhost and file: URLs.
+      // Localhost and file: URLs.
       "NSURLWithString-parse-absolute-file-003",
       "NSURLWithString-parse-absolute-file-006",
       "NSURLWithString-parse-absolute-file-007",
       "NSURLWithString-parse-absolute-file-008",
-      // port with no host.
+      // Empty username.
+      "NSURLWithString-parse-absolute-ftp-005",
+      "NSURLWithString-parse-absolute-ftp-007",
+      // Port with no host.
       "NSURLWithString-parse-absolute-ftp-009",
-      // http wth no host.
+      // HTTP wth no host.
       "NSURLWithString-parse-absolute-query-007",
       "NSURLWithString-parse-absolute-escape-015",
       "NSURLWithString-parse-absolute-escape-016",
       "NSURLWithString-parse-absolute-escape-017",
       "NSURLWithString-parse-absolute-escape-018",
       "NSURLWithString-parse-absolute-escape-019",
-      // percent-encoding in HTTP hostname.
+      // Space in HTTP hostname.
       "NSURLWithString-parse-absolute-escape-009",
-      // not a URL - just a bunch of random characters (?!).
+      // Not a URL - just a bunch of random characters (?!).
       "NSURLWithString-parse-absolute-invalid-001",
       // IPv6 with zone.
       "NSURLWithString-parse-absolute-real-world-003",
-      // http with no host.
+      // HTTP with no host.
       "NSURLWithString-parse-absolute-real-world-008",
-      // not even a URL - just a file path with no scheme.
+      // Not a URL - just a file path with no scheme.
       "NSURLWithString-parse-ambiguous-url-003",
       "NSURLWithString-parse-ambiguous-url-004",
       "NSURLWithString-parse-ambiguous-url-005",
       "NSURLWithString-parse-ambiguous-url-006",
       "NSURLWithString-parse-ambiguous-url-007",
       "NSURLWithString-parse-ambiguous-url-009",
-      // http with no host.
+      // HTTP with no host.
       "NSURLWithString-parse-ambiguous-url-010",
       "NSURLWithString-parse-relative-rfc-042",
       "NSURLWithString-parse-relative-rfc-044",
       "NSURLWithString-parse-relative-real-world-004",
       // IPv6 with zone.
       "NSURLWithString-parse-relative-real-world-005",
-      // file with nil host. -- TODO: could relax these?
-      "NSURLWithString-parse-absolute-file-010",
-      "NSURLWithString-parse-absolute-file-012",
-      "NSURLWithString-parse-ambiguous-url-008",
-      "NSURLWithString-parse-relative-rfc-043",
     ]
 
     var numParsed = 0
@@ -155,7 +168,7 @@ extension FoundationToWebTests {
       var _url: URL? = nil
       switch testDict[kURLTestURLCreatorKey]! as! String {
       case kNSURLWithStringCreator:
-        _url = _URLWithString(inURL, baseString: inBase)
+        _url = _FoundationURLWithString(inURL, baseString: inBase)
       case kCFURLCreateWithStringCreator, kCFURLCreateWithBytesCreator, kCFURLCreateAbsoluteURLWithBytesCreator:
         // Not supported
         continue
@@ -179,28 +192,33 @@ extension FoundationToWebTests {
         XCTFail("\(url) should not be a valid url")
       }
 
-      // Try to convert to WebURL. Not all Foundation URLs can safely be converted.
-      guard let webURL = WebURL(url) else {
-        XCTAssert(expectedWebURLConversionFailures.contains(title), "Unexpected failure: \(title). URL: \(url)")
-        continue
+      // Convert to WebURL.
+      switch WebURL(url) {
+      case .some(let convertedURL):
+        XCTAssert(
+          !expectedWebURLConversionFailures.contains(title),
+          "Unexpected pass: \(title) -- Foundation: \(url) -- WebURL: \(convertedURL)"
+        )
+        XCTAssertEquivalentURLs(convertedURL, url, title)
+        numSuccess += 1
+      case .none:
+        XCTAssert(
+          expectedWebURLConversionFailures.contains(title),
+          "Unexpected fail: \(title) -- Foundation: \(url)"
+        )
       }
-
-      // If WebURL did the conversion, the URLs must be semantically equivalent.
-      let diffs = checkSemanticEquivalence(url, webURL)
-      XCTAssert(diffs.isEmpty, "\(title) - \(url) - \(diffs.map { String(describing: $0) }.joined(separator: ","))")
-      numSuccess += 1
     }
 
     XCTAssertEqual(numParsed, 197, "Number of tests changed. Did you update the test database?")
     // Apparently one more test passes on Windows than Mac/Linux. TODO: investigate.
     #if os(Windows)
-      XCTAssertEqual(numSuccess, 165, "Number of successful conversion changed. Did you update the test database?")
+      XCTAssertEqual(numSuccess, 163, "Number of successful conversion changed. Did you update the test database?")
     #else
-      XCTAssertEqual(numSuccess, 164, "Number of successful conversion changed. Did you update the test database?")
+      XCTAssertEqual(numSuccess, 162, "Number of successful conversion changed. Did you update the test database?")
     #endif
   }
 
-  private func _URLWithString(_ urlString: String, baseString: String?) -> URL? {
+  private func _FoundationURLWithString(_ urlString: String, baseString: String?) -> URL? {
     if let baseString = baseString {
       let baseURL = URL(string: baseString)
       return URL(string: urlString, relativeTo: baseURL)
@@ -309,20 +327,558 @@ extension FoundationToWebTests {
 
 
 // --------------------------------
-// MARK: - Extra tests and fuzzing.
+// MARK: - Extra Foundation.URL Parser/API Tests
+// --------------------------------
+// Tests various aspects of Foundation's parser/API which are not obvious or well-documented.
+
+
+extension FoundationToWebTests {
+
+  func testFoundationParser_backslashesAreRejected() {
+    // Check that Foundation does not allow unescaped backslashes.
+    // The WHATWG URL Standard considers back-slashes to be equivalent to forward-slashes for special schemes.
+    // Component-level verification would catch these when converting, but we can't verify the path,
+    // and they would change the path's meaning.
+
+    // Just to make sure URL rejects these.
+    // https://bugs.xdavidhu.me/google/2021/12/31/fixing-the-unfixable-story-of-a-google-cloud-ssrf/
+    XCTAssertNil(URL(string: "http://creds\\@host.com"))
+    XCTAssertNil(URL(string: "foo://creds\\@host.com"))
+    XCTAssertNil(URLComponents(string: "http://creds\\@host.com"))
+    XCTAssertNil(URLComponents(string: "foo://creds\\@host.com"))
+    XCTAssertEqual(WebURL("http://creds\\@host.com")?.serialized(), "http://creds/@host.com")
+    XCTAssertEqual(WebURL("foo://creds\\@host.com")?.serialized(), "foo://creds%5C@host.com")
+
+    // Backslashes in the path are interpreted differently,
+    // but since URL rejects them, we don't need to worry about it.
+    XCTAssertNil(URL(string: "http://host.com/a/b\\c\\d"))
+    XCTAssertNil(URL(string: "foo://host.com/a/b\\c\\d"))
+    XCTAssertNil(URLComponents(string: "http://host.com/a/b\\c\\d"))
+    XCTAssertNil(URLComponents(string: "foo://host.com/a/b\\c\\d"))
+    XCTAssertEqual(WebURL("http://host.com/a/b\\c\\d")?.serialized(), "http://host.com/a/b/c/d")
+    XCTAssertEqual(WebURL("foo://host.com/a/b\\c\\d")?.serialized(), "foo://host.com/a/b\\c\\d")
+  }
+
+  func testFoundationAPI_percentDecodedComponents_nonUTF8() {
+    // Some Foundation.URL components are only returned percent-decoded, which raises the question of what
+    // to do if the decoded bytes are not UTF-8:
+    //
+    // - Currently, Foundation just returns empty strings (!!!)
+    // - Even if it inserted Unicode replacement characters, the components would be non-equivalent
+    //
+    // So there's nothing else to do but reject components which are returned decoded if they contain non-UTF8.
+
+    let inputs: [(String, String?)] = [
+      // Username: Foundation.user is decoded; cannot be verified.
+      (string: "http://us%82er@host/path?query#frag", webURL: nil),
+      // Password: Foundation.password is encoded, so we can verify it.
+      (string: "http://user:pa%82ss@host/path?query#frag", webURL: "http://user:pa%82ss@host/path?query#frag"),
+
+      // Host (domain): WebURL will reject this, as it is not a valid domain.
+      (string: "http://user:pass@ho%82st/path?query#frag", webURL: nil),
+      // Host (opaque): Foundation.host is decoded; cannot be verified.
+      (string: "sc://user:pass@ho%82st/path?query#frag", webURL: nil),
+
+      // Path: cannot be verified.
+      (string: "http://user:pass@host/pa%82th?query#frag", webURL: "http://user:pass@host/pa%82th?query#frag"),
+      (string: "data:,Hello%F2%80World%EE", webURL: "data:,Hello%F2%80World%EE"),
+
+      // Query: Foundation.query is encoded, so we can verify it.
+      (string: "http://user:pass@host/path?que%82ry#frag", webURL: "http://user:pass@host/path?que%82ry#frag"),
+      // Fragment: Foundation.fragment is encoded, so we can verify it.
+      (string: "http://user:pass@host/path#fra%82g", webURL: "http://user:pass@host/path#fra%82g"),
+    ]
+    for (string, _expectedWebURLString) in inputs {
+      guard let url = URL(string: string) else {
+        XCTFail("Invalid URL: \(string)")
+        continue
+      }
+      guard let expectedWebURLString = _expectedWebURLString else {
+        XCTAssertNil(WebURL(url), "Unexpected conversion: \(string)")
+        continue
+      }
+      guard let actualWebURL = WebURL(url) else {
+        XCTFail("Unexpected failure to convert: \(string)")
+        continue
+      }
+      XCTAssertEqual(
+        expectedWebURLString, actualWebURL.serialized(),
+        "Unexpected result for \(string) -- Expected: \(expectedWebURLString) -- Actual: \(actualWebURL.serialized())"
+      )
+      XCTAssertEquivalentURLs(actualWebURL, url, "String: \(string)")
+    }
+  }
+
+  func testFoundationAPI_emptyAndNilComponents() {
+    // Check that URL.host returns nil for empty hostnames.
+    // When verifying components, we're not able to tell the difference.
+
+    if let url = URL(string: "foo:///bar") {
+      XCTAssertEqual(url.scheme, "foo")
+      XCTAssertEqual(url.host, nil)
+      XCTAssertEqual(url.path, "/bar")
+    } else {
+      XCTFail("Failed to parse URL")
+    }
+    if let url = URL(string: "foo:/bar") {
+      XCTAssertEqual(url.scheme, "foo")
+      XCTAssertEqual(url.host, nil)
+      XCTAssertEqual(url.path, "/bar")
+    } else {
+      XCTFail("Failed to parse URL")
+    }
+
+    if let url = URL(string: "http:///bar") {
+      XCTAssertEqual(url.scheme, "http")
+      XCTAssertEqual(url.host, nil)
+      XCTAssertEqual(url.path, "/bar")
+    } else {
+      XCTFail("Failed to parse URL")
+    }
+    if let url = URL(string: "http:/bar") {
+      XCTAssertEqual(url.scheme, "http")
+      XCTAssertEqual(url.host, nil)
+      XCTAssertEqual(url.path, "/bar")
+    } else {
+      XCTFail("Failed to parse URL")
+    }
+
+    if let url = URL(string: "file:///bar") {
+      XCTAssertEqual(url.scheme, "file")
+      XCTAssertEqual(url.host, nil)
+      XCTAssertEqual(url.path, "/bar")
+    } else {
+      XCTFail("Failed to parse URL")
+    }
+    if let url = URL(string: "file:/bar") {
+      XCTAssertEqual(url.scheme, "file")
+      XCTAssertEqual(url.host, nil)
+      XCTAssertEqual(url.path, "/bar")
+    } else {
+      XCTFail("Failed to parse URL")
+    }
+  }
+}
+
+
+// --------------------------------
+// MARK: - Extra Conversion Tests
 // --------------------------------
 
 
 extension FoundationToWebTests {
 
-  func testAmbiguousAndBuggyURLs() {
+  func testEncodeSetCompatibility() {
+    for char in ASCII.allCharacters {
+      // WebURL's user-info encode-set includes a few more characters than Foundation's encode-set.
+      do {
+        let allowedByWebURL = !URLEncodeSet.UserInfo().shouldPercentEncode(ascii: char.codePoint)
+        let allowedByFoundation_user = CharacterSet.urlUserAllowed.contains(.init(char.codePoint))
+        let allowedByFoundation_pass = CharacterSet.urlPasswordAllowed.contains(.init(char.codePoint))
+        // Foundation's username and password encode-sets are identical.
+        XCTAssertEqual(allowedByFoundation_user, allowedByFoundation_pass)
+        if allowedByFoundation_user {
+          switch char {
+          case ASCII.semicolon, ASCII.equalSign:
+            XCTAssertFalse(allowedByWebURL)
+            XCTAssertTrue(UserInfoExtras().shouldPercentEncode(ascii: char.codePoint))
+          default:
+            XCTAssertTrue(allowedByWebURL)
+          }
+        }
+      }
+      // WebURL's path encode-set is a subset of Foundation's encode-set.
+      do {
+        let allowedByWebURL = !URLEncodeSet.Path().shouldPercentEncode(ascii: char.codePoint)
+        let allowedByFoundation = CharacterSet.urlPathAllowed.contains(.init(char.codePoint))
+        if allowedByFoundation {
+          XCTAssertTrue(allowedByWebURL)
+        }
+      }
+      // WebURL's query encode-set is a subset of Foundation's encode-set.
+      do {
+        let allowedByWebURL = !URLEncodeSet.Query().shouldPercentEncode(ascii: char.codePoint)
+        let allowedByFoundation = CharacterSet.urlQueryAllowed.contains(.init(char.codePoint))
+        if allowedByFoundation {
+          XCTAssertTrue(allowedByWebURL)
+        }
+      }
+      // WebURL's special-query encode-set is a subset of Foundation's encode-set, save for the apostrophe character.
+      do {
+        let allowedByWebURL = !URLEncodeSet.SpecialQuery().shouldPercentEncode(ascii: char.codePoint)
+        let allowedByFoundation = CharacterSet.urlQueryAllowed.contains(.init(char.codePoint))
+        if allowedByFoundation {
+          switch char {
+          case ASCII.apostrophe:
+            XCTAssertFalse(allowedByWebURL)
+            XCTAssertTrue(SpecialQueryExtras().shouldPercentEncode(ascii: char.codePoint))
+          default:
+            XCTAssertTrue(allowedByWebURL)
+          }
+        }
+      }
+      // WebURL's fragment encode-set is a subset of Foundation's encode-set.
+      do {
+        let allowedByWebURL = !URLEncodeSet.Fragment().shouldPercentEncode(ascii: char.codePoint)
+        let allowedByFoundation = CharacterSet.urlFragmentAllowed.contains(.init(char.codePoint))
+        if allowedByFoundation {
+          XCTAssertTrue(allowedByWebURL)
+        }
+      }
+    }
+  }
 
-    let inputs: [(string: String, webURL: String?)] = [
-      // Ambiguous username-password split.
-      (string: "http://@abc", webURL: "http://abc/"),
-      (string: "http://:@abc", webURL: "http://abc/"),
-      (string: "http://abc:@def", webURL: "http://abc@def/"),
-      (string: "http://:abc@def", webURL: "http://:abc@def/"),
+  func testSafeNormalization() {
+
+    // [Scheme]: may be lowercased.
+    test: do {
+      let foundationURL = URL(string: "HtTp://example.com/")!
+      XCTAssertEqual(foundationURL.absoluteString, "HtTp://example.com/")
+      XCTAssertEqual(foundationURL.scheme, "HtTp")
+      XCTAssertEqual(foundationURL.host, "example.com")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://example.com/")
+      XCTAssertEqual(convertedURL.scheme, "http")
+      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+    }
+    test: do {
+      let foundationURL = URL(string: "sChEmE://example.com/")!
+      XCTAssertEqual(foundationURL.absoluteString, "sChEmE://example.com/")
+      XCTAssertEqual(foundationURL.scheme, "sChEmE")
+      XCTAssertEqual(foundationURL.host, "example.com")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "scheme://example.com/")
+      XCTAssertEqual(convertedURL.scheme, "scheme")
+      XCTAssertEqual(convertedURL.host, .opaque("example.com"))
+    }
+
+    // [Username, Password]: may have percent-encoding added, due to differences in encode-set.
+    test: do {
+      let foundationURL = URL(string: "http://us=er:pa;ss@example.com/")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://us=er:pa;ss@example.com/")
+      XCTAssertEqual(foundationURL.scheme, "http")
+      XCTAssertEqual(foundationURL.user, "us=er")
+      XCTAssertEqual(foundationURL.password, "pa;ss")
+      XCTAssertEqual(foundationURL.host, "example.com")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://us%3Der:pa%3Bss@example.com/")
+      XCTAssertEqual(convertedURL.scheme, "http")
+      XCTAssertEqual(convertedURL.username, "us%3Der")
+      XCTAssertEqual(convertedURL.password, "pa%3Bss")
+      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+    }
+
+    // [Hostname]: may be percent-decoded and lowercased, if the URL has a special scheme.
+    test: do {
+      let foundationURL = URL(string: "http://EX%61mpLe.com/")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://EX%61mpLe.com/")
+      XCTAssertEqual(foundationURL.scheme, "http")
+      XCTAssertEqual(foundationURL.host, "EXampLe.com")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://example.com/")
+      XCTAssertEqual(convertedURL.scheme, "http")
+      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+    }
+    test: do {
+      let foundationURL = URL(string: "http://%3127%2e0%2e0%2e1/")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://%3127%2e0%2e0%2e1/")
+      XCTAssertEqual(foundationURL.scheme, "http")
+      XCTAssertEqual(foundationURL.host, "127.0.0.1")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://127.0.0.1/")
+      XCTAssertEqual(convertedURL.scheme, "http")
+      XCTAssertEqual(convertedURL.host, .ipv4Address(IPv4Address(octets: (127, 0, 0, 1))))
+    }
+    // But not if it has a non-special scheme.
+    test: do {
+      let foundationURL = URL(string: "sc://EX%61mpLe.com/")!
+      XCTAssertEqual(foundationURL.absoluteString, "sc://EX%61mpLe.com/")
+      XCTAssertEqual(foundationURL.scheme, "sc")
+      XCTAssertEqual(foundationURL.host, "EXampLe.com")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "sc://EX%61mpLe.com/")
+      XCTAssertEqual(convertedURL.scheme, "sc")
+      XCTAssertEqual(convertedURL.host, .opaque("EX%61mpLe.com"))
+    }
+    test: do {
+      let foundationURL = URL(string: "sc://%3127%2e0%2e0%2e1/")!
+      XCTAssertEqual(foundationURL.absoluteString, "sc://%3127%2e0%2e0%2e1/")
+      XCTAssertEqual(foundationURL.scheme, "sc")
+      XCTAssertEqual(foundationURL.host, "127.0.0.1")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "sc://%3127%2e0%2e0%2e1/")
+      XCTAssertEqual(convertedURL.scheme, "sc")
+      XCTAssertEqual(convertedURL.host, .opaque("%3127%2e0%2e0%2e1"))
+    }
+
+    // [Port]: may be omitted if it is the scheme's default port.
+    test: do {
+      let foundationURL = URL(string: "http://example.com:80/")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://example.com:80/")
+      XCTAssertEqual(foundationURL.scheme, "http")
+      XCTAssertEqual(foundationURL.host, "example.com")
+      XCTAssertEqual(foundationURL.port, 80)
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://example.com/")
+      XCTAssertEqual(convertedURL.scheme, "http")
+      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.port, nil)
+      XCTAssertEqual(convertedURL.portOrKnownDefault, 80)
+    }
+    test: do {
+      let foundationURL = URL(string: "https://example.com:443/")!
+      XCTAssertEqual(foundationURL.absoluteString, "https://example.com:443/")
+      XCTAssertEqual(foundationURL.scheme, "https")
+      XCTAssertEqual(foundationURL.host, "example.com")
+      XCTAssertEqual(foundationURL.port, 443)
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "https://example.com/")
+      XCTAssertEqual(convertedURL.scheme, "https")
+      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.port, nil)
+      XCTAssertEqual(convertedURL.portOrKnownDefault, 443)
+    }
+    // But non-default ports may not be omitted.
+    test: do {
+      let foundationURL = URL(string: "http://example.com:8080/")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://example.com:8080/")
+      XCTAssertEqual(foundationURL.scheme, "http")
+      XCTAssertEqual(foundationURL.host, "example.com")
+      XCTAssertEqual(foundationURL.port, 8080)
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://example.com:8080/")
+      XCTAssertEqual(convertedURL.scheme, "http")
+      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.port, 8080)
+      XCTAssertEqual(convertedURL.portOrKnownDefault, 8080)
+    }
+
+    // [Path]: may be simplified.
+    test: do {
+      let foundationURL = URL(string: "http://example.com/foo/bar/././baz/../qux")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://example.com/foo/bar/././baz/../qux")
+      XCTAssertEqual(foundationURL.scheme, "http")
+      XCTAssertEqual(foundationURL.host, "example.com")
+      XCTAssertEqual(foundationURL.path, "/foo/bar/././baz/../qux")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://example.com/foo/bar/qux")
+      XCTAssertEqual(convertedURL.scheme, "http")
+      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.path, "/foo/bar/qux")
+    }
+    // This includes Windows drive letter compatibility quirks.
+    test: do {
+      let foundationURL = URL(string: "file:///foo/bar/../../C:/../../../baz/../qux/foo2/")!
+      XCTAssertEqual(foundationURL.absoluteString, "file:///foo/bar/../../C:/../../../baz/../qux/foo2/")
+      XCTAssertEqual(foundationURL.scheme, "file")
+      XCTAssertEqual(foundationURL.host, nil)
+      // Foundation strips the trailing slash for some reason (even though .absoluteString still has it ¯\_(ツ)_/¯).
+      XCTAssertEqual(foundationURL.path, "/foo/bar/../../C:/../../../baz/../qux/foo2")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "file:///C:/qux/foo2/")
+      XCTAssertEqual(convertedURL.scheme, "file")
+      XCTAssertEqual(convertedURL.host, .empty)
+      XCTAssertEqual(convertedURL.path, "/C:/qux/foo2/")
+    }
+
+    // [Query]: may have percent-encoding added if the scheme is special, due to differences in encode-set.
+    test: do {
+      let foundationURL = URL(string: "http://example.com/?what's+the+time=qu%61rter+past+nine")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://example.com/?what's+the+time=qu%61rter+past+nine")
+      XCTAssertEqual(foundationURL.scheme, "http")
+      XCTAssertEqual(foundationURL.host, "example.com")
+      XCTAssertEqual(foundationURL.path, "/")
+      XCTAssertEqual(foundationURL.query, "what's+the+time=qu%61rter+past+nine")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://example.com/?what%27s+the+time=qu%61rter+past+nine")
+      XCTAssertEqual(convertedURL.scheme, "http")
+      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.path, "/")
+      XCTAssertEqual(convertedURL.query, "what%27s+the+time=qu%61rter+past+nine")
+    }
+    // But not for non-special schemes.
+    test: do {
+      let foundationURL = URL(string: "sc://example.com/?what's+the+time=qu%61rter+past+nine")!
+      XCTAssertEqual(foundationURL.absoluteString, "sc://example.com/?what's+the+time=qu%61rter+past+nine")
+      XCTAssertEqual(foundationURL.scheme, "sc")
+      XCTAssertEqual(foundationURL.host, "example.com")
+      XCTAssertEqual(foundationURL.path, "/")
+      XCTAssertEqual(foundationURL.query, "what's+the+time=qu%61rter+past+nine")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "sc://example.com/?what's+the+time=qu%61rter+past+nine")
+      XCTAssertEqual(convertedURL.scheme, "sc")
+      XCTAssertEqual(convertedURL.host, .opaque("example.com"))
+      XCTAssertEqual(convertedURL.path, "/")
+      XCTAssertEqual(convertedURL.query, "what's+the+time=qu%61rter+past+nine")
+    }
+
+    // [Fragment]: no normalization is applied.
+  }
+
+  func testUnsafeNormalization() {
+
+    // [Username, Password]: delimiters must not be removed.
+    // Since the WHATWG URL Standard requires it, these must fail to convert.
+    test: do {
+      let foundationURL = URL(string: "http://user:@hostname.com")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://user:@hostname.com")
+      XCTAssertEqual(foundationURL.user, "user")
+      XCTAssertEqual(foundationURL.password, "")
+      XCTAssertEqual(foundationURL.host, "hostname.com")
+
+      XCTAssertNil(WebURL(foundationURL))
+
+      let webURL = WebURL("http://user:@hostname.com")!
+      XCTAssertEqual(webURL.serialized(), "http://user@hostname.com/")
+      //                                              ^ - password delimiter removed.
+      XCTAssertEqual(webURL.username, "user")
+      XCTAssertEqual(webURL.password, nil)
+      XCTAssertEqual(webURL.hostname, "hostname.com")
+    }
+    test: do {
+      let foundationURL = URL(string: "http://:@hostname.com")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://:@hostname.com")
+      XCTAssertEqual(foundationURL.user, "")
+      XCTAssertEqual(foundationURL.password, "")
+      XCTAssertEqual(foundationURL.host, "hostname.com")
+
+      XCTAssertNil(WebURL(foundationURL))
+
+      let webURL = WebURL("http://:@hostname.com")!
+      XCTAssertEqual(webURL.serialized(), "http://hostname.com/")
+      //                                          ^ - userinfo delimiter removed.
+      XCTAssertEqual(webURL.username, nil)
+      XCTAssertEqual(webURL.password, nil)
+      XCTAssertEqual(webURL.hostname, "hostname.com")
+    }
+
+    // [Hostname]: differences in deciding which hostnames are domains vs IPv4.
+    // RFC-2396 says if the last label starts with a number, the host is IPv4,
+    // but the WHATWG's standard says the last label must be entirely digits or a hex number.
+    test: do {
+      let foundationURL = URL(string: "http://ab.0a")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://ab.0a")
+      XCTAssertEqual(foundationURL.host, "ab.0a")
+
+      XCTAssertNil(WebURL(foundationURL))
+
+      let webURL = WebURL("http://ab.0a")!
+      XCTAssertEqual(webURL.serialized(), "http://ab.0a/")
+      XCTAssertEqual(webURL.host, .domain("ab.0a"))
+    }
+    // This does not apply to non-special schemes, as they are not interpreted by the WHATWG standard.
+    test: do {
+      let foundationURL = URL(string: "foo://ab.0a")!
+      XCTAssertEqual(foundationURL.absoluteString, "foo://ab.0a")
+      XCTAssertEqual(foundationURL.host, "ab.0a")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+      XCTAssertEqual(convertedURL.serialized(), "foo://ab.0a")
+      XCTAssertEqual(convertedURL.host, .opaque("ab.0a"))
+
+      let webURL = WebURL("foo://ab.0a")!
+      XCTAssertEqual(webURL.serialized(), "foo://ab.0a")
+      XCTAssertEqual(webURL.host, .opaque("ab.0a"))
+    }
+
+    // Stripping "localhost" from file URLs is not a safe conversion.
+    test: do {
+      let foundationURL = URL(string: "file://localhost/usr/bin/swift")!
+      XCTAssertEqual(foundationURL.absoluteString, "file://localhost/usr/bin/swift")
+      XCTAssertEqual(foundationURL.host, "localhost")
+      XCTAssertEqual(foundationURL.path, "/usr/bin/swift")
+
+      XCTAssertNil(WebURL(foundationURL))
+
+      let webURL = WebURL("file://localhost/usr/bin/swift")!
+      XCTAssertEqual(webURL.serialized(), "file:///usr/bin/swift")
+      XCTAssertEqual(webURL.host, .empty)
+      XCTAssertEqual(webURL.path, "/usr/bin/swift")
+    }
+  }
+
+  func testAmbiguousURLs() {
+
+    var inputs: [(string: String, webURL: String?)] = [
+      // Adding lots of '@'s and ':'s confuses Foundation.URL.
+      // Since the components are inconsistent, WebURL should fail to convert these.
+      (string: "http://@abc", webURL: nil),
+      (string: "http://:@abc", webURL: nil),
+      (string: "http://abc:@def", webURL: nil),
+      (string: "http://:abc@def", webURL: nil),
       (string: "http://abc@def@ghi", webURL: nil),
       (string: "http://:abc@def@ghi", webURL: nil),
       (string: "http://abc:@def@ghi", webURL: nil),
@@ -331,10 +887,10 @@ extension FoundationToWebTests {
       (string: "http://abc@def@:ghi", webURL: nil),
       (string: "http://abc@def@ghi:", webURL: nil),
       (string: "http://u@x:@x", webURL: nil),
-      (string: "sc://@abc", webURL: "sc://abc"),
-      (string: "sc://:@abc", webURL: "sc://abc"),
-      (string: "sc://abc:@def", webURL: "sc://abc@def"),
-      (string: "sc://:abc@def", webURL: "sc://:abc@def"),
+      (string: "sc://@abc", webURL: nil),
+      (string: "sc://:@abc", webURL: nil),
+      (string: "sc://abc:@def", webURL: nil),
+      (string: "sc://:abc@def", webURL: nil),
       (string: "sc://abc@def@ghi", webURL: nil),
       (string: "sc://:abc@def@ghi", webURL: nil),
       (string: "sc://abc:@def@ghi", webURL: nil),
@@ -343,7 +899,7 @@ extension FoundationToWebTests {
       (string: "sc://abc@def@:ghi", webURL: nil),
       (string: "sc://abc@def@ghi:", webURL: nil),
       (string: "s://u@x:@x", webURL: nil),
-      // This can be particularly devious if all components appear to be the same.
+      // As above, but all components have the same contents.
       (string: "http://@2:@2/", webURL: nil),
       (string: "http://@2:@2:@2/", webURL: nil),
       (string: "http://@2:@2:@2/?", webURL: nil),
@@ -351,7 +907,6 @@ extension FoundationToWebTests {
       (string: "http://@2:@2:@?2/", webURL: nil),
       (string: "http://@2:@2:?@2/", webURL: nil),
       (string: "http://@2:@2?:@2/", webURL: nil),
-      (string: "http://2:2:2@2/private/", webURL: nil),
       (string: "sc://@2:@2/", webURL: nil),
       (string: "sc://@2:@2:@2/", webURL: nil),
       (string: "sc://@2:@2:@2/?", webURL: nil),
@@ -359,7 +914,22 @@ extension FoundationToWebTests {
       (string: "sc://@2:@2:@?2/", webURL: nil),
       (string: "sc://@2:@2:?@2/", webURL: nil),
       (string: "sc://@2:@2?:@2/", webURL: nil),
+      // Foundation accepts these, but shouldn't. The returned password includes a non-encoded ":".
+      (string: "http://a:b:c@d/private/", webURL: nil),
+      (string: "http://2:2:2@2/private/", webURL: nil),
+      (string: "sc://a:b:c@d/private/", webURL: nil),
       (string: "sc://2:2:2@2/private/", webURL: nil),
+      // You can trick Foundation.URL to read a password after the hostname.
+      // Here, the URL's hostname is "hostname" and password is "@password".
+      // WebURL should refuse to convert these. https://bugs.swift.org/browse/SR-15513
+      (string: "http://@hostname:@password:@whydoesthishappen/", webURL: nil),
+      (string: "http://@hostname:@password:@whydoesthishappen@/", webURL: nil),
+      (string: "sc://@hostname:@password:@whydoesthishappen/", webURL: nil),
+      (string: "sc://@hostname:@password:@whydoesthishappen@/", webURL: nil),
+      // You can have a single component appear as both the hostname AND the password.
+      (string: "http://:@hostname_and_password:@/", webURL: nil),
+      (string: "sc://:@hostname_and_password:@/", webURL: nil),
+
       // Host-port split.
       (string: "http://abc:99@def@ghi", webURL: nil),
       (string: "http://abc@def:99@ghi", webURL: nil),
@@ -368,24 +938,22 @@ extension FoundationToWebTests {
       (string: "sc://abc@def:99@ghi", webURL: nil),
       (string: "sc://abc@def@ghi:99", webURL: nil),
 
-      // Opaque paths which start with "?" or "#". File appears to have special behaviour.
-      (string: "file:?xyz", webURL: "file:///?xyz"),
-      (string: "file:#xyz", webURL: "file:///%23xyz"),
-      (string: "file:?%82yz", webURL: "file:///?%82yz"),
-      (string: "file:#%82yz", webURL: "file:///%23%82yz"),
+      // Opaque paths which start with "?".
+      // For file URLs, WebURL would turn these in to a URL with non-opaque path.
+      (string: "http:?xyz", webURL: nil),
+      (string: "http:?%82yz", webURL: nil),
+      (string: "file:?xyz", webURL: nil),
+      (string: "file:?%82yz", webURL: nil),
       (string: "sc:?xyz", webURL: "sc:?xyz"),
-      (string: "sc:#xyz", webURL: "sc:%23xyz"),
       (string: "sc:?%82yz", webURL: "sc:?%82yz"),
+      // Opaque paths which start with "#". Foundation borks these URLs before we see them.
+      // https://bugs.swift.org/browse/SR-15381
+      (string: "http:#xyz", webURL: nil),
+      (string: "http:#%82yz", webURL: nil),
+      (string: "file:#xyz", webURL: "file:///%23xyz"),
+      (string: "file:#%82yz", webURL: "file:///%23%82yz"),
+      (string: "sc:#xyz", webURL: "sc:%23xyz"),
       (string: "sc:#%82yz", webURL: "sc:%23%82yz"),
-
-      // Others, from fuzzing.
-      (string: "s://4%3A%3A/", webURL: "s://4%3A%3A/"),
-
-      // URL.path is empty if the path contains percent-encoded invalid UTF-8.
-      // https://bugs.swift.org/browse/SR-15508
-      (string: "s://s/somepath/%72", webURL: "s://s/somepath/%72"),
-      (string: "s://s/somepath/%82", webURL: "s://s/somepath/%82"),
-      (string: "s:%F2F", webURL: "s:%F2F"),
 
       // URLComponents percent-decodes the path if it contains a semicolon.
       // This also combines with SR-15508 to remove the path if its escaped bytes are not valid UTF8.
@@ -398,37 +966,65 @@ extension FoundationToWebTests {
       (string: "B:/;/../%FF", webURL: "b:/%FF"),
       (string: "B:/;%2F/..", webURL: "b:/"),
 
-      // If you use enough "@"s, you can trick the parser in to reading a password component after the hostname.
-      // Here, the URL's hostname is "hostname" and password is "@password". WebURL should refuse to convert these.
-      // https://bugs.swift.org/browse/SR-15513
-      (string: "http://@hostname:@password:@whydoesthishappen/", webURL: nil),
-      (string: "http://@hostname:@password:@whydoesthishappen@/", webURL: nil),
-      // Even worse: you can have a single component appear as both the hostname AND the password. Again, no conversion.
-      (string: "http://:@hostname_and_password:@/", webURL: nil),
-
       // Foundation allows any percent-encoding in IPv6 addresses, including newlines, null bytes, etc.
       // https://bugs.swift.org/browse/SR-15514
-      (string: "http://[::1%0Aen0]/@c@d", webURL: nil),
+      (string: "http://[::1%0Aen0]/c/d", webURL: nil),
+      (string: "http://[::1%0Aen0]@c@d", webURL: nil),
     ]
 
-    for (string, expectedWebURL) in inputs {
+    #if canImport(Darwin)
+      // Password overlaps the fragment. This seems to only happen on Apple platforms;
+      // on other platforms, it returns the correct components and thus can be converted.
+      // https://bugs.swift.org/browse/SR-15738
+      inputs += [
+        (string: "sc://]0#::[@", webURL: nil)
+      ]
+    #else
+      inputs += [
+        (string: "sc://]0#::[@", webURL: "sc://%5D0#::%5B@")
+      ]
+    #endif
+
+    for (string, _expectedWebURLString) in inputs {
       guard let url = URL(string: string) else {
         XCTFail("Invalid URL: \(string)")
         continue
       }
-      guard let expected = expectedWebURL else {
-        XCTAssertNil(WebURL(url), string)
+      guard let expectedWebURLString = _expectedWebURLString else {
+        XCTAssertNil(WebURL(url), "Unexpected conversion: \(string)")
         continue
       }
-      guard let actual = WebURL(url) else {
-        XCTFail("Unexpected failure to convert \(string)")
+      guard let actualWebURL = WebURL(url) else {
+        XCTFail("Unexpected failure to convert: \(string)")
         continue
       }
-      // Check that the conversion produced the expected normalized WebURL.
-      XCTAssertEqual(expected, actual.serialized(), "\(string)")
-      // Check semantic equivalence of the result.
-      let differences = checkSemanticEquivalence(url, actual)
-      XCTAssert(differences.isEmpty, "\(string) - \(differences)")
+      XCTAssertEqual(
+        expectedWebURLString, actualWebURL.serialized(),
+        "Unexpected result for \(string) -- Expected: \(expectedWebURLString) -- Actual: \(actualWebURL.serialized())"
+      )
+      XCTAssertEquivalentURLs(actualWebURL, url, "String: \(string)")
+    }
+  }
+}
+
+
+// --------------------------------
+// MARK: - Fuzz Corpus Tests
+// --------------------------------
+
+
+final class FoundationToWeb_CorpusTests: XCTestCase {
+
+  func testFuzzCorpus() {
+    for bytes in corpus_foundation_to_web {
+      let input = String(decoding: bytes, as: UTF8.self)
+      guard let foundationURL = URL(string: input) else {
+        continue  // Not a valid URL.
+      }
+      guard let webURL = WebURL(foundationURL) else {
+        continue  // WebURL didn't convert the URL. That's fine.
+      }
+      XCTAssertEquivalentURLs(webURL, foundationURL, "String: \(input)")
     }
   }
 }
