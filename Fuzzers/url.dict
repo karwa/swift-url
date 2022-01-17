@@ -77,3 +77,16 @@
 "%82"
 ";"
 "%3B"
+
+# Hex Numbers
+"0x00"
+"0x12"
+"0x80"
+"0xAB"
+"0xFF"
+
+# Tabs, Newlines, Spaces
+"\x09"
+"\x0A"
+"\x0D"
+"\x20"
