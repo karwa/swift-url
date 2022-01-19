@@ -659,75 +659,77 @@ final class SystemFilePathTests: XCTestCase {}
   // --------------------------------------------
 
 
-  #if canImport(System) && !os(iOS) /* FB9832953 - System.framework for iOS is broken in Xcode 13. Last tested: Xcode 13.2.1 */
-    import System
+  #if !os(iOS)  // FB9832953 - System.framework for iOS is broken in Xcode 13. Last tested: Xcode 13.2.1
+    #if canImport(System)
+      import System
 
-    @available(macOS 11, iOS 14, tvOS 14, watchOS 7, *)
-    extension System.FilePath: POSIXFilePathProtocol {
+      @available(macOS 11, iOS 14, tvOS 14, watchOS 7, *)
+      extension System.FilePath: POSIXFilePathProtocol {
 
-      func toURL() throws -> WebURL {
-        try WebURL(filePath: self)
-      }
-      func toString() -> String {
-        String(decoding: self)
-      }
-    }
-
-    // Requires beta SDK:
-    // @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
-    // extension System.FilePath: POSIXFilePathProtocolV2 {}
-    // + add testRelativePaths_framework
-
-    extension SystemFilePathTests {
-
-      func testASCII_framework() throws {
-        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
-          try POSIXFilePathTestSpecs<System.FilePath>.testASCII()
-        } else {
-          try XCTSkipIf(true)
+        func toURL() throws -> WebURL {
+          try WebURL(filePath: self)
+        }
+        func toString() -> String {
+          String(decoding: self)
         }
       }
 
-      func testUnicode_framework() throws {
-        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
-          try POSIXFilePathTestSpecs<System.FilePath>.testUnicode()
-        } else {
-          try XCTSkipIf(true)
-        }
-      }
+      // Requires beta SDK:
+      // @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+      // extension System.FilePath: POSIXFilePathProtocolV2 {}
+      // + add testRelativePaths_framework
 
-      func testUnpairedSurrogateInURL_framework() throws {
-        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
-          try POSIXFilePathTestSpecs<System.FilePath>.testUnpairedSurrogateInURL()
-        } else {
-          try XCTSkipIf(true)
-        }
-      }
+      extension SystemFilePathTests {
 
-      func testUnpairedSurrogateInFilePath_framework() throws {
-        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
-          try POSIXFilePathTestSpecs<System.FilePath>.testUnpairedSurrogateInFilePath()
-        } else {
-          try XCTSkipIf(true)
+        func testASCII_framework() throws {
+          if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+            try POSIXFilePathTestSpecs<System.FilePath>.testASCII()
+          } else {
+            try XCTSkipIf(true)
+          }
         }
-      }
 
-      func testLatin1_framework() throws {
-        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
-          try POSIXFilePathTestSpecs<System.FilePath>.testLatin1()
-        } else {
-          try XCTSkipIf(true)
+        func testUnicode_framework() throws {
+          if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+            try POSIXFilePathTestSpecs<System.FilePath>.testUnicode()
+          } else {
+            try XCTSkipIf(true)
+          }
         }
-      }
 
-      func testGreek_framework() throws {
-        if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
-          try POSIXFilePathTestSpecs<System.FilePath>.testGreek()
-        } else {
-          try XCTSkipIf(true)
+        func testUnpairedSurrogateInURL_framework() throws {
+          if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+            try POSIXFilePathTestSpecs<System.FilePath>.testUnpairedSurrogateInURL()
+          } else {
+            try XCTSkipIf(true)
+          }
+        }
+
+        func testUnpairedSurrogateInFilePath_framework() throws {
+          if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+            try POSIXFilePathTestSpecs<System.FilePath>.testUnpairedSurrogateInFilePath()
+          } else {
+            try XCTSkipIf(true)
+          }
+        }
+
+        func testLatin1_framework() throws {
+          if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+            try POSIXFilePathTestSpecs<System.FilePath>.testLatin1()
+          } else {
+            try XCTSkipIf(true)
+          }
+        }
+
+        func testGreek_framework() throws {
+          if #available(macOS 11, iOS 14, tvOS 14, watchOS 7, *) {
+            try POSIXFilePathTestSpecs<System.FilePath>.testGreek()
+          } else {
+            try XCTSkipIf(true)
+          }
         }
       }
-    }
-  #endif  // canImport(System)
+    #endif  // canImport(System)
+  #endif  // !os(iOS)
 
 #endif  // !os(Windows)
