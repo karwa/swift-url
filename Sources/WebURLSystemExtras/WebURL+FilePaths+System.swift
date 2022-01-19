@@ -39,9 +39,12 @@ import WebURL
 
     /// Creates a `file:` URL representation of the given `FilePath`.
     ///
-    /// The given path must be absolute and must not contain any components which traverse to their parent directories (`..` components).
-    /// Use the `FilePath.isAbsolute` property to check that the path is absolute, and resolve it against a base path if it is not.
-    /// Use the `FilePath.lexicallyNormalize` or `.lexicallyResolving` methods to resolve any `..` components.
+    /// The given path must be absolute and must not contain any components which traverse to their parent directories
+    /// (`".."` components).
+    ///
+    /// Use the `FilePath.isAbsolute` property to check that the path is absolute, and resolve it against a base path
+    /// if it is not. Use the `FilePath.lexicallyNormalize` or `.lexicallyResolving` methods to resolve any `".."`
+    /// components.
     ///
     /// - parameters:
     ///   - filePath: The file path from which to create the file URL.
@@ -66,8 +69,9 @@ import WebURL
     /// The given URL must be a `file:` URL representation of an absolute path according to this system's path format.
     /// The resulting `FilePath` is both absolute and lexically normalized.
     ///
-    /// On Windows, the reconstructed path is first interpreted as UTF-8. Should it not contain valid UTF-8, it will be interpreted
-    /// using the system's active code-page and converted to its Unicode representation.
+    /// On Windows, the reconstructed path is first interpreted as UTF-8.
+    /// Should it not contain valid UTF-8, it will be interpreted using the system's active code-page
+    /// and converted to its Unicode representation.
     ///
     /// - parameters:
     ///   - url: The file URL from which to reconstruct the file path.
@@ -171,7 +175,8 @@ private protocol PlatformStringConversionsProtocol {
 
   /// Converts a null-terminated buffer of platform characters to a null-terminated buffer of bytes.
   ///
-  /// If the platform string is known to contain textual code-points, the buffer passed to `body` will be encoded with UTF-8.
+  /// If the platform string is known to contain textual code-points,
+  /// the buffer passed to `body` will be encoded with UTF-8.
   ///
   static func toMultiByte<ResultType>(
     _ platformString: UnsafeBufferPointer<CInterop_PlatformChar>,
@@ -180,7 +185,8 @@ private protocol PlatformStringConversionsProtocol {
 
   /// Converts a null-terminated buffer of bytes to a null-terminated platform string.
   ///
-  /// If the platform string requires its contents to be textual code-points, this function will attempt to infer the encoding of the bytes.
+  /// If the platform string requires its contents to be textual code-points,
+  /// this function will attempt to infer the encoding of the bytes.
   ///
   static func fromMultiByte<ResultType>(
     _ mbString: UnsafeBufferPointer<UInt8>,
@@ -258,10 +264,14 @@ private protocol PlatformStringConversionsProtocol {
       return try transcoded.withUnsafeBufferPointer(body)
     }
 
-    /// Interprets `input` as a string in the fallback code-page and attempts to transcode it to UTF-16, storing the result in `output`.
+    /// Interprets `input` as a string in the fallback code-page and attempts to transcode it to UTF-16,
+    /// storing the result in `output`.
     ///
-    /// Note that `input` must be null-terminated, and the result will be null-terminated. `output` will have its contents replaced with the resulting string
-    /// and will be resized as needed, reusing any previously-allocated capacity if possible. If transcoding fails, the contents of `output` are unspecified.
+    /// Note that `input` must be null-terminated, and the result will be null-terminated.
+    /// `output` will have its contents replaced with the resulting string and will be resized as needed,
+    /// reusing any previously-allocated capacity if possible.
+    ///
+    /// If transcoding fails, the contents of `output` are unspecified.
     ///
     /// - returns: `true` if transcoding was successful, otherwise `false`.
     ///
