@@ -91,60 +91,66 @@ import WebURL
 // --------------------------------------------
 
 
-#if (os(macOS) || os(iOS) || os(tvOS) || os(watchOS)) && canImport(System) && !os(iOS) /* FB9832953 - System.framework for iOS is broken in Xcode 13. Last tested: Xcode 13.2.1 */
-  import System
+#if !os(iOS)  // FB9832953 - System.framework for iOS is broken in Xcode 13. Last tested: Xcode 13.2.1
+  #if (os(macOS) || os(iOS) || os(tvOS) || os(watchOS)) && canImport(System)
+    import System
 
-  @available(macOS 11, iOS 14, tvOS 14, watchOS 7, *)
-  extension WebURL {
+    @available(macOS 11, iOS 14, tvOS 14, watchOS 7, *)
+    extension WebURL {
 
-    /// Creates a `file:` URL representation of the given `FilePath`.
-    ///
-    /// The given path must be absolute and must not contain any components which traverse to their parent directories (`..` components).
-    /// Use the `FilePath.isAbsolute` property to check that the path is absolute, and resolve it against a base path if it is not.
-    /// Use the `FilePath.lexicallyNormalize` or `.lexicallyResolving` methods to resolve any `..` components.
-    ///
-    /// - parameters:
-    ///   - filePath: The file path from which to create the file URL.
-    ///
-    /// - throws: `URLFromFilePathError`
-    ///
-    public init(filePath: System.FilePath) throws {
-      self = try filePath.withCString { platformStr in
-        try PlatformStringConversions.toMultiByte(UnsafeBufferPointer(start: platformStr, count: filePath.length + 1)) {
-          guard let mbStr = $0 else { throw URLFromFilePathError.transcodingFailure }
-          precondition(mbStr.last == 0, "Expected a null-terminated string")
-          return try WebURL.fromBinaryFilePath(UnsafeBufferPointer(rebasing: mbStr.dropLast()), format: .native)
+      /// Creates a `file:` URL representation of the given `FilePath`.
+      ///
+      /// The given path must be absolute and must not contain any components which traverse to their parent directories
+      /// (`".."` components).
+      ///
+      /// Use the `FilePath.isAbsolute` property to check that the path is absolute, and resolve it against a base path
+      /// if it is not. Use the `FilePath.lexicallyNormalize` or `.lexicallyResolving` methods to resolve any `".."`
+      /// components.
+      ///
+      /// - parameters:
+      ///   - filePath: The file path from which to create the file URL.
+      ///
+      /// - throws: `URLFromFilePathError`
+      ///
+      public init(filePath: System.FilePath) throws {
+        self = try filePath.withCString { cString in
+          try PlatformStringConversions.toMultiByte(UnsafeBufferPointer(start: cString, count: filePath.length + 1)) {
+            guard let mbStr = $0 else { throw URLFromFilePathError.transcodingFailure }
+            precondition(mbStr.last == 0, "Expected a null-terminated string")
+            return try WebURL.fromBinaryFilePath(UnsafeBufferPointer(rebasing: mbStr.dropLast()), format: .native)
+          }
         }
       }
     }
-  }
 
-  @available(macOS 11, iOS 14, tvOS 14, watchOS 7, *)
-  extension System.FilePath {
+    @available(macOS 11, iOS 14, tvOS 14, watchOS 7, *)
+    extension System.FilePath {
 
-    /// Reconstructs a `FilePath` from its URL representation.
-    ///
-    /// The given URL must be a `file:` URL representation of an absolute path according to this system's path format.
-    /// The resulting `FilePath` is both absolute and lexically normalized.
-    ///
-    /// On Windows, the reconstructed path is first interpreted as UTF-8. Should it not contain valid UTF-8, it will be interpreted
-    /// using the system's active code-page and converted to its Unicode representation.
-    ///
-    /// - parameters:
-    ///   - url: The file URL from which to reconstruct the file path.
-    ///
-    /// - throws: `FilePathFromURLError`
-    ///
-    public init(url: WebURL) throws {
-      self = try WebURL.binaryFilePath(from: url, format: .native, nullTerminated: true).withUnsafeBufferPointer {
-        try PlatformStringConversions.fromMultiByte($0) {
-          guard let platformString = $0 else { throw FilePathFromURLError.transcodingFailure }
-          return FilePath(cString: platformString.baseAddress!)
+      /// Reconstructs a `FilePath` from its URL representation.
+      ///
+      /// The given URL must be a `file:` URL representation of an absolute path according to this system's path format.
+      /// The resulting `FilePath` is both absolute and lexically normalized.
+      ///
+      /// On Windows, the reconstructed path is first interpreted as UTF-8.
+      /// Should it not contain valid UTF-8, it will be interpreted using the system's active code-page
+      /// and converted to its Unicode representation.
+      ///
+      /// - parameters:
+      ///   - url: The file URL from which to reconstruct the file path.
+      ///
+      /// - throws: `FilePathFromURLError`
+      ///
+      public init(url: WebURL) throws {
+        self = try WebURL.binaryFilePath(from: url, format: .native, nullTerminated: true).withUnsafeBufferPointer {
+          try PlatformStringConversions.fromMultiByte($0) {
+            guard let platformString = $0 else { throw FilePathFromURLError.transcodingFailure }
+            return FilePath(cString: platformString.baseAddress!)
+          }
         }
       }
     }
-  }
-#endif
+  #endif
+#endif  // !os(iOS)
 
 
 // --------------------------------------------
@@ -155,6 +161,8 @@ import WebURL
 #if canImport(SystemPackage)
   import SystemPackage
   private typealias CInterop_PlatformChar = SystemPackage.CInterop.PlatformChar
+#elseif os(iOS)  // FB9832953 - System.framework for iOS is broken in Xcode 13. Last tested: Xcode 13.2.1
+  private typealias CInterop_PlatformChar = CChar
 #elseif (os(macOS) || os(iOS) || os(tvOS) || os(watchOS)) && canImport(System)
   private typealias CInterop_PlatformChar = CChar
 #endif
