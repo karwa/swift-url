@@ -340,7 +340,7 @@ extension WebURL.Origin {
   /// > Since serialized, non-opaque origins are syntactically valid URLs, they may be parsed as URLs
   /// > in order to reconstruct a ``WebURL/Origin-swift.struct`` from its serialization.
   /// >
-  /// > It is not possible to reconstruct an opaque origin from its serialization.s
+  /// > It is not possible to reconstruct an opaque origin from its serialization.
   ///
   /// [HTML]: https://html.spec.whatwg.org/multipage/origin.html#ascii-serialisation-of-an-origin
   ///
