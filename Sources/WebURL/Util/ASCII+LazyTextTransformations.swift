@@ -20,10 +20,12 @@
 
 extension ASCII {
 
-  /// Returns a collection which has the same contents as the given collection, but without any newline characters or horizontal tabs.
+  /// Returns a collection with the same contents as the given collection,
+  /// but without any newline characters or horizontal tabs.
   ///
-  /// If the only newline or tab characters are at the ends of the given collection, this method returns a trimmed `SubSequence` of the original data in order to
-  /// maintain the collection's performance characteristics. If the collection contains additional newlines or tabs, a lazily-filtering wrapper is returned instead.
+  /// If the only newline or tab characters are at the ends of the source collection, this method returns
+  /// a trimmed `SubSequence` of the original data. If the collection contains any additional newlines or tabs,
+  /// it instead returns a wrapper which filters bytes on-demand.
   ///
   @inlinable
   internal static func filterNewlinesAndTabs<UTF8Bytes>(
@@ -32,13 +34,20 @@ extension ASCII {
   where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
     let trimmedSlice = utf8.trim { isNewlineOrTab($0) }
-    if trimmedSlice.isEmpty == false, trimmedSlice.contains(where: { isNewlineOrTab($0) }) {
-      return .left(ASCII.NewlineAndTabFiltered(unchecked: trimmedSlice))
+    if !trimmedSlice.isEmpty {
+      let hasInternalNewlinesOrTabs =
+        trimmedSlice.withContiguousStorageIfAvailable {
+          $0.boundsChecked.uncheckedFastContainsTabOrCROrLF()
+        } ?? trimmedSlice.contains(where: { isNewlineOrTab($0) })
+      if hasInternalNewlinesOrTabs {
+        return .left(ASCII.NewlineAndTabFiltered(unchecked: trimmedSlice))
+      }
     }
     return .right(trimmedSlice)
   }
 
-  /// If `true`, this character is a newline or tab (`0x0A` carriage return, `0x0D` line feed, or `0x09` horizontal tab).
+  /// Whether the given character is a newline or tab
+  /// (`0x09` horizontal tab, `0x0A` line feed, or `0x0D` carriage return).
   ///
   @inlinable
   internal static func isNewlineOrTab(_ codeUnit: UInt8) -> Bool {

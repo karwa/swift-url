@@ -32,26 +32,31 @@ extension UInt64 {
   }
 }
 
-extension UnsafeBufferPointer where Element == UInt8 {
+extension UnsafeBoundsCheckedBufferPointer where Element == UInt8 {
 
   /// Whether or not the buffer contains the given byte.
   ///
-  /// This implementation compares chunks of 8 bytes at a time,
-  /// using only 4 instructions per chunk of 8 bytes.
+  /// This implementation is able to search chunks of 8 bytes at a time, using only 5 instructions per chunk.
+  ///
+  /// > Important:
+  /// > This function is **not** bounds-checked (since 8-byte chunks are loaded directly from the `baseAddress`,
+  /// > rather than via the Collection interface), although of course it only reads data within the buffer's bounds.
+  /// > The reason it lives on `UnsafeBoundsCheckedBufferPointer` is because unsigned indexes allow for
+  /// > better performance and code-size.
   ///
   @inlinable @inline(__always)  // mask must be constant-folded.
-  internal func _fastContains(_ element: UInt8) -> Bool {
+  internal func uncheckedFastContains(_ element: UInt8) -> Bool {
     let mask = UInt64(repeatingByte: element)
-    return __fastContains(element: element, mask: mask)
+    return _uncheckedFastContains(element: element, mask: mask)
   }
 
   @inlinable
-  internal func __fastContains(element: UInt8, mask: UInt64) -> Bool {
+  internal func _uncheckedFastContains(element: UInt8, mask: UInt64) -> Bool {
     var i = startIndex
     while distance(from: i, to: endIndex) >= 8 {
       // Load 8 bytes from the source.
       var eightBytes = UnsafeRawPointer(
-        self.baseAddress.unsafelyUnwrapped.advanced(by: i)
+        self.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: i))
       ).loadUnaligned(as: UInt64.self)
       // XOR every byte with the element we're searching for.
       // If there are any matches, we'll get a zero byte in that position.
@@ -64,6 +69,53 @@ extension UnsafeBufferPointer where Element == UInt8 {
     }
     while i < endIndex {
       if self[i] == element { return true }
+      i &+= 1
+    }
+    return false
+  }
+}
+
+extension UnsafeBoundsCheckedBufferPointer where Element == UInt8 {
+
+  /// Whether or not the buffer contains an ASCII horizontal tab (0x09), line feed (0x0A),
+  /// or carriage return (0x0D) code-unit.
+  ///
+  /// This implementation is able to search chunks of 8 bytes at a time, using only 5 instructions per chunk.
+  ///
+  /// > Important:
+  /// > This function is **not** bounds-checked (since 8-byte chunks are loaded directly from the `baseAddress`,
+  /// > rather than via the Collection interface), although of course it only reads data within the buffer's bounds.
+  /// > The reason it lives on `UnsafeBoundsCheckedBufferPointer` is because unsigned indexes allow for
+  /// > better performance and code-size.
+  ///
+  @inlinable
+  internal func uncheckedFastContainsTabOrCROrLF() -> Bool {
+    var i = startIndex
+    while distance(from: i, to: endIndex) >= 8 {
+      // Load 8 bytes from the source.
+      let eightBytes = UnsafeRawPointer(
+        self.baseAddress.unsafelyUnwrapped.advanced(by: Int(bitPattern: i))
+      ).loadUnaligned(as: UInt64.self)
+
+      // Check for line feeds first; we're more likely to find one than a tab or carriage return.
+      var bytesForLF = eightBytes
+      bytesForLF ^= UInt64(repeatingByte: ASCII.lineFeed.codePoint)
+      var found = (bytesForLF &- 0x0101_0101_0101_0101) & (~bytesForLF & 0x8080_8080_8080_8080)
+      if found != 0 { return true }
+
+      // Check for tabs (0x09, 0b0000_1001) and carriage returns (0x0D, 0b0000_1101).
+      // These differ by one bit, so mask it out (turns carriage returns in to tabs), then look for tabs.
+      var bytesForTCR = eightBytes
+      bytesForTCR &= UInt64(repeatingByte: 0b1111_1011)
+      bytesForTCR ^= UInt64(repeatingByte: 0b0000_1001)
+      found = (bytesForTCR &- 0x0101_0101_0101_0101) & (~bytesForTCR & 0x8080_8080_8080_8080)
+      if found != 0 { return true }
+
+      i &+= 8
+    }
+    while i < endIndex {
+      let byte = self[i]
+      if byte == ASCII.lineFeed.codePoint || (byte & 0b1111_1011) == 0b0000_1001 { return true }
       i &+= 1
     }
     return false
