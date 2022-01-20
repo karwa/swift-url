@@ -94,12 +94,9 @@ extension ParsedHost {
     _ hostname: UTF8Bytes, callback: inout Callback
   ) -> _OpaqueHostnameInfo? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
-    guard hostname.isEmpty == false else {
-      return nil
-    }
+    assert(!hostname.isEmpty)
 
     var hostnameInfo = _OpaqueHostnameInfo(needsPercentEncoding: false, encodedCount: 0)
-
     for byte in hostname {
       hostnameInfo.encodedCount &+= 1
       guard let asciiChar = ASCII(byte) else {
@@ -127,11 +124,13 @@ extension ParsedHost {
     _ domain: UTF8Bytes, scheme: WebURL.SchemeKind, isPercentDecoded: Bool, callback: inout Callback
   ) -> ParsedHost? where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
-    switch ParsedHost._parseASCIIDomain(domain, isPercentDecoded: isPercentDecoded, callback: &callback) {
+    switch ParsedHost._parseASCIIDomain(domain, isPercentDecoded: isPercentDecoded) {
     case .containsUnicodeOrIDNA:
       // TODO: Handle domains conaining Unicode or IDNA labels.
+      callback.validationError(.domainToASCIIFailure)
       return nil
     case .forbiddenHostCodePoint:
+      callback.validationError(.hostForbiddenCodePoint)
       return nil
     case .endsInANumber:
       guard let address = IPv4Address(utf8: domain) else {
@@ -150,15 +149,14 @@ extension ParsedHost {
   /// and some details which are useful to write a normalized version of the domain.
   ///
   @inlinable
-  internal static func _parseASCIIDomain<UTF8Bytes, Callback>(
-    _ domain: UTF8Bytes, isPercentDecoded: Bool, callback: inout Callback
-  ) -> _DomainParseResult
-  where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
+  internal static func _parseASCIIDomain<UTF8Bytes>(
+    _ domain: UTF8Bytes, isPercentDecoded: Bool
+  ) -> _DomainParseResult where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
+    assert(!domain.isEmpty)
     var domainInfo = _ASCIIDomainInfo(decodedCount: 0, needsPercentDecoding: isPercentDecoded, needsLowercasing: false)
 
     guard !hasIDNAPrefix(utf8: domain) else {
-      callback.validationError(.domainToASCIIFailure)
       return .containsUnicodeOrIDNA
     }
 
@@ -167,11 +165,9 @@ extension ParsedHost {
 
     while i < domain.endIndex {
       guard let char = ASCII(domain[i]) else {
-        callback.validationError(.domainToASCIIFailure)
         return .containsUnicodeOrIDNA
       }
       if char.isForbiddenHostCodePoint {
-        callback.validationError(.hostForbiddenCodePoint)
         return .forbiddenHostCodePoint
       }
       domainInfo.needsLowercasing = domainInfo.needsLowercasing || char.isUppercaseAlpha
@@ -180,7 +176,6 @@ extension ParsedHost {
 
       if char == .period {
         guard !hasIDNAPrefix(utf8: domain[Range(uncheckedBounds: (i, domain.endIndex))]) else {
-          callback.validationError(.domainToASCIIFailure)
           return .containsUnicodeOrIDNA
         }
         if i < domain.endIndex {
@@ -189,22 +184,46 @@ extension ParsedHost {
       }
     }
 
-    var lastLabel = domain[startOfLastLabel...]
-    if lastLabel.last == ASCII.period.codePoint {
-      lastLabel.removeLast()
-    }
-    if !lastLabel.isEmpty {
-      if lastLabel.allSatisfy({ ASCII($0)?.isDigit == true }) {
-        return .endsInANumber
-      } else if lastLabel.fastPopFirst() == ASCII.n0.codePoint,
-        lastLabel.fastPopFirst().flatMap({ ASCII($0)?.lowercased }) == .x,
-        lastLabel.allSatisfy({ ASCII($0)?.isHexDigit == true })
-      {
+    var lastLabel = domain[Range(uncheckedBounds: (startOfLastLabel, domain.endIndex))]
+    // Fast path: if the last label does not begin with a digit, it is not any kind of number we recognize.
+    if let firstChar = lastLabel.fastPopFirst(), ASCII(firstChar)?.isDigit == true {
+      if _domainLabelIsANumber(firstChar: firstChar, remainder: lastLabel) {
         return .endsInANumber
       }
     }
 
     return .asciiDomain(domainInfo)
+  }
+
+  /// Returns whether an ASCII domain label is a number.
+  ///
+  /// The label is provided in two parts: its initial character, and the remaining text.
+  /// The initial character is assumed to be an ASCII digit, and the remaining text is assumed to be ASCII.
+  /// If the domain ends with a trailing period, it may be included in `remainder`.
+  ///
+  @inlinable
+  internal static func _domainLabelIsANumber<UTF8Bytes>(
+    firstChar: UInt8, remainder: UTF8Bytes
+  ) -> Bool where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, UTF8Bytes.SubSequence == UTF8Bytes {
+
+    assert(ASCII(firstChar)?.isDigit == true)
+    var remainder = remainder
+    if remainder.last == ASCII.period.codePoint {
+      remainder.removeLast()
+    }
+    guard let secondChar = remainder.fastPopFirst().flatMap({ ASCII($0) }) else {
+      return true  // The first character is a digit, and the second is assumed ASCII if present.
+    }
+    if secondChar.isDigit {
+      if remainder.fastAllSatisfy({ ASCII($0)?.isDigit == true }) {
+        return true
+      }
+    } else if firstChar == ASCII.n0.codePoint, secondChar == .x || secondChar == .X {
+      if remainder.fastAllSatisfy({ ASCII($0)?.isHexDigit == true }) {
+        return true
+      }
+    }
+    return false
   }
 }
 
