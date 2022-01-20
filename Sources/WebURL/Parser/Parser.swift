@@ -397,7 +397,7 @@ extension ParsedURLString.ProcessedMapping {
           parsing: inputString[path],
           schemeKind: schemeKind,
           hasAuthority: hasAuthority,
-          baseURL: info.componentsToCopyFromBase.contains(.path) ? baseURL.unsafelyUnwrapped : nil,
+          baseURL: info.componentsToCopyFromBase.contains(.path) ? baseURL : nil,
           absolutePathsCopyWindowsDriveFromBase: info.absolutePathsCopyWindowsDriveFromBase
         )
       assert(pathMetrics.requiredCapacity > 0)
@@ -416,7 +416,7 @@ extension ParsedURLString.ProcessedMapping {
           parsing: inputString[path],
           schemeKind: schemeKind,
           hasAuthority: hasAuthority,
-          baseURL: info.componentsToCopyFromBase.contains(.path) ? baseURL.unsafelyUnwrapped : nil,
+          baseURL: info.componentsToCopyFromBase.contains(.path) ? baseURL : nil,
           absolutePathsCopyWindowsDriveFromBase: info.absolutePathsCopyWindowsDriveFromBase,
           needsPercentEncoding: pathMetrics.needsPercentEncoding
         )
@@ -625,15 +625,15 @@ internal struct _CopyableURLComponentSet: OptionSet {
   @usableFromInline
   internal var rawValue: UInt8
 
-  @inlinable
+  @inlinable @inline(__always)
   internal init(rawValue: UInt8) {
     self.rawValue = rawValue
   }
 
-  @inlinable internal static var scheme: Self    { Self(rawValue: 1 << 0) }
-  @inlinable internal static var authority: Self { Self(rawValue: 1 << 1) }
-  @inlinable internal static var path: Self      { Self(rawValue: 1 << 2) }
-  @inlinable internal static var query: Self     { Self(rawValue: 1 << 3) }
+  @inlinable @inline(__always) internal static var scheme: Self    { Self(rawValue: 1 << 0) }
+  @inlinable @inline(__always) internal static var authority: Self { Self(rawValue: 1 << 1) }
+  @inlinable @inline(__always) internal static var path: Self      { Self(rawValue: 1 << 2) }
+  @inlinable @inline(__always) internal static var query: Self     { Self(rawValue: 1 << 3) }
 }
 
 extension ScannedRangesAndFlags {
@@ -1516,16 +1516,16 @@ internal func parseScheme<UTF8Bytes>(
   _ string: UTF8Bytes
 ) -> (terminator: UTF8Bytes.Index, kind: WebURL.SchemeKind)? where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-  let terminatorIdx = string.fastFirstIndex { $0 == ASCII.colon.codePoint } ?? string.endIndex
-  let schemeName = string[Range(uncheckedBounds: (string.startIndex, terminatorIdx))]
-  let kind = WebURL.SchemeKind(parsing: schemeName)
+  let terminatorIdx = string.fastFirstIndex(of: ASCII.colon.codePoint) ?? string.endIndex
+  var schemeName = string[Range(uncheckedBounds: (string.startIndex, terminatorIdx))]
 
+  let kind = WebURL.SchemeKind(parsing: schemeName)
   guard case .other = kind else {
-    return (terminatorIdx, kind)
+    return (schemeName.endIndex, kind)
   }
-  // Note: this also ensures empty strings are rejected.
-  guard ASCII(flatMap: schemeName.first)?.isAlpha == true else { return nil }
-  let isValidSchemeName = schemeName.allSatisfy { byte in
+  // This also ensures that empty schemes are rejected.
+  guard schemeName.fastPopFirst().flatMap({ ASCII($0)?.isAlpha }) == true else { return nil }
+  return schemeName.fastAllSatisfy { byte in
     // https://bugs.swift.org/browse/SR-14438
     // swift-format-ignore
     switch ASCII(byte) {
@@ -1533,8 +1533,7 @@ internal func parseScheme<UTF8Bytes>(
     case .plus?, .minus?, .period?: return true
     default: return false
     }
-  }
-  return isValidSchemeName ? (terminatorIdx, kind) : nil
+  } ? (schemeName.endIndex, kind) : nil
 }
 
 /// Given a string, like "example.com:99/some/path?hello=world", returns the endIndex of the hostname component.
