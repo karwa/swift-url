@@ -213,18 +213,74 @@ extension ASCIITests {
     }
   }
 
-  func testLazyNewlineAndTabFilter() {
+  func testLazyNewlineAndTabFilter_contiguous() {
     let testData: [(String, String, isEmpty: Bool)] = [
-      ("\thello\nworld\n", "helloworld", false),
-      ("\t\n\n\t", "", true),
+      ("\thello\n\rworld\n", "helloworld", false),
+      ("\n\nnewlines \n\nonly\n", "newlines only", false),
+      ("\t\ttabs \t\tonly\t", "tabs only", false),
+      ("\r\rcarriage returns \r\ronly\r", "carriage returns only", false),
+      ("\t\ttrim only, please\n\r\t", "trim only, please", false),
+      ("\t\n\n\r\t", "", true),
       ("no change 0123456789", "no change 0123456789", false),
     ]
     for (testString, expected, isEmpty) in testData {
-      // Check that it works.
+      if testData.withContiguousStorageIfAvailable({ _ in true }) == nil {
+        XCTFail("Expected contiguous input")
+      }
+
+      // Check results after performing an initial scan and trimming.
+      let initialScanResult = ASCII.filterNewlinesAndTabs(from: testString.utf8)
+      switch initialScanResult {
+      case .left(let lazyFiltered):
+        XCTAssertEqualElements(lazyFiltered, expected.utf8)
+        XCTAssertFalse(lazyFiltered.isEmpty)
+        XCTAssertFalse(isEmpty)
+        CollectionChecker.check(lazyFiltered)
+      case .right(let trimmed):
+        XCTAssertEqualElements(trimmed, expected.utf8)
+        XCTAssertEqual(trimmed.isEmpty, isEmpty)
+        CollectionChecker.check(trimmed)
+      }
+
+      // Check without performing an initial scan.
       XCTAssertEqualElements(ASCII.NewlineAndTabFiltered(testString.utf8), expected.utf8)
-      XCTAssertEqual(ASCII.NewlineAndTabFiltered(testString.utf8).isEmpty, isEmpty)
-      // Check Collection conformances.
       CollectionChecker.check(ASCII.NewlineAndTabFiltered(testString.utf8))
+    }
+  }
+
+  func testLazyNewlineAndTabFilter_noncontiguous() {
+    let testData: [(String, String, isEmpty: Bool)] = [
+      ("\thello\n\rworld\n", "helloworld", false),
+      ("\n\nnewlines \n\nonly\n", "newlines only", false),
+      ("\t\ttabs \t\tonly\t", "tabs only", false),
+      ("\r\rcarriage returns \r\ronly\r", "carriage returns only", false),
+      ("\t\ttrim only, please\n\r\t", "trim only, please", false),
+      ("\t\n\n\r\t", "", true),
+      ("no change 0123456789", "no change 0123456789", false),
+    ]
+    for (testString, expected, isEmpty) in testData {
+      let nonContiguousUTF8 = testString.utf8.lazy.map { $0 }
+      if nonContiguousUTF8.withContiguousStorageIfAvailable({ _ in true }) != nil {
+        XCTFail("Expected non-contiguous input")
+      }
+
+      // Check results after performing an initial scan and trimming.
+      let initialScanResult = ASCII.filterNewlinesAndTabs(from: nonContiguousUTF8)
+      switch initialScanResult {
+      case .left(let lazyFiltered):
+        XCTAssertEqualElements(lazyFiltered, expected.utf8)
+        XCTAssertFalse(lazyFiltered.isEmpty)
+        XCTAssertFalse(isEmpty)
+        CollectionChecker.check(lazyFiltered)
+      case .right(let trimmed):
+        XCTAssertEqualElements(trimmed, expected.utf8)
+        XCTAssertEqual(trimmed.isEmpty, isEmpty)
+        CollectionChecker.check(trimmed)
+      }
+
+      // Check without performing an initial scan.
+      XCTAssertEqualElements(ASCII.NewlineAndTabFiltered(nonContiguousUTF8), expected.utf8)
+      CollectionChecker.check(ASCII.NewlineAndTabFiltered(nonContiguousUTF8))
     }
   }
 }

@@ -65,7 +65,7 @@ extension ParsedHost {
     if schemeKind.isSpecial {
       let needsPercentDecoding =
         hostname.withContiguousStorageIfAvailable {
-          $0._fastContains(ASCII.percentSign.codePoint)
+          $0.boundsChecked.uncheckedFastContains(ASCII.percentSign.codePoint)
         } ?? true
       if !needsPercentDecoding {
         result = ParsedHost._parseDomainOrIPv4(

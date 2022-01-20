@@ -194,7 +194,7 @@ extension OtherUtilitiesTests {
   func testFastContains() {
     func check(_ str: String, for byte: UInt8, expected: Bool) {
       var copy = str
-      let fastResult = copy.withUTF8 { $0._fastContains(byte) }
+      let fastResult = copy.withUTF8 { $0.boundsChecked.uncheckedFastContains(byte) }
       let slowResult = copy.withUTF8 { $0.contains(byte) }
       XCTAssertEqual(fastResult, slowResult)
       XCTAssertEqual(fastResult, expected)
