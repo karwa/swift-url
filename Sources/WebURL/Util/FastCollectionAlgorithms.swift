@@ -46,6 +46,14 @@ extension Collection {
     }
     return self[Range(uncheckedBounds: (endIndex, endIndex))]
   }
+
+  /// Whether all elements of the collection satisfy the given predicate.
+  /// If the collection is empty, returns `true`.
+  ///
+  @inlinable
+  internal func fastAllSatisfy(_ predicate: (Element) -> Bool) -> Bool {
+    fastFirstIndex(where: { !predicate($0) }) == nil
+  }
 }
 
 extension Collection where Element: Equatable {

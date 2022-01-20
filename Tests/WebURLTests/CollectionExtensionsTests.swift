@@ -266,4 +266,23 @@ extension CollectionExtensionsTests {
       XCTAssertEqual(elems.fastPopFirst(), nil)
     }
   }
+
+  func testFastAllSatisfy() {
+    // Do all satisfy.
+    do {
+      let elems = [2, 4, 6, 8, 10]
+      XCTAssertTrue(elems.fastAllSatisfy { $0.isMultiple(of: 2) })
+    }
+    // Don't all satisfy.
+    do {
+      let elems = [2, 4, 6, 7, 8, 9]
+      XCTAssertFalse(elems.fastAllSatisfy { $0.isMultiple(of: 2) })
+    }
+    // Empty collection.
+    do {
+      let elems: Array<Int> = []
+      XCTAssertTrue(elems.fastAllSatisfy { _ in false })
+      XCTAssertTrue(elems.fastAllSatisfy { _ in true })
+    }
+  }
 }
