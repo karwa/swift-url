@@ -58,7 +58,7 @@ extension Collection {
 
 extension Collection where Element: Equatable {
 
-  @inlinable
+  @inlinable @inline(__always)  // The closure should be inlined.
   internal func fastFirstIndex(of element: Element) -> Index? {
     fastFirstIndex(where: { $0 == element })
   }
@@ -108,7 +108,7 @@ extension BidirectionalCollection where Element: Equatable {
   /// that this uses  `>` and `<` rather than `==` and `!=` to compare indexes,
   /// which allows bounds-checking to be more throughly eliminated.
   ///
-  @inlinable
+  @inlinable @inline(__always)  // The closure should be inlined.
   internal func fastLastIndex(of element: Element) -> Index? {
     fastLastIndex(where: { $0 == element })
   }

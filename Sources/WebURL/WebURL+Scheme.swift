@@ -42,8 +42,11 @@ extension WebURL.SchemeKind {
 
   /// Determines the `SchemeKind` for the given scheme content.
   ///
-  /// This initializer does not determine whether a given scheme string is valid or not; it only detects certain known schemes and returns `.other` for everything
-  /// else. Note that the ":" terminator must not be included in the content; "http" will be recognized, but "http:" won't. This initializer is case-insensitive.
+  /// This initializer does not determine whether a given scheme string is valid or not;
+  /// it only detects certain known schemes and returns `.other` for everything else.
+  ///
+  /// Note that the ":" terminator must **not** be included in the content;
+  /// `"http"` will be recognized, but `"http:"` won't. This initializer is case-insensitive.
   ///
   /// - parameters:
   ///     - schemeContent: The scheme content, as a sequence of UTF8-encoded bytes.
@@ -91,28 +94,28 @@ extension WebURL.SchemeKind {
   //       which can have a significant performance impact: https://bugs.swift.org/browse/SR-14422
   @inlinable
   internal init(ptr: UnsafeRawPointer, count: UInt8) {
-    // Zeroing the 6th bit of each byte (i.e. AND-ing with 11011111) normalizes the code-unit to uppercase ASCII.
+    // Setting the 6th bit of each byte (i.e. OR-ing with 00100000) normalizes the code-unit to lowercase ASCII.
     switch count {
     case 2:
       var s = ptr.loadUnaligned(as: UInt16.self)
-      s &= 0b11011111_11011111
+      s |= 0b00100000_00100000
       self = (s == Self._ws) ? .ws : .other
     case 3:
       // On big-endian machines, we need to swap-widen-swap:
       // [F, T] ->(swap)-> [T, F] ->(widen)-> [0, 0, T, F] ->(swap)-> [F, T, 0, 0].
       var s = UInt32(ptr.loadUnaligned(as: UInt16.self).littleEndian).littleEndian
       withUnsafeMutableBytes(of: &s) { $0[2] = ptr.load(fromByteOffset: 2, as: UInt8.self) }
-      s &= 0b11011111_11011111_11011111_11011111
+      s |= UInt32(bigEndian: 0b00100000_00100000_00100000_00000000)
       self = (s == Self._wss) ? .wss : (s == Self._ftp) ? .ftp : .other
     case 4:
       var s = ptr.loadUnaligned(as: UInt32.self)
-      s &= 0b11011111_11011111_11011111_11011111
+      s |= 0b00100000_00100000_00100000_00100000
       self = (s == Self._http) ? .http : (s == Self._file) ? .file : .other
     case 5:
       var s = ptr.loadUnaligned(as: UInt32.self)
-      s &= 0b11011111_11011111_11011111_11011111
+      s |= 0b00100000_00100000_00100000_00100000
       self =
-        ((s == Self._http) && ptr.load(fromByteOffset: 4, as: UInt8.self) & 0b11011111 == ASCII.S.codePoint)
+        ((s == Self._http) && ptr.load(fromByteOffset: 4, as: UInt8.self) | 0b00100000 == ASCII.s.codePoint)
         ? .https : .other
     default:
       self = .other
@@ -123,32 +126,32 @@ extension WebURL.SchemeKind {
   // and .init(bigEndian:) will swap them back so they will have the same bytes, in the same order, as the code-units.
   @inlinable @inline(__always)
   internal static var _ws: UInt16 {
-    UInt16(bigEndian: UInt16(ASCII.W.codePoint) &<< 8 | UInt16(ASCII.S.codePoint))
+    UInt16(bigEndian: UInt16(ASCII.w.codePoint) &<< 8 | UInt16(ASCII.s.codePoint))
   }
   @inlinable @inline(__always)
   internal static var _wss: UInt32 {
     UInt32(
-      bigEndian: UInt32(ASCII.W.codePoint) &<< 24 | UInt32(ASCII.S.codePoint) &<< 16 | UInt32(ASCII.S.codePoint) &<< 8
+      bigEndian: UInt32(ASCII.w.codePoint) &<< 24 | UInt32(ASCII.s.codePoint) &<< 16 | UInt32(ASCII.s.codePoint) &<< 8
     )
   }
   @inlinable @inline(__always)
   internal static var _ftp: UInt32 {
     UInt32(
-      bigEndian: UInt32(ASCII.F.codePoint) &<< 24 | UInt32(ASCII.T.codePoint) &<< 16 | UInt32(ASCII.P.codePoint) &<< 8
+      bigEndian: UInt32(ASCII.f.codePoint) &<< 24 | UInt32(ASCII.t.codePoint) &<< 16 | UInt32(ASCII.p.codePoint) &<< 8
     )
   }
   @inlinable @inline(__always)
   internal static var _http: UInt32 {
     UInt32(
-      bigEndian: UInt32(ASCII.H.codePoint) &<< 24 | UInt32(ASCII.T.codePoint) &<< 16 | UInt32(ASCII.T.codePoint) &<< 8
-        | UInt32(ASCII.P.codePoint)
+      bigEndian: UInt32(ASCII.h.codePoint) &<< 24 | UInt32(ASCII.t.codePoint) &<< 16 | UInt32(ASCII.t.codePoint) &<< 8
+        | UInt32(ASCII.p.codePoint)
     )
   }
   @inlinable @inline(__always)
   internal static var _file: UInt32 {
     UInt32(
-      bigEndian: UInt32(ASCII.F.codePoint) &<< 24 | UInt32(ASCII.I.codePoint) &<< 16 | UInt32(ASCII.L.codePoint) &<< 8
-        | UInt32(ASCII.E.codePoint)
+      bigEndian: UInt32(ASCII.f.codePoint) &<< 24 | UInt32(ASCII.i.codePoint) &<< 16 | UInt32(ASCII.l.codePoint) &<< 8
+        | UInt32(ASCII.e.codePoint)
     )
   }
 }
