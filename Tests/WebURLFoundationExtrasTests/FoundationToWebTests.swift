@@ -117,7 +117,6 @@ extension FoundationToWebTests {
       "NSURLWithString-parse-absolute-file-008",
       // Empty username.
       "NSURLWithString-parse-absolute-ftp-005",
-      "NSURLWithString-parse-absolute-ftp-007",
       // Port with no host.
       "NSURLWithString-parse-absolute-ftp-009",
       // HTTP wth no host.
@@ -212,9 +211,9 @@ extension FoundationToWebTests {
     XCTAssertEqual(numParsed, 197, "Number of tests changed. Did you update the test database?")
     // Apparently one more test passes on Windows than Mac/Linux. TODO: investigate.
     #if os(Windows)
-      XCTAssertEqual(numSuccess, 163, "Number of successful conversion changed. Did you update the test database?")
+      XCTAssertEqual(numSuccess, 164, "Number of successful conversion changed. Did you update the test database?")
     #else
-      XCTAssertEqual(numSuccess, 162, "Number of successful conversion changed. Did you update the test database?")
+      XCTAssertEqual(numSuccess, 163, "Number of successful conversion changed. Did you update the test database?")
     #endif
   }
 
@@ -878,7 +877,7 @@ extension FoundationToWebTests {
       (string: "http://@abc", webURL: nil),
       (string: "http://:@abc", webURL: nil),
       (string: "http://abc:@def", webURL: nil),
-      (string: "http://:abc@def", webURL: nil),
+      (string: "http://:abc@def", webURL: "http://:abc@def/"),
       (string: "http://abc@def@ghi", webURL: nil),
       (string: "http://:abc@def@ghi", webURL: nil),
       (string: "http://abc:@def@ghi", webURL: nil),
@@ -890,7 +889,7 @@ extension FoundationToWebTests {
       (string: "sc://@abc", webURL: nil),
       (string: "sc://:@abc", webURL: nil),
       (string: "sc://abc:@def", webURL: nil),
-      (string: "sc://:abc@def", webURL: nil),
+      (string: "sc://:abc@def", webURL: "sc://:abc@def"),
       (string: "sc://abc@def@ghi", webURL: nil),
       (string: "sc://:abc@def@ghi", webURL: nil),
       (string: "sc://abc:@def@ghi", webURL: nil),

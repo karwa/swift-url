@@ -657,9 +657,14 @@ extension WebURL._SPIs {
   /// This function is deliberately outlined from `_checkEquivalence`.
   ///
   @inline(never)
-  internal static func checkUserInfoEquivalence(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
+  private static func checkUserInfoEquivalence(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
 
     // Username:
+
+    // If a URL has no username but does have a password (e.g. "http://:password@host/"),
+    // Foundation returns that the username is empty, but WebURL returns nil.
+    // That's a safe difference, but only if both agree that a password is present.
+    var emptyUsernameRequiresPasswordCheck = false
 
     switch (webURL.utf8.username, foundationURL.user) {
     case (.none, .none):
@@ -668,6 +673,11 @@ extension WebURL._SPIs {
       guard webURLUsername.lazy.percentDecoded().fastElementsEqual(foundationUsername.utf8) else {
         return false
       }
+    case (.none, .some(let foundationUsername)):
+      guard foundationUsername.isEmpty else {
+        return false
+      }
+      emptyUsernameRequiresPasswordCheck = true
     default:
       return false
     }
@@ -687,8 +697,12 @@ extension WebURL._SPIs {
       guard webURLPassword.fastElementsEqual(encodedFoundationPassword) else {
         return false
       }
-      break
+      emptyUsernameRequiresPasswordCheck = false
     default:
+      return false
+    }
+
+    guard !emptyUsernameRequiresPasswordCheck else {
       return false
     }
 
@@ -703,7 +717,7 @@ extension WebURL._SPIs {
   /// agree about which part of the URL string contains the path.
   ///
   @inline(never)
-  internal static func checkPathEquivalenceUsingURLComponents(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
+  private static func checkPathEquivalenceUsingURLComponents(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
 
     guard let fndRawPath = URLComponents(url: foundationURL, resolvingAgainstBaseURL: true)?.percentEncodedPath else {
       return true  // Unable to validate.
