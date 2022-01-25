@@ -977,6 +977,56 @@ extension LazilyPercentDecodedWithSubstitutions: BidirectionalCollection where S
   }
 }
 
+extension LazilyPercentDecodedWithSubstitutions {
+
+  /// Whether the byte at the given index has been percent-decoded or unsubstituted from the source contents.
+  ///
+  /// The given index must be valid for this collection.
+  /// If `false`, the byte at this index is returned verbatim from the source collection.
+  /// If the index is ``endIndex``, this function returns `false`.
+  ///
+  /// ```swift
+  /// let decoded = "h%65llo".utf8.lazy.percentDecoded()
+  ///
+  /// var idx = decoded.startIndex
+  /// UnicodeScalar(decoded[idx]) // "h"
+  /// decoded.isByteDecodedOrUnsubstituted(at: idx) // false
+  ///
+  /// decoded.formIndex(after: &idx)
+  /// UnicodeScalar(decoded[idx]) // "e"
+  /// decoded.isByteDecodedOrUnsubstituted(at: idx) // true
+  /// ```
+  ///
+  @inlinable
+  public func isByteDecodedOrUnsubstituted(at i: Index) -> Bool {
+    i.isDecodedOrUnsubstituted
+  }
+
+  /// The range of elements from the source collection contributing to the value at the given index.
+  ///
+  /// The given index must be valid for this collection.
+  /// If the index is ``endIndex``, the result is an empty range whose bounds are equal to the source's `endIndex`.
+  /// Otherwise, the result covers either one or three bytes from the source.
+  ///
+  /// ```swift
+  /// let source = "h%65llo".utf8
+  /// let decoded = source.lazy.percentDecoded()
+  ///
+  /// var idx = decoded.startIndex
+  /// UnicodeScalar(decoded[idx]) // "h"
+  /// String(source[decoded.sourceIndices(at: idx)]) // "h"
+  ///
+  /// decoded.formIndex(after: &idx)
+  /// UnicodeScalar(decoded[idx]) // "e"
+  /// String(source[decoded.sourceIndices(at: idx)]) // "%65"
+  /// ```
+  ///
+  @inlinable
+  public func sourceIndices(at i: Index) -> Range<Source.Index> {
+    i.sourceRange
+  }
+}
+
 // Internal utilities.
 
 extension Collection where Element == UInt8 {
