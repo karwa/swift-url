@@ -340,4 +340,55 @@ extension PercentEncodingTests {
     _testLazilyDecoded("%F0%9F%A6%86%2C+of+course", substitutions: .formEncoding, to: "🦆, of course")
     _testLazilyDecoded("%F0%9F%8D%8E+%26+%F0%9F%8D%A6", substitutions: .formEncoding, to: "🍎 & 🍦")
   }
+
+  func testLazilyDecoded_isDecodedOrUnsubstituted() {
+
+    let decoded = "h%65llo".utf8.lazy.percentDecoded()
+    var idx = decoded.startIndex
+    XCTAssertEqual(UnicodeScalar(decoded[idx]), "h")
+    XCTAssertFalse(decoded.isByteDecodedOrUnsubstituted(at: idx))
+    decoded.formIndex(after: &idx)
+
+    XCTAssertEqual(UnicodeScalar(decoded[idx]), "e")
+    XCTAssertTrue(decoded.isByteDecodedOrUnsubstituted(at: idx))
+    decoded.formIndex(after: &idx)
+
+    var expected = "llo".unicodeScalars[...]
+    while idx < decoded.endIndex {
+      XCTAssertEqual(UnicodeScalar(decoded[idx]), expected.removeFirst())
+      XCTAssertFalse(decoded.isByteDecodedOrUnsubstituted(at: idx))
+      decoded.formIndex(after: &idx)
+    }
+
+    // endIndex always returns false.
+    XCTAssertEqual(idx, decoded.endIndex)
+    XCTAssertFalse(decoded.isByteDecodedOrUnsubstituted(at: idx))
+    XCTAssertFalse(decoded.isByteDecodedOrUnsubstituted(at: decoded.endIndex))
+  }
+
+  func testLazilyDecoded_sourceIndices() {
+    let source = "h%65llo".utf8
+    let decoded = source.lazy.percentDecoded()
+
+    var idx = decoded.startIndex
+    XCTAssertEqual(UnicodeScalar(decoded[idx]), "h")
+    XCTAssertEqual(String(source[decoded.sourceIndices(at: idx)]), "h")
+    decoded.formIndex(after: &idx)
+
+    XCTAssertEqual(UnicodeScalar(decoded[idx]), "e")
+    XCTAssertEqual(String(source[decoded.sourceIndices(at: idx)]), "%65")
+    decoded.formIndex(after: &idx)
+
+    var expected = "llo".unicodeScalars[...]
+    while idx < decoded.endIndex {
+      XCTAssertEqual(UnicodeScalar(decoded[idx]), expected.removeFirst())
+      XCTAssertEqualElements(CollectionOfOne(decoded[idx]), source[decoded.sourceIndices(at: idx)])
+      decoded.formIndex(after: &idx)
+    }
+
+    // endIndex always returns an empty range at source.endIndex.
+    XCTAssertEqual(idx, decoded.endIndex)
+    XCTAssertEqual(decoded.sourceIndices(at: idx), source.endIndex..<source.endIndex)
+    XCTAssertEqual(decoded.sourceIndices(at: decoded.endIndex), source.endIndex..<source.endIndex)
+  }
 }
