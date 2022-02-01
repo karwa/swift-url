@@ -50,9 +50,31 @@ internal protocol ManagedBufferHeader {
   func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self?
 }
 
-/// An alternative `ManagedBuffer` interface, with the following differences:
+/// An alternative `ManagedBuffer` interface.
+///
+/// This type exists because `ManagedBuffer` has a bit of an awkward interface.
+///
+/// - It is instantiated through the `create` function, which provides an **uninitialized instance**
+///   via a closure and must be unsafe-downcast to the type you actually wanted to create.
+///
+/// - It includes the `capacity` property which is expensive and not portable; it is advised to store the capacity
+///   again in the header, but since `ManagedBuffer.capacity` is a `final` property, you can't override it and
+///   need constant vigilance to avoid using it.
+///
+/// - The `header` is written as a class property in the standard library's source code. This means it requires
+///   dynamic enforcement of the law of exclusivity, which can have significant performance consequences.
+///   But this enforcement is generally not necessary in practice: `ManagedBuffer` is typically used to build
+///   copy-on-write data structures with value semantics, so exclusivity is enforced at a higher level than the
+///   compiler is able to reason about. Indeed, it is not even possible to access a MB's elements except through
+///   an unsafe pointer (which has no exclusivity enforcement), so developers already need to manually ensure
+///   that overlapping writes do not occur.
+///   https://forums.swift.org/t/managedbuffer-header-and-exclusivity/55013/1
+///
+/// So this wrapper cleans things up a little and makes a few changes.
+/// It is in some ways similar to `ManagedBufferPointer`.
 ///
 /// - It is a `struct` with reference semantics, rather than a `class`.
+/// - The `header` property does not enforce exclusivity.
 /// - The initial `header` must be given as a value at initialisation time.
 /// - The `header` must store the buffer's `count`and `capacity`:
 ///   - The `capacity` is automatically set to the correct value when attaching the header to storage.
@@ -109,22 +131,22 @@ internal struct AltManagedBufferReference<Header: ManagedBufferHeader, Element> 
   ///
   @inlinable
   internal var header: Header {
-    get { return _wrapped.header }
-    _modify { yield &_wrapped.header }
+    get { withUnsafeMutablePointerToHeader { $0.pointee } }
+    nonmutating _modify { yield &_wrapped.header }  // FIXME: Uses dynamic exclusivity enforcement.
   }
 
   /// The number of elements that have been initialized in this buffer.
   ///
   @inlinable
   internal var count: Int {
-    header.count
+    withUnsafeMutablePointerToHeader { $0.pointee.count }
   }
 
   /// The number of elements that can be stored in this buffer.
   ///
   @inlinable
   internal var capacity: Int {
-    header.capacity
+    withUnsafeMutablePointerToHeader { $0.pointee.capacity }
   }
 
   /// Call `body` with an `UnsafeMutablePointer` to the stored `Header`.
@@ -367,7 +389,7 @@ extension ManagedArrayBuffer {
     // Update the count of our existing storage. Its contents may have been moved out.
     self._storage.header.count = result.bufferCount
     // Adopt any new storage that was allocated.
-    if var newStorage = result.newStorage?.bufferRef {
+    if let newStorage = result.newStorage?.bufferRef {
       newStorage.header.count = result.newStorageCount
       self._storage = newStorage
     }
