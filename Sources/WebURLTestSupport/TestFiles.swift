@@ -46,7 +46,7 @@ public func loadTestFile<T: Decodable>(_ file: TestFile, as: T.Type) throws -> T
       LoadTestFileError.failedToLoad(file, error: $0)
     }.get()
   #else
-    // SwiftPM resources don't appear to work on other platforms, so just... load it from the respository (sigh).
+    // SwiftPM resources don't appear to work on other platforms, so just... load it from the repository (sigh).
     var path = #filePath
     path.removeLast("Resources.swift".utf8.count)
     path += "Resources/\(file.rawValue).json"
