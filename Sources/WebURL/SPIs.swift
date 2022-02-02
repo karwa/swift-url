@@ -58,7 +58,7 @@ extension WebURL {
 
 extension WebURL._SPIs {
 
-  /// Whether or not this URL's scheme is considered "special".
+  /// Whether this URL's scheme is considered "special".
   ///
   /// > Important:
   /// > This property is not considered part of WebURL's supported API.
@@ -67,6 +67,17 @@ extension WebURL._SPIs {
   @inlinable
   public var _isSpecial: Bool {
     _url.schemeKind.isSpecial
+  }
+
+  /// Whether this URL contains a path sigil.
+  ///
+  /// > Important:
+  /// > This property is not considered part of WebURL's supported API.
+  /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
+  ///
+  @inlinable
+  public var _hasPathSigil: Bool {
+    _url.storage.structure.hasPathSigil
   }
 }
 
@@ -183,6 +194,20 @@ extension WebURL._SPIs {
     case .empty:
       return .empty
     }
+  }
+
+  /// Whether this URL's host is an IPv6 address.
+  ///
+  /// > Important:
+  /// > This property is not considered part of WebURL's supported API.
+  /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
+  ///
+  @inlinable
+  public var _isIPv6: Bool {
+    if case .some(.ipv6Address) = _url.hostKind {
+      return true
+    }
+    return false
   }
 }
 
