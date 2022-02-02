@@ -24,7 +24,7 @@ public struct SimpleTestReport {
   }
 
   public struct Reporter {
-    var expectedResult = Result.pass
+    public var expectedResult = Result.pass
     fileprivate var actualResult = Result.pass
     fileprivate var capturedData = [(String, Any)]()
     fileprivate var failureKeys = [String]()
