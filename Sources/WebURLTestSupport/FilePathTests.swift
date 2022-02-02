@@ -244,8 +244,6 @@ public protocol _URLToFilePath_Harness: TestHarnessProtocol where Suite == URLTo
 
 extension URLToFilePathTests.Harness {
 
-  /// Runs the given collection of WPT URL constructor tests.
-  ///
   public func _runTestCase(_ testcase: Suite.TestCase, _ result: inout TestResult<Suite>) {
 
     guard let url = parseSerializedURL(testcase.URL) else {

@@ -20,7 +20,7 @@ extension WPTSetterTest {
   ///
   public struct WebURLReportHarness {
     public private(set) var report = SimpleTestReport()
-    public private(set) var entriesSeen = 0
+    public private(set) var reportedResultCount = 0
 
     public init() {}
   }
@@ -65,39 +65,17 @@ extension WPTSetterTest.WebURLReportHarness: WPTSetterTest.Harness {
     url.urlValues
   }
 
-  public mutating func reportTestResult(_ result: WPTSetterTest.Result) {
-    if case .host = result.property {
-      return  // 'host' setter is not implemented. Pass/failure isn't meaningful.
-    }
-    entriesSeen += 1
-    report.performTest { reporter in
-      reporter.capture(key: "Property", result.property.name)
-      reporter.capture(key: "Testcase", result.testcase)
-      if let actualValues = result.resultingValues {
-        reporter.capture(key: "Result", actualValues)
-      }
+  public mutating func markSection(_ name: String) {
+    report.markSection(name)
+  }
 
-      if !result.failures.isEmpty {
-        var remainingFailures = result.failures
-
-        if let _ = remainingFailures.remove(.failedToParse) {
-          reporter.fail("Starting URL failed to parse")
-        }
-        if let _ = remainingFailures.remove(.propertyMismatches), let actualValues = result.resultingValues {
-          for (property, expectedValue) in result.testcase.expected {
-            if actualValues[property] != expectedValue {
-              reporter.fail(property.name)
-            }
-          }
-        }
-        if let _ = remainingFailures.remove(.notIdempotent) {
-          reporter.fail("<idempotence>")
-        }
-        if !remainingFailures.isEmpty {
-          assertionFailure("Unhandled failure condition")
-          reporter.fail("unknown reason")
-        }
-      }
+  public mutating func reportTestResult(_ result: TestResult<Suite>) {
+    reportedResultCount += 1
+    if case .host = result.testCase.property {
+      // 'host' setter is not implemented. Can't be XFAIL-ed because some setters are no-ops and actually pass.
+      report.skipTest()
+    } else {
+      report.performTest { reporter in reporter.reportTestResult(result) }
     }
   }
 }
