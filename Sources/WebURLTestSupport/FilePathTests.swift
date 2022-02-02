@@ -204,8 +204,8 @@ public enum URLToFilePathTests: TestSuite {
     ///
     public var comment: String?
 
-    /// The given URL to create a file path from. This serialized URL string must be normalized; the result of parsing this string and serializing the result
-    /// must be exactly equal to this string.
+    /// The given URL to create a file path from. This serialized URL string must be normalized;
+    /// the result of parsing this string and serializing the result must be exactly equal to this string.
     ///
     public var URL: String
 
