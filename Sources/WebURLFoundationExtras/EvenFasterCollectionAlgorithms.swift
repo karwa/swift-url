@@ -87,7 +87,9 @@ extension Sequence where Element == UInt8 {
   ///
   @inlinable @inline(__always)
   internal func fastContains(_ element: Element) -> Bool {
-    withContiguousStorageIfAvailable { $0._fastContains(element) } ?? contains(element)
+    // Hoist mask calculation out of wCSIA to ensure it is constant-folded, even if wCSIA isn't inlined.
+    let mask = UInt64(repeatingByte: element)
+    return withContiguousStorageIfAvailable { $0.__fastContains(element: element, mask: mask) } ?? contains(element)
   }
 }
 
@@ -136,12 +138,6 @@ extension UnsafeBufferPointer where Element == UInt8 {
   /// This implementation compares chunks of 8 bytes at a time,
   /// using only 4 instructions per chunk of 8 bytes.
   ///
-  @inlinable @inline(__always)  // mask must be constant-folded.
-  internal func _fastContains(_ element: UInt8) -> Bool {
-    let mask = UInt64(repeatingByte: element)
-    return __fastContains(element: element, mask: mask)
-  }
-
   @inlinable
   internal func __fastContains(element: UInt8, mask: UInt64) -> Bool {
     var i = startIndex
