@@ -19,26 +19,10 @@ import XCTest
 
 final class FilePathTests: ReportGeneratingTestCase {}
 
-fileprivate func loadTestResource(name: String) -> Data? {
-  // Yeah. This is for real.
-  // I'm pretty massively disappointed that I need to do this.
-  #if os(macOS)
-    let url = Bundle.module.url(forResource: "Resources/\(name)", withExtension: "json")!
-    return try? Data(contentsOf: url)
-  #else
-    var path = #filePath
-    path.removeLast("FilePathTests.swift".utf8.count)
-    path += "Resources/\(name).json"
-    return FileManager.default.contents(atPath: path)
-  #endif
-}
-
 extension FilePathTests {
 
   func testFilePathToURL() throws {
-    let data = loadTestResource(name: "file_url_path_tests")!
-    let testFile = try JSONDecoder().decode(FilePathTestFile.self, from: data)
-
+    let testFile = try loadTestFile(.FilePathTests, as: FilePathTestFile.self)
     var harness = FilePathToURLTests.WebURLReportHarness()
     harness.runTests(testFile.file_path_to_url)
     XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
@@ -50,9 +34,7 @@ extension FilePathTests {
   }
 
   func testURLToFilePath() throws {
-    let data = loadTestResource(name: "file_url_path_tests")!
-    let testFile = try JSONDecoder().decode(FilePathTestFile.self, from: data)
-
+    let testFile = try loadTestFile(.FilePathTests, as: FilePathTestFile.self)
     var harness = URLToFilePathTests.WebURLReportHarness()
     harness.runTests(testFile.url_to_file_path)
     XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
