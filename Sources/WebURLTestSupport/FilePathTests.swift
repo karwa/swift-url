@@ -79,36 +79,17 @@ public enum FilePathToURLTests: TestSuite {
     public var reparsedWindows: String?
   }
 
-  public enum TestFailure: Hashable, CustomStringConvertible {
-    case unexpectedFileURL_posix
-    case unexpectedFailureReason_posix
-    case unexpectedResult_posix
-    case notIdempotent_posix
-    case unexpectedFileURL_windows
-    case unexpectedFailureReason_windows
-    case unexpectedResult_windows
-    case notIdempotent_windows
+  // swift-format-ignore
+  public enum TestFailure: String, Hashable, CustomStringConvertible {
+    case unexpectedFileURL_posix = "A URL was created from the given file path, but it was incorrect (POSIX)."
+    case unexpectedFailureReason_posix = "The file path was correctly rejected, but for the wrong reason (POSIX)."
+    case unexpectedResult_posix = "The file path unexpectedly failed to be turned in to a URL, or unexpectedly succeeded (POSIX)."
+    case notIdempotent_posix = "Re-parsing the URL created from the given file path resulted in a different URL (POSIX)."
 
-    public var description: String {
-      switch self {
-      case .unexpectedFileURL_posix:
-        return "A URL was created from the given file path, but it was incorrect (POSIX)."
-      case .unexpectedFailureReason_posix:
-        return "The file path was correctly rejected, but for the wrong reason (POSIX)."
-      case .unexpectedResult_posix:
-        return "The file path unexpectedly failed to be turned in to a URL, or unexpectedly succeeded (POSIX)."
-      case .notIdempotent_posix:
-        return "Re-parsing the URL created from the given file path resulted in a different URL (POSIX)."
-      case .unexpectedFileURL_windows:
-        return "A URL was created from the given file path, but it was incorrect (WINDOWS)."
-      case .unexpectedFailureReason_windows:
-        return "The file path was correctly rejected, but for the wrong reason (WINDOWS)."
-      case .unexpectedResult_windows:
-        return "The file path unexpectedly failed to be turned in to a URL, or unexpectedly succeeded (WINDOWS)."
-      case .notIdempotent_windows:
-        return "Re-parsing the URL created from the given file path resulted in a different URL (WINDOWS)."
-      }
-    }
+    case unexpectedFileURL_windows = "A URL was created from the given file path, but it was incorrect (WINDOWS)."
+    case unexpectedFailureReason_windows = "The file path was correctly rejected, but for the wrong reason (WINDOWS)."
+    case unexpectedResult_windows = "The file path unexpectedly failed to be turned in to a URL, or unexpectedly succeeded (WINDOWS)."
+    case notIdempotent_windows = "Re-parsing the URL created from the given file path resulted in a different URL (WINDOWS)."
   }
 }
 
@@ -233,36 +214,18 @@ public enum URLToFilePathTests: TestSuite {
     public var windows: Result<String, FailureReason>? = nil
   }
 
-  public enum TestFailure: Hashable, CustomStringConvertible {
-    case failedToParseURL
-    case URLIsNotNormalized
-    case unexpectedPath_posix
-    case unexpectedFailureReason_posix
-    case unexpectedResult_posix
-    case unexpectedPath_windows
-    case unexpectedFailureReason_windows
-    case unexpectedResult_windows
+  // swift-format-ignore
+  public enum TestFailure: String, Hashable, CustomStringConvertible {
+    case failedToParseURL = "Failed to parse the given URL."
+    case URLIsNotNormalized = "Given URL is not normalized, was altered by the parser."
 
-    public var description: String {
-      switch self {
-      case .failedToParseURL:
-        return "Failed to parse the given URL."
-      case .URLIsNotNormalized:
-        return "Given URL is not normalized, was altered by the parser."
-      case .unexpectedPath_posix:
-        return "The path created from the URL was not correct (POSIX)."
-      case .unexpectedFailureReason_posix:
-        return "The URL correctly failed to produce a path, but the reason was incorrect (POSIX)."
-      case .unexpectedResult_posix:
-        return "The URL either unexpectedly produced a path, or unexpectedly failed to do so (POSIX)."
-      case .unexpectedPath_windows:
-        return "The path created from the URL was not correct (WINDOWS)."
-      case .unexpectedFailureReason_windows:
-        return "The URL correctly failed to produce a path, but the reason was incorrect (WINDOWS)."
-      case .unexpectedResult_windows:
-        return "The URL either unexpectedly produced a path, or unexpectedly failed to do so (WINDOWS)."
-      }
-    }
+    case unexpectedPath_posix = "The path created from the URL was not correct (POSIX)."
+    case unexpectedFailureReason_posix = "The URL correctly failed to produce a path, but the reason was incorrect (POSIX)."
+    case unexpectedResult_posix = "The URL either unexpectedly produced a path, or unexpectedly failed to do so (POSIX)."
+
+    case unexpectedPath_windows = "The path created from the URL was not correct (WINDOWS)."
+    case unexpectedFailureReason_windows = "The URL correctly failed to produce a path, but the reason was incorrect (WINDOWS)."
+    case unexpectedResult_windows = "The URL either unexpectedly produced a path, or unexpectedly failed to do so (WINDOWS)."
   }
 }
 
