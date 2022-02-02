@@ -87,7 +87,7 @@ extension WebPlatformTests {
     let testFile = try loadTestFile(.WPTURLSetterTests, as: WPTSetterTest.TestFile.self)
     var harness = WPTSetterTest.WebURLReportHarness()
     harness.runTests(testFile)
-    XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
+    XCTAssert(harness.reportedResultCount > 0, "Failed to execute any tests")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "weburl_setters_wpt.txt")
@@ -99,7 +99,7 @@ extension WebPlatformTests {
     let testFile = try loadTestFile(.WebURLAdditionalSetterTests, as: WPTSetterTest.TestFile.self)
     var harness = WPTSetterTest.WebURLReportHarness()
     harness.runTests(testFile)
-    XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
+    XCTAssert(harness.reportedResultCount > 0, "Failed to execute any tests")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "weburl_setters_more.txt")
