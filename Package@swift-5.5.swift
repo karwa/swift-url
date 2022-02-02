@@ -59,13 +59,13 @@ let package = Package(
     ),
     .target(
       name: "WebURLTestSupport",
-      dependencies: ["WebURL"]
+      dependencies: ["WebURL"],
+      resources: [.copy("Resources")]
     ),
     // Tests.
     .testTarget(
       name: "WebURLTests",
-      dependencies: ["WebURL", "WebURLTestSupport", "Checkit"],
-      resources: [.copy("Resources")]
+      dependencies: ["WebURL", "WebURLTestSupport", "Checkit"]
     ),
     .testTarget(
       name: "WebURLDeprecatedAPITests",

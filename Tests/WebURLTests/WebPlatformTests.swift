@@ -19,21 +19,6 @@ import XCTest
 
 final class WebPlatformTests: ReportGeneratingTestCase {}
 
-fileprivate func loadTestResource(name: String) -> Data? {
-  // Yeah. This is for real.
-  // I'm pretty massively disappointed that I need to do this.
-  #if os(macOS)
-    let url = Bundle.module.url(forResource: "Resources/\(name)", withExtension: "json")!
-    return try? Data(contentsOf: url)
-  #else
-    var path = #filePath
-    path.removeLast("WebPlatformTests.swift".utf8.count)
-    path += "Resources/\(name).json"
-    return FileManager.default.contents(atPath: path)
-  #endif
-}
-
-
 // --------------------------------------------
 // MARK: - URL Constructor
 // --------------------------------------------
@@ -45,8 +30,7 @@ fileprivate func loadTestResource(name: String) -> Data? {
 extension WebPlatformTests {
 
   func testURLConstructor() throws {
-    let data = loadTestResource(name: "urltestdata")!
-    let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: data)
+    let testFile = try loadTestFile(.WPTURLConstructorTests, as: WPTConstructorTest.TestFile.self)
     assert(
       testFile.tests.count == 765,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
@@ -77,9 +61,7 @@ extension WebPlatformTests {
   }
 
   func testURLConstructor_additional() throws {
-    let data = loadTestResource(name: "additional_constructor_tests")!
-    let testFile = try JSONDecoder().decode(WPTConstructorTest.TestFile.self, from: data)
-
+    let testFile = try loadTestFile(.WebURLAdditionalConstructorTests, as: WPTConstructorTest.TestFile.self)
     var harness = WPTConstructorTest.WebURLReportHarness()
     harness.runTests(testFile)
     XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
@@ -102,9 +84,7 @@ extension WebPlatformTests {
 extension WebPlatformTests {
 
   func testURLSetters() throws {
-    let data = loadTestResource(name: "setters_tests")!
-    let testFile = try JSONDecoder().decode(WPTSetterTest.TestFile.self, from: data)
-
+    let testFile = try loadTestFile(.WPTURLSetterTests, as: WPTSetterTest.TestFile.self)
     var harness = WPTSetterTest.WebURLReportHarness()
     harness.runTests(testFile)
     XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
@@ -116,9 +96,7 @@ extension WebPlatformTests {
   }
 
   func testURLSetters_additional() throws {
-    let data = loadTestResource(name: "additional_setters_tests")!
-    let testFile = try JSONDecoder().decode(WPTSetterTest.TestFile.self, from: data)
-
+    let testFile = try loadTestFile(.WebURLAdditionalSetterTests, as: WPTSetterTest.TestFile.self)
     var harness = WPTSetterTest.WebURLReportHarness()
     harness.runTests(testFile)
     XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
