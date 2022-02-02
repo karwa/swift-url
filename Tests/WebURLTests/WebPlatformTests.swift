@@ -32,7 +32,7 @@ extension WebPlatformTests {
   func testURLConstructor() throws {
     let testFile = try loadTestFile(.WPTURLConstructorTests, as: WPTConstructorTest.TestFile.self)
     assert(
-      testFile.tests.count == 765,
+      testFile.count == 765,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
 
@@ -52,7 +52,7 @@ extension WebPlatformTests {
       610,  // domain2ascii: IDNA ignored code points in file URLs hosts.
     ])
     harness.runTests(testFile)
-    XCTAssertEqual(harness.entriesSeen, 765, "Unexpected number of tests executed.")
+    XCTAssertEqual(harness.reportedResultCount, 666, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "weburl_constructor_wpt.txt")
@@ -64,7 +64,7 @@ extension WebPlatformTests {
     let testFile = try loadTestFile(.WebURLAdditionalConstructorTests, as: WPTConstructorTest.TestFile.self)
     var harness = WPTConstructorTest.WebURLReportHarness()
     harness.runTests(testFile)
-    XCTAssert(harness.entriesSeen > 0, "Failed to execute any tests")
+    XCTAssert(harness.reportedResultCount > 0, "Failed to execute any tests")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "weburl_constructor_more.txt")
