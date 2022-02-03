@@ -33,7 +33,7 @@
 @usableFromInline
 internal protocol BufferContainer {
   associatedtype Element
-  func withUnsafeMutablePointerToElements<R>(_ body: (UnsafeMutablePointer<Element>) throws -> R) rethrows -> R
+  mutating func withUnsafeMutablePointerToElements<R>(_ body: (UnsafeMutablePointer<Element>) throws -> R) rethrows -> R
 }
 
 /// Given a `buffer`, representing an entire allocation in which `0..<initializedCount` are initialized elements
@@ -134,7 +134,7 @@ internal func replaceElements<T: BufferContainer>(
     }
     return (bufferCount: newCount, insertedCount: insertCount, newStorage: nil, newStorageCount: 0)
   }
-  let newStorage = storageConstructor(finalCount)
+  var newStorage = storageConstructor(finalCount)
   let srcBuffer = UnsafeMutableBufferPointer(rebasing: buffer.prefix(initializedCount))
   let newCount = newStorage.withUnsafeMutablePointerToElements { newBufferPtr -> Int in
     let newBuffer = UnsafeMutableBufferPointer(start: newBufferPtr, count: finalCount)
