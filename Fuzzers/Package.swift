@@ -18,6 +18,7 @@ import PackageDescription
 
 let package = Package(
   name: "swift-url-fuzzers",
+  platforms: [.macOS(.v10_15)],
   products: [
     // Parses a single input as a URL string.
     // Valid URLs are re-parsed to ensure parsing/serialization is idempotent.
@@ -26,6 +27,10 @@ let package = Package(
     // Parses a single input as a Swift String, then a Foundation URL.
     // If successful, converts the URL to a WebURL and checks for semantic equivalence.
     .executable(name: "foundation-to-web", targets: ["foundation-to-web"]),
+
+    // Parses a single input as a URL string.
+    // If successful, converts the URL to a Foundation URL and checks for semantic equivalence.
+    .executable(name: "web-to-foundation", targets: ["web-to-foundation"]),
   ],
   dependencies: [
     .package(name: "swift-url", path: "..")
@@ -38,6 +43,14 @@ let package = Package(
     ),
     .target(
       name: "foundation-to-web",
+      dependencies: [
+        .product(name: "WebURL", package: "swift-url"),
+        .product(name: "WebURLFoundationExtras", package: "swift-url"),
+      ],
+      swiftSettings: [.unsafeFlags(["-parse-as-library", "-sanitize=fuzzer,address"])]
+    ),
+    .target(
+      name: "web-to-foundation",
       dependencies: [
         .product(name: "WebURL", package: "swift-url"),
         .product(name: "WebURLFoundationExtras", package: "swift-url"),
