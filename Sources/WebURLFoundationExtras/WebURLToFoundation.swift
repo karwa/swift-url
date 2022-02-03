@@ -424,6 +424,20 @@ extension WebURL._SPIs {
 // --------------------------------------------
 
 
+extension WebURL._SPIs {
+
+  /// Code-points banned by RFC-2396 for use as subcomponent delimiters.
+  ///
+  /// > Important:
+  /// > This propwrty is not considered part of WebURL's supported API.
+  /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
+  ///
+  @available(macOS 10.15.0, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
+  public static var RFC2396DisallowedSubdelims: some PercentEncodeSet {
+    WebURLFoundationExtras.RFC2396DisallowedSubdelims()
+  }
+}
+
 /// Code-points banned by RFC-2396 for use as subcomponent delimiters.
 ///
 /// RFC-2396 forbids the following code-points from being used unless escaped.
