@@ -13,10 +13,10 @@
 // limitations under the License.
 
 import Foundation
-import WebURL
 import WebURLTestSupport
 import XCTest
 
+@testable import WebURL
 @testable import WebURLFoundationExtras
 
 /// Asserts that the given URLs contain an equivalent set of components,
@@ -270,6 +270,25 @@ extension WebToFoundationTests {
     test: do {
       let url = WebURL("sc:hello world?foo#bar")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+    }
+
+    // Opaque path with square bracket.
+    // These should fail because Foundation percent-encodes it ("p:%5B")
+    test: do {
+      let url = WebURL("p:[")!
+      XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+    }
+
+    // Opaque path with semicolon and non-UTF8 percent-encoding.
+    // This *can* be converted, but URLComponents isn't able to verify it.
+    test: do {
+      let url = WebURL("ht:;//%E90")!
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      XCTAssertEqual(converted.absoluteString, "ht:;//%E90")
+      XCTAssertEquivalentURLs(url, converted)
     }
   }
 }

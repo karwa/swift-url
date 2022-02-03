@@ -128,6 +128,13 @@ extension WebURL._SPIs {
     _ webURL: WebURL, _ foundationURL: Foundation.URL, foundationString: UnsafeBufferPointer<UInt8>, shortcuts: Bool
   ) -> Bool {
 
+    // Require exact string equality.
+    // This ensures that Foundation didn't encode anything we didn't want it to
+    // (e.g. square brackets or '#'s in opaque paths), and is a useful for guaranteeing round-tripping.
+    guard foundationString.fastElementsEqual(webURL.utf8) else {
+      return false
+    }
+
     // Scheme:
 
     guard foundationURL.scheme?._withContiguousUTF8({ webURL.utf8.scheme.fastElementsEqual($0) }) == true else {
@@ -139,8 +146,7 @@ extension WebURL._SPIs {
 
     guard !webURL.hasOpaquePath else {
       if shortcuts {
-        // For some reason, if a URL with opaque path has a fragment, Foundation percent-encodes the '#'.
-        return webURL.utf8.fragment == nil
+        return true
       } else {
         return checkURLWithOpaquePathEquivalenceUsingURLComponents_w2f(webURL, foundationURL)
       }
@@ -380,7 +386,7 @@ extension WebURL._SPIs {
     // Opaque path:
 
     let foundationPath = foundationComponents.percentEncodedPath
-    guard !foundationPath.utf8.lazy.percentDecoded().fastContains(UInt8(ascii: ";")) else {
+    guard !foundationPath.isEmpty, !foundationPath.utf8.lazy.percentDecoded().fastContains(UInt8(ascii: ";")) else {
       return true  // Unable to validate.
     }
     guard foundationPath._withContiguousUTF8({ webURL.utf8.path.fastElementsEqual($0) }) else {
