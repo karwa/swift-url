@@ -422,13 +422,21 @@ extension WebURL {
 
   /// Creates a `WebURL` that is equivalent to the given `URL` from Foundation.
   ///
-  /// The resulting `WebURL` is normalized according to the requirements of the WHATWG URL Standard,
-  /// and its components are verified to ensure that normalization is compatible with the RFC-2396
-  /// interpretation of the URL (RFC-2396 is the standard Foundation's `URL` conforms to).
+  /// When converting between `Foundation.URL` and `WebURL`, the URL strings and components are verified
+  /// as equivalent, although they may not be identical. Conversion from Foundation to WebURL requires
+  /// normalization - such as canonicalizing obscure IP addresses, or simplifying the path.
+  /// This is necessary because they conform to different URL standards.
   ///
-  /// The vast majority of `URL`s can be converted, but there are some exceptions.
-  /// In particular, the URL must be absolute (with or without a `baseURL`), and some invalid http(s) URLs
-  /// are deemed invalid by the WHATWG URL Standard.
+  /// If the given Foundation URL was previously created from a `WebURL`, it should already be normalized,
+  /// and will _round-trip_ to an identical `WebURL` as was used to create it. See WebURL's `.encodedForFoundation`
+  /// property for more information about round-tripping.
+  ///
+  /// The vast majority of `URL`s from Foundation can be converted, but there are some exceptions.
+  /// In particular, the URL must be have a scheme (such as `"https"`, `"file"`, or your own custom scheme),
+  /// and schemes known to the URL Standard (such as http/s and file URLs) require some additional validation.
+  ///
+  /// - parameters:
+  ///   - foundationURL: The URL to convert
   ///
   public init?(_ foundationURL: URL) {
 

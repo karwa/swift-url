@@ -28,9 +28,7 @@ public func web_to_foundation(_ start: UnsafePointer<UInt8>, _ count: Int) -> CI
   }
 
   // If we agree to convert the URL, check equivalence without taking shortcuts.
-  var encodedWebURL = webURL
-  let _ = encodedWebURL._spis._addPercentEncodingToAllComponents(WebURL._SPIs.RFC2396DisallowedSubdelims)
-
+  let encodedWebURL = webURL.encodedForFoundation
   var foundationURLString = foundationURL.absoluteString
   let areEquivalent = foundationURLString.withUTF8 {
     WebURL._SPIs._checkEquivalence_w2f(encodedWebURL, foundationURL, foundationString: $0, shortcuts: false)
