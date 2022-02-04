@@ -257,10 +257,37 @@ import WebURL
 //      as an IPv4 address, the final label must _entirely_ consist of digits or be a hex number,
 //      rather than just starting with an initial digit.
 //
-//      This is a meaningful difference (❌). The hostname "hello.0a" is presumably invalid by RFC-2396,
-//      since its final label starts with a digit, but clearly it is _not_ a valid IPv4 address.
-//      The WHATWG URL Standard considers this a valid domain, so these hostnames must be rejected.
-//      https://github.com/whatwg/url/issues/679
+//      This is potentially a meaningful difference (🤷‍♂️). The hostname "hello.0a" is presumably invalid
+//      by RFC-2396, since its final label starts with a digit, but clearly it is _not_ a valid IPv4 address.
+//      The WHATWG URL Standard considers this a valid domain.
+//
+//      We opt to allow these, for 3 reasons:
+//
+//      1. RFC-2396 considers it invalid anyway.
+//
+//         This difference would not allow "hello.0a" or "127.0.0.1foo" to be considered IPv4 addresses.
+//
+//      2. RFC-1123 (referenced by RFC-2396) appears to (perhaps, technically) allow it.
+//
+//         RFC-1123 says that any domain label is allowed to be purely numeric, and mentions in a discussion section
+//         that the TLD "will be alphabetic", but discussion sections "contain[s] suggested approaches that
+//         an implementor may want to consider" and so appear to be informative rather than normative.
+//         https://datatracker.ietf.org/doc/html/rfc1123#section-2
+//
+//      3. It appears to be compatible with RFC-3986 (✅), which does not mention using the final label
+//         to distinguish the kind of host:
+//
+//         >    host        = IP-literal / IPv4address / reg-name
+//         >
+//         > The syntax rule for host is ambiguous because it does not completely
+//         > distinguish between an IPv4address and a reg-name.  In order to
+//         > disambiguate the syntax, we apply the "first-match-wins" algorithm:
+//         > If host matches the rule for IPv4address, then it should be
+//         > considered an IPv4 address literal and not a reg-name.
+//         https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2
+//
+//         Since this only applies to http(s), ws(s), ftp and file URLs, and the HTTP/WS standards
+//         all reference RFC-3986 rather than RFC-2396, it appears safe to use the WHATWG interpretation.
 //
 //      Another potential difference is that the WHATWG URL Standard percent-decodes server-based hostnames
 //      before interpreting them, whilst RFC-2396 appears to not allow percent-encoding in these hostnames.
@@ -519,22 +546,7 @@ extension WebURL._SPIs {
         return false
       }
     case .domain(let webURLHost):
-      guard let foundationHost = foundationHost else {
-        return false
-      }
-      // Reject domains whose last label starts with a digit. RFC-2396 says these are IPv4 addresses, not domains.
-      var trimmedFoundationHost = foundationHost.utf8[...]
-      if trimmedFoundationHost.last == UInt8(ascii: ".") {
-        trimmedFoundationHost.removeLast()
-      }
-      if var lastLabelStart = trimmedFoundationHost.lastIndex(of: UInt8(ascii: ".")) {
-        trimmedFoundationHost.formIndex(after: &lastLabelStart)
-        let digits = UInt8(ascii: "0")...UInt8(ascii: "9")
-        if lastLabelStart < trimmedFoundationHost.endIndex, digits.contains(trimmedFoundationHost[lastLabelStart]) {
-          return false
-        }
-      }
-      guard webURLHost.fastElementsEqual(foundationHost.lowercased().utf8) else {
+      guard let foundationHost = foundationHost, webURLHost.fastElementsEqual(foundationHost.lowercased().utf8) else {
         return false
       }
     case .opaque(let webURLHostname):

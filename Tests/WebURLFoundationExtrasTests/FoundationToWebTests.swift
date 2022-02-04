@@ -645,6 +645,38 @@ extension FoundationToWebTests {
       XCTAssertEqual(convertedURL.host, .opaque("%3127%2e0%2e0%2e1"))
     }
 
+    // [Hostname]: RFC-2396 says if the last label starts with a number, the host is IPv4,
+    // but the WHATWG's standard says the last label must be entirely digits or a hex number.
+    // We consider this safe; it means some hostnames that are not valid IP addresses are considered
+    // valid domains, so there is no ambiguity and it also agrees with RFC-3986.
+    test: do {
+      let foundationURL = URL(string: "http://ab.0a")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://ab.0a")
+      XCTAssertEqual(foundationURL.host, "ab.0a")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+
+      XCTAssertEqual(convertedURL.serialized(), "http://ab.0a/")
+      XCTAssertEqual(convertedURL.host, .domain("ab.0a"))
+    }
+    // Non-special schemes are not even interpreted by the WHATWG standard,
+    // so this concern would never have applied to them anyway.
+    test: do {
+      let foundationURL = URL(string: "foo://ab.0a")!
+      XCTAssertEqual(foundationURL.absoluteString, "foo://ab.0a")
+      XCTAssertEqual(foundationURL.host, "ab.0a")
+
+      guard let convertedURL = WebURL(foundationURL) else {
+        XCTFail("Unexpected failure to convert: \(foundationURL)")
+        break test
+      }
+      XCTAssertEqual(convertedURL.serialized(), "foo://ab.0a")
+      XCTAssertEqual(convertedURL.host, .opaque("ab.0a"))
+    }
+
     // [Port]: may be omitted if it is the scheme's default port.
     test: do {
       let foundationURL = URL(string: "http://example.com:80/")!
@@ -819,38 +851,6 @@ extension FoundationToWebTests {
       XCTAssertEqual(webURL.username, nil)
       XCTAssertEqual(webURL.password, nil)
       XCTAssertEqual(webURL.hostname, "hostname.com")
-    }
-
-    // [Hostname]: differences in deciding which hostnames are domains vs IPv4.
-    // RFC-2396 says if the last label starts with a number, the host is IPv4,
-    // but the WHATWG's standard says the last label must be entirely digits or a hex number.
-    test: do {
-      let foundationURL = URL(string: "http://ab.0a")!
-      XCTAssertEqual(foundationURL.absoluteString, "http://ab.0a")
-      XCTAssertEqual(foundationURL.host, "ab.0a")
-
-      XCTAssertNil(WebURL(foundationURL))
-
-      let webURL = WebURL("http://ab.0a")!
-      XCTAssertEqual(webURL.serialized(), "http://ab.0a/")
-      XCTAssertEqual(webURL.host, .domain("ab.0a"))
-    }
-    // This does not apply to non-special schemes, as they are not interpreted by the WHATWG standard.
-    test: do {
-      let foundationURL = URL(string: "foo://ab.0a")!
-      XCTAssertEqual(foundationURL.absoluteString, "foo://ab.0a")
-      XCTAssertEqual(foundationURL.host, "ab.0a")
-
-      guard let convertedURL = WebURL(foundationURL) else {
-        XCTFail("Unexpected failure to convert: \(foundationURL)")
-        break test
-      }
-      XCTAssertEqual(convertedURL.serialized(), "foo://ab.0a")
-      XCTAssertEqual(convertedURL.host, .opaque("ab.0a"))
-
-      let webURL = WebURL("foo://ab.0a")!
-      XCTAssertEqual(webURL.serialized(), "foo://ab.0a")
-      XCTAssertEqual(webURL.host, .opaque("ab.0a"))
     }
 
     // Stripping "localhost" from file URLs is not a safe conversion.
