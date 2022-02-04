@@ -83,6 +83,29 @@ extension WebURL._SPIs {
 
 
 // --------------------------------------------
+// MARK: - URLStructure equality
+// --------------------------------------------
+
+
+extension WebURL._SPIs {
+
+  /// Whether this URL's internal URLStructure is equivalent to `other`'s URLStructure.
+  ///
+  /// If two URLs have the same code-units, they should have identical URLStructures.
+  /// This function is used by tests and fuzzers to check the URL's internal state,
+  /// and ensure this is the case.
+  ///
+  /// > Important:
+  /// > This function is not considered part of WebURL's supported API.
+  /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
+  ///
+  public func _describesSameStructure(as other: WebURL) -> Bool {
+    _url.storage.structure.describesSameStructure(as: other.storage.structure)
+  }
+}
+
+
+// --------------------------------------------
 // MARK: - Path Parsing
 // --------------------------------------------
 
