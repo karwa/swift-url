@@ -31,7 +31,7 @@ public func foundation_to_web(_ start: UnsafePointer<UInt8>, _ count: Int) -> CI
   // If WebURL agrees to convert the URL, check equivalence without taking shortcuts.
   var foundationURLString = foundationURL.absoluteString
   let areEquivalent = foundationURLString.withUTF8 { foundationStringUTF8 in
-    WebURL._SPIs._checkEquivalence(webURL, foundationURL, foundationString: foundationStringUTF8, shortcuts: false)
+    WebURL._SPIs._checkEquivalence_f2w(webURL, foundationURL, foundationString: foundationStringUTF8, shortcuts: false)
   }
   guard areEquivalent else {
     fatalError(

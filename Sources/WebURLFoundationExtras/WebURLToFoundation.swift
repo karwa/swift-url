@@ -96,20 +96,19 @@ extension WebURL._SPIs {
 
   /// Returns whether the given WebURL and Foundation.URL have an equivalent set of components.
   ///
-  /// This function assumes that the Foundation.URL has been parsed from a serialized WebURL.
-  /// That means it assumes components in the Foundation URL are already normalized
-  /// (for example, that the scheme has been lowercased, and hostnames that are IP-address are in their canonical form),
-  /// and that it may perform simpler/stricter equivalence checks.
+  /// This function is designed to check WebURL to Foundation conversions.
+  /// As such, it requires both the URL string and its components to be identical between the two URLs;
+  /// for example, the scheme is assumed to already be lowercased, and IP-address are in their canonical form.
+  /// This is a much stricter equivalence check than is used by Foundation to WebURL conversion.
   ///
-  /// Getting components from Foundation can be very expensive, even if the value is nil.
-  /// If `shortcuts` is `true`, this function takes steps to avoid checking each individual component:
-  /// for example, if Foundation's URL string does not contain a `"@"` character anywhere, it is assumed
-  /// that `foundationURL` will return `nil` for both username or password, and we can check that `webURL` agrees
-  /// rather than actually calling Foundation's getters.
+  /// If `shortcuts` is `true`, this function takes steps to avoid checking each individual component.
+  /// For example, if Foundation's URL string does not contain a `"@"` character anywhere, it is assumed
+  /// that Foundation's URL will not return a username or password, and we can simply check that `webURL` agrees
+  /// rather than actually calling getter for those components (as they are very expensive, even if the value is nil).
   ///
-  /// These shortcuts should not reduce the effectiveness of this function (i.e. it should not fail to catch any
-  /// differences in interpretation between Foundation and WebURL), but only if `foundationURL` has been parsed
-  /// from `webURL.serialized()`. The shortcuts are verified by testing, including fuzz-testing.
+  /// These shortcuts are only safe if `foundationURL` has been parsed from `webURL.serialized()`,
+  /// and are verified by tests, including fuzz-testing. If shortcuts is `false`, every component is checked
+  /// and this function makes no assumptions that the two URLs are related at all.
   ///
   /// - parameters:
   ///   - webURL:           A WebURL value to compare for equivalence.
@@ -294,7 +293,7 @@ extension WebURL._SPIs {
 
   /// Returns whether the given WebURL and Foundation.URL have an equivalent set of user-info components.
   ///
-  /// This function is deliberately outlined from `_checkEquivalence`.
+  /// This function is deliberately outlined from `_checkEquivalence_w2f`.
   ///
   @inline(never)
   private static func checkUserInfoEquivalence_w2f(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
@@ -342,6 +341,8 @@ extension WebURL._SPIs {
   /// Returns whether the given WebURL and Foundation.URL (as interpreted by URLComponents) have an equivalent path,
   /// although it is not possible to verify in all circumstances.
   ///
+  /// This function is deliberately outlined from `_checkEquivalence_w2f`.
+  ///
   @inline(never)
   private static func checkPathEquivalenceUsingURLComponents_w2f(
     _ webURL: WebURL, _ foundationURL: URL
@@ -371,6 +372,8 @@ extension WebURL._SPIs {
   /// set of components, given that the URL has an opaque path.
   ///
   /// It is not possible to verify the components in all circumstances.
+  ///
+  /// This function is deliberately outlined from `_checkEquivalence_w2f`.
   ///
   @inline(never)
   private static func checkURLWithOpaquePathEquivalenceUsingURLComponents_w2f(

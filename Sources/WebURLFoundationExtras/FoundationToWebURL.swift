@@ -436,7 +436,7 @@ extension WebURL {
     let equivalentWebURL = _foundationString.withUTF8 { foundationString -> WebURL? in
       guard
         let webURL = WebURL(utf8: foundationString),
-        WebURL._SPIs._checkEquivalence(webURL, foundationURL, foundationString: foundationString, shortcuts: true)
+        WebURL._SPIs._checkEquivalence_f2w(webURL, foundationURL, foundationString: foundationString, shortcuts: true)
       else {
         return nil
       }
@@ -460,16 +460,19 @@ extension WebURL._SPIs {
 
   /// Returns whether the given WebURL and Foundation.URL have an equivalent set of components.
   ///
-  /// URL components are not required to have identical contents to be considered equivalent;
-  /// certain kinds of normalization required by the WHATWG URL Standard are allowed if (and only if)
-  /// they are compatible with RFC-2396.
+  /// This function is designed to check Foundation to WebURL conversions.
+  /// As such, neither the URL string nor its components are required to be identical between the two URLs;
+  /// certain kinds of normalization that are required by the WHATWG URL Standard are allowed if
+  /// they are considered compatible with RFC-2396 (the standard Foundation's URL conforms to).
   ///
   /// If `shortcuts` is `true`, this function takes steps to avoid checking each individual component.
   /// For example, if Foundation's URL string does not contain a `"@"` character anywhere, it is assumed
-  /// that the URL does not contain a username or password, and we can simply check that `webURL` agrees
-  /// rather than actually getting the components from Foundation (which is expensive, even if the value is nil).
+  /// that Foundation's URL will not return a username or password, and we can simply check that `webURL` agrees
+  /// rather than actually calling getter for those components (as they are very expensive, even if the value is nil).
+  ///
   /// These shortcuts are only safe if `webURL` has been parsed from `foundationURL.absoluteString`,
-  /// and are verified by tests, including fuzz-testing.
+  /// and are verified by tests, including fuzz-testing. If shortcuts is `false`, every component is checked
+  /// and this function makes no assumptions that the two URLs are related at all.
   ///
   /// - parameters:
   ///   - webURL:           A WebURL value to compare for equivalence.
@@ -484,7 +487,7 @@ extension WebURL._SPIs {
   /// > This function is not considered part of WebURL's supported API.
   /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
   ///
-  public static func _checkEquivalence(
+  public static func _checkEquivalence_f2w(
     _ webURL: WebURL, _ foundationURL: URL, foundationString: UnsafeBufferPointer<UInt8>, shortcuts: Bool
   ) -> Bool {
 
@@ -527,7 +530,7 @@ extension WebURL._SPIs {
         return false
       }
     } else {
-      guard checkUserInfoEquivalence(webURL, foundationURL) else {
+      guard checkUserInfoEquivalence_f2w(webURL, foundationURL) else {
         return false
       }
     }
@@ -596,7 +599,7 @@ extension WebURL._SPIs {
     // of the URL string was the URL's path component.
 
     if !shortcuts {
-      guard checkPathEquivalenceUsingURLComponents(webURL, foundationURL) else {
+      guard checkPathEquivalenceUsingURLComponents_f2w(webURL, foundationURL) else {
         return false
       }
     }
@@ -666,10 +669,10 @@ extension WebURL._SPIs {
 
   /// Returns whether the given WebURL and Foundation.URL have an equivalent set of user-info components.
   ///
-  /// This function is deliberately outlined from `_checkEquivalence`.
+  /// This function is deliberately outlined from `_checkEquivalence_f2w`.
   ///
   @inline(never)
-  private static func checkUserInfoEquivalence(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
+  private static func checkUserInfoEquivalence_f2w(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
 
     // Username:
 
@@ -728,8 +731,10 @@ extension WebURL._SPIs {
   /// simplification preserves equivalence, so in effect it is only checking that WebURL and URLComponents
   /// agree about which part of the URL string contains the path.
   ///
+  /// This function is deliberately outlined from `_checkEquivalence_f2w`.
+  ///
   @inline(never)
-  private static func checkPathEquivalenceUsingURLComponents(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
+  private static func checkPathEquivalenceUsingURLComponents_f2w(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
 
     guard let fndRawPath = URLComponents(url: foundationURL, resolvingAgainstBaseURL: true)?.percentEncodedPath else {
       return true  // Unable to validate.

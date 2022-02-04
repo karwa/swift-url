@@ -150,7 +150,7 @@ extension WebToFoundationTests {
 
           // 5. Check equivalence again, using the Foundation-to-WebURL function (no shortcuts).
           areEquivalent = foundationString.withUTF8 {
-            WebURL._SPIs._checkEquivalence(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
+            WebURL._SPIs._checkEquivalence_f2w(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
           }
           reporter.expectTrue(areEquivalent, "Equivalence (Round-trip)")
 
@@ -206,11 +206,11 @@ extension WebToFoundationTests {
 ///
 /// Checks are performed using:
 ///
-/// - `_checkEquivalence_w2f`, which requires string equality
-/// - `_checkEquivalence` (foundation-to-web), which does not require string equality
+/// - `_checkEquivalence_w2f`, which requires string equality, and
+/// - `_checkEquivalence_f2w`, which does not require string equality
 ///
 /// Additionally, this function asserts that the converted URL can round-trip back to a WebURL.
-/// That conversion is also checked using both `_checkEquivalence_w2f` and `_checkEquivalence`,
+/// That conversion is also checked using both `_checkEquivalence_w2f` and `_checkEquivalence_f2w`,
 /// and the result must have the same structure and code-units as the given WebURL.
 ///
 fileprivate func XCTAssertEquivalentURLs(_ webURL: WebURL, _ foundationURL: URL, _ message: String = "") {
@@ -230,7 +230,7 @@ fileprivate func XCTAssertEquivalentURLs(_ webURL: WebURL, _ foundationURL: URL,
 
   // 2. Double-check using the foundation-to-web equivalence checks.
   areEquivalent = urlString.withUTF8 {
-    WebURL._SPIs._checkEquivalence(webURL, foundationURL, foundationString: $0, shortcuts: false)
+    WebURL._SPIs._checkEquivalence_f2w(webURL, foundationURL, foundationString: $0, shortcuts: false)
   }
   XCTAssertTrue(areEquivalent, "\(message) [FoundationToWeb]")
 
@@ -246,7 +246,7 @@ fileprivate func XCTAssertEquivalentURLs(_ webURL: WebURL, _ foundationURL: URL,
     WebURL._SPIs._checkEquivalence_w2f(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
   }
   areEquivalent = foundationString.withUTF8 {
-    WebURL._SPIs._checkEquivalence(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
+    WebURL._SPIs._checkEquivalence_f2w(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
   }
   XCTAssertTrue(areEquivalent, "\(message) [Round-Trip Equivalence To Source]")
 
