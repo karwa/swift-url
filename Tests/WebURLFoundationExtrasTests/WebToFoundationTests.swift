@@ -19,29 +19,6 @@ import XCTest
 @testable import WebURL
 @testable import WebURLFoundationExtras
 
-/// Asserts that the given URLs contain an equivalent set of components,
-/// without taking any shortcuts or making assumptions that they originate from the same string.
-///
-fileprivate func XCTAssertEquivalentURLs(_ webURL: WebURL, _ foundationURL: URL, _ message: String = "") {
-  var message = message
-  if !message.isEmpty {
-    message += " -- "
-  }
-  message += "Foundation: \(foundationURL) -- WebURL: \(webURL)"
-
-  var urlString = foundationURL.absoluteString
-  // Check using the simplified web-to-foundation equivalence checks.
-  var areEquivalent = urlString.withUTF8 {
-    WebURL._SPIs._checkEquivalence_w2f(webURL, foundationURL, foundationString: $0, shortcuts: false)
-  }
-  XCTAssertTrue(areEquivalent, "\(message) [WebToFoundation]")
-  // Also check using the foundation-to-web equivalence checks.
-  areEquivalent = urlString.withUTF8 {
-    WebURL._SPIs._checkEquivalence(webURL, foundationURL, foundationString: $0, shortcuts: false)
-  }
-  XCTAssertTrue(areEquivalent, "\(message) [FoundationToWeb]")
-}
-
 extension WebURL {
   fileprivate var withEncodedRFC2396DisallowedSubdelims: WebURL {
     var copy = self
@@ -160,10 +137,29 @@ extension WebToFoundationTests {
 
           // 3. Check equivalence without shortcuts.
           var foundationString = foundationURL.absoluteString
-          let isEquivalent = foundationString.withUTF8 {
+          var areEquivalent = foundationString.withUTF8 {
             WebURL._SPIs._checkEquivalence_w2f(encodedWebURL, foundationURL, foundationString: $0, shortcuts: false)
           }
-          reporter.expectTrue(isEquivalent, "Equivalence")
+          reporter.expectTrue(areEquivalent, "Equivalence")
+
+          // 4. Round-trip back to a WebURL.
+          guard let roundtripWebURL = WebURL(foundationURL) else {
+            reporter.fail("Failed to round trip converted URL back to a WebURL")
+            return
+          }
+
+          // 5. Check equivalence again, using the Foundation-to-WebURL function (no shortcuts).
+          areEquivalent = foundationString.withUTF8 {
+            WebURL._SPIs._checkEquivalence(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
+          }
+          reporter.expectTrue(areEquivalent, "Equivalence (Round-trip)")
+
+          // 6. Check that the round-tripped WebURL is identical to the encoded WebURL.
+          reporter.expectEqual(roundtripWebURL, encodedWebURL)
+          reporter.expectTrue(roundtripWebURL.utf8.elementsEqual(encodedWebURL.utf8))
+          reporter.expectTrue(
+            roundtripWebURL.storage.structure.describesSameStructure(as: encodedWebURL.storage.structure)
+          )
 
           // Finished.
         }
@@ -199,6 +195,69 @@ extension WebToFoundationTests {
   }
 }
 
+
+// --------------------------------------------
+// MARK: - Additional Tests
+// --------------------------------------------
+
+
+/// Asserts that the given URLs contain an equivalent set of components,
+/// without taking any shortcuts or making assumptions that they originate from the same string.
+///
+/// Checks are performed using:
+///
+/// - `_checkEquivalence_w2f`, which requires string equality
+/// - `_checkEquivalence` (foundation-to-web), which does not require string equality
+///
+/// Additionally, this function asserts that the converted URL can round-trip back to a WebURL.
+/// That conversion is also checked using both `_checkEquivalence_w2f` and `_checkEquivalence`,
+/// and the result must have the same structure and code-units as the given WebURL.
+///
+fileprivate func XCTAssertEquivalentURLs(_ webURL: WebURL, _ foundationURL: URL, _ message: String = "") {
+  var message = message
+  if !message.isEmpty {
+    message += " -- "
+  }
+  message += "Foundation: \(foundationURL) -- WebURL: \(webURL)"
+
+  var urlString = foundationURL.absoluteString
+
+  // 1. Check using the web-to-foundation equivalence checks.
+  var areEquivalent = urlString.withUTF8 {
+    WebURL._SPIs._checkEquivalence_w2f(webURL, foundationURL, foundationString: $0, shortcuts: false)
+  }
+  XCTAssertTrue(areEquivalent, "\(message) [WebToFoundation]")
+
+  // 2. Double-check using the foundation-to-web equivalence checks.
+  areEquivalent = urlString.withUTF8 {
+    WebURL._SPIs._checkEquivalence(webURL, foundationURL, foundationString: $0, shortcuts: false)
+  }
+  XCTAssertTrue(areEquivalent, "\(message) [FoundationToWeb]")
+
+  // 3. Round-trip the URL back to a WebURL.
+  guard let roundtripWebURL = WebURL(foundationURL) else {
+    XCTFail("\(message) [Round-Trip]")
+    return
+  }
+
+  // 4. Check that the conversion was sound.
+  var foundationString = foundationURL.absoluteString
+  areEquivalent = foundationString.withUTF8 {
+    WebURL._SPIs._checkEquivalence_w2f(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
+  }
+  areEquivalent = foundationString.withUTF8 {
+    WebURL._SPIs._checkEquivalence(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
+  }
+  XCTAssertTrue(areEquivalent, "\(message) [Round-Trip Equivalence To Source]")
+
+  // Check that the round-tripped URL is identical to the encoded original.
+  XCTAssertEqual(roundtripWebURL, webURL, "\(message) [Round-Trip String]")
+  XCTAssertTrue(roundtripWebURL.utf8.elementsEqual(webURL.utf8), "\(message) [Round-Trip UTF8]")
+  XCTAssertTrue(
+    roundtripWebURL.storage.structure.describesSameStructure(as: webURL.storage.structure),
+    "\(message) [Round-Trip Strucure]"
+  )
+}
 
 extension WebToFoundationTests {
 
