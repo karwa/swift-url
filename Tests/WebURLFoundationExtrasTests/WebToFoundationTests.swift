@@ -273,3 +273,25 @@ extension WebToFoundationTests {
     }
   }
 }
+
+
+// --------------------------------
+// MARK: - Fuzz Corpus Tests
+// --------------------------------
+
+
+final class WebToFoundation_CorpusTests: XCTestCase {
+
+  func testFuzzCorpus() {
+    for bytes in corpus_web_to_foundation {
+      guard let webURL = WebURL(utf8: bytes) else {
+        continue  // Not a valid URL.
+      }
+      guard let foundationURL = URL(webURL) else {
+        continue  // Couldn't convert the URL. That's fine.
+      }
+      let encodedWebURL = webURL.withEncodedRFC2396DisallowedSubdelims
+      XCTAssertEquivalentURLs(encodedWebURL, foundationURL, "String: \(String(decoding: bytes, as: UTF8.self))")
+    }
+  }
+}
