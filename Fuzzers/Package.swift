@@ -18,7 +18,6 @@ import PackageDescription
 
 let package = Package(
   name: "swift-url-fuzzers",
-  platforms: [.macOS(.v10_15)],
   products: [
     // Parses a single input as a URL string.
     // Valid URLs are re-parsed to ensure parsing/serialization is idempotent.

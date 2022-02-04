@@ -31,11 +31,55 @@ import WebURL
 // ============ END ============
 
 
+extension WebURL {
+
+  /// Returns a copy of this URL which includes any percent-encoding required to convert to a `Foundation.URL`.
+  ///
+  /// When converting between `Foundation.URL` and `WebURL`, the URL strings and components are verified
+  /// as equivalent, although they may not be identical. For example, conversion from Foundation to WebURL
+  /// requires normalizing obscure IP addresses and simplifying the path, and conversion from WebURL to Foundation
+  /// sometimes needs to add percent-encoding. This is necessary because they conform to different URL standards.
+  ///
+  /// However it can be inconvenient. When converting back and forth between URL types, it is often useful
+  /// to guarantee that the result is not just equivalent, but **identical** to the starting URL,
+  /// so that it may be matched with the `==` operator or found in a `Dictionary`.
+  /// This is known as _"round-tripping"_.
+  ///
+  /// The URL returned by this property includes the percent-encoding required to convert to Foundation.
+  /// If it can be converted to a `Foundation.URL`, that result can later be converted _back_ to a `WebURL` which
+  /// is **identical** to the URL returned by this property. No further normalization or encoding will be required.
+  ///
+  /// Example:
+  ///
+  /// ```swift
+  /// "https://example.com/products?id={uuid}"
+  /// // original:                     ^    ^
+  /// "https://example.com/products?id=%7Buuid%7D"
+  /// // encoded:                      ^^^    ^^^
+  /// ```
+  ///
+  /// See the `URL.init?(_: WebURL, addPercentEncoding: Bool)` initializer for more information about which
+  /// characters will be encoded.
+  ///
+  public var encodedForFoundation: WebURL {
+    var encodedCopy = self
+    let _ = encodedCopy._spis._addPercentEncodingToAllComponents(RFC2396DisallowedSubdelims())
+    return encodedCopy
+  }
+}
+
 extension Foundation.URL {
 
   /// Creates a Foundation `URL` equivalent to the given `WebURL`.
   ///
-  /// If any URL component contains the following characters, they will be percent-encoded:
+  /// When converting between `Foundation.URL` and `WebURL`, the URL strings and components are verified
+  /// as equivalent, although they may not be identical. Conversion from WebURL to Foundation sometimes
+  /// needs to add percent-encoding. This is necessary because they conform to different URL standards.
+  ///
+  /// `WebURL`, in common with all major browsers, allows the following characters even if they are not percent-encoded,
+  /// but Foundation's `URL` does not. By default, this encoding will be added for you, although you may opt-out
+  /// of this by setting the `addPercentEncoding` parameter to `false`. Note that doing so will mean that URLs
+  /// containing the following characters cannot be converted:
   ///
   /// - Curly braces (`{}`)
   /// - Backslashes (`\`)
@@ -46,6 +90,8 @@ extension Foundation.URL {
   /// - Number signs (`#`), unless used to delimit the URL's fragment.
   /// - Percent signs (`%`), unless used to delimit a percent-encoded byte.
   ///
+  /// Example:
+  ///
   /// ```swift
   /// "https://example.com/products?id={uuid}"
   /// // original:                     ^    ^
@@ -53,9 +99,10 @@ extension Foundation.URL {
   /// // encoded:                      ^^^    ^^^
   /// ```
   ///
-  /// `WebURL`, in common with all major browsers, allows these characters even if they are not encoded,
-  /// but Foundation's `URL` does not. You may opt-out of this by setting the `addPercentEncoding` parameter to `false`,
-  /// but doing so will mean that URLs containing the above characters cannot be converted.
+  /// If percent-encoding is being added (which is the default), and `webURL` has already been encoded
+  /// for Foundation compatibility via the `.encodedForFoundation` property, the result will _round-trip_
+  /// back to an identical `WebURL` value. If percent-encoding is not being added, the result will also round-trip
+  /// without requiring additional normalization or percent-encoding.
   ///
   /// - parameters:
   ///   - webURL:             The URL to convert
@@ -432,20 +479,6 @@ extension WebURL._SPIs {
 // MARK: - PercentEncodeSets
 // --------------------------------------------
 
-
-extension WebURL._SPIs {
-
-  /// Code-points banned by RFC-2396 for use as subcomponent delimiters.
-  ///
-  /// > Important:
-  /// > This propwrty is not considered part of WebURL's supported API.
-  /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
-  ///
-  @available(macOS 10.15.0, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
-  public static var RFC2396DisallowedSubdelims: some PercentEncodeSet {
-    WebURLFoundationExtras.RFC2396DisallowedSubdelims()
-  }
-}
 
 /// Code-points banned by RFC-2396 for use as subcomponent delimiters.
 ///

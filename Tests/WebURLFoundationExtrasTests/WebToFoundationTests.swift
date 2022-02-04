@@ -19,14 +19,6 @@ import XCTest
 @testable import WebURL
 @testable import WebURLFoundationExtras
 
-extension WebURL {
-  fileprivate var withEncodedRFC2396DisallowedSubdelims: WebURL {
-    var copy = self
-    let _ = copy._spis._addPercentEncodingToAllComponents(RFC2396DisallowedSubdelims())
-    return copy
-  }
-}
-
 final class WebToFoundationTests: ReportGeneratingTestCase {}
 
 
@@ -124,7 +116,7 @@ extension WebToFoundationTests {
 
           var encodedWebURL = webURL
           if addEncoding {
-            encodedWebURL = encodedWebURL.withEncodedRFC2396DisallowedSubdelims
+            encodedWebURL = encodedWebURL.encodedForFoundation
             reporter.capture(key: "Encoded WebURL", encodedWebURL)
           }
 
@@ -294,7 +286,7 @@ extension WebToFoundationTests {
         XCTFail("Failed to convert URL \(url)")
         break test
       }
-      XCTAssertEquivalentURLs(url.withEncodedRFC2396DisallowedSubdelims, converted)
+      XCTAssertEquivalentURLs(url.encodedForFoundation, converted)
     }
     test: do {
       let url = WebURL("sc:hello world?bar")!
@@ -368,7 +360,7 @@ final class WebToFoundation_CorpusTests: XCTestCase {
       guard let foundationURL = URL(webURL) else {
         continue  // Couldn't convert the URL. That's fine.
       }
-      let encodedWebURL = webURL.withEncodedRFC2396DisallowedSubdelims
+      let encodedWebURL = webURL.encodedForFoundation
       XCTAssertEquivalentURLs(encodedWebURL, foundationURL, "String: \(String(decoding: bytes, as: UTF8.self))")
     }
   }
