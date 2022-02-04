@@ -30,6 +30,11 @@ let package = Package(
     // Parses a single input as a URL string.
     // If successful, converts the URL to a Foundation URL and checks for semantic equivalence.
     .executable(name: "web-to-foundation", targets: ["web-to-foundation"]),
+
+    // Parses a single input as a URL string and uses '.encodedForFoundation' to add percent-encoding.
+    // The URL is then converted to a Foundation URL. If successful, it must round-trip back to WebURL
+    // and the round-tripped URL must be exactly the same as the (encoded) original.
+    .executable(name: "web-foundation-roundtrip", targets: ["web-foundation-roundtrip"]),
   ],
   dependencies: [
     .package(name: "swift-url", path: "..")
@@ -50,6 +55,14 @@ let package = Package(
     ),
     .target(
       name: "web-to-foundation",
+      dependencies: [
+        .product(name: "WebURL", package: "swift-url"),
+        .product(name: "WebURLFoundationExtras", package: "swift-url"),
+      ],
+      swiftSettings: [.unsafeFlags(["-parse-as-library", "-sanitize=fuzzer,address"])]
+    ),
+    .target(
+      name: "web-foundation-roundtrip",
       dependencies: [
         .product(name: "WebURL", package: "swift-url"),
         .product(name: "WebURLFoundationExtras", package: "swift-url"),
