@@ -24,7 +24,7 @@ import XCTest
 fileprivate func XCTAssertEquivalentURLs(_ webURL: WebURL, _ foundationURL: URL, _ message: String = "") {
   var urlString = foundationURL.absoluteString
   let areEquivalent = urlString.withUTF8 {
-    WebURL._SPIs._checkEquivalence(webURL, foundationURL, foundationString: $0, shortcuts: false)
+    WebURL._SPIs._checkEquivalence_f2w(webURL, foundationURL, foundationString: $0, shortcuts: false)
   }
   var prefix = message
   if !prefix.isEmpty {
