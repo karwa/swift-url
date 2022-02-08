@@ -1,6 +1,4 @@
 // swift-tools-version:5.3
-// >> This should be identical to Package@swift-5.5.swift,
-// >> except that it adds ".docc" bundles to the targets' "exclude" paths.
 
 // Copyright The swift-url Contributors.
 //
@@ -18,7 +16,7 @@
 
 import PackageDescription
 
-let package = Package(
+var package = Package(
   name: "swift-url",
   products: [
     // Core functionality.
@@ -41,7 +39,10 @@ let package = Package(
     // swift-system for WebURLSystemExtras.
     .package(url: "https://github.com/apple/swift-system.git", .upToNextMajor(from: "1.0.0")),
 
-    // swift-checkit for testing protocol conformances. Test-only dependency.
+    // [Test Only] No-dependency HTTP server for testing Foundation extensions.
+    .package(name: "Swifter", url: "https://github.com/httpswift/swifter.git", .upToNextMajor(from: "1.5.0")),
+
+    // [Test Only] Checkit for testing protocol conformances.
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
   ],
   targets: [
@@ -80,6 +81,37 @@ let package = Package(
       name: "WebURLFoundationExtrasTests",
       dependencies: ["WebURLFoundationExtras", "WebURLTestSupport", "WebURL"],
       resources: [.copy("Resources")]
-    ),
+    )
   ]
 )
+
+// WebURLFoundationExtensionsTests can make use of Swifter (on platforms where it is supported).
+// We can only express the conditional target dependency from SwiftPM 5.4+.
+
+#if swift(>=5.4)
+  package.targets += [
+    .testTarget(
+      name: "WebURLFoundationExtensionsTests",
+      dependencies: [
+        "WebURLFoundationExtras", "WebURL",
+        .product(name: "Swifter", package: "Swifter", condition: .when(platforms: [.macOS, .iOS, .watchOS, .tvOS, .linux]))
+      ]
+    )
+  ]
+#else
+  #if os(macOS) || os(Linux)
+    package.targets += [
+      .testTarget(
+        name: "WebURLFoundationExtensionsTests",
+        dependencies: ["WebURLFoundationExtras", "WebURL", .product(name: "Swifter", package: "Swifter")]
+      )
+    ]
+  #else
+    package.targets += [
+      .testTarget(
+        name: "WebURLFoundationExtensionsTests",
+        dependencies: ["WebURLFoundationExtras", "WebURL"]
+      )
+    ]
+  #endif
+#endif

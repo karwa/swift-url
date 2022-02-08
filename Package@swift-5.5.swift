@@ -1,6 +1,4 @@
 // swift-tools-version:5.5
-// >> This should be identical to Package.swift,
-// >> except that targets may include ".docc" bundles.
 
 // Copyright The swift-url Contributors.
 //
@@ -41,7 +39,10 @@ let package = Package(
     // swift-system for WebURLSystemExtras.
     .package(url: "https://github.com/apple/swift-system.git", .upToNextMajor(from: "1.0.0")),
 
-    // swift-checkit for testing protocol conformances. Test-only dependency.
+    // [Test Only] No-dependency HTTP server for testing Foundation extensions.
+    .package(name: "Swifter", url: "https://github.com/httpswift/swifter.git", .upToNextMajor(from: "1.5.0")),
+
+    // [Test Only] Checkit for testing protocol conformances.
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
   ],
   targets: [
@@ -79,6 +80,13 @@ let package = Package(
       name: "WebURLFoundationExtrasTests",
       dependencies: ["WebURLFoundationExtras", "WebURLTestSupport", "WebURL"],
       resources: [.copy("Resources")]
+    ),
+    .testTarget(
+      name: "WebURLFoundationExtensionsTests",
+      dependencies: [
+        "WebURLFoundationExtras", "WebURL",
+        .product(name: "Swifter", package: "Swifter", condition: .when(platforms: [.macOS, .iOS, .watchOS, .tvOS, .linux]))
+      ]
     ),
   ]
 )
