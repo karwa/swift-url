@@ -17,7 +17,7 @@ import Foundation
 import WebURL
 import WebURLFoundationExtras
 
-/// Benchmarks of WebURL-Foundation interoperability.
+/// Benchmarks of WebURL-Foundation interoperability features.
 ///
 internal enum FoundationCompat {}
 

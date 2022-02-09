@@ -17,7 +17,7 @@ import WebURL
 
 /// Benchmarks the WebURL `.pathComponents` view.
 ///
-let pathComponents = BenchmarkSuite(name: "PathComponents") { suite in
+let PathComponents = BenchmarkSuite(name: "PathComponents") { suite in
 
   // Iteration.
 

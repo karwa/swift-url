@@ -15,9 +15,9 @@
 import Benchmark
 import WebURL
 
-/// Benchmarks the WebURL component setters (e.g. `url.query = "..."`).
+/// Benchmarks WebURL component setters (e.g. `url.query = "..."`).
 ///
-let componentSetters = BenchmarkSuite(name: "ComponentSetters") { suite in
+let ComponentSetters = BenchmarkSuite(name: "ComponentSetters") { suite in
 
   // Scheme.
 

@@ -28,10 +28,10 @@ internal func blackHole<T>(_ x: T) {
 // - file: URLs
 
 Benchmark.main([
-  constructor_http,
-  urlEncoded_Decoded,
-  componentSetters,
-  pathComponents,
+  Constructor.HTTP,
+  ComponentSetters,
+  PathComponents,
+  PercentEncoding,
   FoundationCompat.NSURLToWeb,
   FoundationCompat.WebToNSURL,
 ])
