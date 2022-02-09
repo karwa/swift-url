@@ -17,7 +17,7 @@ import WebURL
 
 /// Benchmarks percent encoding (using the `urlComponentSet`) and decoding without substitutions.
 ///
-let urlEncoded_Decoded = BenchmarkSuite(name: "URLEncoded") { suite in
+let PercentEncoding = BenchmarkSuite(name: "PercentEncoding") { suite in
 
   let urlEncoded_strings = [
     String(decoding: 0 ..< 128, as: UTF8.self), // Every ASCII character
@@ -33,7 +33,7 @@ let urlEncoded_Decoded = BenchmarkSuite(name: "URLEncoded") { suite in
     A very long string with the occassional 🦖 emoji thrown in for good measure!
     """#
   ]
-  suite.benchmark("String.urlEncoded") {
+  suite.benchmark("Encode.String") {
     for string in urlEncoded_strings {
       blackHole(string.percentEncoded(using: .urlComponentSet))
     }
@@ -44,7 +44,7 @@ let urlEncoded_Decoded = BenchmarkSuite(name: "URLEncoded") { suite in
     #"This%20%F0%9F%A6%86%20is%20%F0%9F%90%A7%20some%20%F0%9F%A6%96%20m!x%E2%82%ACd%2520c%C2%BAnt%C2%A3nt"#,
     #"A%20very%20long%20string%20with%20the%20occassional%20%F0%9F%A6%96%20emoji%20thrown%20in%20for%20good%20measure!%0AA%20very%20long%20string%20with%20the%20occassional%20%F0%9F%A6%96%20emoji%20thrown%20in%20for%20good%20measure!%0AA%20very%20long%20string%20with%20the%20occassional%20%F0%9F%A6%96%20emoji%20thrown%20in%20for%20good%20measure!%0AA%20very%20long%20string%20with%20the%20occassional%20%F0%9F%A6%96%20emoji%20thrown%20in%20for%20good%20measure!%0AA%20very%20long%20string%20with%20the%20occassional%20%F0%9F%A6%96%20emoji%20thrown%20in%20for%20good%20measure!%0AA%20very%20long%20string%20with%20the%20occassional%20%F0%9F%A6%96%20emoji%20thrown%20in%20for%20good%20measure!%0AA%20very%20long%20string%20with%20the%20occassional%20%F0%9F%A6%96%20emoji%20thrown%20in%20for%20good%20measure!%0AA%20very%20long%20string%20with%20the%20occassional%20%F0%9F%A6%96%20emoji%20thrown%20in%20for%20good%20measure!"#
   ]
-  suite.benchmark("String.urlDecoded") {
+  suite.benchmark("Decode.String") {
     for string in urlDecoded_strings {
       blackHole(string.percentDecoded())
     }
@@ -56,7 +56,7 @@ let urlEncoded_Decoded = BenchmarkSuite(name: "URLEncoded") { suite in
     #"This 🧵 does not contain any ٪-encoding"#,
     #"This 🧵 does not contain any ٪-encoding -- This 🧵 does not contain any ٪-encoding -- This 🧵 does not contain any ٪-encoding"#
   ]
-  suite.benchmark("String.urlDecoded.notEncoded") {
+  suite.benchmark("Decode.String.NotEncoded") {
     for string in urlDecoded_notEncoded_strings {
       blackHole(string.percentDecoded())
     }
