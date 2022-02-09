@@ -26,12 +26,12 @@ internal func blackHole<T>(_ x: T) {
 // - Non-special versions of SpecialNonFile tests.
 // - Cannot-be-a-base URLs
 // - file: URLs
-// - setters
 
 Benchmark.main([
-  constructor_specialNonFile,
+  constructor_http,
   urlEncoded_Decoded,
   componentSetters,
   pathComponents,
-  foundationToWeb,
+  FoundationCompat.NSURLToWeb,
+  FoundationCompat.WebToNSURL,
 ])
