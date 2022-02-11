@@ -23,25 +23,17 @@ extension WebURLPercentEncodingUtilsTests {
 
   func testDoesNotNeedEncoding() {
 
-    struct EncodeASCIIPeriods: PercentEncodeSet {
-      func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
-        codePoint == UInt8(ascii: ".")
-      }
-    }
-
     func check<EncodeSet: PercentEncodeSet>(_ original: String, _ encodeSet: EncodeSet) {
+      // 1. The given string must be a normalized URL.
       let originalURL = WebURL(original)!
       XCTAssertEqual(originalURL.serialized(), original)
-
+      // 2. Encoding the URL must return '.doesNotNeedEncoding'.
       var encodedURL = originalURL
       XCTAssertEqual(encodedURL._spis._addPercentEncodingToAllComponents(encodeSet), .doesNotNeedEncoding)
-
-      // Check the serialization and structure are identical to the original.
+      // 3. The serialization and structure should remain the same as the original.
+      encodedURL.storage.structure.checkInvariants()
       XCTAssertEqual(encodedURL.serialized(), original)
       XCTAssertTrue(encodedURL.storage.structure.describesSameStructure(as: originalURL.storage.structure))
-      encodedURL.storage.structure.checkInvariants()
-
-      // Check that the "modified" URL reparses to the same result.
       XCTAssertURLIsIdempotent(encodedURL)
     }
 
@@ -49,17 +41,155 @@ extension WebURLPercentEncodingUtilsTests {
 
     // No special characters.
     check("https://example.com/foo/bar?baz#qux", componentSetWithoutSubdelims)
-    // IPv6 address.
-    check("https://[::ffff:c0a8:1]/foo/bar?baz#qux", componentSetWithoutSubdelims)
-    // Only percent-encoding.
-    check("https://example.com/fo%2Fo/b%5Br?b%7Cz#q%23x", componentSetWithoutSubdelims)
-    // Opaque path.
-    check("foo:abc[flag]`()\\{uuid}", componentSetWithoutSubdelims)
+    // Schemes are never encoded, do not cause failure.
+    check("foo-bar:/baz", EncodeSingleCodePoint("-"))
+    // IPv4 addresses are never encoded, do not cause failure.
+    check("https://127.0.0.1/foo/bar?baz#qux", EncodeSingleCodePoint("."))
+    // IPv6 addresses are never encoded, do not cause failure.
+    check("https://[::ffff:c0a8:1]/foo/bar?baz#qux", EncodeSingleCodePoint("["))
 
-    // Domain.
-    check("https://a.b.c.d/foo/bar?baz#qux", EncodeASCIIPeriods())
-    // IPv4 Address.
-    check("https://127.0.0.1/foo/bar?baz#qux", EncodeASCIIPeriods())
+    // URL is already percent-encoded.
+    check("https://example.com/fo%2Fo/b%5Br?b%7Cz#q%23x", componentSetWithoutSubdelims)
+    // Opaque path with no special characters.
+    check("foo:abc-(flag)-(!'*._~)", componentSetWithoutSubdelims)
+    // Opaque path with percent-encoding.
+    check("foo:abc-%24(flag)%5B-(!%2F'*._~)", componentSetWithoutSubdelims)
+  }
+
+  func testUnableToEncode() {
+
+    func check<EncodeSet: PercentEncodeSet>(_ encodeSet: EncodeSet, original: String, expected: String) {
+      // 1. The given string must be a normalized URL.
+      let originalURL = WebURL(original)!
+      XCTAssertEqual(originalURL.serialized(), original)
+      // 2. Encoding the URL must fail, returning '.unableToEncode'.
+      var encodedURL = originalURL
+      XCTAssertEqual(encodedURL._spis._addPercentEncodingToAllComponents(encodeSet), .unableToEncode)
+      // 3. If the operation failed, some components may be encoded whilst others won't be.
+      //    Check the result is as expected.
+      XCTAssertEqual(encodedURL.serialized(), expected)
+      // 4. The URL must be left in a valid state despite the failure.
+      XCTAssertURLIsIdempotent(encodedURL)
+    }
+
+    let componentSetWithoutSubdelims = URLEncodeSet.Component().withoutSubdelims
+
+    // Special characters in domains cannot be encoded, cause failure.
+    check(
+      componentSetWithoutSubdelims,
+      original: "https://exa{m}ple.com/fo[o]/bar?b[a]z#q[u]x",
+      expected: "https://exa{m}ple.com/fo[o]/bar?b[a]z#q[u]x"
+    )
+    check(
+      EncodeSingleCodePoint("."),
+      original: "https://a.b.c.d/foo/bar?baz#qux",
+      expected: "https://a.b.c.d/foo/bar?baz#qux"
+    )
+    // Opaque paths are not encoded (by choice), special characters cause failure.
+    check(
+      componentSetWithoutSubdelims,
+      original: "foo:abc[flag]`()\\{uuid}",
+      expected: "foo:abc[flag]`()\\{uuid}"
+    )
+    // If the operation fails, some components may already have been encoded.
+    check(
+      componentSetWithoutSubdelims,
+      original: "https://us%%er:pa$$word@exa{m}ple.com/fo[o]/bar?b[a]z#q[u]x",
+      expected: "https://us%25%25er:pa%24%24word@exa{m}ple.com/fo[o]/bar?b[a]z#q[u]x"
+    )
+  }
+
+  func testEncodingAdded() {
+
+    let encodeSet = URLEncodeSet.Component().withoutSubdelims
+
+    func check(original: String, expected: String, additionalChecks: (WebURL) -> Void) {
+      // 1. The given string must be a normalized URL.
+      let originalURL = WebURL(original)!
+      XCTAssertEqual(originalURL.serialized(), original)
+      // 2. Encoding the URL must succeed, returning '.encodingAdded'.
+      var encodedURL = originalURL
+      XCTAssertEqual(encodedURL._spis._addPercentEncodingToAllComponents(encodeSet), .encodingAdded)
+      // 3. The mutation should have triggered COW.
+      XCTAssertEqual(originalURL.serialized(), original)
+      // 4. Check the result.
+      encodedURL.storage.structure.checkInvariants()
+      XCTAssertEqual(encodedURL.serialized(), expected)
+      XCTAssertURLIsIdempotent(encodedURL)
+      additionalChecks(encodedURL)
+    }
+
+    // Username
+    check(
+      original: "http://us%er$foo@test/",
+      expected: "http://us%25er%24foo@test/"
+    ) { encodedURL in
+      XCTAssertEqual(encodedURL.username, "us%25er%24foo")
+    }
+
+    // Password
+    check(
+      original: "http://user:pa%s$@test/",
+      expected: "http://user:pa%25s%24@test/"
+    ) { encodedURL in
+      XCTAssertEqual(encodedURL.password, "pa%25s%24")
+    }
+
+    // Opaque hostname
+    check(
+      original: "foo://h%o$t/",
+      expected: "foo://h%25o%24t/"
+    ) { encodedURL in
+      XCTAssertEqual(encodedURL.hostname, "h%25o%24t")
+    }
+
+    // Path
+    check(
+      original: "foo://host/p[%1]/p^2^",
+      expected: "foo://host/p%5B%251%5D/p%5E2%5E"
+    ) { encodedURL in
+      XCTAssertEqual(encodedURL.path, "/p%5B%251%5D/p%5E2%5E")
+      XCTAssertEqualElements(encodedURL.pathComponents, ["p[%1]", "p^2^"])
+    }
+
+    // Query
+    check(
+      original: "foo://host?color[R]=100&color{%G}=233&color|B|=42",
+      expected: "foo://host?color%5BR%5D=100&color%7B%25G%7D=233&color%7CB%7C=42"
+    ) { encodedURL in
+      XCTAssertEqual(encodedURL.query, "color%5BR%5D=100&color%7B%25G%7D=233&color%7CB%7C=42")
+      XCTAssertEqual(encodedURL.formParams.get("color[R]"), "100")
+      XCTAssertEqual(encodedURL.formParams.get("color{%G}"), "233")
+      XCTAssertEqual(encodedURL.formParams.get("color|B|"), "42")
+    }
+
+    // Fragment
+    check(
+      original: "foo://test#abc#d%%zef[#]ghi^|",
+      expected: "foo://test#abc%23d%25%25zef%5B%23%5Dghi%5E%7C"
+    ) { encodedURL in
+      XCTAssertEqual(encodedURL.fragment, "abc%23d%25%25zef%5B%23%5Dghi%5E%7C")
+    }
+
+    // Many components.
+    check(
+      original: "https://test/foo[a]/b%ar|a|^1^?ba%z[a]{1}#qux[a]#%1",
+      expected: "https://test/foo%5Ba%5D/b%25ar%7Ca%7C%5E1%5E?ba%25z%5Ba%5D%7B1%7D#qux%5Ba%5D%23%251"
+    ) { encodedURL in
+      XCTAssertURLComponents(
+        encodedURL, scheme: "https", hostname: "test", path: "/foo%5Ba%5D/b%25ar%7Ca%7C%5E1%5E",
+        query: "ba%25z%5Ba%5D%7B1%7D", fragment: "qux%5Ba%5D%23%251"
+      )
+    }
+    check(
+      original: "foo://te$%t/foo[a]/b%ar|a|^1^?ba%z[a]{1}#qux[a]#%1",
+      expected: "foo://te%24%25t/foo%5Ba%5D/b%25ar%7Ca%7C%5E1%5E?ba%25z%5Ba%5D%7B1%7D#qux%5Ba%5D%23%251"
+    ) { encodedURL in
+      XCTAssertURLComponents(
+        encodedURL, scheme: "foo", hostname: "te%24%25t", path: "/foo%5Ba%5D/b%25ar%7Ca%7C%5E1%5E",
+        query: "ba%25z%5Ba%5D%7B1%7D", fragment: "qux%5Ba%5D%23%251"
+      )
+    }
   }
 
   func testEmptyComponents() {
@@ -111,7 +241,7 @@ extension WebURLPercentEncodingUtilsTests {
     check("foo://host?bar#")
   }
 
-  func testAddingEncoding_firstPathComponent() {
+  func testEncodingAdded_firstPathComponent() {
 
     // Check that we update the URLStructure's firstPathComponentLength when adding percent-encoding.
 
@@ -149,7 +279,7 @@ extension WebURLPercentEncodingUtilsTests {
     }
   }
 
-  func testAddingEncoding_queryIsKnownFormEncoded() {
+  func testEncodingAdded_queryIsKnownFormEncoded() {
 
     // Check that we reset the URLStructure's queryIsKnownFormEncoded when adding percent-encoding.
 
@@ -181,7 +311,7 @@ extension WebURLPercentEncodingUtilsTests {
     }
   }
 
-  func testAddingEncoding_digits() {
+  func testEncodingAdded_digits() {
 
     // Even if for some reason we decide to encode ASCII digits, characters which are part of
     // percent-encoded bytes shouldn't be encoded. Also, the port number should never be encoded.
@@ -195,11 +325,11 @@ extension WebURLPercentEncodingUtilsTests {
     let encodeSet = EncodeDigits()
 
     do {
-      var url = WebURL("http://u%25s3r:pa55wo%25rd@h0st:99/p4t%23")!
-      XCTAssertEqual(url.serialized(), "http://u%25s3r:pa55wo%25rd@h0st:99/p4t%23")
+      var url = WebURL("http://u%25s3r:pa55wo%25rd@host:99/p4t%23")!
+      XCTAssertEqual(url.serialized(), "http://u%25s3r:pa55wo%25rd@host:99/p4t%23")
 
       XCTAssertEqual(url._spis._addPercentEncodingToAllComponents(encodeSet), .encodingAdded)
-      XCTAssertEqual(url.serialized(), "http://u%25s%33r:pa%35%35wo%25rd@h0st:99/p%34t%23")
+      XCTAssertEqual(url.serialized(), "http://u%25s%33r:pa%35%35wo%25rd@host:99/p%34t%23")
       XCTAssertEqual(url.port, 99)
       url.storage.structure.checkInvariants()
 
@@ -215,85 +345,6 @@ extension WebURLPercentEncodingUtilsTests {
       url.storage.structure.checkInvariants()
 
       XCTAssertURLIsIdempotent(url)
-    }
-  }
-
-  func testAddingEncoding() {
-
-    let encodeSet = URLEncodeSet.Component().withoutSubdelims
-
-    func check(_ original: String, encoded: String, additionalChecks: (WebURL) -> Void) {
-      let originalURL = WebURL(original)!
-      XCTAssertEqual(originalURL.serialized(), original)
-
-      var encodedURL = originalURL
-      XCTAssertEqual(encodedURL._spis._addPercentEncodingToAllComponents(encodeSet), .encodingAdded)
-
-      // Check that COW was triggered.
-      XCTAssertEqual(originalURL.serialized(), original)
-
-      XCTAssertEqual(encodedURL.serialized(), encoded)
-      encodedURL.storage.structure.checkInvariants()
-      additionalChecks(encodedURL)
-
-      XCTAssertURLIsIdempotent(encodedURL)
-    }
-
-    // Username
-    check("http://us%er$foo@test/", encoded: "http://us%25er%24foo@test/") { encodedURL in
-      XCTAssertEqual(encodedURL.username, "us%25er%24foo")
-    }
-
-    // Password
-    check("http://user:pa%s$@test/", encoded: "http://user:pa%25s%24@test/") { encodedURL in
-      XCTAssertEqual(encodedURL.password, "pa%25s%24")
-    }
-
-    // Opaque hostname
-    check("foo://h%o$t/", encoded: "foo://h%25o%24t/") { encodedURL in
-      XCTAssertEqual(encodedURL.hostname, "h%25o%24t")
-    }
-
-    // Path
-    check("foo://host/p[%1]/p^2^", encoded: "foo://host/p%5B%251%5D/p%5E2%5E") { encodedURL in
-      XCTAssertEqual(encodedURL.path, "/p%5B%251%5D/p%5E2%5E")
-      XCTAssertEqualElements(encodedURL.pathComponents, ["p[%1]", "p^2^"])
-    }
-
-    // Query
-    check(
-      "foo://host?color[R]=100&color{%G}=233&color|B|=42",
-      encoded: "foo://host?color%5BR%5D=100&color%7B%25G%7D=233&color%7CB%7C=42"
-    ) { encodedURL in
-      XCTAssertEqual(encodedURL.query, "color%5BR%5D=100&color%7B%25G%7D=233&color%7CB%7C=42")
-      XCTAssertEqual(encodedURL.formParams.get("color[R]"), "100")
-      XCTAssertEqual(encodedURL.formParams.get("color{%G}"), "233")
-      XCTAssertEqual(encodedURL.formParams.get("color|B|"), "42")
-    }
-
-    // Fragment
-    check("foo://test#abc#d%%zef[#]ghi^|", encoded: "foo://test#abc%23d%25%25zef%5B%23%5Dghi%5E%7C") { encodedURL in
-      XCTAssertEqual(encodedURL.fragment, "abc%23d%25%25zef%5B%23%5Dghi%5E%7C")
-    }
-
-    // Many components.
-    check(
-      "https://test/foo[a]/b%ar|a|^1^?ba%z[a]{1}#qux[a]#%1",
-      encoded: "https://test/foo%5Ba%5D/b%25ar%7Ca%7C%5E1%5E?ba%25z%5Ba%5D%7B1%7D#qux%5Ba%5D%23%251"
-    ) { encodedURL in
-      XCTAssertURLComponents(
-        encodedURL, scheme: "https", hostname: "test", path: "/foo%5Ba%5D/b%25ar%7Ca%7C%5E1%5E",
-        query: "ba%25z%5Ba%5D%7B1%7D", fragment: "qux%5Ba%5D%23%251"
-      )
-    }
-    check(
-      "foo://te$%t/foo[a]/b%ar|a|^1^?ba%z[a]{1}#qux[a]#%1",
-      encoded: "foo://te%24%25t/foo%5Ba%5D/b%25ar%7Ca%7C%5E1%5E?ba%25z%5Ba%5D%7B1%7D#qux%5Ba%5D%23%251"
-    ) { encodedURL in
-      XCTAssertURLComponents(
-        encodedURL, scheme: "foo", hostname: "te%24%25t", path: "/foo%5Ba%5D/b%25ar%7Ca%7C%5E1%5E",
-        query: "ba%25z%5Ba%5D%7B1%7D", fragment: "qux%5Ba%5D%23%251"
-      )
     }
   }
 }
@@ -319,5 +370,17 @@ fileprivate struct EncodeSetWithoutSubdelims<Base: PercentEncodeSet>: PercentEnc
 extension PercentEncodeSet {
   fileprivate var withoutSubdelims: EncodeSetWithoutSubdelims<Self> {
     EncodeSetWithoutSubdelims(base: self)
+  }
+}
+
+fileprivate struct EncodeSingleCodePoint: PercentEncodeSet {
+  var singleByteCodePoint: UInt8
+
+  init(_ character: Unicode.Scalar) {
+    self.singleByteCodePoint = UInt8(ascii: character)
+  }
+
+  func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    codePoint == singleByteCodePoint
   }
 }
