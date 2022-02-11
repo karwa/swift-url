@@ -128,6 +128,7 @@ extension WebToFoundationTests {
           reporter.capture(key: "Foundation", foundationURL)
 
           // 3. Check equivalence without shortcuts.
+          //    Note that the web-to-foundation equivalence function checks against the _encoded_ WebURL.
           var foundationString = foundationURL.absoluteString
           var areEquivalent = foundationString.withUTF8 {
             WebURL._SPIs._checkEquivalence_w2f(encodedWebURL, foundationURL, foundationString: $0, shortcuts: false)
@@ -140,7 +141,7 @@ extension WebToFoundationTests {
             return
           }
 
-          // 5. Check equivalence again, using the Foundation-to-WebURL function (no shortcuts).
+          // 5. Check equivalence again, using the Foundation-to-WebURL equivalence function without shortcuts.
           areEquivalent = foundationString.withUTF8 {
             WebURL._SPIs._checkEquivalence_f2w(roundtripWebURL, foundationURL, foundationString: $0, shortcuts: false)
           }
@@ -253,9 +254,169 @@ fileprivate func XCTAssertEquivalentURLs(_ webURL: WebURL, _ foundationURL: URL,
 
 extension WebToFoundationTests {
 
+  func testHTTPURLs() {
+
+    // Simple URL with doman, no special characters.
+    test: do {
+      let url = WebURL("http://example.com/foo/bar/baz?qux=qax#glob")!
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      XCTAssertEquivalentURLs(url.encodedForFoundation, converted)
+    }
+
+    // IPv4 address.
+    test: do {
+      let url = WebURL("http://127.0.0.1/foo/bar/baz?qux=qax#glob")!
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      XCTAssertEquivalentURLs(url.encodedForFoundation, converted)
+    }
+
+    // IPv6 address.
+    test: do {
+      let url = WebURL("http://[1212:f0f0::3434:d0d0]/foo/bar/baz?qux=qax#glob")!
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      XCTAssertEquivalentURLs(url.encodedForFoundation, converted)
+    }
+
+    // Domain containing disallowed characters.
+    // Since this cannot be percent-encoded by WebURL, it must fail.
+    test: do {
+      let url = WebURL("http://exa{mpl}e.com/foo/bar/baz?qux=qax#glob")!
+      XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+
+      // This failure is enforced by WebURL's encoding function,
+      // so it is resilient to changes in Foundation's implementation.
+      var encodedURL = url
+      XCTAssertEqual(
+        encodedURL._spis._addPercentEncodingToAllComponents(RFC2396DisallowedSubdelims()),
+        .unableToEncode
+      )
+    }
+
+    // Complex URL with percent encoding.
+    test: do {
+      // 1. Build up a complex URL via the WebURL API.
+      var url = WebURL("http://example.com/")!
+      url.pathComponents += ["p1[%]", "^_^", "🦆", "p4|R|G|B|50%"]
+      url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.startIndex,
+        withPercentEncodedComponents: ["p0[%]"]
+      )
+      url.formParams.set("src[link.href]", to: "http://foobar.net/baz?qux#qaz")
+      url.formParams.client = "📱"
+      XCTAssertEqual(
+        url.serialized(),
+        "http://example.com/p0[%]/p1[%25]/^_^/%F0%9F%A6%86/p4|R|G|B|50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
+      )
+      // 2. Convert to Foundation.
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      let encodedOriginal = url.encodedForFoundation
+      XCTAssertEquivalentURLs(encodedOriginal, converted)
+      XCTAssertEqual(
+        converted.absoluteString,
+        "http://example.com/p0%5B%25%5D/p1%5B%25%5D/%5E_%5E/%F0%9F%A6%86/p4%7CR%7CG%7CB%7C50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
+      )
+      // 3. Check that it round-trips and the API behaves as we expect.
+      guard let roundtrip = WebURL(converted) else {
+        XCTFail("Failed to roundtrip: \(converted)")
+        break test
+      }
+      XCTAssertEqual(Array(roundtrip.pathComponents), ["p0[%]", "p1[%]", "^_^", "🦆", "p4|R|G|B|50%"])
+      XCTAssertEqual(roundtrip.formParams.get("src[link.href]"), "http://foobar.net/baz?qux#qaz")
+      XCTAssertEqual(roundtrip.formParams.client, "📱")
+
+      XCTAssertEqual(roundtrip.serialized(), encodedOriginal.serialized())
+      XCTAssertTrue(roundtrip._spis._describesSameStructure(as: encodedOriginal))
+    }
+  }
+
+  func testCustomURLSchemes() {
+
+    // Simple URL with opaque hostname, no special characters.
+    test: do {
+      let url = WebURL("scheme://example.com/foo/bar/baz?qux=qax#glob")!
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      XCTAssertEquivalentURLs(url.encodedForFoundation, converted)
+    }
+
+    // IPv6 address.
+    test: do {
+      let url = WebURL("scheme://[1212:f0f0::3434:d0d0]/foo/bar/baz?qux=qax#glob")!
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      XCTAssertEquivalentURLs(url.encodedForFoundation, converted)
+    }
+
+    // Opaque hostname containing disallowed characters.
+    test: do {
+      let url = WebURL("scheme://exa{mpl}e.com/foo/bar/baz?qux=qax#glob")!
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      XCTAssertEquivalentURLs(url.encodedForFoundation, converted)
+      XCTAssertEqual(converted.absoluteString, "scheme://exa%7Bmpl%7De.com/foo/bar/baz?qux=qax#glob")
+    }
+
+    // Complex URL with percent encoding.
+    test: do {
+      // 1. Build up a complex URL via the WebURL API.
+      var url = WebURL("scheme://example.com/")!
+      url.pathComponents += ["p1[%]", "^_^", "🦆", "p4|R|G|B|50%"]
+      url.pathComponents.replaceSubrange(
+        url.pathComponents.startIndex..<url.pathComponents.startIndex,
+        withPercentEncodedComponents: ["p0[%]"]
+      )
+      url.formParams.set("src[link.href]", to: "http://foobar.net/baz?qux#qaz")
+      url.formParams.client = "📱"
+      XCTAssertEqual(
+        url.serialized(),
+        "scheme://example.com/p0[%]/p1[%25]/^_^/%F0%9F%A6%86/p4|R|G|B|50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
+      )
+      // 2. Convert to Foundation.
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      let encodedOriginal = url.encodedForFoundation
+      XCTAssertEquivalentURLs(encodedOriginal, converted)
+      XCTAssertEqual(
+        converted.absoluteString,
+        "scheme://example.com/p0%5B%25%5D/p1%5B%25%5D/%5E_%5E/%F0%9F%A6%86/p4%7CR%7CG%7CB%7C50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
+      )
+      // 3. Check that it round-trips and the API behaves as we expect.
+      guard let roundtrip = WebURL(converted) else {
+        XCTFail("Failed to roundtrip: \(converted)")
+        break test
+      }
+      XCTAssertEqual(Array(roundtrip.pathComponents), ["p0[%]", "p1[%]", "^_^", "🦆", "p4|R|G|B|50%"])
+      XCTAssertEqual(roundtrip.formParams.get("src[link.href]"), "http://foobar.net/baz?qux#qaz")
+      XCTAssertEqual(roundtrip.formParams.client, "📱")
+
+      XCTAssertEqual(roundtrip.serialized(), encodedOriginal.serialized())
+      XCTAssertTrue(roundtrip._spis._describesSameStructure(as: encodedOriginal))
+    }
+  }
+
   func testURLWithOpaquePath() {
 
-    // Opaque path with allowed characters.
+    // Opaque path with no special characters.
     test: do {
       let url = WebURL("sc:foobar")!
       guard let converted = URL(url) else {
@@ -266,9 +427,41 @@ extension WebToFoundationTests {
     }
 
     // Opaque path with disallowed characters.
+    // It is very unclear whether percent-encoding this is 'safe', so we choose not to.
     test: do {
       let url = WebURL("sc:hello, world!")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+
+      // This failure is enforced by WebURL's encoding function,
+      // so it is resilient to changes in Foundation's implementation.
+      var encodedURL = url
+      XCTAssertEqual(encodedURL._spis._addPercentEncodingToAllComponents(RFC2396DisallowedSubdelims()), .unableToEncode)
+    }
+
+    // Opaque path with square bracket.
+    // Foundation would generally percent-encode this on its own ("p:%5B"), but as discussed,
+    // we do not generally consider that safe.
+    test: do {
+      let url = WebURL("p:[")!
+      XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+
+      // This failure is enforced by WebURL's encoding function,
+      // so it is resilient to changes in Foundation's implementation.
+      var encodedURL = url
+      XCTAssertEqual(encodedURL._spis._addPercentEncodingToAllComponents(RFC2396DisallowedSubdelims()), .unableToEncode)
+    }
+
+    // Opaque path with semicolon and non-UTF8 percent-encoding.
+    // Foundation's components are exceptionally broken for these URLs,
+    // but as a special case we allow them anyway.
+    test: do {
+      let url = WebURL("ht:;//%E90")!
+      guard let converted = URL(url) else {
+        XCTFail("Failed to convert: \(url)")
+        break test
+      }
+      XCTAssertEqual(converted.absoluteString, "ht:;//%E90")
+      XCTAssertEquivalentURLs(url, converted)
     }
 
     // Opaque path with query.
@@ -321,25 +514,6 @@ extension WebToFoundationTests {
     test: do {
       let url = WebURL("sc:hello world?foo#bar")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
-    }
-
-    // Opaque path with square bracket.
-    // These should fail because Foundation percent-encodes it ("p:%5B")
-    test: do {
-      let url = WebURL("p:[")!
-      XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
-    }
-
-    // Opaque path with semicolon and non-UTF8 percent-encoding.
-    // This *can* be converted, but URLComponents isn't able to verify it.
-    test: do {
-      let url = WebURL("ht:;//%E90")!
-      guard let converted = URL(url) else {
-        XCTFail("Failed to convert: \(url)")
-        break test
-      }
-      XCTAssertEqual(converted.absoluteString, "ht:;//%E90")
-      XCTAssertEquivalentURLs(url, converted)
     }
   }
 }
