@@ -167,6 +167,10 @@ extension WPTConstructorTest: TestSuite {
     /// The URL record properties formed by parsing `input` against `base`.
     ///
     public var propertyValues: URLValues?
+
+    public init(propertyValues: URLValues? = nil) {
+      self.propertyValues = propertyValues
+    }
   }
 
   // swift-format-ignore

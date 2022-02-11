@@ -18,7 +18,7 @@ import Foundation
 ///
 /// Load a database using the ``loadTestFile(_:as:)`` function, providing a type to decode the file as.
 ///
-public enum TestFile: String {
+public enum TestFile: String, Equatable, Hashable, Codable {
   case WPTURLConstructorTests = "urltestdata"
   case WebURLAdditionalConstructorTests = "additional_constructor_tests"
   case WPTURLSetterTests = "setters_tests"

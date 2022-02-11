@@ -69,6 +69,8 @@ public struct TestResult<Suite: TestSuite> {
   }
 }
 
+extension TestResult: Equatable, Hashable {}
+
 /// An object which is able to run test-cases from a `TestSuite` and collect the results.
 ///
 /// Each `TestSuite` adds its own protocol which refines this one, adding requirements for the functionality it needs,
