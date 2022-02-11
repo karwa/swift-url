@@ -244,26 +244,50 @@ extension WebURL._SPIs {
 
   /// The result of an operation which adds percent-encoding to URL components in-place.
   ///
-  /// Either percent-encoding was added, or it wasn't, or the operation failed because we would exceed
-  /// `URLStorage.SizeType.max`. In the latter case, it is possible that some components were encoded and some not.
-  ///
   /// > Important:
   /// > This type, any nested types, and all of their static/member functions, are not considered
   /// > part of WebURL's supported API. Please **do not use** these APIs.
   /// > They may disappear, or their behavior may change, at any time.
   ///
   public enum _AddPercentEncodingResult {
+
+    /// No components required additional percent-encoding; the URL is unchanged.
+    ///
+    /// > Important:
+    /// > This enum case is not considered part of WebURL's supported API.
+    /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
+    ///
     case doesNotNeedEncoding
+
+    /// Percent-encoding was added to one or more components of the URL.
+    ///
+    /// > Important:
+    /// > This enum case is not considered part of WebURL's supported API.
+    /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
+    ///
     case encodingAdded
-    case exceededMaximumCapacity
+
+    /// The URL contains characters which _should_ be encoded, but cannot be. The operation has failed.
+    ///
+    /// For example, percent-encoding may take the URL beyond its maximum capacity,
+    /// or may be required in a component which does not allow percent-encoding (e.g. in a domain).
+    ///
+    /// If the operation fails, some components may be encoded and others may not be,
+    /// but the result is still a proper WebURL with correct structure, etc.
+    ///
+    /// > Important:
+    /// > This enum case is not considered part of WebURL's supported API.
+    /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
+    ///
+    case unableToEncode
 
     @inlinable
     internal static func += (lhs: inout Self, rhs: Self) {
       switch (lhs, rhs) {
-      case (.exceededMaximumCapacity, _):
+      case (.unableToEncode, _):
         assertionFailure("Operation has already failed, nothing more should be combined")
-      case (_, .exceededMaximumCapacity):
-        lhs = .exceededMaximumCapacity
+      case (_, .unableToEncode):
+        lhs = .unableToEncode
       case (.doesNotNeedEncoding, .encodingAdded):
         lhs = .encodingAdded
       case (.encodingAdded, .encodingAdded),
@@ -277,15 +301,26 @@ extension WebURL._SPIs {
   /// Adds percent-encoding to the specified characters in all URL components.
   ///
   /// Note that this is not the same as straight percent-encoding each component;
-  /// this function only adds encoding for characters that are not already part of a percent-encoded byte sequence.
-  /// This ensures that a single round of decoding produces the same result before and after this operation,
-  /// rather than introducing nested percent-encoding.
+  /// this function only adds encoding for characters that are _not already_ part of a percent-encoded byte sequence.
+  /// This mean that it does **not** introduce nested percent-encoding. A single round of decoding produces
+  /// the same result before and after this operation.
   ///
-  /// For example, if the encode-set includes the `"%"` sign itself, `"%hello"` would be encoded to `"%25hello"`,
-  /// but `"%AB"` would remain as `"%AB"`.
+  /// The nested vs. flat distinction really all comes down to how the `"%"` sign itself is handled;
+  /// if we see one being used for percent-encoding (e.g. `"%AB"`), it remains as it is. However,
+  /// if the percent-sign is not being used for percent-encoding (e.g. `"%hello"`), it will be encoded
+  /// and become `"%25hello"`.
   ///
-  /// - No encoding is added to domains or IP addresses, since they do not support percent-encoding.
+  /// Also be aware of the following limitations:
+  ///
   /// - Encoding is only added to list-style paths.
+  ///   If an opaque path requires encoding, the operation fails and returns `.unableToEncode`.
+  ///
+  /// - Encoding cannot be added to domains, since they do not support percent-encoding.
+  ///   If a domain requires encoding, the operation fails and returns `.unableToEncode`.
+  ///
+  /// - IP Addresses are ignored by this function.
+  ///   Even if the encode-set says they should be encoded, they will not be encoded, and the operation will not fail.
+  ///
   /// - The given encode-set must not contain:
   ///   - the ASCII forward slash (`"/"`, 0x2F),
   ///   - ampersand (`"&"`, 0x26),
@@ -293,7 +328,7 @@ extension WebURL._SPIs {
   ///   - equals-sign (`"="`, 0x3D) code-points.
   ///
   /// > Important:
-  /// > This property is not considered part of WebURL's supported API.
+  /// > This function is not considered part of WebURL's supported API.
   /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
   ///
   @inlinable @inline(never)
@@ -316,23 +351,39 @@ extension WebURL._SPIs {
     result += _addPercentEncodingInPlace(_url.utf8.username, encodeSet: encodeSet, buffer: &buffer) {
       structure, newLength in structure.usernameLength = newLength
     }
-    if case .exceededMaximumCapacity = result { return result }
+    if case .unableToEncode = result { return result }
 
     result += _addPercentEncodingInPlace(_url.utf8.password, encodeSet: encodeSet, buffer: &buffer) {
       structure, newLength in structure.passwordLength = newLength + 1
     }
-    if case .exceededMaximumCapacity = result { return result }
+    if case .unableToEncode = result { return result }
 
-    // Hostname (opaque hosts only; we can't add percent-encoding to domains or IP addresses).
-    if case .opaque = _url.storage.structure.hostKind {
+    // Hostname.
+    switch _url.storage.structure.hostKind {
+    case .some(.domain):
+      guard _url.utf8.hostname?.contains(where: { encodeSet.shouldPercentEncode(ascii: $0) }) != true else {
+        // Domains are not allowed to contain percent-encoding.
+        return .unableToEncode
+      }
+    case .some(.opaque):
       result += _addPercentEncodingInPlace(_url.utf8.hostname, encodeSet: encodeSet, buffer: &buffer) {
         structure, newLength in structure.hostnameLength = newLength
       }
+    case .empty?, .ipv4Address?, .ipv6Address?, .none:
+      break
     }
-    if case .exceededMaximumCapacity = result { return result }
+    if case .unableToEncode = result { return result }
 
     // Path.
-    if !_url.hasOpaquePath {
+    if _url.hasOpaquePath {
+      let opqPath = _url.utf8.path
+      switch _addPercentEncoding(opqPath, encodeSet: encodeSet, buffer: &buffer) {
+      case .doesNotNeedEncoding:
+        break
+      case .encodingAdded, .unableToEncode:
+        result = .unableToEncode  // This operation chooses not to encode opaque paths; fail instead.
+      }
+    } else {
       let pathResult = _addPercentEncodingInPlace(_url.utf8.path, encodeSet: encodeSet, buffer: &buffer) {
         structure, newLength in structure.pathLength = newLength
       }
@@ -343,8 +394,8 @@ extension WebURL._SPIs {
         )
       }
       result += pathResult
-      if case .exceededMaximumCapacity = result { return result }
     }
+    if case .unableToEncode = result { return result }
 
     // Query.
     result += _addPercentEncodingInPlace(_url.utf8.query, encodeSet: encodeSet, buffer: &buffer) {
@@ -352,7 +403,7 @@ extension WebURL._SPIs {
       structure.queryLength = newLength + 1
       structure.queryIsKnownFormEncoded = false
     }
-    if case .exceededMaximumCapacity = result { return result }
+    if case .unableToEncode = result { return result }
 
     // Fragment.
     result += _addPercentEncodingInPlace(_url.utf8.fragment, encodeSet: encodeSet, buffer: &buffer) {
@@ -392,7 +443,7 @@ extension WebURL._SPIs {
       let _ = URLStorage.SizeType(exactly: newTotalLength),
       let newComponentLength = URLStorage.SizeType(exactly: buffer.count)
     else {
-      return .exceededMaximumCapacity
+      return .unableToEncode
     }
     // Replace the code-units, then adjust the structure.
     _url.storage.codeUnits.replaceSubrange(oldComponent, with: buffer)

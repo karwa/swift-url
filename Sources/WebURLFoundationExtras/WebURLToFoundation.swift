@@ -115,12 +115,12 @@ extension Foundation.URL {
     // If the user explicitly asked to opt-out of encoding, we should fail rather than let it do that.
     var encodedCopy = webURL
     switch encodedCopy._spis._addPercentEncodingToAllComponents(RFC2396DisallowedSubdelims()) {
-    case .encodingAdded:
-      guard addPercentEncoding else { return nil }
-    case .exceededMaximumCapacity:
-      return nil
     case .doesNotNeedEncoding:
       break
+    case .encodingAdded:
+      guard addPercentEncoding else { return nil }
+    case .unableToEncode:
+      return nil
     }
 
     self.init(string: encodedCopy.serialized())
