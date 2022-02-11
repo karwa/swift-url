@@ -157,31 +157,37 @@ import WebURL
 //    - (Have no standardized meaning. The WHATWG URL Standard does not specify any component-specific normalization)
 //
 //    All Components:
-//    - Percent-encoding may be added. [Compatible with RFC-2396: ✅]
+//    - Percent-encoding may be added. [Compatible with RFC-2396: 😩 (kind of)]
 //
-//      > Many URI include components consisting of or delimited by, certain
-//      > special characters.  These characters are called "reserved", since
-//      > their usage within the URI component is limited to their reserved
-//      > purpose.  If the data for a URI component would conflict with the
-//      > reserved purpose, then the conflicting data must be escaped before
-//      > forming the URI.
-//      >
-//      > reserved = ";" | "/" | "?" | ":" | "@" | "&" | "=" | "+" | "$" | ","
-//      >
-//      > The "reserved" syntax class above refers to those characters that are
-//      > allowed within a URI, but which may not be allowed within a
-//      > particular component of the generic URI syntax; they are used as
-//      > delimiters of the components described in Section 3
+//      > A URI is always in an "escaped" form, since escaping or unescaping a
+//      > completed URI might change its semantics.  Normally, the only time
+//      > escape encodings can safely be made is when the URI is being created
+//      > from its component parts; each component may have its own set of
+//      > characters that are reserved, so only the mechanism responsible for
+//      > generating or interpreting that component can determine whether or
+//      > not escaping a character will change its semantics.
+//      https://datatracker.ietf.org/doc/html/rfc2396#section-2.4.2
 //
-//      > Unreserved characters can be escaped without changing the semantics of the URI
-//      https://datatracker.ietf.org/doc/html/rfc2396#section-2.3
+//      This means it is not possible to say, in general, whether escaping or unescaping a component
+//      will change its semantics; only the software creating or interpreting it can say for sure.
+//      Luckily, the WHATWG URL Standard is very tolerant of non-encoded characters, and only
+//      adds percent-encoding to the following characters:
 //
-//      The WHATWG URL Standard does not generally remove percent-encoding (except in certain hostnames,
-//      discussed later). It may add percent-encoding if its encode-set differs from RFC-2396, but that is
-//      safe as long as the character is not being used in a delimiter position.
+//      - < "=" | ";" > in the user-info section.
 //
-//      If it _did_ encode a character which was being used for its reserved purpose as a delimiter,
-//      it follows that the set of components would no longer match.
+//        RFC-2396 allows these to be unescaped, the WHATWG model doesn't. ❌
+//        That's a real difference, but we allow it since the username and password are officially deprecated,
+//        and it's too difficult to handle without better APIs on Foundation.URL.
+//
+//      _ < "'" > in the query of URLs with a special scheme (http/s, ws/s, ftp, file).
+//
+//        The apostrophe/single-quote is an unreserved character, which means we are allowed to escape
+//        it if needed:
+//
+//        > Unreserved characters can be escaped without changing the semantics
+//        > of the URI, but this should not be done unless the URI is being used
+//        > in a context that does not allow the unescaped character to appear.
+//        https://datatracker.ietf.org/doc/html/rfc2396#section-2.3
 //
 //
 // ### 3. Scheme-specific interpretation.
@@ -501,8 +507,8 @@ extension WebURL._SPIs {
 
     // Scheme:
 
-    guard let foundationScheme = foundationURL.scheme,
-      webURL.utf8.scheme.fastElementsEqual(foundationScheme.lowercased().utf8)
+    guard
+      foundationURL.scheme?.lowercased()._withContiguousUTF8({ webURL.utf8.scheme.fastElementsEqual($0) }) == true
     else {
       return false
     }
@@ -516,7 +522,7 @@ extension WebURL._SPIs {
 
     // [Shortcut] Quick Scan:
     // Getting components from Foundation is expensive, even if the component is 'nil'. So take a shortcut:
-    // if a component's delimiter is not present anywhere in the URL string, the component is also not present.
+    // if a component's delimiter is not present anywhere in Foundation's URL string, the component is also not present.
 
     var assumeNoUserInfo = false
     var assumeNoQuery = false
@@ -545,46 +551,36 @@ extension WebURL._SPIs {
 
     // Host:
 
-    var foundationHost = foundationURL.host
-    foundationHost?.makeContiguousUTF8()
-    switch webURL._spis._utf8_host {
-    case .ipv6Address(let webURLAddr):
-      guard let fndtnAddr = foundationHost.flatMap(IPv6Address.init(_:)), fastEquals(webURLAddr, fndtnAddr) else {
-        return false
-      }
-    case .ipv4Address(let webURLAddr):
-      guard let fndtnAddr = foundationHost.flatMap(IPv4Address.init(_:)), fastEquals(webURLAddr, fndtnAddr) else {
-        return false
-      }
-    case .domain(let webURLHost):
-      guard let foundationHost = foundationHost, webURLHost.fastElementsEqual(foundationHost.lowercased().utf8) else {
-        return false
-      }
-    case .opaque(let webURLHostname):
-      guard let fndHost = foundationHost, webURLHostname.lazy.percentDecoded().fastElementsEqual(fndHost.utf8) else {
-        return false
-      }
-    case .empty:
-      // Foundation.URL.host returns nil for empty hostnames.
-      // This also blocks "localhost" stripping for file URLs, which is not considered equivalence-preserving.
-      guard foundationHost == nil else {
-        return false
-      }
-    case .none:
-      guard foundationHost == nil else {
-        return false
+    let foundationHost = foundationURL.host
+    let hostOK = foundationHost._withContiguousUTF8 { foundationHostUTF8 -> Bool in
+      switch webURL._spis._utf8_host {
+      case .ipv6Address(let webURLAddr):
+        return foundationHostUTF8.flatMap(IPv6Address.init(utf8:)).flatMap { fastEquals(webURLAddr, $0) } ?? false
+      case .ipv4Address(let webURLAddr):
+        return foundationHostUTF8.flatMap(IPv4Address.init(utf8:)).flatMap { fastEquals(webURLAddr, $0) } ?? false
+      case .domain(let webURLHost):
+        // This is lowercasing the string, because we don't have a case-insensitive ASCII bytes comparison function.
+        return foundationHost.flatMap { webURLHost.fastElementsEqual($0.lowercased().utf8) } ?? false
+      case .opaque(let webURLHostname):
+        return foundationHostUTF8.flatMap { webURLHostname.lazy.percentDecoded().fastElementsEqual($0) } ?? false
+      case .empty:
+        // Foundation.URL.host returns nil for empty hostnames.
+        return foundationHost == nil
+      case .none:
+        return foundationHost == nil
       }
     }
+    guard hostOK else { return false }
 
     // Port:
 
     switch (webURL.port, foundationURL.port) {
-    case (.none, .none):
-      break
     case (.some(let webURLPort), .some(let foundationPort)):
       guard webURLPort == foundationPort else {
         return false
       }
+    case (.none, .none):
+      break
     case (.none, .some(let foundationPort)):
       guard webURL.portOrKnownDefault == foundationPort else {
         return false
@@ -615,32 +611,31 @@ extension WebURL._SPIs {
     // Query:
 
     var queryIsPresent = false
+    let webURLQuery = webURL.utf8.query
 
     if assumeNoQuery {
       assert(shortcuts)
-      guard webURL.utf8.query == nil else {
+      guard webURLQuery == nil else {
         return false
       }
     } else {
-      switch (webURL.utf8.query, foundationURL.query) {
-      case (.none, .none):
-        break
-      case (.some(let webURLQuery), .some(var foundationQuery)):
-        queryIsPresent = true
-        foundationQuery.makeContiguousUTF8()
-        if webURL._spis._isSpecial, foundationQuery.utf8.fastContains(UInt8(ascii: "'")) {
-          let encodedFoundationQuery = foundationQuery.utf8.lazy.percentEncoded(using: SpecialQueryExtras())
-          guard webURLQuery.fastElementsEqual(encodedFoundationQuery) else {
-            return false
+      let queryOK = foundationURL.query._withContiguousUTF8 { foundationQuery -> Bool in
+        switch (webURLQuery, foundationQuery) {
+        case (.some(let webURLQuery), .some(let foundationQuery)):
+          queryIsPresent = true
+          if webURL._spis._isSpecial, foundationQuery.fastContains(UInt8(ascii: "'")) {
+            let encodedFoundationQuery = foundationQuery.lazy.percentEncoded(using: SpecialQueryExtras())
+            return webURLQuery.fastElementsEqual(encodedFoundationQuery)
+          } else {
+            return webURLQuery.fastElementsEqual(foundationQuery)
           }
-        } else {
-          guard webURLQuery.fastElementsEqual(foundationQuery.utf8) else {
-            return false
-          }
+        case (.none, .none):
+          return true
+        default:
+          return false
         }
-      default:
-        return false
       }
+      guard queryOK else { return false }
     }
 
     // [Shortcut] Skip Fragment:
@@ -653,22 +648,25 @@ extension WebURL._SPIs {
 
     // Fragment:
 
+    let webURLFragment = webURL.utf8.fragment
+
     if assumeNoFragment {
       assert(shortcuts)
-      guard webURL.utf8.fragment == nil else {
+      guard webURLFragment == nil else {
         return false
       }
     } else {
-      switch (webURL.utf8.fragment, foundationURL.fragment) {
-      case (.none, .none):
-        break
-      case (.some(let webURLFragment), .some(let foundationFragment)):
-        guard webURLFragment.fastElementsEqual(foundationFragment.utf8) else {
+      let fragmentOK = foundationURL.fragment._withContiguousUTF8 { foundationFragment -> Bool in
+        switch (webURLFragment, foundationFragment) {
+        case (.some(let webURLFragment), .some(let foundationFragment)):
+          return webURLFragment.fastElementsEqual(foundationFragment)
+        case (.none, .none):
+          return true
+        default:
           return false
         }
-      default:
-        return false
       }
+      guard fragmentOK else { return false }
     }
 
     // All Checks Passed. The URLs appear to contain equivalent components.
@@ -682,52 +680,43 @@ extension WebURL._SPIs {
   @inline(never)
   private static func checkUserInfoEquivalence_f2w(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
 
-    // Username:
-
     // If a URL has no username but does have a password (e.g. "http://:password@host/"),
     // Foundation returns that the username is empty, but WebURL returns nil.
     // That's a safe difference, but only if both agree that a password is present.
     var emptyUsernameRequiresPasswordCheck = false
 
-    switch (webURL.utf8.username, foundationURL.user) {
-    case (.none, .none):
-      break
-    case (.some(let webURLUsername), .some(let foundationUsername)):
-      guard webURLUsername.lazy.percentDecoded().fastElementsEqual(foundationUsername.utf8) else {
+    // Username:
+
+    let userOK = foundationURL.user._withContiguousUTF8 { foundationUser -> Bool in
+      switch (webURL.utf8.username, foundationUser) {
+      case (.some(let webURLUsername), .some(let foundationUser)):
+        return webURLUsername.lazy.percentDecoded().fastElementsEqual(foundationUser)
+      case (.none, .none):
+        return true
+      case (.none, .some(let foundationUser)):
+        emptyUsernameRequiresPasswordCheck = true
+        return foundationUser.isEmpty
+      default:
         return false
       }
-    case (.none, .some(let foundationUsername)):
-      guard foundationUsername.isEmpty else {
-        return false
-      }
-      emptyUsernameRequiresPasswordCheck = true
-    default:
-      return false
     }
+    guard userOK else { return false }
 
     // Password:
-    // The NSURL Swift overlay has an extraordinarily inefficient implementation for the password getter,
-    // involving writing the *entire URL string* to an Array, and constructing a String from the relevant slice.
-    // Unfortunately, Foundation has a lot of bugs involving user-info components, so we can't take any shortcuts:
-    // - https://bugs.swift.org/browse/SR-15513
-    // - https://bugs.swift.org/browse/SR-15738
 
-    switch (webURL.utf8.password, foundationURL.password) {
-    case (.none, .none):
-      break
-    case (.some(let webURLPassword), .some(let foundationPassword)):
-      let encodedFoundationPassword = foundationPassword.utf8.lazy.percentEncoded(using: UserInfoExtras())
-      guard webURLPassword.fastElementsEqual(encodedFoundationPassword) else {
+    let passwordOK = foundationURL.password._withContiguousUTF8 { foundationPassword -> Bool in
+      switch (webURL.utf8.password, foundationPassword) {
+      case (.some(let webURLPassword), .some(let foundationPassword)):
+        emptyUsernameRequiresPasswordCheck = false
+        let encodedFoundationPassword = foundationPassword.lazy.percentEncoded(using: UserInfoExtras())
+        return webURLPassword.fastElementsEqual(encodedFoundationPassword)
+      case (.none, .none):
+        return true
+      default:
         return false
       }
-      emptyUsernameRequiresPasswordCheck = false
-    default:
-      return false
     }
-
-    guard !emptyUsernameRequiresPasswordCheck else {
-      return false
-    }
+    guard passwordOK, !emptyUsernameRequiresPasswordCheck else { return false }
 
     return true
   }

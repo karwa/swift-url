@@ -246,7 +246,7 @@ extension WebURL._SPIs {
       case (.none, .none):
         return true
       case (.some(let webURLHost), .none):
-        // Foundation.URL.host is nil for empty hostnames.
+        // Foundation.URL.host returns nil for empty hostnames.
         return webURLHost.isEmpty
       default:
         return false
@@ -391,9 +391,7 @@ extension WebURL._SPIs {
   /// This function is deliberately outlined from `_checkEquivalence_w2f`.
   ///
   @inline(never)
-  private static func checkPathEquivalenceUsingURLComponents_w2f(
-    _ webURL: WebURL, _ foundationURL: URL
-  ) -> Bool {
+  private static func checkPathEquivalenceUsingURLComponents_w2f(_ webURL: WebURL, _ foundationURL: URL) -> Bool {
 
     guard let fndRawPath = URLComponents(url: foundationURL, resolvingAgainstBaseURL: true)?.percentEncodedPath else {
       return true  // Unable to validate.
