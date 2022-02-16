@@ -151,7 +151,7 @@ extension FoundationToWebTests {
     ]
 
     var numParsed = 0
-    var numSuccess = 0
+    var numConverted = 0
 
     for obj in loadFoundationTests()! {
       let testDict = obj as! [String: Any]
@@ -161,59 +161,70 @@ extension FoundationToWebTests {
       let inBase = testDict[kURLTestBaseKey] as! String?
       let expectedNSResult = testDict[kURLTestNSResultsKey]!
 
-      if skippedTests.contains(title) { continue }
-
-      // Create a Foundation URL.
-      var _url: URL? = nil
-      switch testDict[kURLTestURLCreatorKey]! as! String {
-      case kNSURLWithStringCreator:
-        _url = _FoundationURLWithString(inURL, baseString: inBase)
-      case kCFURLCreateWithStringCreator, kCFURLCreateWithBytesCreator, kCFURLCreateAbsoluteURLWithBytesCreator:
-        // Not supported
+      if skippedTests.contains(title) {
         continue
-      default:
-        XCTFail()
       }
-      numParsed += 1
+      guard testDict[kURLTestURLCreatorKey]! as! String == kNSURLWithStringCreator else {
+        continue
+      }
+      guard testDict[kURLTestPathComponentKey] == nil, testDict[kURLTestPathExtensionKey] == nil else {
+        continue
+      }
 
-      // Check that the URL is what Foundation expects.
-      guard let url = _url else {
+      // 1. Parse the (input, base) pair with Foundation.
+      numParsed += 1
+      guard let url = _FoundationURLWithString(inURL, baseString: inBase) else {
         XCTAssertEqual(expectedNSResult as? String, kNullURLString)
         continue
       }
+
+      // 2. Check that the URL is what Foundation expects.
       if let expected = expectedNSResult as? [String: Any] {
-        let inPathComponent = testDict[kURLTestPathComponentKey] as! String?
-        let inPathExtension = testDict[kURLTestPathExtensionKey] as! String?
-        let results = _gatherTestResults(url: url, pathComponent: inPathComponent, pathExtension: inPathExtension)
+        let results = _gatherTestResults(url: url)
         let (isEqual, differences) = _compareTestResults(url, expected: expected, got: results)
         XCTAssertTrue(isEqual, "\(title): \(differences.joined(separator: "\n"))")
       } else {
         XCTFail("\(url) should not be a valid url")
       }
 
-      // Convert to WebURL.
-      switch WebURL(url) {
-      case .some(let convertedURL):
-        XCTAssert(
-          !expectedWebURLConversionFailures.contains(title),
-          "Unexpected pass: \(title) -- Foundation: \(url) -- WebURL: \(convertedURL)"
-        )
-        XCTAssertEquivalentURLs(convertedURL, url, title)
-        numSuccess += 1
-      case .none:
-        XCTAssert(
-          expectedWebURLConversionFailures.contains(title),
-          "Unexpected fail: \(title) -- Foundation: \(url)"
-        )
+      // 3. Convert to WebURL.
+      guard let convertedURL = WebURL(url) else {
+        XCTAssert(expectedWebURLConversionFailures.contains(title), "Unexpected fail: \(title) -- Foundation: \(url)")
+        continue
       }
+      numConverted += 1
+      XCTAssert(
+        !expectedWebURLConversionFailures.contains(title),
+        "Unexpected pass: \(title) -- Foundation: \(url) -- WebURL: \(convertedURL)"
+      )
+
+      // 4. Check equivalence without shortcuts.
+      XCTAssertEquivalentURLs(convertedURL, url, title)
+
+      // 5. Round-trip back to a Foundation.URL.
+      //    Note: Some URLs may not round-trip (see `testRoundTripFailures`),
+      //          but everything in the Foundation suite does.
+      guard let roundtripURL = URL(convertedURL) else {
+        XCTFail("Failed to round trip converted WebURL back to a Foundation URL")
+        continue
+      }
+
+      // 6. Check equivalence again, using the WebURL-to-Foundation equivalence function without shortcuts.
+      //    Note that the conversion to WebURL may change the string, so we check equivalence to the round-trip
+      //    result rather than the original Foundation.URL.
+      var roundtripString = roundtripURL.absoluteString
+      let areEquivalent = roundtripString.withUTF8 {
+        WebURL._SPIs._checkEquivalence_w2f(convertedURL, roundtripURL, foundationString: $0, shortcuts: false)
+      }
+      XCTAssertTrue(areEquivalent)
     }
 
     XCTAssertEqual(numParsed, 197, "Number of tests changed. Did you update the test database?")
     // Apparently one more test passes on Windows than Mac/Linux. TODO: investigate.
     #if os(Windows)
-      XCTAssertEqual(numSuccess, 164, "Number of successful conversion changed. Did you update the test database?")
+      XCTAssertEqual(numConverted, 164, "Number of successful conversion changed. Did you update the test database?")
     #else
-      XCTAssertEqual(numSuccess, 163, "Number of successful conversion changed. Did you update the test database?")
+      XCTAssertEqual(numConverted, 163, "Number of successful conversion changed. Did you update the test database?")
     #endif
   }
 
@@ -226,44 +237,30 @@ extension FoundationToWebTests {
     }
   }
 
-  private func _gatherTestResults(url: URL, pathComponent: String?, pathExtension: String?) -> [String: Any] {
+  private func _gatherTestResults(url: URL) -> [String: Any] {
     var result = [String: Any]()
-    if let pathComponent = pathComponent {
-      let newFileURL = url.appendingPathComponent(pathComponent, isDirectory: false)
-      result["appendingPathComponent-File"] = newFileURL.relativeString
-      result["appendingPathComponent-File-BaseURL"] = newFileURL.baseURL?.relativeString ?? kNullString
+    result["relativeString"] = url.relativeString
+    result["baseURLString"] = url.baseURL?.relativeString ?? kNullString
+    result["absoluteString"] = url.absoluteString
+    result["absoluteURLString"] = url.absoluteURL.relativeString
+    result["scheme"] = url.scheme ?? kNullString
+    result["host"] = url.host ?? kNullString
 
-      let newDirURL = url.appendingPathComponent(pathComponent, isDirectory: true)
-      result["appendingPathComponent-Directory"] = newDirURL.relativeString
-      result["appendingPathComponent-Directory-BaseURL"] = newDirURL.baseURL?.relativeString ?? kNullString
-    } else if let pathExtension = pathExtension {
-      let newURL = url.appendingPathExtension(pathExtension)
-      result["appendingPathExtension"] = newURL.relativeString
-      result["appendingPathExtension-BaseURL"] = newURL.baseURL?.relativeString ?? kNullString
-    } else {
-      result["relativeString"] = url.relativeString
-      result["baseURLString"] = url.baseURL?.relativeString ?? kNullString
-      result["absoluteString"] = url.absoluteString
-      result["absoluteURLString"] = url.absoluteURL.relativeString
-      result["scheme"] = url.scheme ?? kNullString
-      result["host"] = url.host ?? kNullString
+    result["port"] = url.port ?? kNullString
+    result["user"] = url.user ?? kNullString
+    result["password"] = url.password ?? kNullString
+    result["path"] = url.path
+    result["query"] = url.query ?? kNullString
+    result["fragment"] = url.fragment ?? kNullString
+    result["relativePath"] = url.relativePath
+    result["isFileURL"] = url.isFileURL ? "YES" : "NO"
+    result["standardizedURL"] = url.standardized.relativeString
 
-      result["port"] = url.port ?? kNullString
-      result["user"] = url.user ?? kNullString
-      result["password"] = url.password ?? kNullString
-      result["path"] = url.path
-      result["query"] = url.query ?? kNullString
-      result["fragment"] = url.fragment ?? kNullString
-      result["relativePath"] = url.relativePath
-      result["isFileURL"] = url.isFileURL ? "YES" : "NO"
-      result["standardizedURL"] = url.standardized.relativeString
-
-      result["pathComponents"] = url.pathComponents
-      result["lastPathComponent"] = url.lastPathComponent
-      result["pathExtension"] = url.pathExtension
-      result["deletingLastPathComponent"] = url.deletingLastPathComponent().relativeString
-      result["deletingLastPathExtension"] = url.deletingPathExtension().relativeString
-    }
+    result["pathComponents"] = url.pathComponents
+    result["lastPathComponent"] = url.lastPathComponent
+    result["pathExtension"] = url.pathExtension
+    result["deletingLastPathComponent"] = url.deletingLastPathComponent().relativeString
+    result["deletingLastPathExtension"] = url.deletingPathExtension().relativeString
     return result
   }
 
@@ -271,7 +268,7 @@ extension FoundationToWebTests {
     var differences = [String]()
     for (key, expectation) in expected {
       // Skip non-string expected results
-      if ["port", "standardizedURL", "pathComponents"].contains(key) {
+      if ["standardizedURL", "pathComponents"].contains(key) {
         continue
       }
       var obj: Any? = expectation
@@ -866,6 +863,25 @@ extension FoundationToWebTests {
       XCTAssertEqual(webURL.serialized(), "file:///usr/bin/swift")
       XCTAssertEqual(webURL.host, .empty)
       XCTAssertEqual(webURL.path, "/usr/bin/swift")
+    }
+  }
+
+  func testRoundTripFailures() {
+
+    // If a domain includes percent-encoded disallowed characters, WebURL will decode them,
+    // and Foundation will reject them when round-tripping.
+    test: do {
+      let foundationURL = URL(string: "http://te%7Bs%7Dt/foo/bar")!
+      XCTAssertEqual(foundationURL.absoluteString, "http://te%7Bs%7Dt/foo/bar")
+      XCTAssertEqual(foundationURL.host, "te{s}t")
+      XCTAssertEqual(foundationURL.path, "/foo/bar")
+
+      let convertedURL = WebURL(foundationURL)!
+      XCTAssertEqual(convertedURL.serialized(), "http://te{s}t/foo/bar")
+      XCTAssertEqual(convertedURL.hostname, "te{s}t")
+      XCTAssertEqual(convertedURL.path, "/foo/bar")
+
+      XCTAssertNil(URL(convertedURL))
     }
   }
 
