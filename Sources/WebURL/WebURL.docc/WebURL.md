@@ -23,6 +23,10 @@ which scales to give you the best possible performance.
 - ``WebURL/WebURL``
 - <doc:PercentEncoding>
 
+### Foundation Interoperability
+
+- <doc:FoundationInterop>
+
 ### Network Hosts
 
 - ``IPv4Address``
