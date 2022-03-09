@@ -256,7 +256,7 @@ extension WebToFoundationTests {
 
   func testHTTPURLs() {
 
-    // Simple URL with doman, no special characters.
+    // Simple URL with domain, no special characters.
     test: do {
       let url = WebURL("http://example.com/foo/bar/baz?qux=qax#glob")!
       guard let converted = URL(url) else {
@@ -431,6 +431,7 @@ extension WebToFoundationTests {
     test: do {
       let url = WebURL("sc:hello, world!")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+      XCTAssertNil(URL(url.encodedForFoundation), "Unexpected conversion: \(url)")
 
       // This failure is enforced by WebURL's encoding function,
       // so it is resilient to changes in Foundation's implementation.
@@ -444,6 +445,7 @@ extension WebToFoundationTests {
     test: do {
       let url = WebURL("p:[")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+      XCTAssertNil(URL(url.encodedForFoundation), "Unexpected conversion: \(url)")
 
       // This failure is enforced by WebURL's encoding function,
       // so it is resilient to changes in Foundation's implementation.
@@ -491,14 +493,17 @@ extension WebToFoundationTests {
     test: do {
       let url = WebURL("sc:foo#bar")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+      XCTAssertNil(URL(url.encodedForFoundation), "Unexpected conversion: \(url)")
     }
     test: do {
       let url = WebURL("sc:foo#bar[baz]=qux")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+      XCTAssertNil(URL(url.encodedForFoundation), "Unexpected conversion: \(url)")
     }
     test: do {
       let url = WebURL("sc:hello world#bar")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+      XCTAssertNil(URL(url.encodedForFoundation), "Unexpected conversion: \(url)")
     }
 
     // Opaque path with query and fragment.
@@ -506,14 +511,17 @@ extension WebToFoundationTests {
     test: do {
       let url = WebURL("sc:foo?bar#baz")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+      XCTAssertNil(URL(url.encodedForFoundation), "Unexpected conversion: \(url)")
     }
     test: do {
       let url = WebURL("sc:foo?bar#baz[qux]=qaz")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+      XCTAssertNil(URL(url.encodedForFoundation), "Unexpected conversion: \(url)")
     }
     test: do {
       let url = WebURL("sc:hello world?foo#bar")!
       XCTAssertNil(URL(url), "Unexpected conversion: \(url)")
+      XCTAssertNil(URL(url.encodedForFoundation), "Unexpected conversion: \(url)")
     }
   }
 }
