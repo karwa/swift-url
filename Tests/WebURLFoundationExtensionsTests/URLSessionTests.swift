@@ -192,7 +192,7 @@ final class URLSessionTests: XCTestCase {}
 
       // Root path.
       let referenceData_root = Data((0...1024).lazy.map { _ in rng.next() })
-      localServer["/"] = { _ in .ok(.data(referenceData_root, contentType: nil)) }
+      localServer["/"] = { _ in .ok(.data(referenceData_root)) }
       makeDataTaskRequest(to: "http://localhost:\(port)/") {
         data, response, error in
         XCTAssertEqual(data, referenceData_root)
@@ -205,7 +205,7 @@ final class URLSessionTests: XCTestCase {}
 
       // Non-root path.
       let referenceData_nonRoot = Data((0...1024).lazy.map { _ in rng.next() })
-      localServer["/foo/bar"] = { _ in .ok(.data(referenceData_nonRoot, contentType: nil)) }
+      localServer["/foo/bar"] = { _ in .ok(.data(referenceData_nonRoot)) }
       makeDataTaskRequest(to: "http://localhost:\(port)/foo/bar") {
         data, response, error in
         XCTAssertEqual(data, referenceData_nonRoot)
@@ -751,7 +751,7 @@ final class URLSessionTests: XCTestCase {}
         var tokens = [AnyCancellable]()
         do {
           let referenceData = Data((0..<1024).lazy.map { _ in rng.next() })
-          localServer["/"] = { _ in .ok(.data(referenceData, contentType: nil)) }
+          localServer["/"] = { _ in .ok(.data(referenceData)) }
 
           let ex = expectation(description: "Root")
           let publisher = URLSession.shared.dataTaskPublisher(for: WebURL("http://localhost:\(port)/")!)
@@ -775,7 +775,7 @@ final class URLSessionTests: XCTestCase {}
 
         do {
           let referenceData = Data((0..<1024).lazy.map { _ in rng.next() })
-          localServer["/foo/bar"] = { _ in .ok(.data(referenceData, contentType: nil)) }
+          localServer["/foo/bar"] = { _ in .ok(.data(referenceData)) }
 
           let ex = expectation(description: "/Foo/Bar")
           let publisher = URLSession.shared.dataTaskPublisher(for: WebURL("http://localhost:\(port)/foo/bar")!)
@@ -848,7 +848,7 @@ final class URLSessionTests: XCTestCase {}
       print("ℹ️ Server started on port: \(port)")
 
       do {
-        localServer["/files/test"] = { _ in .ok(.data(Data("hello, world!".utf8), contentType: nil)) }
+        localServer["/files/test"] = { _ in .ok(.data(Data("hello, world!".utf8))) }
 
         let ex = expectation(description: "Successful Request (Simple)")
         let url = WebURL("http://localhost:\(port)/files/test")!
@@ -873,7 +873,7 @@ final class URLSessionTests: XCTestCase {}
       }
 
       do {
-        localServer["/files/[abc]"] = { _ in .ok(.data(Data("def".utf8), contentType: nil)) }
+        localServer["/files/[abc]"] = { _ in .ok(.data(Data("def".utf8))) }
 
         let ex = expectation(description: "Successful Request (Adding Percent-Encoding)")
         let url = WebURL("http://localhost:\(port)/files/[abc]")!
@@ -935,7 +935,7 @@ final class URLSessionTests: XCTestCase {}
       let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
 
       do {
-        localServer["/files/test"] = { _ in .ok(.data(Data("hello, world!".utf8), contentType: nil)) }
+        localServer["/files/test"] = { _ in .ok(.data(Data("hello, world!".utf8))) }
 
         let ex = expectation(description: "Successful Request (Simple)")
         let url = WebURL("http://localhost:\(port)/files/test")!
@@ -959,7 +959,7 @@ final class URLSessionTests: XCTestCase {}
       }
 
       do {
-        localServer["/files/[abc]"] = { _ in .ok(.data(Data("def".utf8), contentType: nil)) }
+        localServer["/files/[abc]"] = { _ in .ok(.data(Data("def".utf8))) }
 
         let ex = expectation(description: "Successful Request (Adding Percent-Encoding)")
         let url = WebURL("http://localhost:\(port)/files/[abc]")!
