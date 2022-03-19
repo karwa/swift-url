@@ -1,4 +1,4 @@
-name: Swift package tests (Windows)
+name: Swift package tests (Windows, 5.5.3)
 
 on:
   push:
@@ -13,9 +13,9 @@ jobs:
     - uses: actions/checkout@v2
     - uses: seanmiddleditch/gha-setup-vsdevenv@master
 
-    - name: Install Swift 5.5.1
+    - name: Install Swift 5.5.3
       run: |
-        Install-Binary -Url "https://download.swift.org/swift-5.5.1-release/windows10/swift-5.5.1-RELEASE/swift-5.5.1-RELEASE-windows10.exe" -Name "installer.exe" -ArgumentList ("-q")
+        Install-Binary -Url "https://download.swift.org/swift-5.5.3-release/windows10/swift-5.5.3-RELEASE/swift-5.5.3-RELEASE-windows10.exe" -Name "installer.exe" -ArgumentList ("-q")
     - name: Set Environment Variables
       run: |
         echo "SDKROOT=C:\Library\Developer\Platforms\Windows.platform\Developer\SDKs\Windows.sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append

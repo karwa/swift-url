@@ -1,4 +1,4 @@
-name: Swift package tests (Linux)
+name: Swift package tests (Linux, 5.5.3)
 
 on:
   push:
@@ -13,13 +13,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Download Swift 5.3.3
-      run: wget -q https://swift.org/builds/swift-5.3.3-release/ubuntu2004/swift-5.3.3-RELEASE/swift-5.3.3-RELEASE-ubuntu20.04.tar.gz
-    - name: Extract Swift 5.3.3
-      run: tar xzf swift-5.3.3-RELEASE-ubuntu20.04.tar.gz
+    - name: Download Swift 5.5.3
+      run: wget -q https://download.swift.org/swift-5.5.3-release/ubuntu2004/swift-5.5.3-RELEASE/swift-5.5.3-RELEASE-ubuntu20.04.tar.gz
+    - name: Extract Swift 5.5.3
+      run: tar xzf swift-5.5.3-RELEASE-ubuntu20.04.tar.gz
     - name: Add Swift toolchain to PATH
       run: |
-          echo "$GITHUB_WORKSPACE/swift-5.3.3-RELEASE-ubuntu20.04/usr/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/swift-5.5.3-RELEASE-ubuntu20.04/usr/bin" >> $GITHUB_PATH
     - name: Build
       run: swift build -v
     - name: Run tests
