@@ -23,7 +23,7 @@ final class WebPlatformTests: ReportGeneratingTestCase {}
 // MARK: - URL Constructor
 // --------------------------------------------
 // https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json
-// at version 5acc42721ce5811462acc297bff75d33f999cd8f
+// at version 2a64dae4641fbd61bd4257df460e188f425b492e
 // Adjusted to remove an invalid surrogate pair which Foundation's JSON parser refuses to parse.
 
 
@@ -32,7 +32,7 @@ extension WebPlatformTests {
   func testURLConstructor() throws {
     let testFile = try loadTestFile(.WPTURLConstructorTests, as: WPTConstructorTest.TestFile.self)
     assert(
-      testFile.count == 765,
+      testFile.count == 839,
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
 
@@ -42,17 +42,17 @@ extension WebPlatformTests {
       //
       263,  // domain2ascii: (no-break, zero-width, zero-width-no-break) are name-prepped away to nothing.
       265,  // domain2ascii: U+3002 is mapped to U+002E (dot).
-      273,  // domain2ascii: fullwidth input should be converted to ASCII and NOT IDN-ized.
-      278,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
-      279,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
-      290,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
-      393,  // domain2ascii: Hosts and percent-encoding.
-      394,  // domain2ascii: Hosts and percent-encoding.
-      609,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      610,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      277,  // domain2ascii: fullwidth input should be converted to ASCII and NOT IDN-ized.
+      282,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
+      283,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
+      294,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
+      464,  // domain2ascii: Hosts and percent-encoding.
+      465,  // domain2ascii: Hosts and percent-encoding.
+      680,  // domain2ascii: IDNA ignored code points in file URLs hosts.
+      681,  // domain2ascii: IDNA ignored code points in file URLs hosts.
     ])
     harness.runTests(testFile)
-    XCTAssertEqual(harness.reportedResultCount, 666, "Unexpected number of tests executed.")
+    XCTAssertEqual(harness.reportedResultCount, 737, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "weburl_constructor_wpt.txt")
