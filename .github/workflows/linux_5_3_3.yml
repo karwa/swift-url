@@ -1,0 +1,37 @@
+name: Swift package tests (Linux, 5.3.3)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Download Swift 5.3.3
+      run: wget -q https://swift.org/builds/swift-5.3.3-release/ubuntu2004/swift-5.3.3-RELEASE/swift-5.3.3-RELEASE-ubuntu20.04.tar.gz
+    - name: Extract Swift 5.3.3
+      run: tar xzf swift-5.3.3-RELEASE-ubuntu20.04.tar.gz
+    - name: Add Swift toolchain to PATH
+      run: |
+          echo "$GITHUB_WORKSPACE/swift-5.3.3-RELEASE-ubuntu20.04/usr/bin" >> $GITHUB_PATH
+    - name: Build
+      run: swift build -v
+    - name: Run tests
+      run: SWIFT_URL_REPORT_PATH=/tmp/swift-url-report/ swift test --enable-test-discovery -v
+    - name: Build benchmarks
+      run: |
+        cd Benchmarks
+        swift build -v
+    - name: Upload report files
+      uses: actions/upload-artifact@v2
+      if: always()
+      with:
+        name: test-reports
+        path: /tmp/swift-url-report/*
+        if-no-files-found: warn
