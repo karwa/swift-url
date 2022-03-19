@@ -224,16 +224,35 @@ extension ASCII {
   /// Returns `true` if this character is a forbidden host code point, otherwise `false`.
   ///
   /// A forbidden host code point is U+0000 NULL, U+0009 TAB, U+000A LF, U+000D CR,
-  /// U+0020 SPACE, U+0023 (#), U+0025 (%), U+002F (/), U+003A (:), U+003C (<), U+003E (>),
-  /// U+003F (?), U+0040 (@), U+005B ([), U+005C (\), U+005D (]), U+005E (^), or U+007C (|).
+  /// U+0020 SPACE, U+0023 (#), U+002F (/), U+003A (:), U+003C (<), U+003E (>), U+003F (?),
+  /// U+0040 (@), U+005B ([), U+005C (\), U+005D (]), U+005E (^), or U+007C (|).
   ///
   /// https://url.spec.whatwg.org/#host-miscellaneous
   ///
   @inlinable
   internal var isForbiddenHostCodePoint: Bool {
     //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
-    let lo: UInt64 = 0b11010100_00000000_10000000_00101001_00000000_00000000_00100110_00000001
+    let lo: UInt64 = 0b11010100_00000000_10000000_00001001_00000000_00000000_00100110_00000001
     let hi: UInt64 = 0b00010000_00000000_00000000_00000000_01111000_00000000_00000000_00000001
+    if self.codePoint < 64 {
+      return lo & (1 &<< self.codePoint) != 0
+    } else {
+      return hi & (1 &<< (self.codePoint &- 64)) != 0
+    }
+  }
+
+  /// Returns `true` if this character is a forbidden host code point, otherwise `false`.
+  ///
+  /// A forbidden domain code point is a forbiden host code point, a C0 control, U+0025 (%),
+  /// or U+007F DELETE.
+  ///
+  /// https://url.spec.whatwg.org/#host-miscellaneous
+  ///
+  @inlinable
+  internal var isForbiddenDomainCodePoint: Bool {
+    //                 FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210_FEDCBA98_76543210
+    let lo: UInt64 = 0b11010100_00000000_10000000_00101001_11111111_11111111_11111111_11111111
+    let hi: UInt64 = 0b10010000_00000000_00000000_00000000_01111000_00000000_00000000_00000001
     if self.codePoint < 64 {
       return lo & (1 &<< self.codePoint) != 0
     } else {

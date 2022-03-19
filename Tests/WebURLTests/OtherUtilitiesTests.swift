@@ -111,18 +111,29 @@ extension OtherUtilitiesTests {
     XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xBF, 0xBF]))  // DFFF
   }
 
-  func testForbiddenHostCodePoint() {
+  func testForbiddenHostAndDomainCodePoints() {
     /// A forbidden host code point is U+0000 NULL, U+0009 TAB, U+000A LF, U+000D CR,
-    /// U+0020 SPACE, U+0023 (#), U+0025 (%), U+002F (/), U+003A (:), U+003C (<), U+003E (>),
+    /// U+0020 SPACE, U+0023 (#), U+002F (/), U+003A (:), U+003C (<), U+003E (>),
     /// U+003F (?), U+0040 (@), U+005B ([), U+005C (\), U+005D (]), U+005E (^), or U+007C (|).
+
+    /// A forbidden domain code point is a forbiden host code point, a C0 control, U+0025 (%),
+    /// or U+007F DELETE.
     for char in ASCII.allCharacters {
       switch char {
-      case .null, .horizontalTab, .lineFeed, .carriageReturn, .space, .numberSign, .percentSign, .forwardSlash,
+      case .null, .horizontalTab, .lineFeed, .carriageReturn, .space, .numberSign, .forwardSlash,
         .colon, .lessThanSign, .greaterThanSign, .questionMark, .commercialAt, .leftSquareBracket, .backslash,
         .rightSquareBracket, .circumflexAccent, .verticalBar:
         XCTAssertTrue(char.isForbiddenHostCodePoint)
+        XCTAssertTrue(char.isForbiddenDomainCodePoint)
+      case .percentSign, .delete:
+        XCTAssertFalse(char.isForbiddenHostCodePoint)
+        XCTAssertTrue(char.isForbiddenDomainCodePoint)
+      case _ where ASCII.ranges.c0Control.contains(char):
+        XCTAssertFalse(char.isForbiddenHostCodePoint)
+        XCTAssertTrue(char.isForbiddenDomainCodePoint)
       default:
         XCTAssertFalse(char.isForbiddenHostCodePoint)
+        XCTAssertFalse(char.isForbiddenDomainCodePoint)
       }
     }
   }

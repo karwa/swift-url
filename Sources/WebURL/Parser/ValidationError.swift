@@ -96,7 +96,7 @@ extension ValidationError {
   @inlinable internal static var unclosedIPv6Address:                Self { Self(_code: 20) }
   @inlinable internal static var domainToASCIIFailure:               Self { Self(_code: 21) }
   @inlinable internal static var domainToASCIIEmptyDomainFailure:    Self { Self(_code: 22) }
-  @inlinable internal static var hostForbiddenCodePoint:             Self { Self(_code: 23) }
+  @inlinable internal static var hostOrDomainForbiddenCodePoint:     Self { Self(_code: 23) }
   @inlinable internal static var invalidIPv6Address:                 Self { Self(_code: 24) }
   @inlinable internal static var invalidIPv4Address:                 Self { Self(_code: 25) }
   // This one is not in the standard.
@@ -261,9 +261,9 @@ extension ValidationError: CustomStringConvertible {
         This can be caused by many things, such as the domain consisting only of ignorable code points,
         or if the domain is the string "xn--".
         """#
-    case .hostForbiddenCodePoint:
+    case .hostOrDomainForbiddenCodePoint:
       return #"""
-        The input’s host contains a forbidden host code point. Note that hosts are percent-decoded before
+        The input’s host or domain contains a forbidden code point. Note that hosts are percent-decoded before
         being processed when the URL's scheme is special, which would result in the following URL having a hostname
         of "exa#mple.org" (which contains the forbidden host code point "#").
 

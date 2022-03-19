@@ -104,8 +104,8 @@ extension ParsedHost {
         hostnameInfo.encodedCount &+= 2
         continue
       }
-      if asciiChar.isForbiddenHostCodePoint, asciiChar != .percentSign {
-        callback.validationError(.hostForbiddenCodePoint)
+      if asciiChar.isForbiddenHostCodePoint {
+        callback.validationError(.hostOrDomainForbiddenCodePoint)
         return nil
       }
       if URLEncodeSet.C0Control().shouldPercentEncode(ascii: asciiChar.codePoint) {
@@ -129,8 +129,8 @@ extension ParsedHost {
       // TODO: Handle domains conaining Unicode or IDNA labels.
       callback.validationError(.domainToASCIIFailure)
       return nil
-    case .forbiddenHostCodePoint:
-      callback.validationError(.hostForbiddenCodePoint)
+    case .forbiddenDomainCodePoint:
+      callback.validationError(.hostOrDomainForbiddenCodePoint)
       return nil
     case .endsInANumber:
       guard let address = IPv4Address(utf8: domain) else {
@@ -167,8 +167,8 @@ extension ParsedHost {
       guard let char = ASCII(domain[i]) else {
         return .containsUnicodeOrIDNA
       }
-      if char.isForbiddenHostCodePoint {
-        return .forbiddenHostCodePoint
+      if char.isForbiddenDomainCodePoint {
+        return .forbiddenDomainCodePoint
       }
       domainInfo.needsLowercasing = domainInfo.needsLowercasing || char.isUppercaseAlpha
       domainInfo.decodedCount &+= 1
@@ -237,7 +237,7 @@ internal enum _DomainParseResult {
 
   /// The given domain contains forbidden host code-points.
   ///
-  case forbiddenHostCodePoint
+  case forbiddenDomainCodePoint
 
   /// The given domain's final label is a number, according to https://url.spec.whatwg.org/#ends-in-a-number-checker
   /// It should be parsed as an IPv4 address, rather than a domain.
