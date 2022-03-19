@@ -35,24 +35,24 @@ extension WebToFoundationTests {
     // We don't add percent-encoding to a URL's opaque path.
     9,  // Opaque path with space.
     11,  // Opaque path with space.
-    354,  // Opaque path with unescaped backslash.
+    353,  // Opaque path with unescaped backslash.
+    355,  // Opaque path with unescaped '%'.
     356,  // Opaque path with unescaped '%'.
-    357,  // Opaque path with unescaped '%'.
 
     // If a URL has an opaque path and fragment, Foundation percent-encodes the '#'.
     105,  // URL with opaque path and fragment.
     165,  // URL with opaque path and fragment.
-    300,  // URL with opaque path and fragment.
-    301,  // URL with opaque path and fragment.
-    302,  // URL with opaque path and fragment.
-    303,  // URL with opaque path and fragment.
     304,  // URL with opaque path and fragment.
-    333,  // URL with opaque path and fragment.
-    334,  // URL with opaque path and fragment.
+    305,  // URL with opaque path and fragment.
+    306,  // URL with opaque path and fragment.
+    307,  // URL with opaque path and fragment.
+    308,  // URL with opaque path and fragment.
+    337,  // URL with opaque path and fragment.
+    338,  // URL with opaque path and fragment.
 
     // We can't add percent-encoding in domains.
-    387,  // Unescaped curly brackets, backtick.
-    623,  // Unescaped curly brackets, backtick.
+    458,  // Unescaped curly brackets, backtick.
+    694,  // Unescaped curly brackets, backtick.
   ]
   private static let conversionFailures_noAddedPercentEncoding: Set<Int> = {
     var conversionFailures: Set<Int> = conversionFailures_always
@@ -66,24 +66,25 @@ extension WebToFoundationTests {
       147,  // Unescaped percent-sign.
       148,  // Unescaped percent-sign.
       149,  // Unescaped percent-sign.
-      307,  // Unescaped curly brackets, backtick.
-      345,  // Unescaped percent-sign.
-      388,  // Unescaped curly brackets, backtick.
-      480,  // Unescaped vertical bar.
+      311,  // Unescaped curly brackets, backtick.
+      347,  // Unescaped percent-sign.
 
-      591,  // Unescaped percent-sign.
-      593,  // Unescaped percent-sign.
-      618,  // Unescaped percent-sign.
-      619,  // Unescaped percent-sign.
-      620,  // Unescaped percent-sign.
-      621,  // Unescaped percent-sign.
-      622,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
-      624,  // Unescaped percent-sign, square brackets, vertical bar, etc.
-      625,  // Unescaped percent-sign, square brackets, vertical bar, etc.
-      626,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
-      627,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
-      628,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
-      629,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
+      459,  // Unescaped curly brackets, square brackets, backtick, etc.
+      551,  // Unescaped vertical bar.
+
+      662,  // Unescaped percent-sign.
+      664,  // Unescaped percent-sign.
+      689,  // Unescaped percent-sign.
+      690,  // Unescaped percent-sign.
+      691,  // Unescaped percent-sign.
+      692,  // Unescaped percent-sign.
+      693,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
+      695,  // Unescaped percent-sign, square brackets, vertical bar, etc.
+      696,  // Unescaped percent-sign, square brackets, vertical bar, etc.
+      697,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
+      698,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
+      699,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
+      700,  // Unescaped curly brackets, square brackets, backtick, backslash, vertical bar, etc.
     ])
     return conversionFailures
   }()
@@ -166,7 +167,7 @@ extension WebToFoundationTests {
       addEncoding: true,
       isExpectedFailure: { Self.conversionFailures_always.contains($0) }
     )
-    XCTAssertEqual(resultCount, 666)
+    XCTAssertEqual(resultCount, 737)
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "webtofoundation_wpt_withEncoding.txt")
@@ -179,7 +180,7 @@ extension WebToFoundationTests {
       addEncoding: false,
       isExpectedFailure: { Self.conversionFailures_noAddedPercentEncoding.contains($0) }
     )
-    XCTAssertEqual(resultCount, 666)
+    XCTAssertEqual(resultCount, 737)
     XCTAssertFalse(report.hasUnexpectedResults, "Test failed")
 
     let reportURL = fileURLForReport(named: "webtofoundation_wpt_noEncoding.txt")
