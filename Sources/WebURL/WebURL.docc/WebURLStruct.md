@@ -3,7 +3,7 @@
 ## Overview
 
 
-Construct a `WebURL` by initializing a value with a URL String:
+Construct a `WebURL` by initializing a value with a URL string:
 
 ```swift
 WebURL("https://github.com/karwa/swift-url")    // ✅ Typical HTTPS URL.
@@ -11,22 +11,33 @@ WebURL("file:///usr/bin/swift")                 // ✅ Typical file URL.
 WebURL("my.app:/settings/language?debug=true")  // ✅ Typical custom URL.
 ```
 
-`WebURL` aligns with the [latest URL Standard][URL-spec], which governs how browsers and other
-actors on the web platform should interpret URLs. To demonstrate, the following example includes a number of
-syntax mistakes: leading spaces, a mixed-case scheme and domain name, incorrect number of leading slashes,
-as well as unescaped internal spaces and Unicode characters. These sorts of mistakes are relatively common
-not only in user input, but also in network responses and databases. Browsers and JavaScript are able to
-interpret these, and supporting them is important for true compatibility with the web.
+`WebURL` aligns with the [latest URL Standard][URL-spec], which governs how browsers and other actors
+on the web platform should interpret URL strings. It is as lenient as a browser, and includes a number
+of compatibility behaviors necessary for accurate URL processing on the web.
 
-An important feature of the standard is that URLs are always normalized, so when constructing a `WebURL`,
-the URL is automatically cleaned up and made easier for other systems and libraries to work with.
-To see this in action, let's obtain the URL's string representation by calling the ``serialized(excludingFragment:)``
-function.
+To obtain a `WebURL`'s string representation, call the ``serialized(excludingFragment:)`` function,
+or simply construct a `String`:
 
 ```swift
-let url = WebURL("  HTtpS:///MYAPP.COM/sendMessage?I saw a 🦆!")!
-url.serialized() // ✅ "https://myapp.com/sendMessage?I%20saw%20a%20%F0%9F%A6%86!"
+let url = WebURL("https://github.com/karwa/swift-url")!
+url.serialized() // ✅ "https://github.com/karwa/swift-url"
 String(url)      // Same as above.
+```
+
+`WebURL`s are always normalized, so once a value has been parsed, any compatibility behaviors are "cleaned up" and
+the URL can be more easily interpreted - both by your code, and by other systems. Consider the following,
+ill-formatted URL string - it has an uppercase domain-name, a path containing `".."` components, and special characters
+(including Unicode) which are not properly percent-encoded. `WebURL` can parse this string successfully,
+and when we ask for its string representation or any of its components, we get values that are clear 
+and easy to work with. 
+
+```swift
+let url = WebURL("https://MYAPP.COM/foo/../sendMessage?I saw a 🦆!")!
+url.serialized() // ✅ "https://myapp.com/sendMessage?I%20saw%20a%20%F0%9F%A6%86!"
+
+if url.hostname == "myapp.com", url.path == "/sendMessage" {
+  url.query?.percentDecoded()  // ✅ "I saw a 🦆!"
+}
 ```
 
 
@@ -47,7 +58,7 @@ url.query = "q=struct"
 String(url)  // ✅ "https://github.com/karwa/swift-url/search?q=struct"
 ```
 
-WebURL is always normalized, so modified components will be normalized automatically.
+Modified components are normalized automatically.
 
 ```swift
 var url  = WebURL("https://github.com/")!
@@ -55,69 +66,74 @@ url.path = "/apple/swift/pulls/../../swift-package-manager"
 String(url)  // ✅ "https://github.com/apple/swift-package-manager"
 ```
 
-Whilst it may be familiar to work with URL components as strings, they do not fully capture everything that `WebURL`
-knows about a particular component, and require navigating percent-encoding, which can be difficult. 
-For some components which have additional formal/informal meaning, WebURL offers richer APIs which
-are both more precise and more convenient than operating on string values directly:
+Although it may be familiar to work with URL components as strings, `WebURL` also offers richer APIs when
+it knows more about how a component should be interpreted. These APIs are more convenient, expressive, and
+more efficient than operating on string-typed components:
 
 - The ``host-swift.property`` property returns the URL's hostname as an enum.
-  This allows request libraries to understand hostnames as the URL parser does, and to directly establish
-  a network connection.
+  This allows request libraries to understand which _kind of host_ is expressed by the URL,
+  and provides a value which can be used to directly establish a network connection.
 
 - The ``pathComponents-swift.property`` property returns a `Collection` view of a URL's path,
-  and can even be used to add and remove path components. _(Demonstrated below)_
+  and can even be used to add and remove path components at arbitrary locations. _(Demonstrated below)_
 
-- The ``formParams`` property returns a view of a URL's query as a sequence of form-encoded key-value pairs,
-  and offers dynamic properties to read and write query parameters. _(Demonstrated below)_
+- The ``formParams`` property returns a view of a URL's query which supports reading and writing key-value pairs,
+  accessed via a convenient dynamic property API. _(Demonstrated below)_
 
 
 ### Path Components and Query Parameters
 
 
-The ``pathComponents-swift.property`` property is a mutable wrapper which provides a URL's path components
-as a standard Swift `BidirectionalCollection`. It supports for-loops, slicing, map/reduce/filter and more,
-but also adds methods like ``PathComponents-swift.struct/append(_:)``, ``PathComponents-swift.struct/insert(_:at:)``,
-``PathComponents-swift.struct/removeLast(_:)``, which efficiently modify the URL in-place.
+The ``pathComponents-swift.property`` property is a mutable view of a URL's path components as a standard Swift
+`BidirectionalCollection`, allowing you to easily process a URL's path using `for` loops, slices, map/reduce/filter,
+and other generic algorithms all tuned for maximum performance.
 
  ```swift
 let url = WebURL("https://github.com/karwa/swift-url/issues/63")!
 for component in url.pathComponents {
-   // "karwa", "swift-url", "issues", "63"
-}
-if url.pathComponents.dropLast().last == "issues",
-   let issueNumber = url.pathComponents.last.flatMap(Int.init) {
-  // issueNumber: Int = 63
+   // ✅ component = "karwa", "swift-url", "issues", "63"
 }
 
+if url.pathComponents.dropLast().last == "issues",
+   let issueNumber = url.pathComponents.last.flatMap(Int.init) {
+  // ✅ issueNumber = 63
+}
+```
+
+It also includes methods such as ``PathComponents-swift.struct/append(_:)`` (and the `+=` operator),
+``PathComponents-swift.struct/insert(_:at:)``, and ``PathComponents-swift.struct/removeLast(_:)``,
+which can be used for complex path manipulation while efficiently modifying the URL in-place.
+
+```swift
 var url = WebURL("https://info.myapp.com")!
 url.pathComponents += ["music", "bands" "AC/DC"]
 // ✅ "https://info.myapp.com/music/bands/AC%2FDC"
 //                           ^^^^^^^^^^^^^^^^^^^^
+
 url.pathComponents.removeLast()
 url.pathComponents.append("The Rolling Stones")
 // ✅ "https://info.myapp.com/music/bands/The%20%Rolling%20Stones"
 //                                        ^^^^^^^^^^^^^^^^^^^^^^^
 ```
 
-The ``formParams`` property offers a similar interface for query parameters using form-encoding.
+The ``formParams`` property is a mutable view of a URL's query parameters (using HTML form-encoding).
 You can read and write the value for a key using the ``FormEncodedQueryParameters/get(_:)`` and 
-``FormEncodedQueryParameters/set(_:to:)`` methods, or use Swift's dynamic-member syntax to access them
-as properties.
+``FormEncodedQueryParameters/set(_:to:)`` methods, or use Swift's dynamic-member feature to access keys
+as though they were properties on the view.
 
  ```swift
-let url = WebURL("https://example.com/search?category=food&sub=italian&client=mobile")!
+let url = WebURL("https://example.com/search?category=food&client=mobile")!
 url.formParams.category  // "food"
-url.formParams.sub       // "italian"
 url.formParams.client    // "mobile"
 
 var url = WebURL("https://example.com/search")!
 url.formParams += [
   "category" : "sports",
-       "sub" : "cycling",
     "client" : "mobile"
 ]
-// ✅ "https://example.com/search?category=sports&client=mobile&sub=cycling"
-//                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// '+=' appends a Dictionary of key-value pairs:
+// ✅ "https://example.com/search?category=sports&client=mobile"
+//                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 url.formParams.format = "json"
 // ✅ "https://example.com/search?category[...]&format=json"
 //                                             ^^^^^^^^^^^^
@@ -127,15 +143,14 @@ url.formParams.format = "json"
 ### Integration Libraries
 
 
-In addition to all of the above, WebURL offers integration libraries so it may be used with popular first-party and
-third-party libraries.
+The WebURL package includes a number of integration libraries for popular first-party and third-party libraries.
 
 - `WebURLSystemExtras` integrates with **swift-system** (and **System.framework** on Apple platforms) to offer
-   conversion between `System.FilePath` and `WebURL`. It's the best way to work with file URLs.
+   conversions between `FilePath` and `WebURL`. It's the best way to work with file URLs.
 
-- `WebURLFoundationExtras` integrates with **Foundation** to offer conversions between `Foundation.URL` and `WebURL`.
-  This conversion is safe, but does not round-trip because it may add percent-encoding.
-  We're investigating ways to improve that.
+- `WebURLFoundationExtras` integrates with **Foundation** to offer conversions between `Foundation.URL` and `WebURL`,
+   as well as convenient interfaces for APIs such as `URLRequest` and `URLSession`. We **highly recommend** reading
+   <doc:FoundationInterop> for a discussion of how to safely work with multiple URL standards.
 
 [URL-spec]: https://url.spec.whatwg.org/
 
