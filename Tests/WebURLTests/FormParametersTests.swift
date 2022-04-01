@@ -90,6 +90,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     // 'contains' returns the same information.
     XCTAssertTrue(url.formParams.contains("a"))
     XCTAssertTrue(url.formParams.contains("c is the key"))
+    XCTAssertTrue(url.formParams.contains("e"))
     XCTAssertTrue(url.formParams.contains(""))
     XCTAssertFalse(url.formParams.contains("doesNotExist"))
 
@@ -163,6 +164,24 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url)
     }
+
+    // But if there is an '=' sign, it is a KVP with empty key/value and must be preserved.
+    do {
+      var url = WebURL("http://example.com?=&=&=")!
+      XCTAssertEqual(url.serialized(), "http://example.com/?=&=&=")
+      XCTAssertEqual(url.query, "=&=&=")
+      XCTAssertEqual(url.formParams.get(""), "")
+      XCTAssertEqual(url.formParams.getAll("").count, 3)
+
+      // Form-encode, ensure KVPs with empty keys/values are preserved.
+      url.formParams = url.formParams
+      XCTAssertEqual(url.serialized(), "http://example.com/?=&=&=")
+      XCTAssertEqual(url.query, "=&=&=")
+      XCTAssertEqual(url.formParams.get(""), "")
+      XCTAssertEqual(url.formParams.getAll("").count, 3)
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      XCTAssertURLIsIdempotent(url)
+    }
   }
 
   func testAppend() {
@@ -178,16 +197,18 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       url.formParams.append("spa ce", value: "")  // key needs escaping due to substitution only.
       url.formParams.append("search query", value: "why are 🦆 so awesome?")  // both need escaping.
       url.formParams.append("`back`'tick'", value: "")  // U+0027 is encoded by forms, and only by forms.
+      url.formParams.append("", value: "")  // Empty keys and values should be preserved.
       XCTAssertEqual(
         url.serialized(),
-        "http://example.com/?non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27="
+        "http://example.com/?non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&="
       )
       XCTAssertEqual(
-        url.query, "non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27="
+        url.query, "non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&="
       )
       XCTAssertEqual(url.formParams.get("non_escaped"), "true")
       XCTAssertEqual(url.formParams.get("search query"), "why are 🦆 so awesome?")
       XCTAssertEqual(url.formParams.get("`back`'tick'"), "")
+      XCTAssertEqual(url.formParams.get(""), "")
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url)
 
@@ -209,7 +230,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       url.formParams = storedParams
       XCTAssertEqual(
         url.serialized(),
-        "http://foobar.org/?non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&still+alive%3F=should+be%21&owned+and+mutable%3F=sure+thing%21"
+        "http://foobar.org/?non_escaped=true&spa+ce=&search+query=why+are+%F0%9F%A6%86+so+awesome%3F&%60back%60%27tick%27=&=&still+alive%3F=should+be%21&owned+and+mutable%3F=sure+thing%21"
       )
       XCTAssertEqual(url.formParams.get("still alive?"), "should be!")
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
@@ -299,6 +320,71 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
       XCTAssertURLIsIdempotent(url)
     }
+
+    // Appending an empty collection of KVPs should be a no-op.
+    do {
+      var url = WebURL("http://example.com")!
+      XCTAssertEqual(url.serialized(), "http://example.com/")
+      XCTAssertNil(url.query)
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+
+      url.formParams += [] as [(String, String)]
+      XCTAssertEqual(url.serialized(), "http://example.com/")
+      XCTAssertNil(url.query)
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      XCTAssertURLIsIdempotent(url)
+
+      url.formParams += [:] as [String: String]
+      XCTAssertEqual(url.serialized(), "http://example.com/")
+      XCTAssertNil(url.query)
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      XCTAssertURLIsIdempotent(url)
+    }
+    do {
+      var url = WebURL("http://example.com?")!
+      XCTAssertEqual(url.serialized(), "http://example.com/?")
+      XCTAssertEqual(url.query, "")
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+
+      url.formParams += [] as [(String, String)]
+      XCTAssertEqual(url.serialized(), "http://example.com/?")
+      XCTAssertEqual(url.query, "")
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      XCTAssertURLIsIdempotent(url)
+
+      url.formParams += [:] as [String: String]
+      XCTAssertEqual(url.serialized(), "http://example.com/?")
+      XCTAssertEqual(url.query, "")
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      XCTAssertURLIsIdempotent(url)
+    }
+
+    // Appending a non-empty array of key-value pairs, however the keys and values are empty (!).
+    // The empty string is a perfectly valid key name/value.
+    do {
+      var url = WebURL("http://example.com")!
+      XCTAssertEqual(url.serialized(), "http://example.com/")
+      XCTAssertNil(url.query)
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+
+      url.formParams += [("", "")] as [(String, String)]
+      XCTAssertEqual(url.serialized(), "http://example.com/?=")
+      XCTAssertEqual(url.query, "=")
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      XCTAssertURLIsIdempotent(url)
+
+      url.formParams += [("", ""), ("", ""), ("", "")] as [(String, String)]
+      XCTAssertEqual(url.serialized(), "http://example.com/?=&=&=&=")
+      XCTAssertEqual(url.query, "=&=&=&=")
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      XCTAssertURLIsIdempotent(url)
+
+      url.formParams += ["": ""]
+      XCTAssertEqual(url.serialized(), "http://example.com/?=&=&=&=&=")
+      XCTAssertEqual(url.query, "=&=&=&=&=")
+      XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+      XCTAssertURLIsIdempotent(url)
+    }
   }
 
   func testRemove() {
@@ -340,6 +426,7 @@ final class FormEncodedQueryParametersTests: XCTestCase {
     XCTAssertEqual(url.formParams.get("c is the key"), "d")
     XCTAssertEqual(url.formParams.get(""), "foo")
     url.formParams.remove("c is the key")
+    XCTAssertEqual(url.serialized(), "http://example.com/?=foo")
     url.formParams.remove("")
     XCTAssertEqual(url.serialized(), "http://example.com/")
     XCTAssertNil(url.query)
@@ -416,6 +503,26 @@ final class FormEncodedQueryParametersTests: XCTestCase {
       url.serialized(),
       "http://example.com/?c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE&doesNotExist=Yes%2C+it+does%21")
     XCTAssertEqual(url.query, "c+is+the+key=d&e=collapsed&=foo&h=ALSO+THIS+ONE&doesNotExist=Yes%2C+it+does%21")
+    XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+    XCTAssertURLIsIdempotent(url)
+
+    // It is possible to set a value for the empty key.
+    url.formParams.set("", to: "hi")
+    XCTAssertEqual(
+      url.serialized(),
+      "http://example.com/?c+is+the+key=d&e=collapsed&=hi&h=ALSO+THIS+ONE&doesNotExist=Yes%2C+it+does%21")
+    XCTAssertEqual(url.query, "c+is+the+key=d&e=collapsed&=hi&h=ALSO+THIS+ONE&doesNotExist=Yes%2C+it+does%21")
+    XCTAssertEqual(url.formParams.get(""), "hi")
+    XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
+    XCTAssertURLIsIdempotent(url)
+
+    // It is also possible to set an empty value - including for the empty key.
+    url.formParams.set("", to: "")
+    XCTAssertEqual(
+      url.serialized(),
+      "http://example.com/?c+is+the+key=d&e=collapsed&=&h=ALSO+THIS+ONE&doesNotExist=Yes%2C+it+does%21")
+    XCTAssertEqual(url.query, "c+is+the+key=d&e=collapsed&=&h=ALSO+THIS+ONE&doesNotExist=Yes%2C+it+does%21")
+    XCTAssertEqual(url.formParams.get(""), "")
     XCTAssertTrue(url.storage.structure.queryIsKnownFormEncoded)
     XCTAssertURLIsIdempotent(url)
   }
