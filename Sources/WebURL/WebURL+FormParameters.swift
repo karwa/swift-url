@@ -828,50 +828,52 @@ extension URLStorage {
     fromEncoded keyValuePairs: C, lengthIfKnown: Int? = nil
   ) where C: Collection, C.Element == (UTF8Bytes, UTF8Bytes), UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
 
-    let encodedKVPsLength: Int
+    var appendedKVPStringLength: Int
     if let knownLength = lengthIfKnown {
-      encodedKVPsLength = knownLength + (keyValuePairs.count * 2) - 1 /* '=' and '&' */
+      appendedKVPStringLength = knownLength + (keyValuePairs.count * 2) /* '=' and '&' */ - 1
     } else {
-      encodedKVPsLength =
-        keyValuePairs.reduce(into: 0) { length, kvp in
-          length += kvp.0.count + 1 /* '=' */ + kvp.1.count + 1 /* '&' */
-        } - 1
+      appendedKVPStringLength = keyValuePairs.reduce(into: 0) { length, kvp in
+        length += kvp.0.count + 1 /* '=' */ + kvp.1.count + 1 /* '&' */
+      }
+      appendedKVPStringLength -= 1
     }
 
-    var separator: ASCII?
-    switch structure.queryLength {
-    case 0:
-      // No query. We need to add a "?" delimiter.
-      separator = .questionMark
-    case 1:
-      // There is a query, but it's a lone "?" with no string after it.
-      separator = nil
-    default:
-      // There is a query, and we need to add a "&" between the existing contents and appended KVPs.
-      separator = .ampersand
+    guard appendedKVPStringLength > 0 else {
+      return
     }
 
-    guard let bytesToAppend = URLStorage.SizeType(exactly: encodedKVPsLength + (separator == nil ? 0 : 1)) else {
-      fatalError(URLSetterError.exceedsMaximumSize.description)
-    }
-
+    // Calculate the new structure and replace the code-units.
     var newStructure = structure
-    newStructure.queryLength += bytesToAppend
+
+    let bytesToWrite = URLStorage.SizeType(appendedKVPStringLength) + 1
+    let insertPosition: URLStorage.SizeType
+    let delimiter: ASCII
+
+    if structure.queryLength <= 1 {
+      // Replace the entire query.
+      (insertPosition, delimiter) = (structure.queryStart, .questionMark)
+      newStructure.queryLength = bytesToWrite
+    } else {
+      // Append the KVP string to an existing query.
+      (insertPosition, delimiter) = (structure.fragmentStart, .ampersand)
+      newStructure.queryLength += bytesToWrite
+    }
 
     try! replaceSubrange(
-      structure.fragmentStart..<structure.fragmentStart,
-      withUninitializedSpace: bytesToAppend,
+      insertPosition..<structure.fragmentStart,
+      withUninitializedSpace: bytesToWrite,
       newStructure: newStructure
     ) { buffer in
-      var bytesWritten = 0
-      if let separator = separator {
-        buffer[0] = separator.codePoint
-        bytesWritten += 1
-      }
+
+      buffer[0] = delimiter.codePoint
+      var bytesWritten = 1
+
       for (key, value) in keyValuePairs {
         bytesWritten += UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...]).fastInitialize(from: key)
+        precondition(bytesWritten < buffer.count, "Invalid collection: contents have changed between iterations")
         buffer[bytesWritten] = ASCII.equalSign.codePoint
         bytesWritten += 1
+        precondition(bytesWritten <= buffer.count, "Invalid collection: contents have changed between iterations")
         bytesWritten += UnsafeMutableBufferPointer(rebasing: buffer[bytesWritten...]).fastInitialize(from: value)
         if bytesWritten < buffer.count {
           buffer[bytesWritten] = ASCII.ampersand.codePoint
