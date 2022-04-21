@@ -276,7 +276,7 @@ final class IPv6AddressTests: XCTestCase {
       #else
         let p = inet_ntop(AF_INET6, &src, buffer.baseAddress, socklen_t(buffer.count))
       #endif
-      count = (p == nil) ? 0 : strlen(buffer.baseAddress!)
+      count = (p == nil) ? 0 : (strlen(buffer.baseAddress!) + 1 /* null-terminator, written by inet_ntop */)
     }
     return bytes.isEmpty ? nil : String(cString: bytes)
   }
