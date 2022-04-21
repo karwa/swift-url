@@ -1468,3 +1468,12 @@ extension WebURLTests {
     XCTAssertEqual(WebURL("http://ax\tn-\n-6qqa088eba/")?.serialized(), "http://axn--6qqa088eba/")
   }
 }
+
+extension WebURLTests {
+
+  func testIDNA() {
+    let url = WebURL("http://www.foo。bar.com")
+    print(url)
+//    "GOO 　goo.com"
+  }
+}

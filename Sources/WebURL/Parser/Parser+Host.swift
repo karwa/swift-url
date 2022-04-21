@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import IDNA
+
 /// A description of a host that has been parsed from a string.
 ///
 /// - seealso: `ParsedURLString`
@@ -126,6 +128,10 @@ extension ParsedHost {
 
     switch ParsedHost._parseASCIIDomain(domain, isPercentDecoded: isPercentDecoded) {
     case .containsUnicodeOrIDNA:
+
+      let value = normalize(utf8: domain)
+      print(value)
+
       // TODO: Handle domains conaining Unicode or IDNA labels.
       callback.validationError(.domainToASCIIFailure)
       return nil

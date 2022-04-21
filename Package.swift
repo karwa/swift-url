@@ -48,7 +48,11 @@ var package = Package(
   targets: [
     // Products.
     .target(
+      name: "IDNA"
+    ),
+    .target(
       name: "WebURL",
+      dependencies: ["IDNA"],
       exclude: ["WebURL.docc"]
     ),
     .target(

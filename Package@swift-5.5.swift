@@ -48,7 +48,12 @@ let package = Package(
   targets: [
     // Products.
     .target(
-      name: "WebURL"
+      name: "IDNA"
+    ),
+    .target(
+      name: "WebURL",
+      dependencies: ["IDNA"],
+      exclude: ["WebURL.docc"]
     ),
     .target(
       name: "WebURLSystemExtras",
