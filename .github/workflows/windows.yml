@@ -1,0 +1,34 @@
+name: Swift package tests (Windows, Snapshot June 2022)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: Install toolchain DEVELOPMENT-SNAPSHOT-2022-06-02-a
+      uses: compnerd/gha-setup-swift@main
+      with:
+        branch: development
+        tag: DEVELOPMENT-SNAPSHOT-2022-06-02-a
+    - name: Check installation
+      run: swift --version
+    - name: Checkout package
+      uses: actions/checkout@v2
+    - name: Build
+      run: swift build -v
+    - name: Set test report destination
+      run: echo "SWIFT_URL_REPORT_PATH=C:\tmp\swift-url-report" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+    - name: Run tests
+      run: swift test --enable-test-discovery -v
+    - name: Upload report files
+      uses: actions/upload-artifact@v2
+      if: always()
+      with:
+        name: test-reports
+        path: C:\tmp\swift-url-report\*
+        if-no-files-found: warn
