@@ -194,6 +194,76 @@ final class IPv4AddressTests: XCTestCase {
     if let _ = IPv4Address("192.F") { XCTFail("Expected fail") }
     if let _ = IPv4Address("192.0F") { XCTFail("Expected fail") }
     if let _ = IPv4Address("192.0xG") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192k.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168k.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168.0k.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168.0.1k") { XCTFail("Expected fail") }
+
+    // Trailing garbage.
+    if let _ = IPv4Address("192.168.0.1\t") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168.0.1\n") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168.0.1hello") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168.0.1.hello") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168.0.1 hello") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168.0.1\thello") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("192.168.0.1\nhello") { XCTFail("Expected fail") }
+
+    // Leading garbage.
+    if let _ = IPv4Address("\t192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("\n192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("0.192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("hello.192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("hello 192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("hello\t192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address("hello\n192.168.0.1") { XCTFail("Expected fail") }
+  }
+
+  func testInvalid_dottedDecimal() {
+    // TODO: Check for specific validation errors.
+
+    // Non-decimal components.
+    if let _ = IPv4Address(dottedDecimal: "0.0x300") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "0..0x300") { XCTFail("Expected fail") }
+
+    // Non-numbers.
+    if let _ = IPv4Address(dottedDecimal: "sup?") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "100sup?") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "100.sup?") { XCTFail("Expected fail") }
+
+    // Overflow.
+    if let _ = IPv4Address(dottedDecimal: "255.255.255.255") {} else { XCTFail("Failed to parse valid address") }
+    if let _ = IPv4Address(dottedDecimal: "255.255.255.256") { XCTFail("Expected to fail") }
+    if let _ = IPv4Address(dottedDecimal: "255.255.256.0") { XCTFail("Expected to fail") }
+    if let _ = IPv4Address(dottedDecimal: "255.256.0.0") { XCTFail("Expected to fail") }
+    if let _ = IPv4Address(dottedDecimal: "256.0.0.0") { XCTFail("Expected to fail") }
+
+    // Invalid base-X characters.
+    if let _ = IPv4Address(dottedDecimal: "192,168,0,1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192-168-0-1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192 168 0 1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192\n168\n0\n1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192k.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168k.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168.0k.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168.0.1k") { XCTFail("Expected fail") }
+
+    // Trailing garbage.
+    if let _ = IPv4Address(dottedDecimal: "192.168.0.1\t") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168.0.1\n") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168.0.1hello") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168.0.1.hello") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168.0.1 hello") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168.0.1\thello") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "192.168.0.1\nhello") { XCTFail("Expected fail") }
+
+    // Leading garbage.
+    if let _ = IPv4Address(dottedDecimal: "\t192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "\n192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "0.192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "hello.192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "hello 192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "hello\t192.168.0.1") { XCTFail("Expected fail") }
+    if let _ = IPv4Address(dottedDecimal: "hello\n192.168.0.1") { XCTFail("Expected fail") }
   }
 }
 
