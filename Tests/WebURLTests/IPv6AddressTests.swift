@@ -154,6 +154,32 @@ final class IPv6AddressTests: XCTestCase {
       // - Invalid number of pieces.
       ("0001:0002:0003:0004:0005", .notEnoughPieces),
       ("0001:0002:0003:0004:0005:0006:0007:0008:0009", .tooManyPieces),
+
+      // - Invalid characters.
+      ("::helo", .unexpectedCharacter),
+      ("::.", .unexpectedPeriod),
+      (":: ", .unexpectedCharacter),
+      ("::\n", .unexpectedCharacter),
+      ("::\t", .unexpectedCharacter),
+      ("::ff ff", .unexpectedCharacter),
+      ("::ff\nff", .unexpectedCharacter),
+      ("1234k:12k::1234", .unexpectedCharacter),
+      ("1234:12k4::1234", .unexpectedCharacter),
+      ("1234:12k::1234k", .unexpectedCharacter),
+
+      // - Trailing garbage.
+      ("::c0a8:2\t", .unexpectedCharacter),
+      ("::c0a8:2\n", .unexpectedCharacter),
+      ("::c0a8:2 ", .unexpectedCharacter),
+      ("::c0a8:2hello", .unexpectedCharacter),
+      ("::c0a8:2 hello", .unexpectedCharacter),
+
+      // - Leading garbage.
+      ("\t::c0a8:2", .unexpectedCharacter),
+      ("\n::c0a8:2", .unexpectedCharacter),
+      (" ::c0a8:2", .unexpectedCharacter),
+      ("hello::c0a8:2", .unexpectedCharacter),
+      ("hello ::c0a8:2", .unexpectedCharacter),
     ]
 
     struct LastParserError: IPAddressParserCallback {
