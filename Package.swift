@@ -62,7 +62,7 @@ var package = Package(
     .target(
       name: "WebURLTestSupport",
       dependencies: ["WebURL"],
-      resources: [.copy("Resources")]
+      resources: [.copy("TestFilesData")]
     ),
     // Tests.
     .testTarget(
