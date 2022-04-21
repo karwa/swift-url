@@ -39,7 +39,7 @@ public func loadTestFile<T: Decodable>(_ file: TestFile, as: T.Type) throws -> T
 
   let fileData: Data
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
-    let url = Bundle.module.url(forResource: "Resources/\(file.rawValue)", withExtension: "json")!
+    let url = Bundle.module.url(forResource: "TestFilesData/\(file.rawValue)", withExtension: "json")!
     fileData = try Result {
       try Data(contentsOf: url)
     }.mapError {
@@ -48,8 +48,8 @@ public func loadTestFile<T: Decodable>(_ file: TestFile, as: T.Type) throws -> T
   #else
     // SwiftPM resources don't appear to work on other platforms, so just... load it from the repository (sigh).
     var path = #filePath
-    path.removeLast("Resources.swift".utf8.count)
-    path += "Resources/\(file.rawValue).json"
+    path.removeLast("TestFiles.swift".utf8.count)
+    path += "TestFilesData/\(file.rawValue).json"
     guard let data = FileManager.default.contents(atPath: path) else {
       throw LoadTestFileError.failedToLoad(file, error: nil)
     }
