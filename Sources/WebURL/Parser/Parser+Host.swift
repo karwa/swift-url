@@ -129,8 +129,13 @@ extension ParsedHost {
     switch ParsedHost._parseASCIIDomain(domain, isPercentDecoded: isPercentDecoded) {
     case .containsUnicodeOrIDNA:
 
-      let value = normalize(utf8: domain)
-      print(value)
+      var buffer = [UInt8]()
+      if IDNA.toASCII(utf8: domain, writer: { byte in buffer.append(byte) }) {
+        let asciiDomain = String(decoding: buffer, as: UTF8.self)
+        print("Original:", "[\(String(decoding: domain, as: UTF8.self))]", "ToASCII:", "[\(asciiDomain)]")
+      } else {
+        print("ToASCII Failed! Input: [\(String(decoding: domain, as: UTF8.self))]")
+      }
 
       // TODO: Handle domains conaining Unicode or IDNA labels.
       callback.validationError(.domainToASCIIFailure)
