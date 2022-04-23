@@ -20,6 +20,7 @@ import IDNA
 ///
 @usableFromInline
 internal enum ParsedHost {
+  case idn([UInt8])
   case asciiDomain(_ASCIIDomainInfo)
   case ipv4Address(IPv4Address)
   case ipv6Address(IPv6Address)
@@ -129,17 +130,44 @@ extension ParsedHost {
     switch ParsedHost._parseASCIIDomain(domain, isPercentDecoded: isPercentDecoded) {
     case .containsUnicodeOrIDNA:
 
-      var buffer = [UInt8]()
-      if IDNA.toASCII(utf8: domain, writer: { byte in buffer.append(byte) }) {
-        let asciiDomain = String(decoding: buffer, as: UTF8.self)
-        print("Original:", "[\(String(decoding: domain, as: UTF8.self))]", "ToASCII:", "[\(asciiDomain)]")
-      } else {
+// ============ HACKY IDNA INTEGRATION ============
+
+      // The domain should already be percent-decoded (if required), and we don't decode again after IDNA
+      // (anything which gets normalized to percent-encoding, e.g. "％４１.com", will be rejected).
+      //
+      // So just normalize, then check to see whether it's a domain or IPv4.
+
+      var asciiDomain = [UInt8]()
+      guard IDNA.toASCII(utf8: domain, writer: { byte in asciiDomain.append(byte) }) else {
         print("ToASCII Failed! Input: [\(String(decoding: domain, as: UTF8.self))]")
+        return nil
+      }
+      print(
+        "Original:", "[\(String(decoding: domain, as: UTF8.self))]",
+        "ToASCII:", "[\(String(decoding: asciiDomain, as: UTF8.self))]"
+      )
+      guard !asciiDomain.isEmpty else { return nil }
+
+      switch ParsedHost._parseASCIIDomain(asciiDomain, isPercentDecoded: false, ignoreIDNAPrefix: true) {
+      case .containsUnicodeOrIDNA:
+        fatalError("Output of toASCII should be ASCII, and IDNA prefix should be ignored")
+      case .forbiddenDomainCodePoint:
+        callback.validationError(.hostOrDomainForbiddenCodePoint)
+        return nil
+      case .endsInANumber:
+        guard let address = IPv4Address(utf8: asciiDomain) else {
+          return nil
+        }
+        return .ipv4Address(address)
+      case .asciiDomain(_):
+        if case .file = scheme, isLocalhost(utf8: asciiDomain) {
+          return .empty
+        }
+        return .idn(asciiDomain)
       }
 
-      // TODO: Handle domains conaining Unicode or IDNA labels.
-      callback.validationError(.domainToASCIIFailure)
-      return nil
+// ============ END HACKY IDNA INTEGRATION ============
+
     case .forbiddenDomainCodePoint:
       callback.validationError(.hostOrDomainForbiddenCodePoint)
       return nil
@@ -161,13 +189,13 @@ extension ParsedHost {
   ///
   @inlinable
   internal static func _parseASCIIDomain<UTF8Bytes>(
-    _ domain: UTF8Bytes, isPercentDecoded: Bool
+    _ domain: UTF8Bytes, isPercentDecoded: Bool, ignoreIDNAPrefix: Bool = false
   ) -> _DomainParseResult where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
     assert(!domain.isEmpty)
     var domainInfo = _ASCIIDomainInfo(decodedCount: 0, needsPercentDecoding: isPercentDecoded, needsLowercasing: false)
 
-    guard !hasIDNAPrefix(utf8: domain) else {
+    guard !hasIDNAPrefix(utf8: domain) || ignoreIDNAPrefix else {
       return .containsUnicodeOrIDNA
     }
 
@@ -186,7 +214,7 @@ extension ParsedHost {
       domain.formIndex(after: &i)
 
       if char == .period {
-        guard !hasIDNAPrefix(utf8: domain[Range(uncheckedBounds: (i, domain.endIndex))]) else {
+        guard !hasIDNAPrefix(utf8: domain[Range(uncheckedBounds: (i, domain.endIndex))]) || ignoreIDNAPrefix else {
           return .containsUnicodeOrIDNA
         }
         if i < domain.endIndex {
@@ -315,6 +343,11 @@ extension ParsedHost {
     switch self {
     case .empty:
       writer.writeHostname(lengthIfKnown: 0, kind: .empty) { $0(EmptyCollection()) }
+
+    case .idn(let buffer):
+      // FIXME: Do we want to set a flag on the WebURL object that this is an IDN domain? Perhaps a new HostKind case?
+      //        It can be useful info for APIs which decode domains back to Unicode.
+      writer.writeHostname(lengthIfKnown: buffer.count, kind: .domain) { $0(buffer) }
 
     case .asciiDomain(let domainInfo):
       // It isn't worth splitting "needs percent decoding" from "needs lowercasing".

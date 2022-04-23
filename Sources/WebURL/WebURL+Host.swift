@@ -121,6 +121,8 @@ extension WebURL {
       return .ipv6Address(address)
     case .empty:
       return .empty
+    case .idn(let buffer):
+      return .domain(String(decoding: buffer, as: UTF8.self))
     case .asciiDomain:
       return .domain(String(decoding: hostnameCodeUnits, as: UTF8.self))
     case .opaque:

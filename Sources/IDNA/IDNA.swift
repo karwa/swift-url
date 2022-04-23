@@ -14,21 +14,42 @@
 
 //@_spi(_Unicode) import Swift
 
-internal var unused_option: Bool { true }
-
-// URL Standard:
-//
-// > Let result be the result of running Unicode ToASCII with domain_name set to domain,
-// > UseSTD3ASCIIRules set to beStrict, CheckHyphens set to false, CheckBidi set to true, CheckJoiners set to true,
-// > Transitional_Processing set to false, and VerifyDnsLength set to beStrict.
-//
-// https://url.spec.whatwg.org/#concept-domain-to-ascii
-
-
-// Unicode ToASCII algorithm processing steps.
-// https://www.unicode.org/reports/tr46/#Processing
-
-
+/// A namespace for functions and types relating to Internationalized Domain Names for Applications (IDNA).
+///
+/// > One of the great strengths of domain names is universality. The URL `http://Apple.com` goes to Apple's website
+/// > from anywhere in the world, using any browser.
+/// >
+/// > Initially, domain names were restricted to ASCII characters. This was a significant burden on people
+/// > using other characters. Suppose, for example, that the domain name system had been invented by Greeks,
+/// > and one could only use Greek characters in URLs. Rather than `apple.com`, one would have to write something
+/// > like `αππλε.κομ`. An English speaker would not only have to be acquainted with Greek characters,
+/// > but would also have to pick those Greek letters that would correspond to the desired English letters.
+/// > One would have to guess at the spelling of particular words, because there are not exact matches between scripts.
+/// >
+/// > Most of the world’s population faced this situation until recently, because their languages
+/// > use non-ASCII characters. A system was introduced in 2003 for internationalized domain names (IDN).
+/// > This system is called Internationalizing Domain Names for Applications, or IDNA for short.
+/// >
+/// > \- [UTS 46](https://www.unicode.org/reports/tr46/)
+///
+/// IDNA works by encoding Unicode text as ASCII. The text is validated and case-folded as is typical for domains,
+/// but also normalized so that simple ASCII equality of the result corresponds to Unicode canonical equivalence
+/// of the presentation forms. Domains have rather severe length limitations stemming from the early days of
+/// the internet, so a space-efficient "Punycode" encoding is used to turn the normalized, validated Unicode domain
+/// in to an ASCII string.
+///
+/// The result is not human-readable, and instead, IDNs must be decoded to presentation form.
+/// For example, the string `你好你好` becomes `xn--6qqa088eba` when encoded by IDNA. Note that it is not always safe
+/// to display a decoded IDN, and developers should check for possible homograph/spoofing attacks before doing so.
+/// If in doubt, display it in its Punycode-encoded form rather than decoding it.
+///
+/// The best thing about IDNA is that domains are encoded on a per-label basis, so `api.你好你好.com`
+/// becomes `api.xn--6qqa088eba.com`, and as far as any routing/filtering or other network-related software/hardware
+/// is concerned, that is just a standard ASCII domain. It has the same structure, and things like SSL certificates
+/// can be matched simply without needing to consider Unicode equivalence of hostnames.
+///
+/// But despite computers seeing it as an ASCII domain, users can interact with it in their native language. Cool.
+///
 public enum IDNA {}
 
 
@@ -39,6 +60,25 @@ public enum IDNA {}
 
 extension IDNA {
 
+  /// Encodes a domain as an Internationalized Domain Name (IDN).
+  ///
+  /// The given domain may be in Unicode (or "presentation") form, or already encoded as an IDN string.
+  /// This operation is idempotent, so encoding an already-encoded IDN string will simply return the same string,
+  /// unchanged.
+  ///
+  /// This function is defined by the [WHATWG URL Standard][WHATWG-ToASCII], which defers to the function defined in
+  /// [UTS #46][UTS46-ToASCII], with parameters bound as follows:
+  ///
+  /// - `Transitional_Processing` is `false`
+  /// - `CheckHyphens` is `false`
+  /// - `CheckBidi` is `true`
+  /// - `CheckJoiners` is `true`
+  /// - `UseSTD3ASCIIRules` is given by the parameter `beStrict`
+  /// - `VerifyDnsLength` is given by the parameter `beStrict`
+  ///
+  /// [WHATWG-ToASCII]: https://url.spec.whatwg.org/#concept-domain-to-ascii
+  /// [UTS46-ToASCII]: https://www.unicode.org/reports/tr46/#ToASCII
+  ///
   public static func toASCII<Source>(
     utf8 source: Source, beStrict: Bool = false, writer: (UInt8) -> Void
   ) -> Bool where Source: Collection, Source.Element == UInt8 {
@@ -55,6 +95,7 @@ extension IDNA {
     }
   }
 }
+
 
 // --------------------------------------------
 // MARK: - Mapping and Normlization
@@ -172,6 +213,11 @@ extension IDNA {
     case skipped
     case mapped([Unicode.Scalar])
     case invalid
+
+    static func mapped(_ v: [UInt32]) -> Self {
+      // FIXME: Array Map.
+      .mapped(v.map { Unicode.Scalar($0)! })
+    }
   }
 
   internal static func getScalarMapping(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> Mapping {
@@ -183,9 +229,7 @@ extension IDNA {
 
     lookup: for (codepoints, status, mapping) in _idna_mapping_data_subs.joined() {
       if codepoints.lowerBound > scalar.value {
-        // Not found. Assume valid.
-        // TODO: Is that a safe assumption? I think so due to Unicode's compatibility guarantees.
-        return .valid
+        return .invalid  // Not found. Assume invalid.
       }
       if codepoints.contains(scalar.value) {
         switch status {
@@ -194,19 +238,15 @@ extension IDNA {
         case .ignored:
           return .skipped
         case .mapped:
-          return .mapped(mapping!.map { Unicode.Scalar($0)! }) // FIXME: Array Map.
+          return .mapped(mapping!)
         case .deviation:
-          if transitionalProcessing {
-            return .mapped(mapping!.map { Unicode.Scalar($0)! }) // FIXME: Array Map.
-          } else {
-            return .valid
-          }
+          return transitionalProcessing ? .mapped(mapping!) : .valid
         case .disallowed:
           return .invalid
         case .disallowed_STD3_valid:
           return useSTD3ASCIIRules ? .invalid : .valid
         case .disallowed_STD3_mapped:
-          return useSTD3ASCIIRules ? .invalid : .mapped(mapping!.map { Unicode.Scalar($0)! }) // FIXME: Array Map.
+          return useSTD3ASCIIRules ? .invalid : .mapped(mapping!)
         }
       }
     }
@@ -257,7 +297,7 @@ extension IDNA {
 
 extension IDNA {
 
-  static func checkAndEncodeLabel<Label>(
+  internal static func checkAndEncodeLabel<Label>(
     _ label: Label, verifyDNSLength: Bool, writer: (UInt8) -> Void
   ) -> Bool where Label: BidirectionalCollection, Label.Element == Unicode.Scalar {
 
@@ -267,11 +307,8 @@ extension IDNA {
 
     // 5. Encode each label to ASCII with Punycode, write to result.
     //
+    guard Punycode.encode(label, writer: writer) else { return false }
 
-    // FIXME: For now, just write it as UTF-8 instead of actually ASCII.
-    for scalar in label {
-      UTF8.encode(scalar) { byte in writer(byte) }
-    }
     return true
   }
 
@@ -379,3 +416,15 @@ extension IDNA {
     return true
   }
 }
+
+
+
+
+
+
+
+// MARK: - Utils
+
+
+
+internal var unused_option: Bool { true }

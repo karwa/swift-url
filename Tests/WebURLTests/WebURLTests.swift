@@ -1472,8 +1472,22 @@ extension WebURLTests {
 extension WebURLTests {
 
   func testIDNA() {
-    let url = WebURL("http://www.foo。bar.com")
-    print(url)
-//    "GOO 　goo.com"
+    let hosts: [(String, String?)] = [
+      ("www.foo。bar.com", "www.foo.bar.com"),
+      ("GOO 　goo.com", nil),
+      ("💩.com", "xn--ls8h.com"),
+      ("hello.💩.com", "hello.xn--ls8h.com"),
+      ("你好你好", "xn--6qqa088eba"),
+      ("faß.api.你好你好.com", "xn--fa-hia.api.xn--6qqa088eba.com"),
+      ("faß.ExAmPlE", "xn--fa-hia.example"),
+      ("0x𝟕f.1", "127.0.0.1"),
+      ("０Ｘｃ０．０２５０．０１", "192.168.0.1"),
+    ]
+    for (inputHost, urlHost) in hosts {
+      let url = WebURL("http://\(inputHost)")
+      XCTAssertEqual(url?.hostname, urlHost)
+      print("URL:", url?.serialized() ?? "nil")
+      print("")
+    }
   }
 }
