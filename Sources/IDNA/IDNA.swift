@@ -84,8 +84,11 @@ extension IDNA {
   ) -> Bool where Source: Collection, Source.Element == UInt8 {
 
     var prepped = CompatibilityMappedAndNormalized(source: source.makeIterator(), useSTD3ASCIIRules: beStrict)
-    return _bufferLabels(&prepped, capLength: beStrict) { iter, label, isLast in
-      guard !iter.hasError, checkAndEncodeLabel(label, verifyDNSLength: beStrict, writer: writer) else {
+    return _bufferAndDecodeLabels(&prepped, capLength: beStrict) { iter, label, wasDecoded, isLast in
+      guard
+        !iter.hasError,
+        checkAndEncodeLabel(label, wasAlreadyPunycode: wasDecoded, verifyDNSLength: beStrict, writer: writer)
+      else {
         return false
       }
       if !isLast {
@@ -256,18 +259,19 @@ extension IDNA {
 
 
 // --------------------------------------------
-// MARK: - Label Buffering
+// MARK: - Label Buffering, Decoding
 // --------------------------------------------
 
 
 extension IDNA {
 
-  /// Consumes an iterator of Unicode scalars, collecting each domain label in to a buffer which is processed
-  /// by the given closure.
+  /// Consumes an iterator of Unicode scalars, collecting each domain label in to a buffer.
+  /// The label is then Punycode-decoded in-place if necessary, before being provided to
+  /// the given closure for further processing.
   ///
-  internal static func _bufferLabels<Source>(
+  internal static func _bufferAndDecodeLabels<Source>(
     _ source: inout Source, capLength: Bool,
-    writer: (_ source: Source, _ label: [Unicode.Scalar], _ isLast: Bool) -> Bool
+    writer: (_ source: Source, _ label: inout [Unicode.Scalar], _ wasDecoded: Bool, _ isLast: Bool) -> Bool
   ) -> Bool where Source: IteratorProtocol, Source.Element == Unicode.Scalar {
 
     // TODO: When capLength = true, we could use a fixed-size stack buffer.
@@ -276,7 +280,16 @@ extension IDNA {
     while let scalar = source.next() {
       // 3. Break in to domain labels at U+002E FULL STOP (".").
       guard scalar != "." else {
-        guard writer(source, labelBuffer, false) else { return false }
+        let wasDecoded: Bool
+        switch Punycode.decodeInPlace(&labelBuffer[...]) {
+        case .failed:
+          return false
+        case .success:
+          wasDecoded = true
+        case .notPunycode:
+          wasDecoded = false
+        }
+        guard writer(source, &labelBuffer, wasDecoded, false) else { return false }
         labelBuffer.removeAll(keepingCapacity: true)
         continue
       }
@@ -285,7 +298,16 @@ extension IDNA {
       }
       labelBuffer.append(scalar)
     }
-    return writer(source, labelBuffer, true)
+    let wasDecoded: Bool
+    switch Punycode.decodeInPlace(&labelBuffer[...]) {
+    case .failed:
+      return false
+    case .success:
+      wasDecoded = true
+    case .notPunycode:
+      wasDecoded = false
+    }
+    return writer(source, &labelBuffer, wasDecoded, true)
   }
 }
 
@@ -298,33 +320,35 @@ extension IDNA {
 extension IDNA {
 
   internal static func checkAndEncodeLabel<Label>(
-    _ label: Label, verifyDNSLength: Bool, writer: (UInt8) -> Void
+    _ label: Label, wasAlreadyPunycode: Bool, verifyDNSLength: Bool, writer: (UInt8) -> Void
   ) -> Bool where Label: BidirectionalCollection, Label.Element == Unicode.Scalar {
 
     // 4. Validate each label (checkHypens, checkJoiners, checkBidi, etc).
     //
-    guard checkLabel(label, verifyDNSLength: verifyDNSLength) else { return false }
+    guard checkLabel(label, wasAlreadyPunycode: wasAlreadyPunycode, verifyDNSLength: verifyDNSLength) else {
+      return false
+    }
 
     // 5. Encode each label to ASCII with Punycode, write to result.
     //
-    guard Punycode.encode(label, writer: writer) else { return false }
+    guard Punycode.encode(label, into: writer) else {
+      return false
+    }
 
     return true
   }
 
   private static func checkLabel<Source>(
-    _ label: Source, verifyDNSLength: Bool
+    _ label: Source, wasAlreadyPunycode: Bool, verifyDNSLength: Bool
   ) -> Bool where Source: BidirectionalCollection, Source.Element == UnicodeScalar {
 
-    if label.starts(with: ["x", "n", "-", "-"]) {
-      // TODO: Decode from Punycode
-      // TODO: Validate decoded code-points, but do not map them.
+    assert(!label.starts(with: ["x", "n", "-", "-"]))
 
+    if wasAlreadyPunycode {
+      // TODO: Validate decoded code-points, but do not map them.
       // > With either Transitional or Nontransitional Processing, sources already in Punycode are validated without mapping.
       // > In particular, Punycode containing Deviation characters, such as href="xn--fu-hia.de" (for fuß.de) is not remapped.
       // > This provides a mechanism allowing explicit use of Deviation characters even during a transition period.
-
-      return false
     }
 
     // Flags.
@@ -418,13 +442,24 @@ extension IDNA {
 }
 
 
+// --------------------------------------------
+// MARK: - ToUnicode
+// --------------------------------------------
 
 
+extension IDNA {
 
+  // FIXME: Unimplemented. Only here for docs references.
+
+  public static func toUnicode<Source>(
+    utf8 source: Source, beStrict: Bool = false, writer: (UInt8) -> Void
+  ) -> Bool where Source: Collection, Source.Element == UInt8 {
+
+    fatalError("Here for docs references only")
+  }
+}
 
 
 // MARK: - Utils
-
-
 
 internal var unused_option: Bool { true }

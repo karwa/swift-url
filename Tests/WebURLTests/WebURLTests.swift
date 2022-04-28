@@ -1477,17 +1477,36 @@ extension WebURLTests {
       ("GOO 　goo.com", nil),
       ("💩.com", "xn--ls8h.com"),
       ("hello.💩.com", "hello.xn--ls8h.com"),
-      ("你好你好", "xn--6qqa088eba"),
       ("faß.api.你好你好.com", "xn--fa-hia.api.xn--6qqa088eba.com"),
       ("faß.ExAmPlE", "xn--fa-hia.example"),
       ("0x𝟕f.1", "127.0.0.1"),
       ("０Ｘｃ０．０２５０．０１", "192.168.0.1"),
+      ("ₓn--fa-hia.example", "xn--fa-hia.example"),
+      ("☃", "xn--n3h"),
+      ("xn--n3h", "xn--n3h"),
+      ("你好你好", "xn--6qqa088eba"),
+      ("xn--6qqa088eba", "xn--6qqa088eba"),
+      ("a.أهلا.com", "a.xn--igbi0gl.com"),
+      ("a.هذهالكلمة.com", "a.xn--mgbet1febhkb.com"),
+      ("xn--b1abfaaepdrnnbgefbadotcwatmq2g4l", "xn--b1abfaaepdrnnbgefbadotcwatmq2g4l"),
+      ("xn--bbb", "xn--bbb"),
+
+//      ("a.b.c.xn--pokxncvks", nil), FIXME: Valid punycode; is supposed to fail in validation
     ]
     for (inputHost, urlHost) in hosts {
+      // 1. Check that we can parse the input hostname in a URL.
       let url = WebURL("http://\(inputHost)")
+      // 2. Should be mapped and encoded to the correct value (or fail).
       XCTAssertEqual(url?.hostname, urlHost)
+
+      defer { print("") }
       print("URL:", url?.serialized() ?? "nil")
-      print("")
+
+      // 3. Check idemopotence.
+      guard let url = url else { continue }
+      let roundtrip = WebURL(url.serialized())
+      XCTAssertEqual(roundtrip?.serialized(), url.serialized())
+      XCTAssertEqual(roundtrip?.hostname, url.hostname)
     }
   }
 }

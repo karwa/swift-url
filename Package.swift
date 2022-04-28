@@ -70,6 +70,10 @@ var package = Package(
     ),
     // Tests.
     .testTarget(
+      name: "IDNATests",
+      dependencies: ["IDNA", "WebURLTestSupport"]
+    ),
+    .testTarget(
       name: "WebURLTests",
       dependencies: ["WebURL", "WebURLTestSupport", "Checkit"]
     ),
