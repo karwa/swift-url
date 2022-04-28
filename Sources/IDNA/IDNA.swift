@@ -271,25 +271,40 @@ extension IDNA {
   ///
   internal static func _bufferAndDecodeLabels<Source>(
     _ source: inout Source, capLength: Bool,
-    writer: (_ source: Source, _ label: inout [Unicode.Scalar], _ wasDecoded: Bool, _ isLast: Bool) -> Bool
+    writer: (_ source: Source, _ label: ArraySlice<Unicode.Scalar>, _ wasDecoded: Bool, _ isLast: Bool) -> Bool
   ) -> Bool where Source: IteratorProtocol, Source.Element == Unicode.Scalar {
 
     // TODO: When capLength = true, we could use a fixed-size stack buffer.
 
     var labelBuffer = [Unicode.Scalar]()
+    labelBuffer.reserveCapacity(64)
+
+    func decodeAndWriteBuffer(isLast: Bool) -> Bool {
+      let slice: ArraySlice<Unicode.Scalar>
+      let wasDecoded: Bool
+      switch Punycode.decodeInPlace(&labelBuffer) {
+      case .success(let count):
+        slice = labelBuffer.prefix(count)
+        wasDecoded = true
+      case .notPunycode:
+        slice = labelBuffer[...]
+        wasDecoded = false
+      case .failed:
+        return false
+      }
+      return writer(source, slice, wasDecoded, isLast)
+    }
+
     while let scalar = source.next() {
+
       // 3. Break in to domain labels at U+002E FULL STOP (".").
+
       guard scalar != "." else {
-        let wasDecoded: Bool
-        switch Punycode.decodeInPlace(&labelBuffer[...]) {
-        case .failed:
-          return false
-        case .success:
-          wasDecoded = true
-        case .notPunycode:
-          wasDecoded = false
-        }
-        guard writer(source, &labelBuffer, wasDecoded, false) else { return false }
+
+        // 4. If the label starts with "xn--", decode from Punycode.
+        //    (... + further processing by writer)
+
+        guard decodeAndWriteBuffer(isLast: false) else { return false }
         labelBuffer.removeAll(keepingCapacity: true)
         continue
       }
@@ -298,16 +313,11 @@ extension IDNA {
       }
       labelBuffer.append(scalar)
     }
-    let wasDecoded: Bool
-    switch Punycode.decodeInPlace(&labelBuffer[...]) {
-    case .failed:
-      return false
-    case .success:
-      wasDecoded = true
-    case .notPunycode:
-      wasDecoded = false
-    }
-    return writer(source, &labelBuffer, wasDecoded, true)
+
+    // 4. If the label starts with "xn--", decode from Punycode.
+    //    (... + further processing by writer)
+
+    return decodeAndWriteBuffer(isLast: true)
   }
 }
 

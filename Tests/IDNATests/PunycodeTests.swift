@@ -79,13 +79,26 @@ extension PunycodeTests {
 
   func testDecodeInPlace() {
 
-    func _depunycode(_ input: String, expected: Punycode.DecodingResult? = nil) -> [Unicode.Scalar]? {
+    enum ExpectedResult {
+      case success
+      case failure
+      case notPunycode
+    }
+
+    func _depunycode(_ input: String, expected: ExpectedResult = .failure) -> [Unicode.Scalar]? {
       var decoded = Array(input.unicodeScalars)
-      let result = Punycode.decodeInPlace(&decoded[...])
-      if expected != nil {
-        XCTAssertEqual(expected, result)
+      switch Punycode.decodeInPlace(&decoded) {
+      case .success(count: let count):
+        XCTAssertEqual(expected, .success, "Unexpected decoding")
+        decoded.removeLast(decoded.count - count)
+        return decoded
+      case .notPunycode:
+        XCTAssertEqual(expected, .notPunycode, "Expected decoding")
+        return decoded
+      case .failed:
+        XCTAssertEqual(expected, .failure, "Expected failure")
+        return nil
       }
-      return result != .failed ? decoded : nil
     }
 
     // === Valid Inputs ===
@@ -173,11 +186,12 @@ extension PunycodeTests {
     func doTest(encoded expectedEncoded: String, decoded expectedDecoded: String) {
 
       // Decode the label, resulting in a string of Unicode scalars.
-      var actualDecoded = Array(expectedEncoded.unicodeScalars)
-      guard case .success = Punycode.decodeInPlace(&actualDecoded[...]) else {
+      var actualDecoded = Array(expectedEncoded.unicodeScalars)[...]
+      guard case .success(let decodedCount) = Punycode.decodeInPlace(&actualDecoded) else {
         XCTFail("Failed to decode, or 'xn--' prefix not found")
         return
       }
+      actualDecoded = actualDecoded.prefix(decodedCount)
       XCTAssertEqualElements(actualDecoded, expectedDecoded.unicodeScalars)
 
       // Re-encoding the decoded output should reproduce the original string.

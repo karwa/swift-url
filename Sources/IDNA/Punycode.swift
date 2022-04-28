@@ -286,105 +286,112 @@ extension Punycode {
 
 extension Punycode {
 
-  /// The result of decoding an ASCII Punycode string to Unicode.
+  /// The result of decoding an ASCII Punycode label to Unicode.
   ///
-  public enum DecodingResult {
+  public enum DecodeInPlaceResult {
 
     /// The string was decoded successfully.
-    case success
+    /// It can be found in the first `count` elements of the buffer.
+    ///
+    case success(count: Int)
 
-    /// The source string is invalid and could not be decoded.
+    /// The string is invalid and could not be decoded.
+    /// The contents of the buffer should be considered invalid and discarded.
+    ///
     case failed
 
-    /// The string lacks the Punycode ACE prefix ("xn--") and has not been decoded.
+    /// The string lacks the Punycode ACE prefix (`"xn--"`) and so has not been decoded.
+    ///
     case notPunycode
   }
 
   /// Decodes the given ASCII Punycode label to Unicode.
   ///
-  /// The label is decoded in-place. The Punycode algorithm encodes Unicode text by describing a base string
-  /// consisting of ASCII scalars; it then encodes a set of steps by which this decoder inserts Unicode scalars
-  /// in to that base string.
+  /// The label, expressed as a buffer of Unicode codepoints, is decoded in-place over the existing contents.
+  /// If decoding is successful, the return value ``DecodeInPlaceResult/success(count:)`` communicates
+  /// the length of the decoded string within the buffer.
   ///
   /// The label must contain the ACE prefix (`"xn--"`), otherwise no decoding will be performed
-  /// and the function will return `.notPunycode`.
+  /// and the function will return ``DecodeInPlaceResult/notPunycode``.
+  ///
+  /// If the label contains the ACE prefix but is ill-formed, or is so long that it would cause
+  /// internal calculations to overflow (~3800 scalars), the function will return ``DecodeInPlaceResult/failed``.
+  /// The contents of the buffer should be considered invalid and discarded in that case.
   ///
   /// ```swift
   /// func decodeDomainLabel(_ input: String) -> String? {
-  ///   var decoded = Array(input.unicodeScalars)
-  ///   if case .failed = Punycode.decodeInPlace(&decoded[...]) {
-  ///     return nil  // Nonsense punycode.
+  ///   var buffer = Array(input.unicodeScalars)
+  ///   switch Punycode.decodeInPlace(&buffer) {
+  ///   case .success(let count):
+  ///     var result = ""
+  ///     result.unicodeScalars.append(contentsOf: buffer.prefix(count))
+  ///     return result
+  ///   case .notPunycode:
+  ///     return input // No "xn--" prefix.
+  ///   case .failed:
+  ///     return nil   // "xn--" prefix but nonsense punycode.
   ///   }
-  ///   var result = ""
-  ///   result.unicodeScalars.append(contentsOf: decoded)
-  ///   return result
   /// }
   ///
   /// decodeDomainLabel("xn--6qqa088eba")  // "你好你好"
   /// ```
   ///
-  /// > Important:
+  /// > Note:
   /// >
-  /// > Punycode is just an implementation detail of IDNA, and decoding is not enough to properly handle
-  /// > Internationalized Domain Names (IDNs). If you wish to decode an IDN to its Unicode/display form,
-  /// > use the ``IDNA/IDNA/toUnicode(utf8:beStrict:writer:)`` function instead.
+  /// > Punycode is just an implementation detail of IDNA, and decoding a domain label is not enough
+  /// > to properly handle Internationalized Domain Names (IDNs). If you wish to decode an encoded IDN
+  /// > to its Unicode/display form, use the ``IDNA/IDNA/toUnicode(utf8:beStrict:writer:)`` function instead.
   ///
-  public static func decodeInPlace(_ buffer: inout ArraySlice<Unicode.Scalar>) -> DecodingResult {
-    _decodeInPlace(&buffer)
-  }
+  @inlinable
+  public static func decodeInPlace<Buffer>(
+    _ buffer: inout Buffer
+  ) -> DecodeInPlaceResult where Buffer: RandomAccessCollection & MutableCollection, Buffer.Element == Unicode.Scalar {
 
-  // TODO: This isn't ^really^ generic, because it relies on certain index behaviour when mutating.
-  //       We need to slightly tweak the way codepoints are inserted so that it doesn't use RRC at all,
-  //       and only relies on MutableCollection.
+    // 1. Make sure there is something for us to decode.
+    //    If there is no ACE prefix, we don't consider it a Punycode string.
 
-  internal static func _decodeInPlace<Buffer>(
-    _ input: inout Buffer
-  ) -> DecodingResult
-  where
-    Buffer: BidirectionalCollection & RangeReplaceableCollection & MutableCollection,
-    Buffer.Element == Unicode.Scalar
-  {
-
-    // FIXME: (Performance) Move the 'basic' codepoints up manually and leave the tail where it is.
-    guard input.starts(with: ["x", "n", "-", "-"]) else { return .notPunycode }
-    input.removeFirst(4)
-
-    var tailReadCursor: Buffer.Index
-    var countProcessedScalars: UInt32
-    let suffixScalarsToRemove: Int
-
-    // Split the input in to 'basic' (ASCII) codepoints (if there are any), and the tail.
-
-    if let tailDelimiter = input.lastIndex(of: "-") {
-      tailReadCursor = input.index(after: tailDelimiter)
-      countProcessedScalars = UInt32(input.distance(from: input.startIndex, to: tailDelimiter))
-      suffixScalarsToRemove = input.distance(from: tailDelimiter, to: input.endIndex)
-      // Validate the basic codepoints.
-      guard !input.prefix(upTo: tailDelimiter).contains(where: { !isBasic($0) }) else {
-        return .failed
+    do {
+      var iter = buffer.makeIterator()
+      guard iter.next() == "x", iter.next() == "n", iter.next() == "-", iter.next() == "-" else {
+        return .notPunycode
       }
-
-    } else {
-      tailReadCursor = input.startIndex
-      countProcessedScalars = 0
-      suffixScalarsToRemove = input.count
     }
 
-    // Consume the tail, inserting scalars among the basic codepoints where it tells us to.
+    // 2. Find the base string containing the basic (ASCII) codepoints, and copy them to the front.
+    //    The rest is the tail, containing a sequence of encoded deltas.
 
-    var insertionPoint = input.startIndex
+    var tailCursor = buffer.index(buffer.startIndex, offsetBy: 4)
+    var countProcessedScalars = UInt32.zero
+
+    if let tailDelimiter = buffer[tailCursor...].lastIndex(of: "-") {
+      var src = tailCursor
+      var dst = buffer.startIndex
+      while src < tailDelimiter {
+        guard isBasic(buffer[src]) else { return .failed }
+        buffer[dst] = buffer[src]
+        buffer.formIndex(after: &src)
+        buffer.formIndex(after: &dst)
+      }
+      tailCursor = buffer.index(after: tailDelimiter)
+      countProcessedScalars = UInt32(buffer.distance(from: buffer.startIndex, to: dst))
+    }
+
+    // 3. Consume the tail, decoding deltas, which are instructions
+    //    to insert a scalar at a "random" (non-sequential) location.
+
+    var insertionPoint = buffer.startIndex
     var (codePoint, bias) = InitialDecoderState
 
-    while tailReadCursor < input.endIndex {
+    while tailCursor < buffer.endIndex {
 
-      // Decode a variable-length integer into delta.
+      // 3a. Decode a variable-length integer into delta.
 
       var delta = UInt32.zero
       do {
         var (weight, k) = (UInt32(1), Base)
         while true {
-          guard tailReadCursor < input.endIndex, let digit = decode_digit(input[tailReadCursor]) else { return .failed }
-          input.formIndex(after: &tailReadCursor)
+          guard tailCursor < buffer.endIndex, let digit = decode_digit(buffer[tailCursor]) else { return .failed }
+          buffer.formIndex(after: &tailCursor)
 
           guard digit <= (.max &- delta).dividedReportingOverflow(by: weight).partialValue else { return .failed }
           delta &+= digit &* weight
@@ -399,46 +406,62 @@ extension Punycode {
         }
       }
 
-      // Adjust bias for the next integer.
-
-      countProcessedScalars += 1
-      bias = calculateAdjustedBias(
-        delta: delta,
-        countProcessedScalars: countProcessedScalars,
-        isFirstAdjustment: insertionPoint == input.startIndex
-      )
-
-      // Increment the { codePoint, insertionPoint } state by 'delta'.
+      // 3b. Process delta.
+      //     Use it to adjust the bias for the next integer, then use it to increment our
+      //     { codePoint, insertionPoint} state.
 
       do {
-        let distanceToEnd = countProcessedScalars &- UInt32(input.distance(from: input.startIndex, to: insertionPoint))
-        if delta < distanceToEnd {
+        // Increment 'countProcessedScalars' now even though it is actually written later;
+        // it's how Punycode works, and it is important for this to never be zero.
+        countProcessedScalars += 1
+        bias = calculateAdjustedBias(
+          delta: delta,
+          countProcessedScalars: countProcessedScalars,
+          isFirstAdjustment: insertionPoint == buffer.startIndex
+        )
+
+        let stepsToEnd = countProcessedScalars &- UInt32(buffer.distance(from: buffer.startIndex, to: insertionPoint))
+        if delta < stepsToEnd {
           // Same codepoint, repeated at a different offset.
-          input.formIndex(&insertionPoint, offsetBy: Int(delta))
+          buffer.formIndex(&insertionPoint, offsetBy: Int(delta))
         } else {
           // Different codepoint.
-          delta &-= distanceToEnd
+          delta &-= stepsToEnd
           let (codepointDelta, insertionOffset) = delta.quotientAndRemainder(dividingBy: countProcessedScalars)
 
           let codePoint_overflow: Bool
           (codePoint, codePoint_overflow) = codePoint.addingReportingOverflow(1 &+ codepointDelta)
           guard !codePoint_overflow else { return .failed }
-          insertionPoint = input.index(input.startIndex, offsetBy: Int(insertionOffset))
+          insertionPoint = buffer.index(buffer.startIndex, offsetBy: Int(insertionOffset))
         }
       }
-      guard let scalar = Unicode.Scalar(codePoint) else { return .failed }
 
-      // Insert the scalar, advancing the tailReadIndex by 1 so it maintains position.
-      // FIXME: This is incorrect; neither RRC nor MC allow this. Basically it only works for Array(Slice) and similar.
-      // FIXME: Overwrite the tail region rather than insert. This should always result in fewer scalars IIUC.
-      input.insert(scalar, at: insertionPoint)
-      input.formIndex(after: &tailReadCursor)
+      guard let scalarToInsert = Unicode.Scalar(codePoint) else { return .failed }
 
-      input.formIndex(after: &insertionPoint)
+      // 3c. Insert the scalar.
+      //     Since we consumed *at least* one scalar from the front of the tail to get this decoded scalar,
+      //     we can just move everything after the insertion point down by 1 place, and overwrite the tail
+      //     without growing.
+
+      do {
+        var src = buffer.index(buffer.startIndex, offsetBy: Int(countProcessedScalars))
+        var dst = buffer.index(after: src)
+        assert(dst <= tailCursor, "We only write over parts of the tail that have already been consumed")
+        while src >= insertionPoint {
+          buffer[dst] = buffer[src]
+          buffer.formIndex(before: &dst)
+          buffer.formIndex(before: &src)
+        }
+        buffer[insertionPoint] = scalarToInsert
+      }
+
+      buffer.formIndex(after: &insertionPoint)
     }
 
-    // Now that the tail has been decoded, it may be removed.
-    input.removeLast(suffixScalarsToRemove)
-    return .success
+    // 4. Finished.
+    //    MutableCollection does not allow us to remove the junk at the end, so return the new length
+    //    and let the caller handle that problem.
+
+    return .success(count: Int(countProcessedScalars))
   }
 }
