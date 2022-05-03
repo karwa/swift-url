@@ -12,88 +12,288 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//@_spi(_Unicode) import Swift
-
-/// A namespace for functions and types relating to Internationalized Domain Names for Applications (IDNA).
+/// Functions relating to Internationalizing Domain Names for Applications (IDNA).
 ///
-/// > One of the great strengths of domain names is universality. The URL `http://Apple.com` goes to Apple's website
-/// > from anywhere in the world, using any browser.
-/// >
-/// > Initially, domain names were restricted to ASCII characters. This was a significant burden on people
-/// > using other characters. Suppose, for example, that the domain name system had been invented by Greeks,
-/// > and one could only use Greek characters in URLs. Rather than `apple.com`, one would have to write something
-/// > like `αππλε.κομ`. An English speaker would not only have to be acquainted with Greek characters,
-/// > but would also have to pick those Greek letters that would correspond to the desired English letters.
-/// > One would have to guess at the spelling of particular words, because there are not exact matches between scripts.
-/// >
-/// > Most of the world’s population faced this situation until recently, because their languages
-/// > use non-ASCII characters. A system was introduced in 2003 for internationalized domain names (IDN).
-/// > This system is called Internationalizing Domain Names for Applications, or IDNA for short.
-/// >
-/// > \- [UTS 46](https://www.unicode.org/reports/tr46/)
+/// IDNA is a way of normalizing and encoding Unicode text as ASCII in a way that is optimized for domain names,
+/// compatible with existing DNS infrastructure, and is able to support the important security-related decisions
+/// made by inspecting domains.
 ///
-/// IDNA works by encoding Unicode text as ASCII. The text is validated and case-folded as is typical for domains,
-/// but also normalized so that simple ASCII equality of the result corresponds to Unicode canonical equivalence
-/// of the presentation forms. Domains have rather severe length limitations stemming from the early days of
-/// the internet, so a space-efficient "Punycode" encoding is used to turn the normalized, validated Unicode domain
-/// in to an ASCII string.
+/// The resulting ASCII form is not entirely human-readable, and instead, IDNs must be converted
+/// to presentation/Unicode form for display. For example, the string `你好你好` becomes `xn--6qqa088eba` in ASCII form.
+/// Note that it is not always safe to display a decoded IDN, and it is wise to include context-specific logic
+/// as part of a more sophisticated display strategy.
 ///
-/// The result is not human-readable, and instead, IDNs must be decoded to presentation form.
-/// For example, the string `你好你好` becomes `xn--6qqa088eba` when encoded by IDNA. Note that it is not always safe
-/// to display a decoded IDN, and developers should check for possible homograph/spoofing attacks before doing so.
-/// If in doubt, display it in its Punycode-encoded form rather than decoding it.
+/// This type is a namespace for two APIs, exposed as static functions:
 ///
-/// The best thing about IDNA is that domains are encoded on a per-label basis, so `api.你好你好.com`
-/// becomes `api.xn--6qqa088eba.com`, and as far as any routing/filtering or other network-related software/hardware
-/// is concerned, that is just a standard ASCII domain. It has the same structure, and things like SSL certificates
-/// can be matched simply without needing to consider Unicode equivalence of hostnames.
+/// - ``toUnicode(utf8:writer:)`` performs IDNA compatibility processing, normalization, decoding, validation, etc -
+///   in order to produce a domain's Unicode form. This is how you would turn `xn--6qqa088eba.com` in to `你好你好.com`.
 ///
-/// But despite computers seeing it as an ASCII domain, users can interact with it in their native language. Cool.
+///   This function visits each label of the domain as a buffer of Unicode scalars, allowing for presentation logic
+///   to decide how best to display the label (for example, if the label contains scripts the user does not appear to
+///   be familiar with, or mixes scripts, it may be wise to display in Punycode or show some other warning in the UI).
+///
+/// - ``toASCII(utf8:beStrict:writer:)`` performs the same IDNA compatibility processing as ``toUnicode(utf8:writer:)``,
+///   with an additional `beStrict` parameter (not used by URLs). After being normalized, and validated by
+///   this processing, the labels are converted to their ASCII form. This turns `你好你好.com` in to `xn--6qqa088eba.com`.
+///
+/// Both of these APIs are idempotent, so running them on already-normalized output returns the same data.
+/// This makes it very convenient to pass a domain through `toUnicode` or `toASCII` as part of existing workflows.
+///
+/// These APIs follow definitions in the WHATWG URL Standard, which follow definitions in
+/// [Unicode Technical Standard #46](https://www.unicode.org/reports/tr46/). See each function's documentation
+/// for details on how it relates to UTS46.
 ///
 public enum IDNA {}
 
 
 // --------------------------------------------
-// MARK: - ToASCII
+// MARK: - ToUnicode/ToASCII
 // --------------------------------------------
 
 
 extension IDNA {
 
-  /// Encodes a domain as an Internationalized Domain Name (IDN).
+  /// Converts a domain to its Unicode representation.
   ///
-  /// The given domain may be in Unicode (or "presentation") form, or already encoded as an IDN string.
-  /// This operation is idempotent, so encoding an already-encoded IDN string will simply return the same string,
-  /// unchanged.
+  /// This function performs IDNA Compatibility Processing on the given domain, including
+  /// applying a compatibility mapping, normalization, and splitting in to domain labels.
+  /// Punycode labels are decoded in to Unicode, and all labels are validated.
   ///
-  /// This function is defined by the [WHATWG URL Standard][WHATWG-ToASCII], which defers to the function defined in
-  /// [UTS #46][UTS46-ToASCII], with parameters bound as follows:
+  /// This processing is idempotent, so it may be reapplied without changing the result.
   ///
+  /// ```swift
+  /// // ASCII domains.
+  /// toUnicode("example.com")  // ✅ "example.com"
+  ///
+  /// // Punycode.
+  /// toUnicode("xn--weswift-z98d")        // ✅ "we❤️swift"
+  /// toUnicode("api.xn--6qqa088eba.com")  // ✅ "api.你好你好.com"
+  ///
+  /// // Idempotent.
+  /// toUnicode("api.你好你好.com")  // ✅ "api.你好你好.com"
+  ///
+  /// // Normalizes Unicode domains.
+  /// toUnicode("www.caf\u{00E9}.fr")   // ✅ "www.café.fr" ("caf\u{00E9}")
+  /// toUnicode("www.cafe\u{0301}.fr")  // ✅ "www.café.fr" ("caf\u{00E9}")
+  /// toUnicode("www.xn--caf-dma.fr")   // ✅ "www.café.fr" ("caf\u{00E9}")
+  ///
+  /// // IDN validation.
+  /// // This is how you would Punycode "cafe\u{0301}"
+  /// // but that isn't normalized, so it doesn't pass validation.
+  /// toUnicode("xn--cafe-yvc.fr")  // ✅ <nil> - Not a valid IDN!
+  /// ```
+  ///
+  /// When rendering a domain for UI, the IDNA Compatibility Processing standard (UTS46)
+  /// recommends considering carefully which domain presentation is appropriate for the context:
+  ///
+  /// > Implementations are advised to apply additional tests to these labels,
+  /// > such as those described in [Unicode Technical Report #36][UTR36] and
+  /// > [Unicode Technical Standard #39][UTS39], and take appropriate actions.
+  /// >
+  /// > For example, a label with mixed scripts or confusables may be called out in the UI.
+  /// > Note that the use of Punycode to signal problems may be counter-productive,
+  /// > as described in [UTR36][UTR36].
+  ///
+  /// Some sophisticated presentation strategies consider information such as which scripts
+  /// the user is familiar with when deciding how to display a domain.
+  ///
+  /// To facilitate that kind of high-level processing, this function visits each label of the domain
+  /// using a callback closure. Labels are provided to the closure as a buffer of Unicode scalars.
+  /// After deciding how to present the label, the closure can construct the full domain by appending it
+  /// to a String or encoding it with UTF-8/UTF-16/etc, followed by ASCII full-stops (U+002E)
+  /// where instructed.
+  ///
+  /// Let's say we have a function, `DecidePresentationStrategyForLabel`, which decides the best way to render
+  /// a domain label in our UI, given our user's locale preferences and other heuristics. Here's how we
+  /// could integrate it:
+  ///
+  /// ```swift
+  /// func RenderDomain(_ input: String) -> String? {
+  ///
+  ///   var result = ""
+  ///   let success = IDNA.toUnicode(utf8: input.utf8) { label, needsTrailingDot in
+  ///     switch DecidePresentationStrategyForLabel(label) {
+  ///     // Unicode presentation.
+  ///     case .unicode:
+  ///       result.unicodeScalars.append(contentsOf: label)
+  ///     // The checker think the Unicode presentation is potentially misleading,
+  ///     // and we should write it as Punycode instead.
+  ///     case .punycode:
+  ///       Punycode.encode(label) { ascii in
+  ///         result.unicodeScalars.append(Unicode.Scalar(ascii))
+  ///       }
+  ///     // Other strategies, beyond Punycode...?
+  ///     case .highlightConfusableWithKnownBrand:
+  ///       /* ... Maybe use AttributedString to flag it for UI code? */
+  ///       /* ... Maybe an extra warning for certain actions, like making a purchase/entering a password? */
+  ///     }
+  ///
+  ///     // Remember the dot :)
+  ///     if needsTrailingDot { result += "." }
+  ///     return true
+  ///   }
+  ///   return success ? result : nil
+  /// }
+  ///
+  /// RenderDomain("x.example.com")
+  /// // ✅ "x.example.com" (ASCII)
+  ///
+  /// RenderDomain("shop.xn--igbi0gl.com")
+  /// // ✅ "shop.أهلا.com"
+  ///
+  /// RenderDomain("xn--pple-poa.com")
+  /// // ✅ "xn--pple-poa.com", NOT "åpple.com"
+  ///
+  /// RenderDomain("岍岊岊岅岉岎.com")
+  /// // ✅ "岍岊岊岅岉岎.com" NOT "xn--citibank.com"
+  /// ```
+  ///
+  /// If an error occurs, the function will stop processing the domain and return `false`,
+  /// and any previously-written data should be discarded. The callback closure can also ask
+  /// for processing to stop by returning `false`.
+  ///
+  /// ### UTS46 Parameters
+  ///
+  /// This function is defined by the [WHATWG URL Standard][WHATWG-ToUnicode] as `"domain to Unicode"`.
+  /// It is the same as the `ToUnicode` function defined by [Unicode Technical Standard #46][UTS46-ToUnicode],
+  /// with parameters bound as follows:
+  ///
+  /// - `CheckHyphens` is `false`
+  /// - `CheckBidi` is `true`
+  /// - `CheckJoiners` is `true`
+  /// - `UseSTD3ASCIIRules` is `false`
   /// - `Transitional_Processing` is `false`
+  ///
+  /// [WHATWG-ToUnicode]: https://url.spec.whatwg.org/#concept-domain-to-unicode
+  /// [UTS46-ToUnicode]: https://www.unicode.org/reports/tr46/#ToUnicode
+  /// [UTR36]: https://www.unicode.org/reports/tr36/
+  /// [UTS39]: https://www.unicode.org/reports/tr39/
+  ///
+  /// - parameters:
+  ///   - utf8:   A domain to convert to Unicode, as a Collection of UTF-8 code-units.
+  ///   - writer: A closure which receives the labels of the domain emitted by this function.
+  ///             The labels should be written in the order they are visited, and if `needsTrailingDot` is true,
+  ///             should be followed by U+002E FULL STOP ("."). If this closure returns `false`,
+  ///             processing will stop and the function will return `false`.
+  ///
+  /// - returns: Whether or not the operation was successful.
+  ///            If `false`, any data previously yielded to `writer` should be discarded.
+  ///
+  @inlinable
+  public static func toUnicode<Source>(
+    utf8 source: Source, writer: (_ label: AnyRandomAccessCollection<Unicode.Scalar>, _ needsTrailingDot: Bool) -> Bool
+  ) -> Bool where Source: Collection, Source.Element == UInt8 {
+    return process(utf8: source, useSTD3ASCIIRules: false) { label, needsTrailingDot in
+      writer(AnyRandomAccessCollection(label), needsTrailingDot)
+    }
+  }
+
+  /// Converts a domain to its ASCII representation.
+  ///
+  /// This function performs IDNA Compatibility Processing on the given domain, including
+  /// applying a compatibility mapping, normalization, and splitting in to domain labels.
+  /// Punycode labels are decoded in to Unicode, and all labels are validated.
+  ///
+  /// This processing is idempotent, so it may be reapplied without changing the result.
+  ///
+  /// ```swift
+  /// // ASCII domains.
+  /// toASCII("example.com")  // ✅ "example.com"
+  ///
+  /// // Unicode.
+  /// toASCII("we❤️swift")       // ✅ "xn--weswift-z98d"
+  /// toASCII("api.你好你好.com")  // ✅ "api.xn--6qqa088eba.com"
+  ///
+  /// // Idempotent.
+  /// toASCII("api.xn--6qqa088eba.com") // ✅ "api.xn--6qqa088eba.com"
+  ///
+  /// // Normalizes Unicode domains.
+  /// toASCII("caf\u{00E9}.fr")   // ✅ "xn--caf-dma.fr"
+  /// toASCII("cafe\u{0301}.fr")  // ✅ "xn--caf-dma.fr"
+  ///
+  /// // IDN validation.
+  /// // The '-yvc' version is how you would Punycode "cafe\u{0301}"
+  /// // but that isn't normalized, so it doesn't pass validation.
+  /// toASCII("xn--caf-dma.fr")   // ✅ "xn--caf-dma.fr" - valid IDN
+  /// toASCII("xn--cafe-yvc.fr")  // ❎ <nil> - Not a valid IDN!
+  /// ```
+  ///
+  /// Although the ASCII representation is less commonly used to render a domain,
+  /// it is still worth considering carefully which domain presentation is appropriate for the context:
+  ///
+  /// > Implementations are advised to apply additional tests to these labels,
+  /// > such as those described in [Unicode Technical Report #36][UTR36] and
+  /// > [Unicode Technical Standard #39][UTS39], and take appropriate actions.
+  /// >
+  /// > For example, a label with mixed scripts or confusables may be called out in the UI.
+  /// > Note that the use of Punycode to signal problems may be counter-productive,
+  /// > as described in [UTR36][UTR36].
+  ///
+  /// In particular, note that in situations such as `"岍岊岊岅岉岎.com"` (or `"xn--citibank.com"`),
+  /// the ASCII representation may do more to mislead than the Unicode representation. For more information
+  /// about rendering domains for display, see ``toUnicode(utf8:writer:)``.
+  ///
+  /// This function visits the ASCII bytes of the result using a callback closure. To construct the full domain,
+  /// the bytes can be converted to scalars and appended to a String, or written to a buffer.
+  ///
+  /// ```swift
+  /// func idna_encode(_ input: String) -> String? {
+  ///   var buffer = [UInt8]()
+  ///   let success = IDNA.toASCII(utf8: input.utf8) { ascii in
+  ///     buffer.append(ascii)
+  ///   }
+  ///   return success ? String(decoding: buffer, as: UTF8.self) : nil
+  /// }
+  ///
+  /// idna_encode("x.example.com")
+  /// // ✅ "x.example.com" (ASCII)
+  ///
+  /// idna_encode("shop.أهلا.com")
+  /// // ✅ "shop.xn--igbi0gl.com"
+  /// ```
+  ///
+  /// If an error occurs, the function will stop processing the domain and return `false`,
+  /// and any previously-written data should be discarded.
+  ///
+  /// ### UTS46 Parameters
+  ///
+  /// This function is defined by the [WHATWG URL Standard][WHATWG-ToASCII] as `"domain to ASCII"`.
+  /// It is the same as the `ToASCII` function defined by [Unicode Technical Standard #46][UTS46-ToASCII],
+  /// with parameters bound as follows:
+  ///
   /// - `CheckHyphens` is `false`
   /// - `CheckBidi` is `true`
   /// - `CheckJoiners` is `true`
   /// - `UseSTD3ASCIIRules` is given by the parameter `beStrict`
-  /// - `VerifyDnsLength` is given by the parameter `beStrict`
+  /// - `Transitional_Processing` is `false`
+  ///
+  /// `VerifyDnsLength` is not implemented, and so is effectively always `false`.
+  /// URLs do not enforce DNS' length limits so it is not necessary for current users of this API,
+  /// and limiting the length of the written domain can be composed on top of the current design.
   ///
   /// [WHATWG-ToASCII]: https://url.spec.whatwg.org/#concept-domain-to-ascii
   /// [UTS46-ToASCII]: https://www.unicode.org/reports/tr46/#ToASCII
   ///
+  /// - parameters:
+  ///   - utf8:      An Internationalized Domain Name (IDN) to encode, as a Collection of UTF-8 code-units.
+  ///   - beStrict:  Limits allowed domain names as described by STD3/RFC-1122, such as limiting ASCII characters
+  ///                to alphanumerics and hyphens. URLs tend to less strict than this, and have their own disallowed
+  ///                characters sets (for example, they allow underscores, such as in `"some_hostname"`).
+  ///   - writer:    A closure which receives the ASCII bytes emitted by this function.
+  ///
+  /// - returns: Whether or not the operation was successful.
+  ///            If `false`, any data previously yielded to `writer` should be discarded.
+  ///
+  @inlinable
   public static func toASCII<Source>(
     utf8 source: Source, beStrict: Bool = false, writer: (UInt8) -> Void
   ) -> Bool where Source: Collection, Source.Element == UInt8 {
 
-    var prepped = CompatibilityMappedAndNormalized(source: source.makeIterator(), useSTD3ASCIIRules: beStrict)
-    return _bufferAndDecodeLabels(&prepped, capLength: beStrict) { iter, label, wasDecoded, isLast in
-      guard
-        !iter.hasError,
-        checkAndEncodeLabel(label, wasAlreadyPunycode: wasDecoded, verifyDNSLength: beStrict, writer: writer)
-      else {
-        return false
-      }
-      if !isLast {
-        writer(UInt8(ascii: "."))
-      }
+    return process(utf8: source, useSTD3ASCIIRules: beStrict) { label, needsTrailingDot in
+      // Encode each validated label to ASCII using Punycode.
+      guard Punycode.encode(label, into: writer) else { return false }
+      // Join labels with U+002E.
+      if needsTrailingDot { writer(UInt8(ascii: ".")) }
       return true
     }
   }
@@ -101,121 +301,196 @@ extension IDNA {
 
 
 // --------------------------------------------
-// MARK: - Mapping and Normlization
+// MARK: - Compatibility Processing
 // --------------------------------------------
 
 
 extension IDNA {
 
-  /// An iterator of mapped and normalized Unicode.Scalars, decoded from a source collection of UTF-8 bytes.
+  /// Performs IDNA compatibility processing, as defined by https://www.unicode.org/reports/tr46/#Processing
+  ///
+  @usableFromInline
+  internal static func process<Source>(
+    utf8 source: Source, useSTD3ASCIIRules: Bool,
+    writer: (_ buffer: ArraySlice<Unicode.Scalar>, _ needsTrailingDot: Bool) -> Bool
+  ) -> Bool where Source: Collection, Source.Element == UInt8 {
+
+    // 1 & 2. Map & Normalize.
+    var preppedScalarsStream = _MappedAndNormalized(source: source.makeIterator(), useSTD3ASCIIRules: useSTD3ASCIIRules)
+
+    // 3. Break.
+    return _breakLabels(consuming: &preppedScalarsStream, checkSourceError: { $0.hasError }) {
+      encodedLabel, needsTrailingDot in
+
+      // TODO: Fast paths.
+
+      // 4(a). Convert.
+      guard let (label, wasDecoded) = _decodePunycodeIfNeeded(&encodedLabel) else { return false }
+
+      // 4(b). Validate.
+      guard _validate(label: label, isKnownMappedAndNormalized: !wasDecoded) else { return false }
+
+      // Yield the label.
+      return writer(label, needsTrailingDot)
+    }
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - 1 & 2 - Map & Normalize
+// --------------------------------------------
+
+
+extension IDNA {
+
+  /// Transforms a stream of UTF-8 bytes to a stream of case-folded, compatibility-mapped, NFC normalized
+  /// Unicode scalars.
   ///
   /// This iterator performs the first 2 steps of IDNA Compatibility Processing, as defined by UTS#46 section 4
-  /// <https://www.unicode.org/reports/tr46/#Processing>. The input is expressed as UTF-8 code-units, which will be
-  /// decoded in to Unicode code-points, mapped according to the IDNA mapping table, normalized to NFC, and
-  /// yielded individually as a stream of Unicode code-points.
+  /// <https://www.unicode.org/reports/tr46/#Processing>. Similar procesing is sometimes referred to as "nameprep".
   ///
-  /// This is approximately what RFC-3491 (IDNA-2003) calls "Nameprep". It essentially NFKC-CaseFolds
-  /// the string, although it does have some additional mappings and ignored/disallowed code-points.
+  /// Should any stage of processing encounter an error (for example, if the source contains invalid UTF-8,
+  /// or disallowed codepoints), the iterator will terminate and its `hasError` flag will be set.
   ///
-  /// Should stage of the processing pipeline encounter an error (for example, if the source contains invalid UTF-8
-  /// or disallowed code-points), the iterator's `hasError` flag will be set.
-  ///
-  /// > Important:
-  /// > The iterator may _or may not_ terminate on encountering an error, so this flag should always be checked.
-  ///
-  internal struct CompatibilityMappedAndNormalized<Source>: IteratorProtocol
-  where Source: IteratorProtocol, Source.Element == UInt8 {
+  @usableFromInline
+  internal struct _MappedAndNormalized<UTF8Bytes>: IteratorProtocol
+  where UTF8Bytes: IteratorProtocol, UTF8Bytes.Element == UInt8 {
 
-    internal var source: Source
-    internal var useSTD3ASCIIRules: Bool
+    @usableFromInline
+    internal private(set) var hasError = false
 
-    internal var hasError = false
+    // Private state.
 
-    internal var _state = State.decodeFromSource
-    internal var _decoder = UTF8()
+    @usableFromInline
+    internal private(set) var _state = _State.decodeFromSource
 
-    internal init(source: Source, useSTD3ASCIIRules: Bool) {
-      self.source = source
-      self.useSTD3ASCIIRules = useSTD3ASCIIRules
+    @usableFromInline
+    internal private(set) var _source: UTF8Bytes
+
+    @usableFromInline
+    internal private(set) var _decoder = UTF8()
+
+    @usableFromInline
+    internal private(set) var _useSTD3ASCIIRules: Bool
+
+    @usableFromInline
+    internal private(set) var _normalizationBuffer = ""
+
+    @inlinable
+    internal init(source: UTF8Bytes, useSTD3ASCIIRules: Bool) {
+      self._source = source
+      self._useSTD3ASCIIRules = useSTD3ASCIIRules
     }
 
-    internal enum State {
+    @usableFromInline
+    internal enum _State {
       case decodeFromSource
-      case map(Unicode.Scalar)
-      case normalize([Unicode.Scalar])
 
-      case serialize([Unicode.Scalar], index: Int)
+      case map(Unicode.Scalar)
+
+      case normalize([Unicode.Scalar])
       case end
+      case serialize([Unicode.Scalar], index: Int)
     }
 
+    @inlinable
     internal mutating func next() -> Unicode.Scalar? {
-      switch _state {
+      while true {
+        switch _state {
 
-      // 0. Decode another scalar from the source bytes.
-      //
-      case .decodeFromSource:
-        switch _decoder.decode(&source) {
-        case .scalarValue(let scalar):
-          self._state = .map(scalar)
-          return next()
-        case .error:
-          self.hasError = true
-          fallthrough
-        case .emptyInput:
-          self._state = .end
+        // 0. Decode a scalar from the source bytes.
+        //
+        case .decodeFromSource:
+          switch _decoder.decode(&_source) {
+          case .scalarValue(let scalar):
+            self._state = .map(scalar)
+          case .error:
+            self.hasError = true
+            fallthrough
+          case .emptyInput:
+            self._state = .end
+          }
+
+        // 1. Map the code-points using the IDNA mapping table.
+        //
+        case .map(let decodedScalar):
+          switch IDNA._getScalarMapping(decodedScalar, useSTD3ASCIIRules: _useSTD3ASCIIRules) {
+          case .valid:
+            self._state = .normalize([decodedScalar])
+          case .mapped(let replacements):
+            self._state = .normalize(replacements)
+          case .ignored:
+            self._state = .decodeFromSource
+          case .disallowed:
+            self.hasError = true
+            self._state = .end
+          }
+
+        // 2. Normalize the resulting stream of code-points to NFC.
+        //
+
+        // === HACK HACK HACK ===
+        //
+        // FIXME: Neither the standard library nor Foundation give us the interface we want here.
+        // We end up having to buffer all the mapped scalars as a String just for normalization!
+        //
+        // === HACK HACK HACK ===
+
+        // a. Gather the mapped scalars in to a String.
+        //    Eventually, '.decodeFromSource' will consume all scalars and go to '.end'.
+        //
+        case .normalize(let mappedScalars):
+          if IDNA_MappingAndNormalization_UseStringBufferForNormalization {
+            _normalizationBuffer.unicodeScalars.append(contentsOf: mappedScalars)
+            self._state = .decodeFromSource
+          } else {
+            // Normalization disabled!
+            self._state = .serialize(mappedScalars, index: 0)
+          }
+
+        // b. End state. This is *SUPPOSED* to always return nil and remain in the end state.
+        //    But if we have an unprocessed "normalization buffer" (String from [a]), we have to flush it.
+        //
+        case .end:
+          if !self.hasError && !_normalizationBuffer.isEmpty {
+            self._state = .serialize(toNFC(_normalizationBuffer), index: 0)
+            _normalizationBuffer = ""
+            continue
+          }
           return nil
+
+        // c. Yield each of the resulting NFC scalar(s), then go back to '.decodeFromSource'.
+        //
+        case .serialize(let scalars, index: let position):
+          if position < scalars.endIndex {
+            self._state = .serialize(scalars, index: position + 1)
+            return scalars[position]
+          } else {
+            assert(_normalizationBuffer.isEmpty)
+            self._state = .decodeFromSource
+          }
+
+        // === END HACK HACK HACK (for now) ===
         }
-
-      // 1. Map the code-points using the IDNA mapping table.
-      //
-      case .map(let decodedScalar):
-        switch IDNA.getScalarMapping(decodedScalar, useSTD3ASCIIRules: useSTD3ASCIIRules) {
-        case .valid:
-          self._state = .normalize([decodedScalar])
-        case .mapped(let replacements):
-          self._state = .normalize(replacements)
-        case .skipped:
-          self._state = .decodeFromSource
-        case .invalid:
-          self.hasError = true
-          self._state = .end
-          return nil
-        }
-        return next()
-
-      // 2. Normalize the resulting string to NFC.
-      //
-      case .normalize(let mappedScalars):
-        // TODO: Use standard library's NFC normalization. It will allocate a buffer, but perhaps we can pre-allocate it?
-        self._state = .serialize(mappedScalars, index: 0)
-        return next()
-
-      // X. Yield each of the resulting scalar(s), then decode a new one from the source.
-      //
-      case .serialize(let scalars, index: let position):
-        if position < scalars.endIndex {
-          self._state = .serialize(scalars, index: position + 1)
-          return scalars[position]
-        } else {
-          self._state = .decodeFromSource
-          return next()
-        }
-
-      // X. End state. Always return nil and remains in the end state.
-      case .end:
-        return nil
       }
     }
   }
 }
 
+// TODO: This needs to actually have a sophisticated implementation.
+// - We shouldn't have mappings stored as arrays; they should be offets in to some static data.
+// - The lookup table itself needs work. Maybe use the stdlib's MPH stuff? Maybe something else?
+
 extension IDNA {
 
+  @usableFromInline
   internal enum Mapping {
-    case valid
-    case skipped
+    case disallowed
+    case ignored
     case mapped([Unicode.Scalar])
-    case invalid
+    // (deviation is resolved from transitional_processing)
+    case valid
 
     static func mapped(_ v: [UInt32]) -> Self {
       // FIXME: Array Map.
@@ -223,195 +498,236 @@ extension IDNA {
     }
   }
 
-  internal static func getScalarMapping(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> Mapping {
+  @usableFromInline
+  internal static func _getScalarMapping(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> Mapping {
+    // Parameters.
+    let transitionalProcessing = FixedParameter(false)
 
-    // Flags.
-    let transitionalProcessing = false && unused_option
-
+    // Lookup.
     // TODO: optimized table lookup. For now linear search, lol.
-
     lookup: for (codepoints, status, mapping) in _idna_mapping_data_subs.joined() {
       if codepoints.lowerBound > scalar.value {
-        return .invalid  // Not found. Assume invalid.
+        return .disallowed  // Not found. Assume invalid.
       }
       if codepoints.contains(scalar.value) {
         switch status {
         case .valid:
           return .valid
         case .ignored:
-          return .skipped
+          return .ignored
         case .mapped:
           return .mapped(mapping!)
         case .deviation:
           return transitionalProcessing ? .mapped(mapping!) : .valid
         case .disallowed:
-          return .invalid
+          return .disallowed
         case .disallowed_STD3_valid:
-          return useSTD3ASCIIRules ? .invalid : .valid
+          return useSTD3ASCIIRules ? .disallowed : .valid
         case .disallowed_STD3_mapped:
-          return useSTD3ASCIIRules ? .invalid : .mapped(mapping!)
+          return useSTD3ASCIIRules ? .disallowed : .mapped(mapping!)
         }
       }
     }
     fatalError("Did not find a mapping for scalar: \(scalar.value) (\(scalar))")
   }
-}
 
-
-// --------------------------------------------
-// MARK: - Label Buffering, Decoding
-// --------------------------------------------
-
-
-extension IDNA {
-
-  /// Consumes an iterator of Unicode scalars, collecting each domain label in to a buffer.
-  /// The label is then Punycode-decoded in-place if necessary, before being provided to
-  /// the given closure for further processing.
+  /// Whether the code point is valid to be used in a domain label.
   ///
-  internal static func _bufferAndDecodeLabels<Source>(
-    _ source: inout Source, capLength: Bool,
-    writer: (_ source: Source, _ label: ArraySlice<Unicode.Scalar>, _ wasDecoded: Bool, _ isLast: Bool) -> Bool
-  ) -> Bool where Source: IteratorProtocol, Source.Element == Unicode.Scalar {
-
-    // TODO: When capLength = true, we could use a fixed-size stack buffer.
-
-    var labelBuffer = [Unicode.Scalar]()
-    labelBuffer.reserveCapacity(64)
-
-    func decodeAndWriteBuffer(isLast: Bool) -> Bool {
-      let slice: ArraySlice<Unicode.Scalar>
-      let wasDecoded: Bool
-      switch Punycode.decodeInPlace(&labelBuffer) {
-      case .success(let count):
-        slice = labelBuffer.prefix(count)
-        wasDecoded = true
-      case .notPunycode:
-        slice = labelBuffer[...]
-        wasDecoded = false
-      case .failed:
-        return false
-      }
-      return writer(source, slice, wasDecoded, isLast)
-    }
-
-    while let scalar = source.next() {
-
-      // 3. Break in to domain labels at U+002E FULL STOP (".").
-
-      guard scalar != "." else {
-
-        // 4. If the label starts with "xn--", decode from Punycode.
-        //    (... + further processing by writer)
-
-        guard decodeAndWriteBuffer(isLast: false) else { return false }
-        labelBuffer.removeAll(keepingCapacity: true)
-        continue
-      }
-      if capLength {
-        guard labelBuffer.count < 63 else { return false }
-      }
-      labelBuffer.append(scalar)
-    }
-
-    // 4. If the label starts with "xn--", decode from Punycode.
-    //    (... + further processing by writer)
-
-    return decodeAndWriteBuffer(isLast: true)
-  }
-}
-
-
-// --------------------------------------------
-// MARK: - Label Validation
-// --------------------------------------------
-
-
-extension IDNA {
-
-  internal static func checkAndEncodeLabel<Label>(
-    _ label: Label, wasAlreadyPunycode: Bool, verifyDNSLength: Bool, writer: (UInt8) -> Void
-  ) -> Bool where Label: BidirectionalCollection, Label.Element == Unicode.Scalar {
-
-    // 4. Validate each label (checkHypens, checkJoiners, checkBidi, etc).
-    //
-    guard checkLabel(label, wasAlreadyPunycode: wasAlreadyPunycode, verifyDNSLength: verifyDNSLength) else {
-      return false
-    }
-
-    // 5. Encode each label to ASCII with Punycode, write to result.
-    //
-    guard Punycode.encode(label, into: writer) else {
-      return false
-    }
-
+  /// From UTS46:
+  ///
+  /// > 4.1 Validity Criteria
+  /// >
+  /// > `6`. Each code point in the label must only have certain status values according to Section 5, IDNA Mapping Table:
+  /// >    - For Transitional Processing, each value must be valid.
+  /// >    - For Nontransitional Processing, each value must be either valid or deviation.
+  /// >
+  ///
+  /// https://www.unicode.org/reports/tr46/#Validity_Criteria
+  ///
+  @inlinable
+  internal static func _validateStatus(_ scalar: Unicode.Scalar, transitionalProcessing: Bool) -> Bool {
+    precondition(transitionalProcessing == false, "transition processing not implemented")
+    // FIXME: It seems that useSTD3ASCIIRules perhaps should be true, as the standard doesn't say to forward it.
+    //        But implementations seem to do so.
+    //        In any case, we should make it a parameter like getScalarMapping does.
+    guard case .valid = _getScalarMapping(scalar, useSTD3ASCIIRules: false) else { return false }
     return true
   }
+}
 
-  private static func checkLabel<Source>(
-    _ label: Source, wasAlreadyPunycode: Bool, verifyDNSLength: Bool
-  ) -> Bool where Source: BidirectionalCollection, Source.Element == UnicodeScalar {
 
-    assert(!label.starts(with: ["x", "n", "-", "-"]))
+// --------------------------------------------
+// MARK: - 3 - Break
+// --------------------------------------------
 
-    if wasAlreadyPunycode {
-      // TODO: Validate decoded code-points, but do not map them.
-      // > With either Transitional or Nontransitional Processing, sources already in Punycode are validated without mapping.
-      // > In particular, Punycode containing Deviation characters, such as href="xn--fu-hia.de" (for fuß.de) is not remapped.
-      // > This provides a mechanism allowing explicit use of Deviation characters even during a transition period.
+
+extension IDNA {
+
+  /// Consumes an iterator of Unicode scalars, gathering its contents in to a buffer which is yielded
+  /// at each occurence of the domain label separator `U+002E FULL STOP (".")`.
+  ///
+  /// When the source iterator terminates, the `checkSourceError` closure is invoked to check whether
+  /// the stream finished due to an error. If so, the function returns `false`.
+  ///
+  /// The `needsTrailingDot` parameter to the `writer` closure communicates whether the label is being yielded
+  /// due to a label separator, or whether it is the remainder. This can be used to write label separators at
+  /// the appropriate locations and hence reconstruct the full, normalized domain.
+  ///
+  @inlinable
+  internal static func _breakLabels<Scalars>(
+    consuming source: inout Scalars,
+    checkSourceError: (Scalars) -> Bool = { _ in false },
+    writer: (_ buffer: inout Array<Unicode.Scalar>, _ needsTrailingDot: Bool) -> Bool
+  ) -> Bool where Scalars: IteratorProtocol, Scalars.Element == Unicode.Scalar {
+
+    // TODO: Stack allocation? Sometimes?
+    var buffer = [Unicode.Scalar]()
+    buffer.reserveCapacity(64)
+
+    while let scalar = source.next() {
+      if scalar != "." {
+        buffer.append(scalar)
+      } else {
+        guard writer(&buffer, /* needsTrailingDot: */ true) else { return false }
+        buffer.removeAll(keepingCapacity: true)
+      }
     }
+    guard !checkSourceError(source) else {
+      return false
+    }
+    return buffer.isEmpty ? true : writer(&buffer, /* needsTrailingDot: */ false)
+  }
+}
 
-    // Flags.
-    let transitionalProcessing = false && unused_option
 
-    let checkHypens = false && unused_option
-    let checkBidi = true && unused_option
-    let checkJoiners = true && unused_option
+// --------------------------------------------
+// MARK: - 4(a) - Convert
+// --------------------------------------------
+
+
+extension IDNA {
+
+  /// If the given buffer contains a Punycode-encoded domain label, decodes it in-place.
+  /// Otherwise, returns the given buffer, unchanged.
+  ///
+  @inlinable
+  internal static func _decodePunycodeIfNeeded<Buffer>(
+    _ buffer: inout Buffer
+  ) -> (label: Buffer.SubSequence, wasDecoded: Bool)?
+  where Buffer: RandomAccessCollection & MutableCollection, Buffer.Element == Unicode.Scalar {
+
+    switch Punycode.decodeInPlace(&buffer) {
+    case .success(let count):
+      return (buffer.prefix(count), wasDecoded: true)
+    case .notPunycode:
+      return (buffer[...], wasDecoded: false)
+    case .failed:
+      return nil
+    }
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - 4(b) - Validate
+// --------------------------------------------
+
+
+extension IDNA {
+
+  /// Returns whether a domain label satisfies the conditions specified by [UTS46, 4.1 Validity Criteria][uts46].
+  ///
+  /// This function uses the same parameter values as used by the "domain to ASCII" and "domain to Unicode"
+  /// functions in the WHATWG URL Standard:
+  ///
+  /// - `CheckHyphens` is `false`
+  /// - `CheckBidi` is `true`
+  /// - `CheckJoiners` is `true`
+  /// - `Transitional_Processing` is `false`
+  ///
+  /// The label is assumed to already be split on U+002E FULL STOP, so that aspect of the validation
+  /// criteria is only checked in debug builds.
+  ///
+  /// [uts46]: https://www.unicode.org/reports/tr46/#Validity_Criteria
+  ///
+  /// - parameters:
+  ///   - label:                      The label to check, as a collection of Unicod code-points.
+  ///   - isKnownMappedAndNormalized: If `true`, declares that the label's code-points have not changed since
+  ///                                 undergoing compatibility mapping and normalization, so their status
+  ///                                 will be assumed valid. **Important:** If the label has been decoded
+  ///                                 from Punycode, this must be `false`.
+  ///
+  @inlinable
+  internal static func _validate<Label>(
+    label: Label, isKnownMappedAndNormalized: Bool
+  ) -> Bool where Label: BidirectionalCollection, Label.Element == UnicodeScalar {
+
+    assert(!Punycode.hasACEPrefix(label), "Punycode labels should be decoded already")
+
+    // Parameters.
+
+    let checkHypens = FixedParameter(false)
+    let checkBidi = FixedParameter(true)
+    let checkJoiners = FixedParameter(true)
+    let transitionalProcessing = FixedParameter(false)
 
     //  4.1 Validity Criteria
     //
     //  Each of the following criteria must be satisfied for a label:
     //
-    //  1. The label must be in Unicode Normalization Form NFC. ✅
-    //  2. If CheckHyphens, the label must not contain a U+002D HYPHEN-MINUS character in both the third and fourth positions.
-    //  3. If CheckHyphens, the label must neither begin nor end with a U+002D HYPHEN-MINUS character.
+    //  1. The label must be in Unicode Normalization Form NFC.
+
+    guard isKnownMappedAndNormalized || isNFC(label) else { return false }
+
+    //  2. If CheckHyphens, the label must not contain a U+002D HYPHEN-MINUS character
+    //     in both the third and fourth positions.
+    //  3. If CheckHyphens, the label must neither begin nor end with a U+002D HYPHEN-MINUS
+    //     character.
 
     if checkHypens {
-      guard label.first != "-", label.last != "-" else {
-        return false
-      }
-      guard !label.dropFirst(2).starts(with: ["-", "-"]) else {
-        return false
-      }
+      preconditionFailure("CheckHyphens is not supported")
     }
 
-    //  4. The label must not contain a U+002E ( . ) FULL STOP. ✅
+    //  4. The label must not contain a U+002E ( . ) FULL STOP.
+
+    assert(!label.contains("."), "Labels should already be split on U+002E")
+
     //  5. The label must not begin with a combining mark, that is: General_Category=Mark.
 
     switch label.first?.properties.generalCategory {
-    case .spacingMark?, .nonspacingMark?, .enclosingMark?: return false
-    default: break
+    case .spacingMark, .nonspacingMark, .enclosingMark:
+      return false
+    default:
+      break
     }
 
-    //  6. Each code point in the label must only have certain status values according to Section 5, IDNA Mapping Table: ✅
+    //  6. Each code point in the label must only have certain status values
+    //     according to Section 5, IDNA Mapping Table:
     //     - For Transitional Processing, each value must be valid.
     //     - For Nontransitional Processing, each value must be either valid or deviation.
-    if transitionalProcessing {
-      fatalError("We only use non-transitional processing. For transitional processing, further validation is required.")
+
+    guard
+      isKnownMappedAndNormalized
+        || label.allSatisfy({ _validateStatus($0, transitionalProcessing: transitionalProcessing) })
+    else {
+      return false
     }
 
-    //  7. If CheckJoiners, the label must satisify the ContextJ rules from Appendix A,
-    //     in The Unicode Code Points and Internationalized Domain Names for Applications (IDNA) [IDNA2008].
-    //     https://www.rfc-editor.org/rfc/rfc5892.html#appendix-A
+    var idx = label.startIndex
+    while idx < label.endIndex {
+      let scalar = label[idx]
+      defer { label.formIndex(after: &idx) }
 
-    if checkJoiners {
-      for idx in label.indices {
-        let scalar = label[idx]
+      //  7. If CheckJoiners, the label must satisify the ContextJ rules from Appendix A,
+      //     in The Unicode Code Points and Internationalized Domain Names for Applications (IDNA) [IDNA2008].
+      //     https://www.rfc-editor.org/rfc/rfc5892.html#appendix-A
+
+      if checkJoiners {
         if scalar.value == 0x200C /* ZERO WIDTH NON-JOINER */ {
 
           if idx > label.startIndex {
             let previousScalar = label[label.index(before: idx)]
-            if previousScalar.properties.canonicalCombiningClass == .virama { continue }
+            if case .virama = previousScalar.properties.canonicalCombiningClass { continue }
           }
           // TODO: We also need to add joining data from the UCD.
           // https://www.unicode.org/Public/UCD/latest/ucd/extracted/DerivedJoiningType.txt
@@ -424,28 +740,28 @@ extension IDNA {
 
           if idx > label.startIndex {
             let previousScalar = label[label.index(before: idx)]
-            if previousScalar.properties.canonicalCombiningClass == .virama { continue }
+            if case .virama = previousScalar.properties.canonicalCombiningClass { continue }
           }
           return false
-
         }
+      }
+
+      //  8. If CheckBidi, and if the domain name is a  Bidi domain name, then the label must satisfy
+      //     all six of the numbered conditions in [IDNA2008] RFC 5893, Section 2.
+
+      if checkBidi {
+        // A Bidi domain name is a domain name containing at least one character with Bidi_Class R, AL, or AN.
+        // See [IDNA2008] RFC 5893, Section 1.4.
+
+        // FIXME: We can't do this, but we might be able to unblock some stuff by rejecting Bidi domain names.
+        // R = Right-to-left, AL = Right-to-Left Arabic, AN = Arabic Number
+        // So we "only" need to detect and reject those codepoints.
+
+        // https://www.unicode.org/Public/UCD/latest/ucd/extracted/DerivedBidiClass.txt
       }
     }
 
-
-    //  8. If CheckBidi, and if the domain name is a  Bidi domain name, then the label must satisfy
-    //     all six of the numbered conditions in [IDNA2008] RFC 5893, Section 2.
-
-    if checkBidi {
-      // A Bidi domain name is a domain name containing at least one character with Bidi_Class R, AL, or AN.
-      // See [IDNA2008] RFC 5893, Section 1.4.
-
-      // FIXME: We can't do this, but we might be able to unblock some stuff by rejecting Bidi domain names.
-      // R = Right-to-left, AL = Right-to-Left Arabic, AN = Arabic Number
-      // So we "only" need to detect and reject those codepoints.
-
-      // https://www.unicode.org/Public/UCD/latest/ucd/extracted/DerivedBidiClass.txt
-    }
+    // X. Validation complete.
 
     return true
   }
@@ -453,23 +769,60 @@ extension IDNA {
 
 
 // --------------------------------------------
-// MARK: - ToUnicode
+// MARK: - Utils and Shims.
 // --------------------------------------------
 
 
-extension IDNA {
+@inlinable @inline(__always)
+internal func FixedParameter(_ value: Bool) -> Bool { value }
 
-  // FIXME: Unimplemented. Only here for docs references.
+// The standard library doesn't currently expose NFC normalization algorithms or data.
+//
+// Also, the current implementation uses String as its Unicode codepoint source, but
+// it is actually written generically and should be able to consume our scalars directly.
+// That means we currently have to buffer everything in to a string, but really we'd rather not.
 
-  public static func toUnicode<Source>(
-    utf8 source: Source, beStrict: Bool = false, writer: (UInt8) -> Void
-  ) -> Bool where Source: Collection, Source.Element == UInt8 {
+@inlinable @inline(__always)
+internal var IDNA_MappingAndNormalization_UseStringBufferForNormalization: Bool { true }
 
-    fatalError("Here for docs references only")
+#if USE_SWIFT_STDLIB_UNICODE
+
+  @_spi(_Unicode) import Swift
+
+  @usableFromInline
+  func isNFC<C: Collection>(_ scalars: C) -> Bool where C.Element == Unicode.Scalar {
+    var s = ""
+    s.unicodeScalars.append(contentsOf: scalars)
+    if #available(macOS 9999, *) {
+      return s._nfc.elementsEqual(scalars)
+    } else {
+      fatalError()
+    }
   }
-}
 
+  @usableFromInline
+  func toNFC(_ string: String) -> [Unicode.Scalar] {
+    if #available(macOS 9999, *) {
+      return Array(string._nfc)
+    } else {
+      fatalError()
+    }
+  }
 
-// MARK: - Utils
+#else
 
-internal var unused_option: Bool { true }
+  import Foundation
+
+  @usableFromInline
+  func isNFC<C: Collection>(_ scalars: C) -> Bool where C.Element == Unicode.Scalar {
+    var str = ""
+    str.unicodeScalars.append(contentsOf: scalars)
+    return str.precomposedStringWithCanonicalMapping.unicodeScalars.elementsEqual(scalars)
+  }
+
+  @usableFromInline
+  func toNFC(_ string: String) -> [Unicode.Scalar] {
+    Array(string.precomposedStringWithCanonicalMapping.unicodeScalars)
+  }
+
+#endif

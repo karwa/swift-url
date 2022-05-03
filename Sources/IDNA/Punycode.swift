@@ -305,6 +305,20 @@ extension Punycode {
     case notPunycode
   }
 
+  /// Whether or not the given buffer begins with the Punycode ACE prefix (`"xn--"`).
+  /// This function checks for the prefix case-sensitively.
+  ///
+  @inlinable
+  internal static func hasACEPrefix<Buffer>(
+    _ buffer: Buffer
+  ) -> Bool where Buffer: Collection, Buffer.Element == Unicode.Scalar {
+    var iter = buffer.makeIterator()
+    guard iter.next() == "x", iter.next() == "n", iter.next() == "-", iter.next() == "-" else {
+      return false
+    }
+    return true
+  }
+
   /// Decodes the given ASCII Punycode label to Unicode.
   ///
   /// The label, expressed as a buffer of Unicode codepoints, is decoded in-place over the existing contents.
@@ -350,11 +364,8 @@ extension Punycode {
     // 1. Make sure there is something for us to decode.
     //    If there is no ACE prefix, we don't consider it a Punycode string.
 
-    do {
-      var iter = buffer.makeIterator()
-      guard iter.next() == "x", iter.next() == "n", iter.next() == "-", iter.next() == "-" else {
-        return .notPunycode
-      }
+    guard hasACEPrefix(buffer) else {
+      return .notPunycode
     }
 
     // 2. Find the base string containing the basic (ASCII) codepoints, and copy them to the front.

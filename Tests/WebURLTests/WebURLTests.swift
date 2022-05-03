@@ -1490,8 +1490,13 @@ extension WebURLTests {
       ("a.هذهالكلمة.com", "a.xn--mgbet1febhkb.com"),
       ("xn--b1abfaaepdrnnbgefbadotcwatmq2g4l", "xn--b1abfaaepdrnnbgefbadotcwatmq2g4l"),
       ("xn--bbb", "xn--bbb"),
+      ("caf\u{00E9}.fr", "xn--caf-dma.fr"),
+      ("cafe\u{0301}.fr", "xn--caf-dma.fr"),
+      ("xn--cafe-yvc.fr", nil),
 
-//      ("a.b.c.xn--pokxncvks", nil), FIXME: Valid punycode; is supposed to fail in validation
+      ("xn--1ch.com", "xn--1ch.com"),
+
+      ("a.b.c.xn--pokxncvks", nil), // Valid punycode; should be rejected by label validation.
     ]
     for (inputHost, urlHost) in hosts {
       // 1. Check that we can parse the input hostname in a URL.

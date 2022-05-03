@@ -88,7 +88,7 @@ extension PunycodeTests {
     func _depunycode(_ input: String, expected: ExpectedResult = .failure) -> [Unicode.Scalar]? {
       var decoded = Array(input.unicodeScalars)
       switch Punycode.decodeInPlace(&decoded) {
-      case .success(count: let count):
+      case .success(let count):
         XCTAssertEqual(expected, .success, "Unexpected decoding")
         decoded.removeLast(decoded.count - count)
         return decoded
