@@ -20,7 +20,7 @@ public protocol TestSuite {
 
   /// A testcase. A set of input data and expected results.
   ///
-  associatedtype TestCase: Hashable, Codable
+  associatedtype TestCase: Hashable
 
   /// The set of possible failures that may occur when testing a particular `TestCase`.
   ///
@@ -28,7 +28,7 @@ public protocol TestSuite {
 
   /// Additional information captured while testing a particular `TestCase`.
   ///
-  associatedtype CapturedData: Hashable = Void
+  associatedtype CapturedData: Hashable = Never
 
   // Note:
   // Ideally, we'd have the harness here as an "associated protocol", and then we could build

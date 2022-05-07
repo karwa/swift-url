@@ -65,7 +65,7 @@ var package = Package(
     ),
     .target(
       name: "WebURLTestSupport",
-      dependencies: ["WebURL"],
+      dependencies: ["WebURL", "IDNA"],
       resources: [.copy("TestFilesData")]
     ),
     // Tests.

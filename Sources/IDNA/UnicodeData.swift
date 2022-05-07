@@ -38,7 +38,9 @@ internal enum IDNAMappingStatus {
   case disallowed_STD3_mapped
 }
 
-internal typealias IDNAMappingTableSubArrayElt = (codepoints: ClosedRange<UInt32>, status: IDNAMappingStatus, mapping: [UInt32]?)
+internal typealias IDNAMappingTableSubArrayElt = (
+  codepoints: ClosedRange<UInt32>, status: IDNAMappingStatus, mapping: [UInt32]?
+)
 
 // swift-format-ignore
 internal let _idna_mapping_data_sub_0: [IDNAMappingTableSubArrayElt] = [
@@ -9401,4 +9403,3 @@ internal let _idna_mapping_data_subs: [[IDNAMappingTableSubArrayElt]] = [
   _idna_mapping_data_sub_88,
   _idna_mapping_data_sub_89,
 ]
-

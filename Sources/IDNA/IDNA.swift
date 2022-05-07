@@ -328,7 +328,9 @@ extension IDNA {
       guard let (label, wasDecoded) = _decodePunycodeIfNeeded(&encodedLabel) else { return false }
 
       // 4(b). Validate.
-      guard _validate(label: label, isKnownMappedAndNormalized: !wasDecoded) else { return false }
+      guard
+        _validate(label: label, isKnownMappedAndNormalized: !wasDecoded, useSTD3ASCIIRules: useSTD3ASCIIRules)
+      else { return false }
 
       // Yield the label.
       return writer(label, needsTrailingDot)
@@ -545,12 +547,11 @@ extension IDNA {
   /// https://www.unicode.org/reports/tr46/#Validity_Criteria
   ///
   @inlinable
-  internal static func _validateStatus(_ scalar: Unicode.Scalar, transitionalProcessing: Bool) -> Bool {
+  internal static func _validateStatus(
+    _ scalar: Unicode.Scalar, transitionalProcessing: Bool, useSTD3ASCIIRules: Bool
+  ) -> Bool {
     precondition(transitionalProcessing == false, "transition processing not implemented")
-    // FIXME: It seems that useSTD3ASCIIRules perhaps should be true, as the standard doesn't say to forward it.
-    //        But implementations seem to do so.
-    //        In any case, we should make it a parameter like getScalarMapping does.
-    guard case .valid = _getScalarMapping(scalar, useSTD3ASCIIRules: false) else { return false }
+    guard case .valid = _getScalarMapping(scalar, useSTD3ASCIIRules: useSTD3ASCIIRules) else { return false }
     return true
   }
 }
@@ -656,13 +657,15 @@ extension IDNA {
   ///                                 undergoing compatibility mapping and normalization, so their status
   ///                                 will be assumed valid. **Important:** If the label has been decoded
   ///                                 from Punycode, this must be `false`.
+  ///   - useSTD3ASCIIRules:          If a label has _not_ already been mapped and normalized, its code-points
+  ///                                 will be checked and must be considered 'valid' by the mapping table.
+  ///                                 If this parameter is `true`, code-points with the status `disallowed_STD3_valid`
+  ///                                 will be considered **disallowed**; if `false`, they are considered **valid**.
   ///
   @inlinable
   internal static func _validate<Label>(
-    label: Label, isKnownMappedAndNormalized: Bool
+    label: Label, isKnownMappedAndNormalized: Bool, useSTD3ASCIIRules: Bool
   ) -> Bool where Label: BidirectionalCollection, Label.Element == UnicodeScalar {
-
-    assert(!Punycode.hasACEPrefix(label), "Punycode labels should be decoded already")
 
     // Parameters.
 
@@ -706,9 +709,14 @@ extension IDNA {
     //     - For Transitional Processing, each value must be valid.
     //     - For Nontransitional Processing, each value must be either valid or deviation.
 
+    // Note: it is not clear whether or not UseSTD3ASCIIRules should be propagated to this point.
+    //       I think so, and some implementations seem to. Have asked for clarification.
+    //       https://github.com/whatwg/url/issues/341#issuecomment-1119193904
     guard
       isKnownMappedAndNormalized
-        || label.allSatisfy({ _validateStatus($0, transitionalProcessing: transitionalProcessing) })
+        || label.allSatisfy({
+          _validateStatus($0, transitionalProcessing: transitionalProcessing, useSTD3ASCIIRules: useSTD3ASCIIRules)
+        })
     else {
       return false
     }

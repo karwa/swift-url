@@ -226,7 +226,9 @@ var output = #"""
     case disallowed_STD3_mapped
   }
 
-  internal typealias IDNAMappingTableSubArrayElt = (codepoints: ClosedRange<UInt32>, status: IDNAMappingStatus, mapping: [UInt32]?)
+  internal typealias IDNAMappingTableSubArrayElt = (
+    codepoints: ClosedRange<UInt32>, status: IDNAMappingStatus, mapping: [UInt32]?
+  )
 
   """# + "\n"
 
@@ -300,7 +302,7 @@ internal let _idna_mapping_data_subs: [[IDNAMappingTableSubArrayElt]] = [
 for subArrayIndex in 0...sub.number {
   output += "  _idna_mapping_data_sub_\(subArrayIndex),\n"
 }
-output += "]\n"
+output += "]"
 
 // Print to stdout.
 
