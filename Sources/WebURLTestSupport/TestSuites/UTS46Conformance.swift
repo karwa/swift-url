@@ -244,7 +244,6 @@ extension UTS46Conformance.Harness {
   public func _runTestCase(_ testcase: Suite.TestCase, _ result: inout TestResult<Suite>) {
 
     var captures = Suite.CapturedData()
-    defer { result.captures = captures }
 
     // ToUnicode.
     let unicodeResult = Self._runTestCaseSingleOperation(
@@ -260,7 +259,7 @@ extension UTS46Conformance.Harness {
       captures.toUnicodeResult = actualUnicodeResult
       result.failures.insert(.toUnicode)
     case .some((failingResult: .none, _)):
-      captures.toUnicodeResult = "<nil>"
+      captures.toUnicodeResult = nil
       result.failures.insert(.toUnicode)
     }
 
@@ -278,9 +277,11 @@ extension UTS46Conformance.Harness {
       captures.toAsciiNResult = actualAsciiNResult
       result.failures.insert(.toAsciiN)
     case .some((failingResult: .none, _)):
-      captures.toAsciiNResult = "<nil>"
+      captures.toAsciiNResult = nil
       result.failures.insert(.toAsciiN)
     }
+
+    result.captures = captures
   }
 
   private static func _runTestCaseSingleOperation(
@@ -318,8 +319,18 @@ extension TestHarnessProtocol where Suite == UTS46Conformance {
   public mutating func runTests<Lines>(_ lines: Lines) where Lines: Collection, Lines.Element == ArraySlice<UInt8> {
     var index = 0
     for line in lines {
-      // Skip comment lines.
-      guard line.first != UInt8(ascii: "#") else { continue }
+      // Lines which begin with a '#' are comments.
+      guard line.first != UInt8(ascii: "#") else {
+        // This is not official, but sometimes there are section dividers.
+        // There isn't really a way to distinguish them, except that they are comment lines
+        // and are all uppercase ASCII or spaces (e.g. "# BIDI TESTS").
+        let comment = line.dropFirst()
+        let uppercaseAlphas = (UInt8(ascii: "A")...UInt8(ascii: "Z"))
+        if !comment.isEmpty, comment.allSatisfy({ $0 == UInt8(ascii: " ") || uppercaseAlphas.contains($0) }) {
+          markSection(String(decoding: comment, as: UTF8.self))
+        }
+        continue
+      }
 
       // Note: each line also includes a trailing comment after a '#',
       // but since TestCase is only going to use the first 5 segments,

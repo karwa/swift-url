@@ -70,6 +70,10 @@ extension UTS46Conformance.WebURLIDNAReportHarness: UTS46Conformance.Harness {
 
   // Reporting.
 
+  public mutating func markSection(_ name: String) {
+    report.markSection(name)
+  }
+
   private static func shouldSkipTest(statusCodes: ArraySlice<UInt8>) -> Bool {
     let validationFailures = UTS46Conformance.FailableValidationSteps.parse(statusCodes)
 
@@ -134,8 +138,8 @@ extension UTS46Conformance.WebURLIDNAReportHarness: UTS46Conformance.Harness {
       // Some tests contain valid uses of zero-width joiners.
       // We are overly strict and reject these. We'd need Joining_Type data to confirm that they are valid.
       if joinerFailures.contains(result.testNumber) {
-        //        assert(result.captures?.toUnicodeResult == "<nil>")
-        //        assert(result.captures?.toAsciiNResult == "<nil>")
+        // assert(result.captures!.toUnicodeResult == nil)
+        // assert(result.captures!.toAsciiNResult == nil)
         reporter.expectedResult = .fail
       }
       reporter.reportTestResult(result)
