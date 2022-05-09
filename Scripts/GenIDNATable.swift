@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Foundation
+
 struct MappingTableEntry {
 
   var codePoints: ClosedRange<UInt32>
@@ -42,6 +44,8 @@ struct MappingTableEntry {
     /// the status is disallowed if `UseSTD3ASCIIRules=true` (the normal case);
     /// implementations that allow `UseSTD3ASCIIRules=false` would treat the code point as **mapped**.
     case disallowed_STD3_mapped = "disallowed_STD3_mapped"
+
+    case mapped_rebased = "___weburl___mapped_rebased___"
   }
 
   /// Parses the code-points, status and mapping from a given line of the IDNA mapping table.
@@ -69,12 +73,12 @@ struct MappingTableEntry {
     codePoints: do {
       let stringValue = components[0]
       if let singleValue = UInt32(stringValue, radix: 16) {
-        self.codePoints = singleValue ... singleValue
+        self.codePoints = singleValue...singleValue
       } else {
         guard
           stringValue.contains("."),
           let rangeStart = UInt32(stringValue.prefix(while: { $0 != "." }), radix: 16),
-          let rangeEnd   = UInt32(stringValue.suffix(while: { $0 != "." }), radix: 16)
+          let rangeEnd = UInt32(stringValue.suffix(while: { $0 != "." }), radix: 16)
         else {
           return nil
         }
@@ -87,6 +91,9 @@ struct MappingTableEntry {
         return nil
       }
       self.status = status
+    }
+    if case .mapped_rebased = self.status {
+      fatalError("Rebased status cannot be used when parsing")
     }
     mapping: do {
       switch self.status {
@@ -127,7 +134,7 @@ extension Substring {
 
   var trimmingSpaces: Substring {
     let firstNonSpace = firstIndex(where: { $0 != " " }) ?? endIndex
-    let lastNonSpace  = lastIndex(where: { $0 != " " }).map { index(after: $0) } ?? endIndex
+    let lastNonSpace = lastIndex(where: { $0 != " " }).map { index(after: $0) } ?? endIndex
     return self[firstNonSpace..<lastNonSpace]
   }
 }
@@ -160,8 +167,6 @@ extension UInt32 {
 // Script
 
 
-import Foundation
-
 // 1. Load the mapping table.
 let mappingTableURL = URL(fileURLWithPath: #filePath, isDirectory: false)
   .deletingLastPathComponent()
@@ -176,8 +181,63 @@ for line in entireMappingTable.split(separator: "\n").filter({ !$0.starts(with: 
   guard let entry = MappingTableEntry(parsing: data) else {
     fatalError("FAILED TO PARSE: \(data) -- \(comment)")
   }
-  entries.append(entry)
+  if let last = entries.last, let merged = last.tryMerge(with: entry) {
+    entries[entries.index(before: entries.endIndex)] = merged
+  } else {
+    entries.append(entry)
+  }
 }
+
+extension MappingTableEntry {
+
+  func tryMerge(with next: MappingTableEntry) -> MappingTableEntry? {
+    // Ranges must be contiguous.
+    guard self.codePoints.upperBound + 1 == next.codePoints.lowerBound else {
+      return nil
+    }
+    switch (self.status, next.status) {
+    // No mapping data; the existing entry can simply be extended.
+    case (.valid, .valid),
+      (.disallowed, .disallowed),
+      (.ignored, .ignored),
+      (.disallowed_STD3_valid, .disallowed_STD3_valid):
+      var copy = self
+      copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
+      return copy
+
+    // Merge mapping data.
+    case (.mapped, .mapped):
+      let selfMapping = self.mapping!
+      let otherMapping = next.mapping!
+      // If the mapping data is identical, the existing entry can simply be extended.
+      if selfMapping == otherMapping {
+        var copy = self
+        copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
+        return copy
+      }
+      // If the mapping data is not identical, but are both mappings to single, sequential scalars,
+      // we can merge both entries in to a mapped_rebased.
+      if selfMapping.count == 1, otherMapping.count == 1, selfMapping[0] + 1 == otherMapping[0] {
+        var copy = self
+        copy.status = .mapped_rebased
+        copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
+        return copy
+      }
+    case (.mapped_rebased, .mapped):
+      let selfMapping = self.mapping!
+      let otherMapping = next.mapping!
+      if otherMapping.count == 1, selfMapping[0] + UInt32(self.codePoints.count) == otherMapping[0] {
+        var copy = self
+        copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
+        return copy
+      }
+    default:
+      break
+    }
+    return nil
+  }
+}
+
 
 // TODO: 3. Transform the raw, parsed entries in to some kind of optimized/compact form.
 
@@ -185,7 +245,8 @@ for line in entireMappingTable.split(separator: "\n").filter({ !$0.starts(with: 
 
 // TODO: Include IDNA table version in output file
 
-var output = #"""
+var output =
+  #"""
   // Copyright The swift-url Contributors.
   //
   // Licensed under the Apache License, Version 2.0 (the "License");
@@ -224,6 +285,13 @@ var output = #"""
     /// the status is disallowed if `UseSTD3ASCIIRules=true` (the normal case);
     /// implementations that allow `UseSTD3ASCIIRules=false` would treat the code point as **mapped**.
     case disallowed_STD3_mapped
+
+    /// The code point should be replaced in the string. The replacement is calculated by finding
+    /// the distance from the entry's lowerBound to the code point, and adding that offset to the new
+    /// origin.
+    /// For example, the uppercase ASCII alphas 'A'...'Z' are mapped by rebasing relative to the origin 'a',
+    /// effectively lowercasing them.
+    case mapped_rebased
   }
 
   internal typealias IDNAMappingTableSubArrayElt = (
@@ -244,17 +312,19 @@ struct SubArray {
   init(number: Int) {
     self.number = number
     self.count = 0
-    self.string = #"""
-    // swift-format-ignore
-    internal let _idna_mapping_data_sub_\#(number): [IDNAMappingTableSubArrayElt] = [
-    """# + "\n"
+    self.string =
+      #"""
+      // swift-format-ignore
+      internal let _idna_mapping_data_sub_\#(number): [IDNAMappingTableSubArrayElt] = [
+      """# + "\n"
   }
 
   mutating func append(_ entry: MappingTableEntry) {
     count += 1
 
     string += "  ("
-    string += "codepoints: ClosedRange<UInt32>(uncheckedBounds: (\(entry.codePoints.lowerBound.hexString), \(entry.codePoints.upperBound.hexString))), "
+    string +=
+      "codepoints: ClosedRange<UInt32>(uncheckedBounds: (\(entry.codePoints.lowerBound.hexString), \(entry.codePoints.upperBound.hexString))), "
     string += "status: IDNAMappingStatus.\(entry.status), "
 
     if let mapping = entry.mapping {
@@ -295,10 +365,11 @@ output += "\n"
 
 // Write the 2D array.
 
-output += #"""
-// swift-format-ignore
-internal let _idna_mapping_data_subs: [[IDNAMappingTableSubArrayElt]] = [
-"""# + "\n"
+output +=
+  #"""
+  // swift-format-ignore
+  internal let _idna_mapping_data_subs: [[IDNAMappingTableSubArrayElt]] = [
+  """# + "\n"
 for subArrayIndex in 0...sub.number {
   output += "  _idna_mapping_data_sub_\(subArrayIndex),\n"
 }
@@ -307,3 +378,16 @@ output += "]"
 // Print to stdout.
 
 print(output)
+
+/*
+
+ Okay, we're going to need a lot more infrastructure here. It may need to be a package, even.
+
+ We need to do a couple of optimisation passes on the input data:
+
+ 3. Group all mappings up in to a giant table, dedupe them, and and replace Arrays with (offset, length) pairs
+    in to static data.
+ 4. Optimise the main table layout.
+
+
+ */

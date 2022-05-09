@@ -519,6 +519,9 @@ extension IDNA {
           return .ignored
         case .mapped:
           return .mapped(mapping!)
+        case .mapped_rebased:
+          let offset = scalar.value &- codepoints.lowerBound
+          return .mapped([mapping![0] &+ offset])
         case .deviation:
           return transitionalProcessing ? .mapped(mapping!) : .valid
         case .disallowed:
