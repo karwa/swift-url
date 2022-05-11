@@ -467,7 +467,7 @@ extension IDNA {
           }
           switch mappedScalar {
           case .single(let scalar, _): _normalizationBuffer.unicodeScalars.append(scalar)
-          case .multiple(let scalars): _normalizationBuffer.unicodeScalars += scalars
+          case .multiple(let idx): _normalizationBuffer.unicodeScalars += idx.get(table: _idna_replacements_table)
           default: fatalError()
           }
           self._state = .decodeFromSource
@@ -501,10 +501,10 @@ extension IDNA {
           case .single(let scalar, _):
             self._state = .decodeFromSource
             return scalar
-          case .multiple(let scalars):
-            if position < scalars.endIndex {
+          case .multiple(let idx):
+            if position < idx.length {
               self._state = .serializeUnnormalized(mappedScalar, index: position + 1)
-              return scalars[position]
+              return idx.get(table: _idna_replacements_table)[position]
             } else {
               self._state = .decodeFromSource
             }
@@ -528,7 +528,7 @@ extension IDNA {
     // Note: If _getScalarMapping returns '.single' and 'wasMapped == false', it means the original
     //       scalar was considered 'valid' by the combination of `transitional_processing` and `useSTD3ASCIIRules`.
     case single(Unicode.Scalar, wasMapped: Bool)
-    case multiple(ArraySlice<Unicode.Scalar>)
+    case multiple(ReplacementsTable.Index)
     case ignored
     case disallowed
 
@@ -539,7 +539,7 @@ extension IDNA {
       case .rebased(let origin):
         return .single(Unicode.Scalar(origin &+ offset)!, wasMapped: true)
       case .table(let idx):
-        return .multiple(idx.get(table: _idna_replacements_table))
+        return .multiple(idx)
       }
     }
   }
@@ -550,17 +550,37 @@ extension IDNA {
     let transitionalProcessing = FixedParameter(false)
 
     // Lookup.
+    let entry: MappingTableEntry
     if scalar.isASCII {
-      // TODO: ASCII fast-path.
-    }
-    let subArrayIdx = _idna_mapping_data_subs.partitionedIndex(where: { scalar.value > $0.0.upperBound })
-    let subArray = _idna_mapping_data_subs[subArrayIdx]
-    precondition(subArray.0.contains(scalar.value))
+      switch scalar {
+      // ASCII alphanumerics (and the dot!) are by far the most common things we're going to see, even in IDNs.
+      case "a"..."z", "0"..."9", ".":
+        return .single(scalar, wasMapped: false)
+      case "A"..."Z":
+        let distance = scalar.value &- Unicode.Scalar("A").value
+        let caseFolded = Unicode.Scalar(Unicode.Scalar("a").value &+ distance)!
+        return .single(caseFolded, wasMapped: true)
+      // Other ASCII - TODO: also probably worth optimizing in some way.
+      default:
+        let subArray = _idna_mapping_data_sub_0
+        let idx = subArray.firstIndex { !(scalar.value > MappingTableEntry(_storage: $0).codePoints.upperBound) }!
+        entry = MappingTableEntry(_storage: subArray[idx])
+      }
+    } else {
+      // Level 1 lookup - find the correct block.
+      // TODO: Optimize the branches here? Align on scalar planes/script boundaries?
+      let subArrayIdx = _idna_mapping_data_subs.partitionedIndex(where: { scalar.value > $0.0.upperBound })
+      let subArray = _idna_mapping_data_subs[subArrayIdx]
+      assert(subArray.0.contains(scalar.value))
 
-    let idx = subArray.1.partitionedIndex(where: {
-      scalar.value > MappingTableEntry(_storage: $0).codePoints.upperBound
-    })
-    let entry = MappingTableEntry(_storage: subArray.1[idx])
+      // Level 2 lookup - binary search within the block.
+      // TODO: Split upperBounds as their own Arrays, for better packing and cache usage?
+      let idx = subArray.1.partitionedIndex(where: {
+        scalar.value > MappingTableEntry(_storage: $0).codePoints.upperBound
+      })
+      entry = MappingTableEntry(_storage: subArray.1[idx])
+    }
+
     precondition(entry.codePoints.contains(scalar.value))
 
     let offset = scalar.value &- entry.codePoints.lowerBound

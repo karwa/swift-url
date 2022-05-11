@@ -332,7 +332,11 @@ output += "\n"
 // We need to split this in to smaller tables to avoid exponential memory growth
 // and promote putting it in the static data section of the binary.
 
-output += "internal typealias IDNAMappingTableSubArrayElt = UInt64\n"
+output +=
+  """
+  @usableFromInline
+  internal typealias IDNAMappingTableSubArrayElt = UInt64\n
+  """
 output += "\n"
 
 var splitArrayInfo = [(Int, ClosedRange<UInt32>)]()

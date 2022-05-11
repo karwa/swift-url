@@ -22,6 +22,7 @@ func printArrayLiteral<Data, OutputStream>(
   output.write(
     #"""
     // swift-format-ignore
+    @usableFromInline
     internal let \#(name): [\#(elementType)] = [
     """#
   )
