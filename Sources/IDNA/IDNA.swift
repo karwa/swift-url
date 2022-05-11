@@ -391,9 +391,10 @@ extension IDNA {
 
       case map(Unicode.Scalar)
 
-      case normalize([Unicode.Scalar])
+      case normalize(MappedScalar)
       case end
-      case serialize([Unicode.Scalar], index: Int)
+      case serializeNormalized([Unicode.Scalar], index: Int)
+      case serializeUnnormalized(MappedScalar, index: Int)
     }
 
     @inlinable
@@ -417,11 +418,10 @@ extension IDNA {
         // 1. Map the code-points using the IDNA mapping table.
         //
         case .map(let decodedScalar):
-          switch IDNA._getScalarMapping(decodedScalar, useSTD3ASCIIRules: _useSTD3ASCIIRules) {
-          case .valid:
-            self._state = .normalize([decodedScalar])
-          case .mapped(let replacements):
-            self._state = .normalize(replacements)
+          let mappedScalar = IDNA._getScalarMapping(decodedScalar, useSTD3ASCIIRules: _useSTD3ASCIIRules)
+          switch mappedScalar {
+          case .single, .multiple:
+            self._state = .normalize(mappedScalar)
           case .ignored:
             self._state = .decodeFromSource
           case .disallowed:
@@ -434,43 +434,81 @@ extension IDNA {
 
         // === HACK HACK HACK ===
         //
-        // FIXME: Neither the standard library nor Foundation give us the interface we want here.
-        // We end up having to buffer all the mapped scalars as a String just for normalization!
+        // We have a couple of different paths here.
+        //
+        // A. Normalize to NFC (like we're supposed to).
+        //
+        //    There are 2 ways to get this: from an unstable standard library SPI, or from Foundation.
+        //    In both cases, the functions accept a String, not a stream of Unicode scalars, so we need to consume
+        //    the entire input source, mapping everything, normalize it, and serialize the result as a stream
+        //    of scalars. It's a really ugly mess of states. Sorry.
+        //
+        //    The standard library's implementation is generic and could work directly with a stream of scalars.
+        //    That's what this design is intended to work with. We would just feed it scalars on each call to 'next()',
+        //    and forward its output.
+        //
+        // B. Don't normalize to NFC.
+        //
+        //    This is not really valid, but is useful for testing because it doesn't force serialization.
+        //    That means we process N labels, and might fail on the N+1'th label because of something like a UTF-8
+        //    decoding error, which would have been caught much earlier if we serialized everything.
+        //
+        //    It means more ugly mess of states. Again, sorry.
         //
         // === HACK HACK HACK ===
 
-        // a. Gather the mapped scalars in to a String.
-        //    Eventually, '.decodeFromSource' will consume all scalars and go to '.end'.
+        // A.i. Gather the mapped scalars in to a String.
+        //      Eventually, '.decodeFromSource' will consume all scalars and go to '.end'.
         //
-        case .normalize(let mappedScalars):
-          if IDNA_MappingAndNormalization_UseStringBufferForNormalization {
-            _normalizationBuffer.unicodeScalars.append(contentsOf: mappedScalars)
-            self._state = .decodeFromSource
-          } else {
-            // Normalization disabled!
-            self._state = .serialize(mappedScalars, index: 0)
+        case .normalize(let mappedScalar):
+          guard IDNA_MappingAndNormalization_NormalizeByBufferingToString else {
+            self._state = .serializeUnnormalized(mappedScalar, index: 0)  // Normalization disabled!
+            break
           }
+          switch mappedScalar {
+          case .single(let scalar, _): _normalizationBuffer.unicodeScalars.append(scalar)
+          case .multiple(let scalars): _normalizationBuffer.unicodeScalars += scalars
+          default: fatalError()
+          }
+          self._state = .decodeFromSource
 
-        // b. End state. This is *SUPPOSED* to always return nil and remain in the end state.
-        //    But if we have an unprocessed "normalization buffer" (String from [a]), we have to flush it.
+        // A.ii. End state. This is *SUPPOSED* to always return nil and remain in the end state.
+        //       But if we have an unprocessed "normalization buffer" (String from [a]), we have to flush it.
         //
         case .end:
           if !self.hasError && !_normalizationBuffer.isEmpty {
-            self._state = .serialize(toNFC(_normalizationBuffer), index: 0)
+            self._state = .serializeNormalized(toNFC(_normalizationBuffer), index: 0)
             _normalizationBuffer = ""
             continue
           }
           return nil
 
-        // c. Yield each of the resulting NFC scalar(s), then go back to '.decodeFromSource'.
+        // A.iii. Yield each of the resulting NFC scalar(s), then go back to '.decodeFromSource'.
         //
-        case .serialize(let scalars, index: let position):
+        case .serializeNormalized(let scalars, index: let position):
           if position < scalars.endIndex {
-            self._state = .serialize(scalars, index: position + 1)
+            self._state = .serializeNormalized(scalars, index: position + 1)
             return scalars[position]
           } else {
             assert(_normalizationBuffer.isEmpty)
             self._state = .decodeFromSource
+          }
+
+        // B. Yield non-normalized scalar(s) straight from the mapping table, then go back to '.decodeFromSource'.
+        //
+        case .serializeUnnormalized(let mappedScalar, index: let position):
+          switch mappedScalar {
+          case .single(let scalar, _):
+            self._state = .decodeFromSource
+            return scalar
+          case .multiple(let scalars):
+            if position < scalars.endIndex {
+              self._state = .serializeUnnormalized(mappedScalar, index: position + 1)
+              return scalars[position]
+            } else {
+              self._state = .decodeFromSource
+            }
+          default: fatalError()
           }
 
         // === END HACK HACK HACK (for now) ===
@@ -481,55 +519,67 @@ extension IDNA {
 }
 
 // TODO: This needs to actually have a sophisticated implementation.
-// - We shouldn't have mappings stored as arrays; they should be offets in to some static data.
 // - The lookup table itself needs work. Maybe use the stdlib's MPH stuff? Maybe something else?
 
 extension IDNA {
 
   @usableFromInline
-  internal enum Mapping {
-    case disallowed
+  internal enum MappedScalar {
+    // Note: If _getScalarMapping returns '.single' and 'wasMapped == false', it means the original
+    //       scalar was considered 'valid' by the combination of `transitional_processing` and `useSTD3ASCIIRules`.
+    case single(Unicode.Scalar, wasMapped: Bool)
+    case multiple(ArraySlice<Unicode.Scalar>)
     case ignored
-    case mapped([Unicode.Scalar])
-    // (deviation is resolved from transitional_processing)
-    case valid
+    case disallowed
 
-    static func mapped(_ v: [UInt32]) -> Self {
-      // FIXME: Array Map.
-      .mapped(v.map { Unicode.Scalar($0)! })
+    static func resolve(_ offset: UInt32, _ v: MappingTableEntry.Mapping) -> Self {
+      switch v {
+      case .single(let single):
+        return .single(Unicode.Scalar(single)!, wasMapped: true)
+      case .rebased(let origin):
+        return .single(Unicode.Scalar(origin &+ offset)!, wasMapped: true)
+      case .table(let idx):
+        return .multiple(idx.get(table: _idna_replacements_table))
+      }
     }
   }
 
   @usableFromInline
-  internal static func _getScalarMapping(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> Mapping {
+  internal static func _getScalarMapping(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> MappedScalar {
     // Parameters.
     let transitionalProcessing = FixedParameter(false)
 
     // Lookup.
-    // TODO: optimized table lookup. For now linear search, lol.
-    lookup: for (codepoints, status, mapping) in _idna_mapping_data_subs.joined() {
-      if codepoints.lowerBound > scalar.value {
-        return .disallowed  // Not found. Assume invalid.
+    // TODO: optimized table lookup. For now 2-stage linear search, lol.
+    lookup: for (range, subarray) in _idna_mapping_data_subs {
+
+      if range.lowerBound > scalar.value {
+        return .disallowed  // Not in the table?!. Assume invalid.
       }
-      if codepoints.contains(scalar.value) {
-        switch status {
-        case .valid:
-          return .valid
-        case .ignored:
-          return .ignored
-        case .mapped:
-          return .mapped(mapping!)
-        case .mapped_rebased:
-          let offset = scalar.value &- codepoints.lowerBound
-          return .mapped([mapping![0] &+ offset])
-        case .deviation:
-          return transitionalProcessing ? .mapped(mapping!) : .valid
-        case .disallowed:
-          return .disallowed
-        case .disallowed_STD3_valid:
-          return useSTD3ASCIIRules ? .disallowed : .valid
-        case .disallowed_STD3_mapped:
-          return useSTD3ASCIIRules ? .disallowed : .mapped(mapping!)
+      guard range.contains(scalar.value) else { continue }
+      for compactEntry in subarray {
+        let entry = MappingTableEntry(compactEntry)
+        if entry.codePoints.lowerBound > scalar.value {
+          return .disallowed  // Not found. Assume invalid.
+        }
+        if entry.codePoints.contains(scalar.value) {
+          let offset = scalar.value &- entry.codePoints.lowerBound
+          switch entry.status {
+          case .valid:
+            return .single(scalar, wasMapped: false)
+          case .ignored:
+            return .ignored
+          case .disallowed:
+            return .disallowed
+          case .disallowed_STD3_valid:
+            return useSTD3ASCIIRules ? .disallowed : .single(scalar, wasMapped: false)
+          case .deviation(let mapping):
+            return transitionalProcessing ? .resolve(offset, mapping!) : .single(scalar, wasMapped: false)
+          case .disallowed_STD3_mapped(let mapping):
+            return useSTD3ASCIIRules ? .disallowed : .resolve(offset, mapping)
+          case .mapped(let mapping):
+            return .resolve(offset, mapping)
+          }
         }
       }
     }
@@ -554,8 +604,8 @@ extension IDNA {
     _ scalar: Unicode.Scalar, transitionalProcessing: Bool, useSTD3ASCIIRules: Bool
   ) -> Bool {
     precondition(transitionalProcessing == false, "transition processing not implemented")
-    guard case .valid = _getScalarMapping(scalar, useSTD3ASCIIRules: useSTD3ASCIIRules) else { return false }
-    return true
+    if case .single(_, false) = _getScalarMapping(scalar, useSTD3ASCIIRules: useSTD3ASCIIRules) { return true }
+    return false
   }
 }
 
@@ -789,12 +839,13 @@ internal func FixedParameter(_ value: Bool) -> Bool { value }
 
 // The standard library doesn't currently expose NFC normalization algorithms or data.
 //
-// Also, the current implementation uses String as its Unicode codepoint source, but
+// Also, the current (SPI) implementation uses String as its Unicode codepoint source, but
 // it is actually written generically and should be able to consume our scalars directly.
-// That means we currently have to buffer everything in to a string, but really we'd rather not.
+// That means we currently have to buffer everything in to a string, but in the future
+// we should be able to avoid that overhead.
 
 @inlinable @inline(__always)
-internal var IDNA_MappingAndNormalization_UseStringBufferForNormalization: Bool { true }
+internal var IDNA_MappingAndNormalization_NormalizeByBufferingToString: Bool { true }
 
 #if USE_SWIFT_STDLIB_UNICODE
 

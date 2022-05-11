@@ -36,7 +36,6 @@ extension UTS46ConformanceTests {
       401,
       404,
     ])
-    // harness.runTests(lines.prefix(1000))
     harness.runTests(lines)
     XCTAssertEqual(harness.reportedResultCount, 6235, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")

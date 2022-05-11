@@ -14,7 +14,45 @@
 
 import Foundation
 
-struct MappingTableEntry {
+// --------------------------------------------
+// MARK: - Parse Data File
+// --------------------------------------------
+
+
+// - Load the mapping table.
+
+let mappingTableURL = Bundle.module.url(forResource: "TableDefinitions/IdnaMappingTable", withExtension: "txt")!
+let entireMappingTable = try String(contentsOf: mappingTableURL)
+
+// - Parse the entries.
+//   We do a bit of optimization here already, by merging contiguous entries as they are appended to the table
+//   and collapsing contiguous mappings. This can reduce 1/3 of entries (from ~9000 to 6000).
+
+private var rawEntries = [RawMappingTableEntry]()
+for line in entireMappingTable.split(separator: "\n").filter({ !$0.starts(with: "#") }) {
+
+  let data = line.prefix { $0 != "#" }
+  let comment = line[data.endIndex...].dropFirst()
+
+  guard let entry = RawMappingTableEntry(parsing: data) else {
+    fatalError(
+      """
+      ⚠️ Failed to Parse Entry in Mapping Data! ⚠️
+      line: \(line)
+      data: \(data)
+      comment: \(comment)
+      """
+    )
+  }
+
+  if let last = rawEntries.last, let merged = last.tryMerge(with: entry) {
+    rawEntries[rawEntries.index(before: rawEntries.endIndex)] = merged
+  } else {
+    rawEntries.append(entry)
+  }
+}
+
+fileprivate struct RawMappingTableEntry {
 
   var codePoints: ClosedRange<UInt32>
   var status: Status
@@ -126,80 +164,26 @@ struct MappingTableEntry {
   }
 }
 
+extension RawMappingTableEntry {
 
-// Utilities.
+  func tryMerge(with next: RawMappingTableEntry) -> RawMappingTableEntry? {
 
-
-extension Substring {
-
-  var trimmingSpaces: Substring {
-    let firstNonSpace = firstIndex(where: { $0 != " " }) ?? endIndex
-    let lastNonSpace = lastIndex(where: { $0 != " " }).map { index(after: $0) } ?? endIndex
-    return self[firstNonSpace..<lastNonSpace]
-  }
-}
-
-extension BidirectionalCollection {
-
-  /// Returns the slice of this collection's trailing elements which match the given predicate.
-  ///
-  /// If no elements match the predicate, the returned slice is empty, from `endIndex..<endIndex`.
-  ///
-  @usableFromInline
-  internal func suffix(while predicate: (Element) -> Bool) -> SubSequence {
-    var i = endIndex
-    while i > startIndex {
-      let beforeI = index(before: i)
-      guard predicate(self[beforeI]) else { return self[i..<endIndex] }
-      i = beforeI
-    }
-    return self[startIndex..<endIndex]
-  }
-}
-
-extension UInt32 {
-  var hexString: String {
-    "0x" + String(self, radix: 16, uppercase: true)
-  }
-}
-
-
-// Script
-
-
-// 1. Load the mapping table.
-let mappingTableURL = URL(fileURLWithPath: #filePath, isDirectory: false)
-  .deletingLastPathComponent()
-  .appendingPathComponent("IdnaMappingTable.txt")
-let entireMappingTable = try String(contentsOf: mappingTableURL)
-
-// 2. Parse the entries.
-var entries = [MappingTableEntry]()
-for line in entireMappingTable.split(separator: "\n").filter({ !$0.starts(with: "#") }) {
-  let data = line.prefix { $0 != "#" }
-  let comment = line[data.endIndex...].dropFirst()
-  guard let entry = MappingTableEntry(parsing: data) else {
-    fatalError("FAILED TO PARSE: \(data) -- \(comment)")
-  }
-  if let last = entries.last, let merged = last.tryMerge(with: entry) {
-    entries[entries.index(before: entries.endIndex)] = merged
-  } else {
-    entries.append(entry)
-  }
-}
-
-extension MappingTableEntry {
-
-  func tryMerge(with next: MappingTableEntry) -> MappingTableEntry? {
     // Ranges must be contiguous.
     guard self.codePoints.upperBound + 1 == next.codePoints.lowerBound else {
       return nil
     }
+    // FIXME: Don't merge entries if the merged result would contain > 0xFFFF code-points,
+    //        because the length wouldn't fit in a 16-bit integer later. In future, we should
+    //        go through a splitting phase to get the biggest blocks we can, aligned to script boundaries, etc.
+    if self.codePoints.count + next.codePoints.count > UInt16.max {
+      return nil
+    }
+
     switch (self.status, next.status) {
     // No mapping data; the existing entry can simply be extended.
     case (.valid, .valid),
-      (.disallowed, .disallowed),
       (.ignored, .ignored),
+      (.disallowed, .disallowed),
       (.disallowed_STD3_valid, .disallowed_STD3_valid):
       var copy = self
       copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
@@ -239,9 +223,73 @@ extension MappingTableEntry {
 }
 
 
-// TODO: 3. Transform the raw, parsed entries in to some kind of optimized/compact form.
+// --------------------------------------------
+// MARK: - Process, Optimize
+// --------------------------------------------
 
-// 4. Write the data out as a Swift file which can be imported by the IDNA module.
+
+// - Split the mappings off in to a separate table ("replacements table"),
+//   so that every entry is a fixed-size scalar.
+
+// TODO: Split the entries in to more tables - e.g. a table of just the starting code-point for lookup.
+// TODO: Split the main code-point table in to several tables (in a more sophisticated way than the 'writing' step does).
+//       - Probably some kind of trie? Aligned on Unicode planes so users don't cross sub-tables too often?
+
+var processed = [MappingTableEntry]()
+var replacements = ReplacementsTable.Builder()
+
+for entry in rawEntries {
+
+  let processedStatus: MappingTableEntry.Status
+  switch entry.status {
+  case .valid:
+    processedStatus = .valid
+  case .ignored:
+    processedStatus = .ignored
+  case .disallowed:
+    processedStatus = .disallowed
+  case .disallowed_STD3_valid:
+    processedStatus = .disallowed_STD3_valid
+
+  case .deviation:
+    guard let mapping = entry.mapping else {
+      processedStatus = .deviation(nil)
+      break
+    }
+    if mapping.count == 1 {
+      processedStatus = .deviation(.single(mapping.first!))
+    } else {
+      processedStatus = .deviation(.table(replacements.insert(mapping: mapping)))
+    }
+
+  case .disallowed_STD3_mapped:
+    guard let mapping = entry.mapping else { fatalError("Expected mapping") }
+    if mapping.count == 1 {
+      processedStatus = .disallowed_STD3_mapped(.single(mapping.first!))
+    } else {
+      processedStatus = .disallowed_STD3_mapped(.table(replacements.insert(mapping: mapping)))
+    }
+  case .mapped:
+    guard let mapping = entry.mapping else { fatalError("Expected mapping") }
+    if mapping.count == 1 {
+      processedStatus = .mapped(.single(mapping.first!))
+    } else {
+      processedStatus = .mapped(.table(replacements.insert(mapping: mapping)))
+    }
+  case .mapped_rebased:
+    guard let mapping = entry.mapping else { fatalError("Expected mapping") }
+    processedStatus = .mapped(.rebased(origin: mapping.first!))
+    break
+  }
+
+  processed.append(MappingTableEntry(codePoints: entry.codePoints, status: processedStatus))
+}
+
+
+// --------------------------------------------
+// MARK: - Write
+// --------------------------------------------
+
 
 // TODO: Include IDNA table version in output file
 
@@ -261,133 +309,83 @@ var output =
   // See the License for the specific language governing permissions and
   // limitations under the License.
 
-  internal enum IDNAMappingStatus {
-
-    /// The code point is valid, and not modified.
-    case valid
-
-    /// The code point is removed: this is equivalent to mapping the code point to an empty string.
-    case ignored
-
-    /// The code point is replaced in the string by the value for the mapping.
-    case mapped
-
-    /// The code point is either mapped or valid, depending on whether the processing is transitional or not.
-    case deviation
-
-    /// The code point is not allowed.
-    case disallowed
-
-    /// The status is disallowed if `UseSTD3ASCIIRules=true` (the normal case);
-    /// implementations that allow `UseSTD3ASCIIRules=false` would treat the code point as **valid**.
-    case disallowed_STD3_valid
-
-    /// the status is disallowed if `UseSTD3ASCIIRules=true` (the normal case);
-    /// implementations that allow `UseSTD3ASCIIRules=false` would treat the code point as **mapped**.
-    case disallowed_STD3_mapped
-
-    /// The code point should be replaced in the string. The replacement is calculated by finding
-    /// the distance from the entry's lowerBound to the code point, and adding that offset to the new
-    /// origin.
-    /// For example, the uppercase ASCII alphas 'A'...'Z' are mapped by rebasing relative to the origin 'a',
-    /// effectively lowercasing them.
-    case mapped_rebased
-  }
-
-  internal typealias IDNAMappingTableSubArrayElt = (
-    codepoints: ClosedRange<UInt32>, status: IDNAMappingStatus, mapping: [UInt32]?
-  )
+  // ---------------------------------------------
+  //                 DO NOT MODIFY
+  // ---------------------------------------------
+  // Generated by GenerateUnicodeData
 
   """# + "\n"
+
+// Print the replacements table.
+
+printArrayLiteral(
+  name: "_idna_replacements_table",
+  elementType: "Unicode.Scalar",
+  data: replacements.buildReplacementsTable(),
+  columns: 8,
+  formatter: { #""\u{\#(String($0, radix: 16, uppercase: true))}""# },
+  to: &output
+)
+output += "\n"
 
 // Swift's support for static data tables is pretty poor.
 // We need to split this in to smaller tables to avoid exponential memory growth
 // and promote putting it in the static data section of the binary.
 
-struct SubArray {
-  var string: String
-  var number: Int
-  var count: Int
-
-  init(number: Int) {
-    self.number = number
-    self.count = 0
-    self.string =
-      #"""
-      // swift-format-ignore
-      internal let _idna_mapping_data_sub_\#(number): [IDNAMappingTableSubArrayElt] = [
-      """# + "\n"
-  }
-
-  mutating func append(_ entry: MappingTableEntry) {
-    count += 1
-
-    string += "  ("
-    string +=
-      "codepoints: ClosedRange<UInt32>(uncheckedBounds: (\(entry.codePoints.lowerBound.hexString), \(entry.codePoints.upperBound.hexString))), "
-    string += "status: IDNAMappingStatus.\(entry.status), "
-
-    if let mapping = entry.mapping {
-      precondition(!mapping.isEmpty)
-      string += "mapping: [\(mapping.map { $0.hexString }.joined(separator: ", "))]"
-    } else {
-      string += "nil"
-    }
-    string += "),\n"
-  }
-
-  func finalizedIfFull() -> (serialization: String, next: SubArray)? {
-    guard count == 100 else {
-      precondition(count < 100)
-      return nil
-    }
-    return (serialization: self.finalized(), next: SubArray(number: self.number + 1))
-  }
-
-  func finalized() -> String {
-    self.string + "]\n"
-  }
-}
-
-// Write the sub-arrays.
-
-var sub = SubArray(number: 0)
-for entry in entries {
-  sub.append(entry)
-  if let (serialization, nextSub) = sub.finalizedIfFull() {
-    output += serialization
-    output += "\n"
-    sub = nextSub
-  }
-}
-output += sub.finalized()
+output += "internal typealias IDNAMappingTableSubArrayElt = UInt64\n"
 output += "\n"
+
+var splitArrayInfo = [(Int, ClosedRange<UInt32>)]()
+
+var splitArrayNum = 0
+var splitElements = [MappingTableEntry]()
+
+for element in processed {
+  splitElements.append(element)
+  if splitElements.count == 250 {
+    splitArrayInfo.append(
+      (splitArrayNum, splitElements.first!.codePoints.lowerBound...splitElements.last!.codePoints.upperBound)
+    )
+    printArrayLiteral(
+      name: "_idna_mapping_data_sub_\(splitArrayNum)",
+      elementType: "IDNAMappingTableSubArrayElt",
+      data: splitElements, columns: 5,
+      formatter: { $0.toInt().paddedHexString },
+      to: &output
+    )
+    output += "\n"
+    splitArrayNum += 1
+    splitElements.removeAll(keepingCapacity: true)
+  }
+}
+if !splitElements.isEmpty {
+  splitArrayInfo.append(
+    (splitArrayNum, splitElements.first!.codePoints.lowerBound...splitElements.last!.codePoints.upperBound)
+  )
+  printArrayLiteral(
+    name: "_idna_mapping_data_sub_\(splitArrayNum)",
+    elementType: "IDNAMappingTableSubArrayElt",
+    data: splitElements, columns: 5,
+    formatter: { $0.toInt().paddedHexString },
+    to: &output
+  )
+  output += "\n"
+  splitElements.removeAll(keepingCapacity: true)
+}
 
 // Write the 2D array.
 
-output +=
-  #"""
-  // swift-format-ignore
-  internal let _idna_mapping_data_subs: [[IDNAMappingTableSubArrayElt]] = [
-  """# + "\n"
-for subArrayIndex in 0...sub.number {
-  output += "  _idna_mapping_data_sub_\(subArrayIndex),\n"
-}
-output += "]"
+printArrayLiteral(
+  name: "_idna_mapping_data_subs",
+  elementType: "(ClosedRange<UInt32>, [IDNAMappingTableSubArrayElt])",
+  data: splitArrayInfo, columns: 1,
+  formatter: { "(\($1), _idna_mapping_data_sub_\($0))" },
+  to: &output
+)
 
 // Print to stdout.
 
+precondition(output.last == "\n")
+output.removeLast()
+
 print(output)
-
-/*
-
- Okay, we're going to need a lot more infrastructure here. It may need to be a package, even.
-
- We need to do a couple of optimisation passes on the input data:
-
- 3. Group all mappings up in to a giant table, dedupe them, and and replace Arrays with (offset, length) pairs
-    in to static data.
- 4. Optimise the main table layout.
-
-
- */
