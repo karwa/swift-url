@@ -550,40 +550,36 @@ extension IDNA {
     let transitionalProcessing = FixedParameter(false)
 
     // Lookup.
-    // TODO: optimized table lookup. For now 2-stage linear search, lol.
-    lookup: for (range, subarray) in _idna_mapping_data_subs {
-
-      if range.lowerBound > scalar.value {
-        return .disallowed  // Not in the table?!. Assume invalid.
-      }
-      guard range.contains(scalar.value) else { continue }
-      for compactEntry in subarray {
-        let entry = MappingTableEntry(_storage: compactEntry)
-        if entry.codePoints.lowerBound > scalar.value {
-          return .disallowed  // Not found. Assume invalid.
-        }
-        if entry.codePoints.contains(scalar.value) {
-          let offset = scalar.value &- entry.codePoints.lowerBound
-          switch entry.status {
-          case .valid:
-            return .single(scalar, wasMapped: false)
-          case .ignored:
-            return .ignored
-          case .disallowed:
-            return .disallowed
-          case .disallowed_STD3_valid:
-            return useSTD3ASCIIRules ? .disallowed : .single(scalar, wasMapped: false)
-          case .deviation(let mapping):
-            return transitionalProcessing ? .resolve(offset, mapping!) : .single(scalar, wasMapped: false)
-          case .disallowed_STD3_mapped(let mapping):
-            return useSTD3ASCIIRules ? .disallowed : .resolve(offset, mapping)
-          case .mapped(let mapping):
-            return .resolve(offset, mapping)
-          }
-        }
-      }
+    if scalar.isASCII {
+      // TODO: ASCII fast-path.
     }
-    fatalError("Did not find a mapping for scalar: \(scalar.value) (\(scalar))")
+    let subArrayIdx = _idna_mapping_data_subs.partitionedIndex(where: { scalar.value > $0.0.upperBound })
+    let subArray = _idna_mapping_data_subs[subArrayIdx]
+    precondition(subArray.0.contains(scalar.value))
+
+    let idx = subArray.1.partitionedIndex(where: {
+      scalar.value > MappingTableEntry(_storage: $0).codePoints.upperBound
+    })
+    let entry = MappingTableEntry(_storage: subArray.1[idx])
+    precondition(entry.codePoints.contains(scalar.value))
+
+    let offset = scalar.value &- entry.codePoints.lowerBound
+    switch entry.status {
+    case .valid:
+      return .single(scalar, wasMapped: false)
+    case .ignored:
+      return .ignored
+    case .disallowed:
+      return .disallowed
+    case .disallowed_STD3_valid:
+      return useSTD3ASCIIRules ? .disallowed : .single(scalar, wasMapped: false)
+    case .deviation(let mapping):
+      return transitionalProcessing ? .resolve(offset, mapping!) : .single(scalar, wasMapped: false)
+    case .disallowed_STD3_mapped(let mapping):
+      return useSTD3ASCIIRules ? .disallowed : .resolve(offset, mapping)
+    case .mapped(let mapping):
+      return .resolve(offset, mapping)
+    }
   }
 
   /// Whether the code point is valid to be used in a domain label.
@@ -606,6 +602,31 @@ extension IDNA {
     precondition(transitionalProcessing == false, "transition processing not implemented")
     if case .single(_, false) = _getScalarMapping(scalar, useSTD3ASCIIRules: useSTD3ASCIIRules) { return true }
     return false
+  }
+}
+
+extension RandomAccessCollection {
+
+  /// Returns the index of the first element in the collection
+  /// that doesn't match the predicate.
+  ///
+  /// The collection must already be partitioned according to the
+  /// predicate, as if `x.partition(by: predicate)` had already
+  /// been called.
+  ///
+  @inlinable
+  internal func partitionedIndex(where predicate: (Element) -> Bool) -> Index {
+    var low = self.startIndex
+    var high = self.endIndex
+    while low != high {
+      let mid = index(low, offsetBy: distance(from: low, to: high) / 2)
+      if predicate(self[mid]) {
+        low = index(after: mid)
+      } else {
+        high = mid
+      }
+    }
+    return low
   }
 }
 

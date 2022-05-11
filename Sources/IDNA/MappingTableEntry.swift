@@ -51,7 +51,9 @@ extension MappingTableEntry {
     let lowerBound = _storage &>> 42
     // bits 42 - 26 (16 bits)
     let delta = (_storage &>> 26) & 0xFFFF
-    return UInt32(truncatingIfNeeded: lowerBound)...UInt32(truncatingIfNeeded: lowerBound &+ delta)
+    return ClosedRange(
+      uncheckedBounds: (UInt32(truncatingIfNeeded: lowerBound), UInt32(truncatingIfNeeded: lowerBound &+ delta))
+    )
   }
 
   @inlinable
@@ -72,7 +74,7 @@ extension MappingTableEntry {
   @inlinable
   internal static func _parseMapping(_ value: UInt64) -> Mapping? {
     // bits 23 - 21 (2 bits)
-    switch (value >> 21) & 0b11 {
+    switch (value &>> 21) & 0b11 {
     case 0:
       return nil
     case 1:
@@ -89,7 +91,9 @@ extension MappingTableEntry {
       let offset = (value >> 8) & 0x1FFF
       // length: bits 8 - 0 (8 bits)
       let length = value & 0xFF
-      return .table(ReplacementsTable.Index(offset: UInt16(offset), length: UInt8(length)))
+      return .table(
+        ReplacementsTable.Index(offset: UInt16(truncatingIfNeeded: offset), length: UInt8(truncatingIfNeeded: length))
+      )
     default:
       fatalError("Unreachable")
     }
