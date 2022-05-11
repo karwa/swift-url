@@ -558,7 +558,7 @@ extension IDNA {
       }
       guard range.contains(scalar.value) else { continue }
       for compactEntry in subarray {
-        let entry = MappingTableEntry(compactEntry)
+        let entry = MappingTableEntry(_storage: compactEntry)
         if entry.codePoints.lowerBound > scalar.value {
           return .disallowed  // Not found. Assume invalid.
         }

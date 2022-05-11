@@ -350,7 +350,7 @@ for element in processed {
       name: "_idna_mapping_data_sub_\(splitArrayNum)",
       elementType: "IDNAMappingTableSubArrayElt",
       data: splitElements, columns: 5,
-      formatter: { $0.toInt().paddedHexString },
+      formatter: { $0._storage.paddedHexString },
       to: &output
     )
     output += "\n"
@@ -366,7 +366,7 @@ if !splitElements.isEmpty {
     name: "_idna_mapping_data_sub_\(splitArrayNum)",
     elementType: "IDNAMappingTableSubArrayElt",
     data: splitElements, columns: 5,
-    formatter: { $0.toInt().paddedHexString },
+    formatter: { $0._storage.paddedHexString },
     to: &output
   )
   output += "\n"

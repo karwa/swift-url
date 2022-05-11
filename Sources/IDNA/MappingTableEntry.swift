@@ -16,8 +16,13 @@
 ///
 public struct MappingTableEntry {
 
-  public var codePoints: ClosedRange<UInt32>
-  public var status: Status
+  @usableFromInline
+  internal var _storage: UInt64
+
+  @inlinable
+  public init(_storage: UInt64) {
+    self._storage = _storage
+  }
 
   public enum Status {
     case valid
@@ -41,25 +46,27 @@ public struct MappingTableEntry {
 extension MappingTableEntry {
 
   @inlinable
-  public init(_ value: UInt64) {
+  public var codePoints: ClosedRange<UInt32> {
     // bits 63 - 42 (21 bits)
-    let lowerBound = value &>> 42
+    let lowerBound = _storage &>> 42
     // bits 42 - 26 (16 bits)
-    let delta = (value &>> 26) & 0xFFFF
+    let delta = (_storage &>> 26) & 0xFFFF
+    return UInt32(truncatingIfNeeded: lowerBound)...UInt32(truncatingIfNeeded: lowerBound &+ delta)
+  }
+
+  @inlinable
+  public var status: Status {
     // bits 26 - 23 (3 bits)
-    let status: Status
-    switch (value &>> 23) & 0b111 {
-    case 1: status = .valid
-    case 2: status = .ignored
-    case 3: status = .disallowed
-    case 4: status = .disallowed_STD3_valid
-    case 5: status = .deviation(Self._parseMapping(value))
-    case 6: status = .mapped(Self._parseMapping(value)!)
-    case 7: status = .disallowed_STD3_mapped(Self._parseMapping(value)!)
+    switch (_storage &>> 23) & 0b111 {
+    case 1: return .valid
+    case 2: return .ignored
+    case 3: return .disallowed
+    case 4: return .disallowed_STD3_valid
+    case 5: return .deviation(Self._parseMapping(_storage))
+    case 6: return .mapped(Self._parseMapping(_storage)!)
+    case 7: return .disallowed_STD3_mapped(Self._parseMapping(_storage)!)
     default: fatalError("Corrupt data")
     }
-    self.codePoints = UInt32(truncatingIfNeeded: lowerBound)...UInt32(truncatingIfNeeded: lowerBound &+ delta)
-    self.status = status
   }
 
   @inlinable
@@ -90,7 +97,11 @@ extension MappingTableEntry {
 
   // Script only:
 
-  internal func toInt() -> UInt64 {
+  internal init(codePoints: ClosedRange<UInt32>, status: Status) {
+    self.init(_storage: Self.toInt(codePoints: codePoints, status: status))
+  }
+
+  private static func toInt(codePoints: ClosedRange<UInt32>, status: Status) -> UInt64 {
     var value = UInt64.zero
     // bits 63 - 42 (21 bits)
     value = UInt64(codePoints.lowerBound) &<< 42
