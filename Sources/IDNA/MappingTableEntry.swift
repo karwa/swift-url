@@ -203,6 +203,7 @@ public struct ReplacementsTable {
     private var length = 0
 
     internal mutating func insert(mapping: [UInt32]) -> Index {
+      precondition(!mapping.isEmpty, "Attempt to insert empty mapping")
       // If there is an existing mapping, return it.
       if let existingIndex = data[mapping] { return existingIndex }
       // The 'Index' defines where this appears in the output data;

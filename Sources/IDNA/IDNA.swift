@@ -546,39 +546,45 @@ extension IDNA {
 
   @usableFromInline
   internal static func _getScalarMapping(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> MappedScalar {
+
     // Parameters.
     let transitionalProcessing = FixedParameter(false)
 
     // Lookup.
+    //
+    // For each MappingTableEntry, the lowerBound is in the top 21 bits.
+    // So we can place the scalar we're looking for in the top 21 bits, set every other bit to 1, and simply
+    // compare the integer values to find the entry that must contain our lowerBound.
+    let mappingPrefix = (UInt64(scalar.value) &<< 42) | (0x3FFFFFFFFFF)
+
     let entry: MappingTableEntry
     if scalar.isASCII {
       switch scalar {
-      // ASCII alphanumerics (and the dot!) are by far the most common things we're going to see, even in IDNs.
-      case "a"..."z", "0"..."9", ".":
+      // ASCII alphanumerics (and the dot/hyphen!) are by far the most common things we're going to see, even in IDNs.
+      case "a"..."z", "0"..."9", ".", "-":
         return .single(scalar, wasMapped: false)
       case "A"..."Z":
-        let distance = scalar.value &- Unicode.Scalar("A").value
-        let caseFolded = Unicode.Scalar(Unicode.Scalar("a").value &+ distance)!
+        let distance = UInt8(truncatingIfNeeded: scalar.value) &- UInt8(ascii: "A")
+        let caseFolded = Unicode.Scalar(UInt8(ascii: "a") &+ distance)
         return .single(caseFolded, wasMapped: true)
-      // Other ASCII - TODO: also probably worth optimizing in some way.
       default:
-        let subArray = _idna_mapping_data_sub_0
-        let idx = subArray.firstIndex { !(scalar.value > MappingTableEntry(_storage: $0).codePoints.upperBound) }!
-        entry = MappingTableEntry(_storage: subArray[idx])
+        // TODO: also probably worth optimizing in some way.
+        let subArray = _idna_mapping_data_bmp0
+        entry = subArray.withUnsafeBufferPointer {
+          let buffer = $0  // TODO: .boundsChecked
+          let idx = buffer.firstIndex { mappingPrefix < $0 }! &- 1
+          return MappingTableEntry(_storage: buffer[idx])
+        }
       }
     } else {
       // Level 1 lookup - find the correct block.
-      // TODO: Optimize the branches here? Align on scalar planes/script boundaries?
-      let subArrayIdx = _idna_mapping_data_subs.partitionedIndex(where: { scalar.value > $0.0.upperBound })
-      let subArray = _idna_mapping_data_subs[subArrayIdx]
-      assert(subArray.0.contains(scalar.value))
-
+      let subArray = _idna_mapping_data_for_scalar(scalar)
       // Level 2 lookup - binary search within the block.
-      // TODO: Split upperBounds as their own Arrays, for better packing and cache usage?
-      let idx = subArray.1.partitionedIndex(where: {
-        scalar.value > MappingTableEntry(_storage: $0).codePoints.upperBound
-      })
-      entry = MappingTableEntry(_storage: subArray.1[idx])
+      entry = subArray.withUnsafeBufferPointer {
+        let buffer = $0  // TODO: .boundsChecked
+        let idx = buffer.partitionedIndex { mappingPrefix >= $0 } &- 1
+        return MappingTableEntry(_storage: buffer[idx])
+      }
     }
 
     precondition(entry.codePoints.contains(scalar.value))
@@ -638,7 +644,7 @@ extension RandomAccessCollection {
   internal func partitionedIndex(where predicate: (Element) -> Bool) -> Index {
     var low = self.startIndex
     var high = self.endIndex
-    while low != high {
+    while low < high {
       let mid = index(low, offsetBy: distance(from: low, to: high) / 2)
       if predicate(self[mid]) {
         low = index(after: mid)

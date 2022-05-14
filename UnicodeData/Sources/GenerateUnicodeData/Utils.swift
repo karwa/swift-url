@@ -51,14 +51,34 @@ extension String {
 
 // Int to Hex.
 
-extension FixedWidthInteger {
-  internal var hexString: String {
-    "0x" + String(self, radix: 16, uppercase: true)
-  }
+enum HexStringFormat {
+  /// Format without any leading zeroes, e.g. `0x2`.
+  case minimal
+  /// Format which includes all leading zeroes in a fixed-width integer, e.g. `0x00CE`.
+  case fullWidth
+  /// Format which pads values with enough zeroes to reach a minimum length.
+  case padded(toLength: Int)
 }
 
 extension FixedWidthInteger {
-  internal var paddedHexString: String {
-    "0x" + (String(self, radix: 16, uppercase: true).leftPadding(toLength: Self.bitWidth / 4, withPad: "0"))
+
+  internal func hexString(format: HexStringFormat = .fullWidth) -> String {
+    "0x" + unprefixedHexString(format: format)
+  }
+
+  internal func unprefixedHexString(format: HexStringFormat) -> String {
+    let minimal = String(self, radix: 16, uppercase: true)
+    switch format {
+    case .minimal:
+      return minimal
+    case .fullWidth:
+      return minimal.leftPadding(toLength: Self.bitWidth / 4, withPad: "0")
+    case .padded(toLength: let minLength):
+      if minimal.count < minLength {
+        return minimal.leftPadding(toLength: minLength, withPad: "0")
+      } else {
+        return minimal
+      }
+    }
   }
 }

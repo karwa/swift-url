@@ -28,7 +28,7 @@ let entireMappingTable = try String(contentsOf: mappingTableURL)
 //   We do a bit of optimization here already, by merging contiguous entries as they are appended to the table
 //   and collapsing contiguous mappings. This can reduce 1/3 of entries (from ~9000 to 6000).
 
-private var rawEntries = [RawMappingTableEntry]()
+var rawEntries = [RawMappingTableEntry]()
 for line in entireMappingTable.split(separator: "\n").filter({ !$0.starts(with: "#") }) {
 
   let data = line.prefix { $0 != "#" }
@@ -52,193 +52,52 @@ for line in entireMappingTable.split(separator: "\n").filter({ !$0.starts(with: 
   }
 }
 
-fileprivate struct RawMappingTableEntry {
-
-  var codePoints: ClosedRange<UInt32>
-  var status: Status
-  var mapping: [UInt32]?
-
-  enum Status: String {
-
-    /// The code point is valid, and not modified.
-    case valid = "valid"
-
-    /// The code point is removed: this is equivalent to mapping the code point to an empty string.
-    case ignored = "ignored"
-
-    /// The code point is replaced in the string by the value for the mapping.
-    case mapped = "mapped"
-
-    /// The code point is either mapped or valid, depending on whether the processing is transitional or not.
-    case deviation = "deviation"
-
-    /// The code point is not allowed.
-    case disallowed = "disallowed"
-
-    /// The status is disallowed if `UseSTD3ASCIIRules=true` (the normal case);
-    /// implementations that allow `UseSTD3ASCIIRules=false` would treat the code point as **valid**.
-    case disallowed_STD3_valid = "disallowed_STD3_valid"
-
-    /// the status is disallowed if `UseSTD3ASCIIRules=true` (the normal case);
-    /// implementations that allow `UseSTD3ASCIIRules=false` would treat the code point as **mapped**.
-    case disallowed_STD3_mapped = "disallowed_STD3_mapped"
-
-    case mapped_rebased = "___weburl___mapped_rebased___"
-  }
-
-  /// Parses the code-points, status and mapping from a given line of the IDNA mapping table.
-  /// The given line must be stripped of its trailing comment.
-  ///
-  /// For example:
-  ///
-  /// ```
-  /// 00B8          ; disallowed_STD3_mapped ; 0020 0327
-  /// 00B9          ; mapped                 ; 0031
-  /// 00BA          ; mapped                 ; 006F
-  /// 00BB          ; valid                  ;      ; NV8
-  /// 00BC          ; mapped                 ; 0031 2044 0034
-  /// 00BD          ; mapped                 ; 0031 2044 0032
-  /// 00E0..00F6    ; valid
-  /// ```
-  ///
-  /// The validation here is minimal. The input data is presumed to be a correctly-formatted Unicode data table.
-  ///
-  init?(parsing tableData: Substring) {
-
-    let components = tableData.split(separator: ";").map { $0.trimmingSpaces }
-    guard components.count >= 2 else { return nil }
-
-    codePoints: do {
-      let stringValue = components[0]
-      if let singleValue = UInt32(stringValue, radix: 16) {
-        self.codePoints = singleValue...singleValue
-      } else {
-        guard
-          stringValue.contains("."),
-          let rangeStart = UInt32(stringValue.prefix(while: { $0 != "." }), radix: 16),
-          let rangeEnd = UInt32(stringValue.suffix(while: { $0 != "." }), radix: 16)
-        else {
-          return nil
-        }
-        self.codePoints = rangeStart...rangeEnd
-      }
-    }
-    status: do {
-      let stringValue = components[1]
-      guard let status = Status(rawValue: String(stringValue)) else {
-        return nil
-      }
-      self.status = status
-    }
-    if case .mapped_rebased = self.status {
-      fatalError("Rebased status cannot be used when parsing")
-    }
-    mapping: do {
-      switch self.status {
-      case .mapped, .deviation, .disallowed_STD3_mapped:
-        // Code-points are mapped; we must have a corresponding mapping entry.
-        break
-      default:
-        // Code-points are unmapped or ignored (mapped to the empty string).
-        self.mapping = nil
-        break mapping
-      }
-      // If we're expecting mapping data, it must not be empty unless this is a deviation.
-      let stringValue = components[2]
-      if stringValue.isEmpty {
-        guard case .deviation = self.status else { return nil }
-        self.mapping = nil
-        break mapping
-      }
-      var replacements = [UInt32]()
-      for replacementScalar in stringValue.split(separator: " ") {
-        guard let scalar = UInt32(replacementScalar, radix: 16) else {
-          return nil
-        }
-        replacements.append(scalar)
-      }
-      precondition(!replacements.isEmpty)
-      self.mapping = replacements
-    }
-    // Done.
-  }
-}
-
-extension RawMappingTableEntry {
-
-  func tryMerge(with next: RawMappingTableEntry) -> RawMappingTableEntry? {
-
-    // Ranges must be contiguous.
-    guard self.codePoints.upperBound + 1 == next.codePoints.lowerBound else {
-      return nil
-    }
-    // FIXME: Don't merge entries if the merged result would contain > 0xFFFF code-points,
-    //        because the length wouldn't fit in a 16-bit integer later. In future, we should
-    //        go through a splitting phase to get the biggest blocks we can, aligned to script boundaries, etc.
-    if self.codePoints.count + next.codePoints.count > UInt16.max {
-      return nil
-    }
-
-    switch (self.status, next.status) {
-    // No mapping data; the existing entry can simply be extended.
-    case (.valid, .valid),
-      (.ignored, .ignored),
-      (.disallowed, .disallowed),
-      (.disallowed_STD3_valid, .disallowed_STD3_valid):
-      var copy = self
-      copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
-      return copy
-
-    // Merge mapping data.
-    case (.mapped, .mapped):
-      let selfMapping = self.mapping!
-      let otherMapping = next.mapping!
-      // If the mapping data is identical, the existing entry can simply be extended.
-      if selfMapping == otherMapping {
-        var copy = self
-        copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
-        return copy
-      }
-      // If the mapping data is not identical, but are both mappings to single, sequential scalars,
-      // we can merge both entries in to a mapped_rebased.
-      if selfMapping.count == 1, otherMapping.count == 1, selfMapping[0] + 1 == otherMapping[0] {
-        var copy = self
-        copy.status = .mapped_rebased
-        copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
-        return copy
-      }
-    case (.mapped_rebased, .mapped):
-      let selfMapping = self.mapping!
-      let otherMapping = next.mapping!
-      if otherMapping.count == 1, selfMapping[0] + UInt32(self.codePoints.count) == otherMapping[0] {
-        var copy = self
-        copy.codePoints = self.codePoints.lowerBound...next.codePoints.upperBound
-        return copy
-      }
-    default:
-      break
-    }
-    return nil
-  }
-}
-
 
 // --------------------------------------------
 // MARK: - Process, Optimize
 // --------------------------------------------
 
 
-// - Split the mappings off in to a separate table ("replacements table"),
-//   so that every entry is a fixed-size scalar.
+// - Split the raw mapping data in to separate tables:
 
-// TODO: Split the entries in to more tables - e.g. a table of just the starting code-point for lookup.
-// TODO: Split the main code-point table in to several tables (in a more sophisticated way than the 'writing' step does).
-//       - Probably some kind of trie? Aligned on Unicode planes so users don't cross sub-tables too often?
+// The replacements table.
+//
+// Contains all of the mappings. For example, 1 scalar can sometimes map to as many as 18 replacement scalars.
+// The replacements get de-duped and collected in a flat array, and mapping entries can refer to their data
+// using the (offset, length) in this table. The (offset, length) info is otherwise known as a ReplacementsTable.Index.
 
-var processed = [MappingTableEntry]()
 var replacements = ReplacementsTable.Builder()
 
+// Mapping entries.
+//
+// For every scalar, contains the status and ReplacementsTable.Index, if there is a corresponding mapping.
+// There are ~6000 entries. With a binary search, that means 13 steps to find any element.
+// It can help a little bit to break the tables up in to some manually-unrolled, easily predictable branches:
+//
+// bmpXEntries        | Plane 0      | The Basic Multilingual Plane (BMP)
+// ideographicEntries | Plane 1 - 3  | Historic Scripts, Emoji, and CJK Unified Ideograph Extensions
+// otherEntries       | Plane 4 - 16 | Other (Unassigned, Private Use, etc)
+//
+// The BMP itself is also broken up in to 3 sections:
+//
+// 0 | 0x0000 ... 0x0FFF | 35 blocks, including Basic Latin, Latin-1, Greek, Cyrillic, Hebrew, Arabic, Devangali, etc.
+// 1 | 0x1000 ... 0x2E7F | 69 blocks, including Cherokee, Runic, Phillipine scripts, extensions, symbols - currency, etc.
+// 2 | 0x2E80 ... 0xFFFF | CJK scripts, including Hiragana, Katakana, CJK Unified Ideographs, Hangul Syllables, etc.
+//
+// These each have ~1000, 1000, and 2500 entries respectively.
+//
+// These unrolled branches, which map a scalar to one of these smaller tables, are part of the function
+// `_idna_mapping_data_for_scalar`, which is emitted alongside the data.
+
+var bmp0Entries = [MappingTableEntry]()
+var bmp1Entries = [MappingTableEntry]()
+var bmp2Entries = [MappingTableEntry]()
+var ideographicEntries = [MappingTableEntry]()
+var otherEntries = [MappingTableEntry]()
+
 for entry in rawEntries {
+
+  // Insert mappings in to the replacements table.
 
   let processedStatus: MappingTableEntry.Status
   switch entry.status {
@@ -250,7 +109,6 @@ for entry in rawEntries {
     processedStatus = .disallowed
   case .disallowed_STD3_valid:
     processedStatus = .disallowed_STD3_valid
-
   case .deviation:
     guard let mapping = entry.mapping else {
       processedStatus = .deviation(nil)
@@ -261,7 +119,6 @@ for entry in rawEntries {
     } else {
       processedStatus = .deviation(.table(replacements.insert(mapping: mapping)))
     }
-
   case .disallowed_STD3_mapped:
     guard let mapping = entry.mapping else { fatalError("Expected mapping") }
     if mapping.count == 1 {
@@ -282,7 +139,72 @@ for entry in rawEntries {
     break
   }
 
-  processed.append(MappingTableEntry(codePoints: entry.codePoints, status: processedStatus))
+  // Insert the data from the entry in as many sub-tables as appropriate,
+  // splitting entries on table boundaries if necessary.
+
+  let lowerBoundPlane = entry.codePoints.lowerBound >> 16
+  let unalignedEntry = MappingTableEntry(codePoints: entry.codePoints, status: processedStatus)
+
+  switch lowerBoundPlane {
+  case 0:
+    // First, split BMP/ideographic codepoints.
+    let (bmp, ideographic) = unalignedEntry.split(at: 0x10000)
+    if let ideographic = ideographic {
+      precondition(ideographic.codePoints.upperBound < 0x40000, "Single range covers entire ideographic space?!")
+      ideographicEntries.append(ideographic)
+    }
+    // Then split the BMP entry in to BMP0/1/2.
+    let (bmp0, rest) = bmp!.split(at: 0x1000)
+    if let bmp0 = bmp0 { bmp0Entries.append(bmp0) }
+    if let rest = rest {
+      let (bmp1, bmp2) = rest.split(at: 0x2E80)
+      if let bmp1 = bmp1 { bmp1Entries.append(bmp1) }
+      if let bmp2 = bmp2 { bmp2Entries.append(bmp2) }
+    }
+  case 1, 2, 3:
+    let (ideographic, other) = unalignedEntry.split(at: 0x40000)
+    ideographicEntries.append(ideographic!)
+    if let other = other { otherEntries.append(other) }
+  default:
+    otherEntries.append(unalignedEntry)
+  }
+}
+
+extension MappingTableEntry {
+
+  /// Splits this mapping table entry at the given code-point value.
+  ///
+  /// The result is a tuple of 2 optional mapping entries:
+  ///
+  /// - `lessThan` will contain codepoints in the range `lowerBound ... (firstNotIncluded - 1)`, if there are any.
+  /// - `greaterThanOrEqual` will contain codepoints in the range `firstNotIncluded ... upperBound`, if there are any.
+  ///
+  /// Both of these mapping entries inherit their mapping information from this (the original) entry.
+  /// It just expresses the same status for the same codepoints in 2 entries rather than 1.
+  ///
+  func split(
+    at firstNotIncluded: UInt32
+  ) -> (lessThan: MappingTableEntry?, greaterThanOrEqual: MappingTableEntry?) {
+
+    let lowerIsWithin = self.codePoints.lowerBound < firstNotIncluded
+    let upperIsWithin = self.codePoints.upperBound < firstNotIncluded
+    switch (lowerIsWithin, upperIsWithin) {
+    case (true, true):
+      return (lessThan: self, greaterThanOrEqual: nil)
+    case (false, false):
+      return (lessThan: nil, greaterThanOrEqual: self)
+    case (true, false):
+      let status = self.status
+      let lowerCodepoints = self.codePoints.lowerBound...(firstNotIncluded - 1)
+      let upperCodepoints = firstNotIncluded...self.codePoints.upperBound
+      return (
+        lessThan: MappingTableEntry(codePoints: lowerCodepoints, status: status),
+        greaterThanOrEqual: MappingTableEntry(codePoints: upperCodepoints, status: status)
+      )
+    case (false, true):
+      fatalError("upperBound > lowerBound")
+    }
+  }
 }
 
 
@@ -323,69 +245,60 @@ printArrayLiteral(
   elementType: "Unicode.Scalar",
   data: replacements.buildReplacementsTable(),
   columns: 8,
-  formatter: { #""\u{\#(String($0, radix: 16, uppercase: true))}""# },
+  formatter: { #""\u{\#($0.unprefixedHexString(format: .padded(toLength: 6)))}""# },
   to: &output
 )
 output += "\n"
-
-// Swift's support for static data tables is pretty poor.
-// We need to split this in to smaller tables to avoid exponential memory growth
-// and promote putting it in the static data section of the binary.
 
 output +=
   """
   @usableFromInline
-  internal typealias IDNAMappingTableSubArrayElt = UInt64\n
+  internal typealias MappingTableEntry_Storage = UInt64\n
   """
 output += "\n"
 
-var splitArrayInfo = [(Int, ClosedRange<UInt32>)]()
-
-var splitArrayNum = 0
-var splitElements = [MappingTableEntry]()
-
-for element in processed {
-  splitElements.append(element)
-  if splitElements.count == 250 {
-    splitArrayInfo.append(
-      (splitArrayNum, splitElements.first!.codePoints.lowerBound...splitElements.last!.codePoints.upperBound)
-    )
-    printArrayLiteral(
-      name: "_idna_mapping_data_sub_\(splitArrayNum)",
-      elementType: "IDNAMappingTableSubArrayElt",
-      data: splitElements, columns: 5,
-      formatter: { $0._storage.paddedHexString },
-      to: &output
-    )
-    output += "\n"
-    splitArrayNum += 1
-    splitElements.removeAll(keepingCapacity: true)
+output +=
+  #"""
+  // swift-format-ignore
+  @inlinable
+  internal func _idna_mapping_data_for_scalar(_ scalar: Unicode.Scalar) -> [MappingTableEntry_Storage] {
+    let value = scalar.value
+    if value <= 0xFFFF {
+      // BMP.
+      if value <= 0x0FFF {
+        return _idna_mapping_data_bmp0
+      } else if value <= 0x2E7F {
+        return _idna_mapping_data_bmp1
+      } else {
+        return _idna_mapping_data_bmp2
+      }
+    } else if value <= 0x3FFFF {
+      // SMP, SIP, TIP.
+      return _idna_mapping_data_ideographic
+    } else {
+      // SSP, SPUA-A/B.
+      return _idna_mapping_data_other
+    }
   }
-}
-if !splitElements.isEmpty {
-  splitArrayInfo.append(
-    (splitArrayNum, splitElements.first!.codePoints.lowerBound...splitElements.last!.codePoints.upperBound)
-  )
+  """# + "\n"
+output += "\n"
+
+for (table, name) in [
+  (bmp0Entries, "_idna_mapping_data_bmp0"),
+  (bmp1Entries, "_idna_mapping_data_bmp1"),
+  (bmp2Entries, "_idna_mapping_data_bmp2"),
+  (ideographicEntries, "_idna_mapping_data_ideographic"),
+  (otherEntries, "_idna_mapping_data_other"),
+] {
   printArrayLiteral(
-    name: "_idna_mapping_data_sub_\(splitArrayNum)",
-    elementType: "IDNAMappingTableSubArrayElt",
-    data: splitElements, columns: 5,
-    formatter: { $0._storage.paddedHexString },
+    name: name,
+    elementType: "MappingTableEntry_Storage",
+    data: table, columns: 5,
+    formatter: { $0._storage.hexString(format: .fullWidth) },
     to: &output
   )
   output += "\n"
-  splitElements.removeAll(keepingCapacity: true)
 }
-
-// Write the 2D array.
-
-printArrayLiteral(
-  name: "_idna_mapping_data_subs",
-  elementType: "(ClosedRange<UInt32>, [IDNAMappingTableSubArrayElt])",
-  data: splitArrayInfo, columns: 1,
-  formatter: { "(\($1), _idna_mapping_data_sub_\($0))" },
-  to: &output
-)
 
 // Print to stdout.
 
