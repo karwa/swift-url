@@ -46,14 +46,10 @@ public struct MappingTableEntry {
 extension MappingTableEntry {
 
   @inlinable
-  public var codePoints: ClosedRange<UInt32> {
+  public var lowerBound: UInt32 {
     // bits 63 - 42 (21 bits)
     let lowerBound = _storage &>> 42
-    // bits 42 - 26 (16 bits)
-    let delta = (_storage &>> 26) & 0xFFFF
-    return ClosedRange(
-      uncheckedBounds: (UInt32(truncatingIfNeeded: lowerBound), UInt32(truncatingIfNeeded: lowerBound &+ delta))
-    )
+    return UInt32(truncatingIfNeeded: lowerBound)
   }
 
   @inlinable
@@ -101,25 +97,15 @@ extension MappingTableEntry {
 
   // Script only:
 
-  internal init(codePoints: ClosedRange<UInt32>, status: Status) {
-    self.init(_storage: Self.toInt(codePoints: codePoints, status: status))
+  internal init(lowerBound: UInt32, status: Status) {
+    self.init(_storage: Self.toInt(lowerBound: lowerBound, status: status))
   }
 
-  private static func toInt(codePoints: ClosedRange<UInt32>, status: Status) -> UInt64 {
+  private static func toInt(lowerBound: UInt32, status: Status) -> UInt64 {
     var value = UInt64.zero
     // bits 63 - 42 (21 bits)
-    value = UInt64(codePoints.lowerBound) &<< 42
-    // bits 42 - 26 (16 bits)
-    let delta = codePoints.upperBound - codePoints.lowerBound
-    precondition(
-      delta <= UInt16.max,
-      """
-      ⚠️ Failed to Print Entry in Mapping Data - Delta too large! ⚠️
-      codePoints: \(codePoints.lowerBound) ... \(codePoints.upperBound)
-      delta: \(delta)
-      """
-    )
-    value = value | UInt64(delta) &<< 26
+    value = UInt64(lowerBound) &<< 42
+    // bits 42 - 26 EMPTY (16 bits)
     // bits 26 - 23 (3 bits)
     let mapping: Optional<Mapping>
     switch status {

@@ -587,9 +587,9 @@ extension IDNA {
       }
     }
 
-    precondition(entry.codePoints.contains(scalar.value))
+    precondition(entry.lowerBound <= scalar.value)
 
-    let offset = scalar.value &- entry.codePoints.lowerBound
+    let offset = scalar.value &- entry.lowerBound
     switch entry.status {
     case .valid:
       return .single(scalar, wasMapped: false)

@@ -68,6 +68,18 @@ for line in entireMappingTable.split(separator: "\n").filter({ !$0.starts(with: 
 
 var replacements = ReplacementsTable.Builder()
 
+extension MappingTableEntry.Mapping {
+
+  static func singleOrTable(_ raw: [UInt32], replacements: inout ReplacementsTable.Builder) -> Self {
+    if raw.count == 1 {
+      return .single(raw.first!)
+    } else {
+      precondition(raw.count > 1, "Raw mapping should not be empty")
+      return .table(replacements.insert(mapping: raw))
+    }
+  }
+}
+
 // Mapping entries.
 //
 // For every scalar, contains the status and ReplacementsTable.Index, if there is a corresponding mapping.
@@ -95,116 +107,50 @@ var bmp2Entries = [MappingTableEntry]()
 var ideographicEntries = [MappingTableEntry]()
 var otherEntries = [MappingTableEntry]()
 
-for entry in rawEntries {
+for rawEntry in rawEntries {
 
-  // Insert mappings in to the replacements table.
+  // Insert mappings in to the replacements table to get the final status for this range of codepoints.
 
-  let processedStatus: MappingTableEntry.Status
-  switch entry.status {
+  let status: MappingTableEntry.Status
+  switch rawEntry.status {
   case .valid:
-    processedStatus = .valid
+    status = .valid
   case .ignored:
-    processedStatus = .ignored
+    status = .ignored
   case .disallowed:
-    processedStatus = .disallowed
+    status = .disallowed
   case .disallowed_STD3_valid:
-    processedStatus = .disallowed_STD3_valid
+    status = .disallowed_STD3_valid
   case .deviation:
-    guard let mapping = entry.mapping else {
-      processedStatus = .deviation(nil)
-      break
-    }
-    if mapping.count == 1 {
-      processedStatus = .deviation(.single(mapping.first!))
-    } else {
-      processedStatus = .deviation(.table(replacements.insert(mapping: mapping)))
-    }
+    status = .deviation(rawEntry.mapping.map { .singleOrTable($0, replacements: &replacements) })
   case .disallowed_STD3_mapped:
-    guard let mapping = entry.mapping else { fatalError("Expected mapping") }
-    if mapping.count == 1 {
-      processedStatus = .disallowed_STD3_mapped(.single(mapping.first!))
-    } else {
-      processedStatus = .disallowed_STD3_mapped(.table(replacements.insert(mapping: mapping)))
-    }
+    status = .disallowed_STD3_mapped(.singleOrTable(rawEntry.mapping!, replacements: &replacements))
   case .mapped:
-    guard let mapping = entry.mapping else { fatalError("Expected mapping") }
-    if mapping.count == 1 {
-      processedStatus = .mapped(.single(mapping.first!))
-    } else {
-      processedStatus = .mapped(.table(replacements.insert(mapping: mapping)))
-    }
+    status = .mapped(.singleOrTable(rawEntry.mapping!, replacements: &replacements))
   case .mapped_rebased:
-    guard let mapping = entry.mapping else { fatalError("Expected mapping") }
-    processedStatus = .mapped(.rebased(origin: mapping.first!))
-    break
+    status = .mapped(.rebased(origin: rawEntry.mapping!.first!))
   }
 
-  // Insert the data from the entry in as many sub-tables as appropriate,
-  // splitting entries on table boundaries if necessary.
+  // Insert the status at the appropriate positions across our multiple tables.
+  // Essentially this means: at the place where the entry starts, and if it crosses in to any other tables,
+  // it should also insert an entry at the table start point.
 
-  let lowerBoundPlane = entry.codePoints.lowerBound >> 16
-  let unalignedEntry = MappingTableEntry(codePoints: entry.codePoints, status: processedStatus)
-
-  switch lowerBoundPlane {
-  case 0:
-    // First, split BMP/ideographic codepoints.
-    let (bmp, ideographic) = unalignedEntry.split(at: 0x10000)
-    if let ideographic = ideographic {
-      precondition(ideographic.codePoints.upperBound < 0x40000, "Single range covers entire ideographic space?!")
-      ideographicEntries.append(ideographic)
-    }
-    // Then split the BMP entry in to BMP0/1/2.
-    let (bmp0, rest) = bmp!.split(at: 0x1000)
-    if let bmp0 = bmp0 { bmp0Entries.append(bmp0) }
-    if let rest = rest {
-      let (bmp1, bmp2) = rest.split(at: 0x2E80)
-      if let bmp1 = bmp1 { bmp1Entries.append(bmp1) }
-      if let bmp2 = bmp2 { bmp2Entries.append(bmp2) }
-    }
-  case 1, 2, 3:
-    let (ideographic, other) = unalignedEntry.split(at: 0x40000)
-    ideographicEntries.append(ideographic!)
-    if let other = other { otherEntries.append(other) }
-  default:
-    otherEntries.append(unalignedEntry)
-  }
-}
-
-extension MappingTableEntry {
-
-  /// Splits this mapping table entry at the given code-point value.
-  ///
-  /// The result is a tuple of 2 optional mapping entries:
-  ///
-  /// - `lessThan` will contain codepoints in the range `lowerBound ... (firstNotIncluded - 1)`, if there are any.
-  /// - `greaterThanOrEqual` will contain codepoints in the range `firstNotIncluded ... upperBound`, if there are any.
-  ///
-  /// Both of these mapping entries inherit their mapping information from this (the original) entry.
-  /// It just expresses the same status for the same codepoints in 2 entries rather than 1.
-  ///
-  func split(
-    at firstNotIncluded: UInt32
-  ) -> (lessThan: MappingTableEntry?, greaterThanOrEqual: MappingTableEntry?) {
-
-    let lowerIsWithin = self.codePoints.lowerBound < firstNotIncluded
-    let upperIsWithin = self.codePoints.upperBound < firstNotIncluded
-    switch (lowerIsWithin, upperIsWithin) {
-    case (true, true):
-      return (lessThan: self, greaterThanOrEqual: nil)
-    case (false, false):
-      return (lessThan: nil, greaterThanOrEqual: self)
-    case (true, false):
-      let status = self.status
-      let lowerCodepoints = self.codePoints.lowerBound...(firstNotIncluded - 1)
-      let upperCodepoints = firstNotIncluded...self.codePoints.upperBound
-      return (
-        lessThan: MappingTableEntry(codePoints: lowerCodepoints, status: status),
-        greaterThanOrEqual: MappingTableEntry(codePoints: upperCodepoints, status: status)
-      )
-    case (false, true):
-      fatalError("upperBound > lowerBound")
+  func insertInSplitTable(range: ClosedRange<UInt32>, table: inout [MappingTableEntry]) {
+    let codePoints = rawEntry.codePoints
+    if codePoints.contains(range.lowerBound) {
+      assert(table.isEmpty)
+      table.append(MappingTableEntry(lowerBound: range.lowerBound, status: status))
+    } else if range.contains(codePoints.lowerBound) {
+      assert(!table.isEmpty)
+      table.append(MappingTableEntry(lowerBound: codePoints.lowerBound, status: status))
     }
   }
+
+  insertInSplitTable(range: 0x000000...0x000FFF, table: &bmp0Entries)
+  insertInSplitTable(range: 0x001000...0x002E7F, table: &bmp1Entries)
+  insertInSplitTable(range: 0x002E80...0x00FFFF, table: &bmp2Entries)
+  insertInSplitTable(range: 0x010000...0x03FFFF, table: &ideographicEntries)
+  insertInSplitTable(range: 0x040000...0x10FFFF, table: &otherEntries)
 }
 
 
