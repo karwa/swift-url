@@ -132,12 +132,6 @@ extension RawMappingTableEntry {
     guard self.codePoints.upperBound + 1 == next.codePoints.lowerBound else {
       return nil
     }
-    // FIXME: Don't merge entries if the merged result would contain > 0xFFFF code-points,
-    //        because the length wouldn't fit in a 16-bit integer later. In future, we should
-    //        go through a splitting phase to get the biggest blocks we can, aligned to script boundaries, etc.
-    if self.codePoints.count + next.codePoints.count > UInt16.max {
-      return nil
-    }
 
     switch (self.status, next.status) {
     // No mapping data; the existing entry can simply be extended.
