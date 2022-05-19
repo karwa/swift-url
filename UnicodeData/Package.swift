@@ -25,7 +25,8 @@ let package = Package(
     targets: [
       .target(
         name: "GenerateUnicodeData",
-        resources: [.copy("TableDefinitions")]
+        resources: [.copy("TableDefinitions")],
+        swiftSettings: [.define("UNICODE_DB_INCLUDE_BUILDER")]
       )
     ]
 )

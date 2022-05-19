@@ -52,7 +52,7 @@ do {
 
 
 // --------------------------------------------
-// MARK: - Process, Optimize
+// MARK: - Build database
 // --------------------------------------------
 
 
@@ -67,6 +67,50 @@ do {
 
 // TODO: Compact the replacements table.
 var replacements = ReplacementsTable.Builder()
+
+// - A database of the IDNA status and mapping data associated with Unicode code-points.
+
+var idnaDBBuilder = CodePointDatabase<IDNAData>.Builder()
+
+struct IDNAData: CodePointDatabaseBuildSchema {
+
+  // Our ASCII entries contain a simplified valid/mapped/STD3 flag and optional
+  // replacement code-point, packed in a UInt16.
+
+  typealias ASCIIData = ASCIIMappingEntry
+
+  static var asciiEntryElementType: String { "UInt16" }
+
+  static func formatASCIIEntry(_ entry: ASCIIData) -> String {
+    entry._storage.hexString(format: .fullWidth)
+  }
+
+  // Our Unicode entries contain more elaborate status and mapping info:
+  // either a 21-bit scalar, as a replacement or new origin to "rebase" against, or
+  // an compacted region of a static data table (the "replacements table").
+  // We need a UInt32 for these. They contain full Unicode scalars.
+
+  typealias UnicodeData = UnicodeMappingEntry
+
+  static var unicodeEntryElementType: String { "UInt32" }
+
+  static func formatUnicodeEntry(_ entry: UnicodeData) -> String {
+    entry._storage.hexString(format: .fullWidth)
+  }
+
+  static func entry(_ entry: UnicodeData, copyForStartingAt newStartPoint: UInt32) -> UnicodeData {
+    // Rebase mappings can be split, but in practice they never are so this isn't tested at all.
+    // Forbid them just to be sure they don't slip by unnoticed.
+    if case .some(.rebased) = entry.mapping {
+      preconditionFailure("Rebased mappings are intentionally forbidden from being split")
+    }
+    // All other entries don't care which exact code-point they are linked against in the index.
+    // They are "position-independent".
+    return entry
+  }
+}
+
+// -
 
 extension UnicodeMappingEntry.Mapping {
 
@@ -88,73 +132,34 @@ extension UnicodeMappingEntry.Mapping {
   }
 }
 
-// - Status entries.
-//
-//   Every scalar has a status - valid, mapped, disallowed, ignored, etc. But Unicode scalars exist in a space
-//   of 17 planes, each consisting of 2^16 (65K) scalars, and it is impractical to store an individual entry
-//   for every single scalar. We need to compress it somehow, while keeping lookups reasonably fast.
-//
-//   There are ^a lot^ of ways we could do this. Each region of scalars is more/less common and has its own
-//   size:speed trade-off to consider. We also have the option of looking up scalars directly as UTF-8 bytes,
-//   since scalars encoded as UTF-8 sort the same way as their decoded values.
-//
-//   The approach here is not _too_ fancy. We do lookup at the (decoded) Unicode scalar level. ASCII uses a simple
-//   1:1 lookup table (an Array), and everything else goes through binary search, taking a maximum of
-//   log2(n) + 1 steps to locate a scalar, where n is the (fixed) size of the table.
-//
-//   Despite not being too fancy, we do a couple of things to try optimize lookup a bit further. For one thing,
-//   we split the scalars in an 'index' table away from the status data for better cache utilization when performing
-//   the binary search. Also, since Unicode scalars are 21-bit numbers, typically they are stored as UInt32s
-//   which wastes a lot of bits; to improve on this, we give each _plane_ its own mapping table, and store
-//   16-bit offsets in the index. This idea was borrowed from ICU: <https://icu.unicode.org/design/struct/utrie>.
-
-var asciiData = [ASCIIMappingEntry]()
-var planeData = (0...16).map { _ in PairOfArrays<UInt16, UnicodeMappingEntry>(x: [], y: []) }
-
-/// A pair of arrays that are guaranteed to have the same number of elements.
-///
-struct PairOfArrays<X, Y> {
-  private(set) var x: [X]
-  private(set) var y: [Y]
-
-  mutating func append(_ elementX: X, _ elementY: Y) {
-    x.append(elementX)
-    y.append(elementY)
-  }
-}
-
 for rawEntry in rawEntries {
 
   var rawEntry = rawEntry
 
   // - Consume the ASCII portion of the entry and use it to populate 'asciiData'.
+  //   Insert an entry for each individual ASCII codepoint, flattening out rebase mappings.
 
   if rawEntry.codePoints.lowerBound < 0x80 {
 
-    func entry(codePoint: UInt8) -> ASCIIMappingEntry {
+    for asciiCodePoint in rawEntry.codePoints.lowerBound...min(rawEntry.codePoints.upperBound, 0x7F) {
+      let entry: ASCIIMappingEntry
       switch rawEntry.status {
       case .valid:
-        return .valid
+        entry = .valid
       case .disallowed_STD3_valid:
-        return .disallowed_STD3_valid
+        entry = .disallowed_STD3_valid
       case .mapped:
         let mapping = rawEntry.mapping!
         precondition(mapping.count == 1, "ASCII codepoints should only map to a single other codepoint")
-        return .mapped(to: UInt8(mapping.first!))
+        entry = .mapped(to: UInt8(mapping.first!))
       case .mapped_rebased:
-        let origin = UInt8(rawEntry.mapping!.first!)
-        let distance = codePoint - UInt8(rawEntry.codePoints.lowerBound)
-        return .mapped(to: origin + distance)
+        let offset = asciiCodePoint - rawEntry.codePoints.lowerBound
+        let newOrigin = rawEntry.mapping!.first!
+        entry = .mapped(to: UInt8(newOrigin + offset))
       case .ignored, .disallowed, .disallowed_STD3_mapped, .deviation:
         fatalError("Mapping types unused for ASCII codepoints")
       }
-    }
-
-    // Insert an entry for each individual ASCII codepoint.
-    precondition(asciiData.count == Int(rawEntry.codePoints.lowerBound), "Inserting ASCII entry in wrong location!")
-    let asciiUpperbound = min(rawEntry.codePoints.upperBound, 0x7F)
-    for codePoint in rawEntry.codePoints.lowerBound...asciiUpperbound {
-      asciiData.append(entry(codePoint: UInt8(codePoint)))
+      idnaDBBuilder.appendAscii(entry, for: asciiCodePoint)
     }
 
     // Slice off the ASCII portion of the rawEntry; it has been handled.
@@ -164,8 +169,8 @@ for rawEntry in rawEntries {
 
   precondition(!rawEntry.codePoints.isEmpty, "Cannot process an empty mapping entry!")
 
-  // Transform the raw status in to our compacted status,
-  // including inserting it in the replacements table if needed.
+  // - Transform the raw, parsed status in to our compacted status.
+  //   Insert mappings in to the replacements table if needed.
 
   let entry: UnicodeMappingEntry
   switch rawEntry.status {
@@ -186,43 +191,10 @@ for rawEntry in rawEntries {
   case .mapped_rebased:
     entry = UnicodeMappingEntry(.mapped, .rebased(origin: rawEntry.mapping!.first!))
   }
-
-  // Insert the status at the appropriate positions in each plane's table.
-  // Essentially this means: at the place where the entry starts, and if it crosses in to any other planes,
-  // it should also insert an entry at the plane's start point.
-
-  func addToPlaneTable(
-    _ table: inout PairOfArrays<UInt16, UnicodeMappingEntry>, planeRange: ClosedRange<UInt32>
-  ) -> Bool {
-    let codePoints = rawEntry.codePoints
-    if codePoints.contains(UInt32(planeRange.lowerBound)) {
-      assert(table.x.isEmpty)
-      table.append(0, entry)
-      return true
-    }
-    if planeRange.contains(codePoints.lowerBound) {
-      assert(table.x.isEmpty == false || codePoints.lowerBound == 0x80)
-      table.append(UInt16(codePoints.lowerBound & 0xFFFF), entry)
-      return true
-    }
-    return false
-  }
-
-  var insertedInSomePlane = false
-  for plane in 0..<17 {
-    let planeStart = UInt32(plane) << 16
-    let insertedInThisPlane = addToPlaneTable(&planeData[plane], planeRange: planeStart...planeStart + 0xFFFF)
-
-    // We don't support splitting rebase mappings across multiple planes. It never occurs, anyway.
-    if insertedInThisPlane && insertedInSomePlane {
-      if case .some(.rebased) = entry.mapping {
-        preconditionFailure("Rebased mappings may not cross planes")
-      }
-    }
-    insertedInSomePlane = insertedInSomePlane || insertedInThisPlane
-  }
-  precondition(insertedInSomePlane, "Mapping entry was not inserted in any plane: \(rawEntry)")
+  idnaDBBuilder.appendUnicode(entry, for: rawEntry.codePoints)
 }
+
+let db = idnaDBBuilder.finalize()
 
 
 // --------------------------------------------
@@ -230,47 +202,36 @@ for rawEntry in rawEntries {
 // --------------------------------------------
 
 
-precondition(!asciiData.isEmpty)
-// TODO: Validate ASCII data.
-
-precondition(planeData.count == 17)
-for plane in 0..<17 {
-  let dataForPlane = planeData[plane]
-
-  // Check the lengths.
-  // Note: This means a valid position in the index table is a valid position in the mapping entry table,
-  // and we don't need to bounds-check when using a position from one table in the other table.
-  precondition(
-    dataForPlane.x.count == dataForPlane.y.count,
-    "The index and status tables must have the same number of elements"
-  )
-
-  // There is always at least one entry, for the start of the plane.
-  if plane == 0 {
-    precondition(
-      dataForPlane.x[0] == 0x80,
-      "The BMP data must start with an entry at offset 0x80"
-    )
-  } else {
-    precondition(
-      dataForPlane.x[0] == 0x00,
-      "Non-BMP plane data must start with an entry for offset 0x00"
-    )
+for codePoint in 0...0x10FFFF {
+  guard let scalar = Unicode.Scalar(codePoint) else {
+    continue
   }
 
-  for mappingEntryIdx in dataForPlane.y.indices {
-    let mappingEntry = dataForPlane.y[mappingEntryIdx]
+  switch db[scalar] {
+  case .ascii(let entry):
+    precondition(codePoint < 0x80)
+    // Certain statuses must have a replacement, others must not have a replacement.
+    switch entry.status {
+    case .valid, .disallowed_STD3_valid:
+      precondition(entry.replacement.value == 0, "Valid/STD3 codepoint should not have a replacement")
+    case .mapped:
+      precondition(entry.replacement.value != 0, "No ASCII codepoints are ever mapped to NULL")
+    }
+  // TODO: Validate ASCII entries.
+
+  case .nonAscii(let entry, startCodePoint: let entryStartCodePoint):
+    precondition(codePoint >= 0x80)
 
     // Certain statuses must have a mapping, others must not have a mapping.
-    switch mappingEntry.status {
+    switch entry.status {
     case .valid, .disallowed_STD3_valid, .ignored, .disallowed:
       precondition(
-        mappingEntry.mapping == nil,
+        entry.mapping == nil,
         "Valid/Ignored/Disallowed codepoints should not have a mapping"
       )
     case .mapped, .disallowed_STD3_mapped:
       precondition(
-        mappingEntry.mapping != nil,
+        entry.mapping != nil,
         "Mapped codepoints must have a mapping"
       )
     case .deviation:
@@ -279,42 +240,21 @@ for plane in 0..<17 {
 
     // Check the mapping results are sensible, all table references are in-bounds,
     // and any numerical scalar values are valid Unicode scalars (e.g. not surrogates).
-    switch mappingEntry.mapping {
+    switch entry.mapping {
     case .none:
       break
-    case .single(let value):
-      precondition(
-        Unicode.Scalar(value) != nil,
-        "Invalid scalar value. \(value)"
-      )
-    case .rebased(let origin):
-      // For a rebase mapping, switch to the index table and find which offsets map to this entry.
-      let mappingEntryStart = dataForPlane.x[mappingEntryIdx]
-      let mappingEntryLength: UInt16
-      if mappingEntryIdx < dataForPlane.y.endIndex {
-        mappingEntryLength = dataForPlane.x[mappingEntryIdx + 1] - mappingEntryStart
-      } else {
-        mappingEntryLength = UInt16.max - mappingEntryStart
-      }
-      precondition(mappingEntryLength > 0)
-      // Check every valid offset from this origin.
-      for offset in 0..<mappingEntryLength {
-        let rebasedPlaneOffset = origin + UInt32(offset)
-        let rebasedCodePoint = UInt32(plane << 16) + rebasedPlaneOffset
-        precondition(
-          Unicode.Scalar(rebasedCodePoint) != nil,
-          "Invalid scalar value. [Plane \(plane)] \(origin) + \(offset) = \(String(rebasedCodePoint, radix: 16))"
-        )
-      }
+    case .single(let replacement):
+      precondition(Unicode.Scalar(replacement) != nil, "\(codePoint) maps invalid scalar value \(replacement)")
+    case .rebased(let newOrigin):
+      let distance = scalar.value - entryStartCodePoint
+      let replacement = newOrigin + distance
+      precondition(Unicode.Scalar(replacement) != nil, "\(codePoint) rebased to invalid scalar value \(replacement)")
     case .table(let index):
-      precondition(
-        replacements.isInBounds(index),
-        "Replacement table index is out of bounds!"
-      )
+      precondition(replacements.isInBounds(index), "Replacement table index is out of bounds!")
     }
-  }
 
-  // TODO: Check the status data against the raw mapping entries, before we "optimized" them.
+  // TODO: Check the status data against the raw mapping entries from the parser.
+  }
 }
 
 
@@ -361,89 +301,7 @@ printArrayLiteral(
 )
 output += "\n"
 
-// ASCII
-
-printArrayLiteral(
-  name: "_idna_status_ascii",
-  elementType: "UInt16",
-  data: asciiData, columns: 8,
-  formatter: { $0._storage.hexString(format: .fullWidth) },
-  to: &output
-)
-output += "\n"
-
-// Index and Status arrays for each plane.
-
-var indexArrays = [String]()
-var statusArrays = [String]()
-for (plane, data) in planeData.enumerated() {
-  let indexArrayName = "_idna_index_sub_plane_\(plane)"
-  let statusArrayName = "_idna_status_sub_plane_\(plane)"
-
-  printArrayLiteral(
-    name: indexArrayName,
-    elementType: "UInt16",
-    data: data.x, columns: 10,
-    formatter: { $0.hexString(format: .fullWidth) },
-    to: &output
-  )
-  output += "\n"
-  printArrayLiteral(
-    name: statusArrayName,
-    elementType: "UInt32",
-    data: data.y, columns: 8,
-    formatter: { $0._storage.hexString(format: .fullWidth) },
-    to: &output
-  )
-  output += "\n"
-
-  indexArrays.append(indexArrayName)
-  statusArrays.append(statusArrayName)
-}
-
-// Overall Index and Status arrays.
-
-printArrayLiteral(
-  name: "_idna_indexes",
-  elementType: "[UInt16]",
-  data: indexArrays, columns: 1,
-  to: &output
-)
-output += "\n"
-printArrayLiteral(
-  name: "_idna_statuses",
-  elementType: "[UInt32]",
-  data: statusArrays, columns: 1,
-  to: &output
-)
-output += "\n"
-
-output +=
-  #"""
-  // swift-format-ignore
-  @inlinable
-  internal func _idna_withIndexAndStatusTable<T>(
-    containing scalar: Unicode.Scalar,
-    body: (
-      _ index: UnsafeBufferPointer<UInt16>, _ statusTable: UnsafeBufferPointer<UInt32>,
-      _ planeStart: UInt32, _ offset: UInt16
-    ) -> T
-  ) -> T {
-    let plane      = scalar.value &>> 16
-    let planeStart = plane &<< 16
-    let offset     = UInt16(truncatingIfNeeded: scalar.value)
-    return _idna_indexes.withUnsafeBufferPointer { indexes_buffer in
-      return indexes_buffer[Int(plane)].withUnsafeBufferPointer { index in
-        return _idna_statuses.withUnsafeBufferPointer { statuses_buffer in
-          return statuses_buffer[Int(plane)].withUnsafeBufferPointer { statusTable in
-            return body(index, statusTable, planeStart, offset)
-          }
-        }
-      }
-    }
-  }
-  """#
-output += "\n"
+output += db.printAsSwiftSourceCode(name: "_idna")
 
 // Print to stdout.
 

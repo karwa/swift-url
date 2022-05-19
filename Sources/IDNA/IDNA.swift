@@ -518,6 +518,19 @@ extension IDNA {
   }
 }
 
+@usableFromInline
+internal struct RawIDNAData: CodePointDatabaseSchema {
+  @usableFromInline internal typealias ASCIIData = UInt16
+  @usableFromInline internal typealias UnicodeData = UInt32
+}
+
+@usableFromInline
+internal let _idna_db = CodePointDatabase<RawIDNAData>(
+  asciiData: _idna_ascii,
+  bmpData: _idna_bmp_splitTables,
+  nonbmpData: _idna_nonbmp_splitTables
+)
+
 extension IDNA {
 
   /// The result of mapping a scalar from the source contents.
@@ -543,81 +556,55 @@ extension IDNA {
   ///
   @inlinable @inline(__always)
   internal static func mapScalar(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> MappedScalar {
-    // ASCII fast path.
-    // Always inlined, because for ASCII, even setting up the stack frame for the non-ASCII path is a decent cost.
-    if scalar.isASCII {
-      return _mapScalar_ascii(scalar, useSTD3ASCIIRules: useSTD3ASCIIRules)
-    } else {
-      return _mapScalar_nonascii(scalar, useSTD3ASCIIRules: useSTD3ASCIIRules)
-    }
-  }
 
-  // TODO: This still calls swift_once for the immutable global. Anything we can do about that?
+    switch _idna_db[scalar] {
+    case .ascii(let rawASCII):
+      let entry = ASCIIMappingEntry(_storage: rawASCII)
+      if !entry.isMapped {
+        if _slowPath(useSTD3ASCIIRules), case .disallowed_STD3_valid = entry.status { return .disallowed }
+        return .single(scalar, wasMapped: false)
+      } else {
+        return .single(entry.replacement, wasMapped: true)
+      }
 
-  @inlinable
-  internal static func _mapScalar_ascii(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> MappedScalar {
+    case .nonAscii(let entryStorage, startCodePoint: let startingCodePointOfEntry):
+      func resolve(_ mapping: UnicodeMappingEntry.Mapping?, at offset: UInt32) -> MappedScalar {
+        switch mapping {
+        case .single(let single):
+          // ✅ When constructing the status table, we check every in-line scalar value.
+          return .single(Unicode.Scalar(_unchecked: single), wasMapped: true)
+        case .rebased(let origin):
+          // ✅ When constructing the status table, we check every rebased mapping.
+          return .single(Unicode.Scalar(_unchecked: origin &+ offset), wasMapped: true)
+        case .table(let idx):
+          return .multiple(idx)
+        case .none:
+          return .disallowed
+        }
+      }
+      let entry = UnicodeMappingEntry(_storage: entryStorage)
+      let offset = scalar.value &- startingCodePointOfEntry
 
-    // The 'scalar.value' check is effectively a bounds-check, and is folded with the caller's 'isASCII' branch.
-    assert(_idna_status_ascii.count == 128)
-    precondition(scalar.value < 128)
-    let entry = ASCIIMappingEntry(
-      _storage: _idna_status_ascii.withUnsafeBufferPointer { buffer in buffer[Int(scalar.value)] }
-    )
-    if !entry.isMapped {
-      if _slowPath(useSTD3ASCIIRules), case .disallowed_STD3_valid = entry.status { return .disallowed }
-      return .single(scalar, wasMapped: false)
-    } else {
-      return .single(entry.replacement, wasMapped: true)
-    }
-  }
-
-  // TODO: This has 2 each of swift_once + retain + release for the plane info tables. Can we fix that?
-
-  @usableFromInline
-  internal static func _mapScalar_nonascii(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> MappedScalar {
-
-    func resolve(_ mapping: UnicodeMappingEntry.Mapping?, at offset: UInt32) -> MappedScalar {
-      switch mapping {
-      case .single(let single):
-        // ✅ When constructing the status table, we check every in-line scalar value.
-        return .single(Unicode.Scalar(_unchecked: single), wasMapped: true)
-      case .rebased(let origin):
-        // ✅ When constructing the status table, we check every valid offset in rebase mapping entries.
-        return .single(Unicode.Scalar(_unchecked: origin &+ offset), wasMapped: true)
-      case .table(let idx):
-        return .multiple(idx)
-      case .none:
+      // Parameters.
+      let transitionalProcessing = FixedParameter(false)
+      // Resolve status.
+      switch entry.status {
+      case .valid:
+        return .single(scalar, wasMapped: false)
+      case .deviation:
+        return transitionalProcessing && entry.mapping != nil
+          ? resolve(entry.mapping, at: offset) : .single(scalar, wasMapped: false)
+      case .disallowed_STD3_valid:
+        return _slowPath(useSTD3ASCIIRules) ? .disallowed : .single(scalar, wasMapped: false)
+      case .mapped:
+        return resolve(entry.mapping, at: offset)
+      case .disallowed_STD3_mapped:
+        return _slowPath(useSTD3ASCIIRules) ? .disallowed : resolve(entry.mapping, at: offset)
+      case .ignored:
+        return .ignored
+      case .disallowed:
         return .disallowed
       }
-    }
-
-    let transitionalProcessing = FixedParameter(false)
-
-    let (entryStorage, startingCodePointOfEntry) = _idna_withIndexAndStatusTable(containing: scalar) {
-      indexTable, statusTable, planeStart, offset -> (UInt32, UInt32) in
-      let k = Int(bitPattern: indexTable.withUncheckedIndexArithmetic.partitionedIndex { offset >= $0 } &- 1)
-      return (statusTable[k], planeStart | UInt32(indexTable[k]))
-    }
-    assert(startingCodePointOfEntry <= scalar.value)
-
-    let entry = UnicodeMappingEntry(_storage: entryStorage)
-    let offset = scalar.value &- startingCodePointOfEntry
-    switch entry.status {
-    case .valid:
-      return .single(scalar, wasMapped: false)
-    case .deviation:
-      return transitionalProcessing && entry.mapping != nil
-        ? resolve(entry.mapping, at: offset) : .single(scalar, wasMapped: false)
-    case .disallowed_STD3_valid:
-      return _slowPath(useSTD3ASCIIRules) ? .disallowed : .single(scalar, wasMapped: false)
-    case .mapped:
-      return resolve(entry.mapping, at: offset)
-    case .disallowed_STD3_mapped:
-      return _slowPath(useSTD3ASCIIRules) ? .disallowed : resolve(entry.mapping, at: offset)
-    case .ignored:
-      return .ignored
-    case .disallowed:
-      return .disallowed
     }
   }
 
@@ -643,34 +630,10 @@ extension IDNA {
   }
 }
 
-extension RandomAccessCollection {
-
-  /// Returns the index of the first element in the collection
-  /// that doesn't match the predicate.
-  ///
-  /// The collection must already be partitioned according to the
-  /// predicate, as if `x.partition(by: predicate)` had already
-  /// been called.
-  ///
-  @inlinable
-  internal func partitionedIndex(where predicate: (Element) -> Bool) -> Index {
-    var low = self.startIndex
-    var high = self.endIndex
-    while low < high {
-      let mid = index(low, offsetBy: distance(from: low, to: high) / 2)
-      if predicate(self[mid]) {
-        low = index(after: mid)
-      } else {
-        high = mid
-      }
-    }
-    return low
-  }
-}
-
 extension Unicode.Scalar {
 
-  fileprivate init(_unchecked v: UInt32) {
+  @inlinable
+  internal init(_unchecked v: UInt32) {
     self = unsafeBitCast(v, to: Unicode.Scalar.self)
   }
 }
