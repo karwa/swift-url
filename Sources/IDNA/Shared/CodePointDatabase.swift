@@ -25,13 +25,22 @@ protocol CodePointDatabaseSchema {
 @usableFromInline
 protocol CodePointDatabaseBuildSchema: CodePointDatabaseSchema {
 
-  static func entry(_ entry: UnicodeData, copyForStartingAt newStartPoint: UInt32) -> UnicodeData
-
   static var asciiEntryElementType: String { get }
   static func formatASCIIEntry(_ entry: ASCIIData) -> String
 
   static var unicodeEntryElementType: String { get }
   static func formatUnicodeEntry(_ entry: UnicodeData) -> String
+
+  static func entry(_ entry: UnicodeData, copyForStartingAt newStartPoint: UInt32) -> UnicodeData
+}
+
+extension CodePointDatabaseBuildSchema {
+
+  @inlinable
+  static func entry(_ entry: UnicodeData, copyForStartingAt newStartPoint: UInt32) -> UnicodeData {
+    // Default assumption is that entries do not care which code-points they apply to.
+    entry
+  }
 }
 
 // swift-format-ignore
@@ -211,6 +220,17 @@ extension CodePointDatabase {
           return body(codePointTable, dataTable, planeStart, offsetWithinPlane)
         }
       }
+    }
+  }
+}
+
+extension CodePointDatabase.LookupResult where Schema.ASCIIData == Schema.UnicodeData {
+
+  @inlinable
+  internal var value: Schema.ASCIIData {
+    switch self {
+    case .ascii(let v): return v
+    case .nonAscii(let v, startCodePoint: _): return v
     }
   }
 }

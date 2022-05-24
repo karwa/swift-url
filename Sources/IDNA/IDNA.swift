@@ -318,6 +318,8 @@ extension IDNA {
     // 1 & 2. Map & Normalize.
     var preppedScalarsStream = _MappedAndNormalized(source: source.makeIterator(), useSTD3ASCIIRules: useSTD3ASCIIRules)
 
+    var validationState = CrossLabelValidationState()
+
     // 3. Break.
     return _breakLabels(consuming: &preppedScalarsStream, checkSourceError: { $0.hasError }) {
       encodedLabel, needsTrailingDot in
@@ -329,8 +331,12 @@ extension IDNA {
 
       // 4(b). Validate.
       guard
-        _validate(label: label, isKnownMappedAndNormalized: !wasDecoded, useSTD3ASCIIRules: useSTD3ASCIIRules)
+        _validate(
+          label: label, isKnownMappedAndNormalized: !wasDecoded, useSTD3ASCIIRules: useSTD3ASCIIRules,
+          state: &validationState)
       else { return false }
+
+      guard validationState.checkFinalValidationState() else { return false }
 
       // Yield the label.
       return writer(label, needsTrailingDot)
@@ -518,11 +524,6 @@ extension IDNA {
   }
 }
 
-@usableFromInline
-internal struct RawIDNAData: CodePointDatabaseSchema {
-  @usableFromInline internal typealias ASCIIData = UInt16
-  @usableFromInline internal typealias UnicodeData = UInt32
-}
 
 @usableFromInline
 internal let _idna_db = CodePointDatabase<RawIDNAData>(
@@ -559,7 +560,7 @@ extension IDNA {
 
     switch _idna_db[scalar] {
     case .ascii(let rawASCII):
-      let entry = ASCIIMappingEntry(_storage: rawASCII)
+      let entry = IDNAMappingData.ASCIIData(_storage: rawASCII)
       if !entry.isMapped {
         if _slowPath(useSTD3ASCIIRules), case .disallowed_STD3_valid = entry.status { return .disallowed }
         return .single(scalar, wasMapped: false)
@@ -568,7 +569,7 @@ extension IDNA {
       }
 
     case .nonAscii(let entryStorage, startCodePoint: let startingCodePointOfEntry):
-      func resolve(_ mapping: UnicodeMappingEntry.Mapping?, at offset: UInt32) -> MappedScalar {
+      func resolve(_ mapping: IDNAMappingData.UnicodeData.Mapping?, at offset: UInt32) -> MappedScalar {
         switch mapping {
         case .single(let single):
           // ✅ When constructing the status table, we check every in-line scalar value.
@@ -582,7 +583,7 @@ extension IDNA {
           return .disallowed
         }
       }
-      let entry = UnicodeMappingEntry(_storage: entryStorage)
+      let entry = IDNAMappingData.UnicodeData(_storage: entryStorage)
       let offset = scalar.value &- startingCodePointOfEntry
 
       // Parameters.
@@ -716,7 +717,72 @@ extension IDNA {
 // --------------------------------------------
 
 
+@usableFromInline
+internal struct RawBIDIData: CodePointDatabaseSchema {
+  @usableFromInline internal typealias ASCIIData = UInt8
+  @usableFromInline internal typealias UnicodeData = UInt8
+}
+
+@usableFromInline
+internal let _bidi_db = CodePointDatabase<RawBIDIData>(
+  asciiData: _bidi_ascii,
+  bmpData: _bidi_bmp_splitTables,
+  nonbmpData: _bidi_nonbmp_splitTables
+)
+
+@usableFromInline
+enum BidiInfo {
+  case L
+  case RorAL
+  case AN
+  case EN
+  case ESorCSorETorONorBN
+  case NSM
+  case other
+
+  @inlinable
+  init(value: UInt8) {
+    switch value {
+    case 0: self = .L  // For 1, 5, 6
+    case 1: self = .RorAL  // For 1, 2, 3
+    case 2: self = .AN  // For 2, 4
+    case 3: self = .EN  // For 2, 4, 5
+    case 4: self = .ESorCSorETorONorBN  // For 2, 5
+    case 5: self = .NSM  // For 2, 3, 5, 6
+    default: self = .other
+    }
+  }
+}
+
 extension IDNA {
+
+  @usableFromInline
+  internal struct CrossLabelValidationState {
+
+    @usableFromInline
+    internal var isConfirmedBidiDomain = false
+
+    @usableFromInline
+    internal var hasBidiFailure = false
+
+    @inlinable
+    internal init() {
+    }
+
+    @inlinable
+    internal func checkFinalValidationState() -> Bool {
+      if isConfirmedBidiDomain {
+        return !hasBidiFailure
+      }
+      return true
+    }
+  }
+
+  @usableFromInline
+  enum Bidi_LabelDirection {
+    case LTR
+    case RTL
+  }
 
   /// Returns whether a domain label satisfies the conditions specified by [UTS46, 4.1 Validity Criteria][uts46].
   ///
@@ -746,7 +812,7 @@ extension IDNA {
   ///
   @inlinable
   internal static func _validate<Label>(
-    label: Label, isKnownMappedAndNormalized: Bool, useSTD3ASCIIRules: Bool
+    label: Label, isKnownMappedAndNormalized: Bool, useSTD3ASCIIRules: Bool, state: inout CrossLabelValidationState
   ) -> Bool where Label: BidirectionalCollection, Label.Element == UnicodeScalar {
 
     // Parameters.
@@ -803,9 +869,16 @@ extension IDNA {
       return false
     }
 
+    // Bidi state.
+    var bidi_labelDirection = Bidi_LabelDirection.LTR
+    var bidi_trailingNSMs = 0
+    var bidi_hasEN = false
+    var bidi_hasAN = false
+
     var idx = label.startIndex
     while idx < label.endIndex {
       let scalar = label[idx]
+      let scalarInfo = BidiInfo(value: _bidi_db[scalar].get())
       defer { label.formIndex(after: &idx) }
 
       //  7. If CheckJoiners, the label must satisify the ContextJ rules from Appendix A,
@@ -839,15 +912,95 @@ extension IDNA {
       //  8. If CheckBidi, and if the domain name is a  Bidi domain name, then the label must satisfy
       //     all six of the numbered conditions in [IDNA2008] RFC 5893, Section 2.
 
-      if checkBidi {
+      bidi: if checkBidi {
+
         // A Bidi domain name is a domain name containing at least one character with Bidi_Class R, AL, or AN.
         // See [IDNA2008] RFC 5893, Section 1.4.
 
-        // FIXME: We can't do this, but we might be able to unblock some stuff by rejecting Bidi domain names.
-        // R = Right-to-left, AL = Right-to-Left Arabic, AN = Arabic Number
-        // So we "only" need to detect and reject those codepoints.
+        if !state.isConfirmedBidiDomain {
+          switch scalarInfo {
+          case .RorAL, .AN: state.isConfirmedBidiDomain = true
+          default: break
+          }
+        }
 
-        // https://www.unicode.org/Public/UCD/latest/ucd/extracted/DerivedBidiClass.txt
+        // 1.  The first character must be a character with Bidi property L, R,
+        //     or AL.  If it has the R or AL property, it is an RTL label; if it
+        //     has the L property, it is an LTR label.
+        //
+        // 2.  In an RTL label, only characters with the Bidi properties R, AL,
+        //     AN, EN, ES, CS, ET, ON, BN, or NSM are allowed.
+        //
+        // 3.  In an RTL label, the end of the label must be a character with
+        //     Bidi property R, AL, EN, or AN, followed by zero or more
+        //     characters with Bidi property NSM.
+        //
+        // 4.  In an RTL label, if an EN is present, no AN may be present, and
+        //     vice versa.
+        //
+        // 5.  In an LTR label, only characters with the Bidi properties L, EN,
+        //     ES, CS, ET, ON, BN, or NSM are allowed.
+        //
+        // 6.  In an LTR label, the end of the label must be a character with
+        //     Bidi property L or EN, followed by zero or more characters with
+        //     Bidi property NSM.
+
+        if idx == label.startIndex {
+          // 1.
+          switch scalarInfo {
+          case .L: bidi_labelDirection = .LTR
+          case .RorAL: bidi_labelDirection = .RTL
+          default: state.hasBidiFailure = true
+          }
+        } else {
+          switch bidi_labelDirection {
+          case .LTR:
+            // 5.
+            switch scalarInfo {
+            case .L, .EN, .ESorCSorETorONorBN, .NSM: break
+            default: state.hasBidiFailure = true
+            }
+          case .RTL:
+            // 2.
+            switch scalarInfo {
+            case .RorAL, .ESorCSorETorONorBN, .NSM: break
+            case .AN: bidi_hasAN = true
+            case .EN: bidi_hasEN = true
+            default: state.hasBidiFailure = true
+            }
+          }
+        }
+
+        if case .NSM = scalarInfo {
+          bidi_trailingNSMs += 1
+        } else {
+          bidi_trailingNSMs = 0
+        }
+      }
+    }
+
+    if let lastNonSpace = label.dropLast(bidi_trailingNSMs).last {
+      let scalarInfo = BidiInfo(value: _bidi_db[lastNonSpace].get())
+      switch bidi_labelDirection {
+      case .LTR:
+        // 6.
+        switch scalarInfo {
+        case .L, .EN: break
+        default: state.hasBidiFailure = true
+        }
+      case .RTL:
+        // 3.
+        switch scalarInfo {
+        case .RorAL, .EN, .AN: break
+        default: state.hasBidiFailure = true
+        }
+      }
+    }
+
+    if case .RTL = bidi_labelDirection {
+      // 4.
+      if bidi_hasEN && bidi_hasAN {
+        state.hasBidiFailure = true
       }
     }
 

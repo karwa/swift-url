@@ -51,7 +51,8 @@ extension String {
 
 // Int to Hex.
 
-enum HexStringFormat {
+@usableFromInline
+internal enum HexStringFormat {
   /// Format without any leading zeroes, e.g. `0x2`.
   case minimal
   /// Format which includes all leading zeroes in a fixed-width integer, e.g. `0x00CE`.
@@ -62,10 +63,12 @@ enum HexStringFormat {
 
 extension FixedWidthInteger {
 
+  @usableFromInline
   internal func hexString(format: HexStringFormat = .fullWidth) -> String {
     "0x" + unprefixedHexString(format: format)
   }
 
+  @usableFromInline
   internal func unprefixedHexString(format: HexStringFormat) -> String {
     let minimal = String(self, radix: 16, uppercase: true)
     switch format {
@@ -80,5 +83,29 @@ extension FixedWidthInteger {
         return minimal
       }
     }
+  }
+}
+
+// Table generation.
+
+extension RangeTable where Bound == UInt32 {
+
+  func generateTable<T>(
+    _: T.Type,
+    mapAsciiValue: (Element) -> T.ASCIIData,
+    mapUnicodeValue: (Element) -> T.UnicodeData
+  ) -> CodePointDatabase<T> where T: CodePointDatabaseBuildSchema {
+    precondition(self.bounds.lowerBound == 0)
+    precondition(self.bounds.upperBound == 0x11_0000)
+
+    var builder = CodePointDatabase<T>.Builder()
+    for (range, value) in spans {
+      for asciiCodePoint in range.clamped(to: 0..<0x80) {
+        builder.appendAscii(mapAsciiValue(value), for: asciiCodePoint)
+      }
+      guard range.upperBound >= 0x80 else { continue }
+      builder.appendUnicode(mapUnicodeValue(value), for: ClosedRange(range.clamped(to: 0x80..<0x110000)))
+    }
+    return builder.finalize()
   }
 }

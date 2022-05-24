@@ -1,1 +1,0 @@
-../../../Sources/IDNA/CodePointDatabase.swift

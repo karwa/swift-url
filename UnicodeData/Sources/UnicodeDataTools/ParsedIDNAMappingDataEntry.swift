@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-internal struct RawMappingTableEntry {
+internal struct ParsedIDNAMappingDataEntry {
 
   var codePoints: ClosedRange<UInt32>
   var status: Status
@@ -124,9 +124,9 @@ internal struct RawMappingTableEntry {
   }
 }
 
-extension RawMappingTableEntry {
+extension ParsedIDNAMappingDataEntry {
 
-  func tryMerge(with next: RawMappingTableEntry) -> RawMappingTableEntry? {
+  func tryMerge(with next: ParsedIDNAMappingDataEntry) -> ParsedIDNAMappingDataEntry? {
 
     // Ranges must be contiguous.
     guard self.codePoints.upperBound + 1 == next.codePoints.lowerBound else {

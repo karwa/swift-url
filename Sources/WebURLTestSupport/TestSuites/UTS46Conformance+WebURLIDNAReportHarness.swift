@@ -106,19 +106,6 @@ extension UTS46Conformance.WebURLIDNAReportHarness: UTS46Conformance.Harness {
       return true
     }
 
-    // We don't properly validate BiDi yet :(
-    // FIXME: We should either validate, or detect-and-reject these. Allowing invalid inputs to succeed is not okay.
-
-    let hasBidiFailure = validationFailures.contains {
-      switch $0 {
-      case .B1, .B2, .B3, .B4, .B5, .B6: return true
-      default: return false
-      }
-    }
-    guard !hasBidiFailure else {
-      return true
-    }
-
     // Otherwise, we should run the test.
 
     return false

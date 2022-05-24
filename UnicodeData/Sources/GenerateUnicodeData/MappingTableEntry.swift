@@ -1,1 +1,0 @@
-../../../Sources/IDNA/MappingTableEntry.swift
