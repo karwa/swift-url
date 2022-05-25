@@ -12,34 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// Describes the data associated with code-points in a `CodePointDatabase`.
+///
 @usableFromInline
-protocol CodePointDatabaseSchema {
+internal protocol CodePointDatabase_Schema {
 
   /// The type of data that is stored for ASCII code-points.
   associatedtype ASCIIData
 
   /// The type of data that is stored for non-ASCII code-points.
   associatedtype UnicodeData
+
+  /// (Optional) Returns a copy of the given non-ASCII data, adjusted to apply to a different start location.
+  ///
+  static func unicodeData(
+    _ data: UnicodeData, at originalStart: UInt32, copyForStartingAt newStartPoint: UInt32
+  ) -> UnicodeData
 }
 
-@usableFromInline
-protocol CodePointDatabaseBuildSchema: CodePointDatabaseSchema {
-
-  static var asciiEntryElementType: String { get }
-  static func formatASCIIEntry(_ entry: ASCIIData) -> String
-
-  static var unicodeEntryElementType: String { get }
-  static func formatUnicodeEntry(_ entry: UnicodeData) -> String
-
-  static func entry(_ entry: UnicodeData, copyForStartingAt newStartPoint: UInt32) -> UnicodeData
-}
-
-extension CodePointDatabaseBuildSchema {
+extension CodePointDatabase_Schema {
 
   @inlinable
-  static func entry(_ entry: UnicodeData, copyForStartingAt newStartPoint: UInt32) -> UnicodeData {
+  internal static func unicodeData(
+    _ data: UnicodeData, at originalStart: UInt32, copyForStartingAt newStartPoint: UInt32
+  ) -> UnicodeData {
     // Default assumption is that entries do not care which code-points they apply to.
-    entry
+    data
   }
 }
 
@@ -57,7 +55,7 @@ extension CodePointDatabaseBuildSchema {
 ///   to values of the `Entry.UnicodeEntry` type.
 ///
 @usableFromInline
-internal struct CodePointDatabase<Schema: CodePointDatabaseSchema> {
+internal struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
 
   @usableFromInline
   internal typealias SplitTable<CodePoint, Data> = (codePointTable: [CodePoint], dataTable: [Data])
@@ -268,7 +266,7 @@ extension RandomAccessCollection {
 
 #if UNICODE_DB_INCLUDE_BUILDER
 
-  extension CodePointDatabase where Schema: CodePointDatabaseBuildSchema {
+  extension CodePointDatabase {
 
     /// For the builder only. Creates an empty database.
     ///
@@ -339,7 +337,8 @@ extension RandomAccessCollection {
             assert(table.codePointTable.isEmpty)
             assert(table.dataTable.isEmpty)
             table.codePointTable.append(UInt16(truncatingIfNeeded: planeRange.lowerBound))
-            table.dataTable.append(Schema.entry(data, copyForStartingAt: planeRange.lowerBound))
+            let adjusted = Schema.unicodeData(data, at: codePoints.lowerBound, copyForStartingAt: planeRange.lowerBound)
+            table.dataTable.append(adjusted)
             return true
           }
           if planeRange.contains(codePoints.lowerBound) {
@@ -385,13 +384,26 @@ extension RandomAccessCollection {
   // --------------------------------------------
 
 
-  extension CodePointDatabase where Schema: CodePointDatabaseBuildSchema {
+  @usableFromInline
+  internal protocol CodePointDatabase_Formatter {
+    associatedtype Schema: CodePointDatabase_Schema
+
+    static var asciiEntryElementType: String { get }
+    static func formatASCIIEntry(_ entry: Schema.ASCIIData) -> String
+
+    static var unicodeEntryElementType: String { get }
+    static func formatUnicodeEntry(_ entry: Schema.UnicodeData) -> String
+  }
+
+  extension CodePointDatabase {
 
     /// Returns a String of this database as Swift source code.
     ///
     /// The `name` parameter is used as a prefix for the various internal tables.
     ///
-    internal func printAsSwiftSourceCode(name: String) -> String {
+    internal func printAsSwiftSourceCode<Formatter>(
+      name: String, using formatter: Formatter.Type
+    ) -> String where Formatter: CodePointDatabase_Formatter, Formatter.Schema == Schema {
 
       var output = ""
 
@@ -399,9 +411,9 @@ extension RandomAccessCollection {
 
       printArrayLiteral(
         name: "\(name)_ascii",
-        elementType: Schema.asciiEntryElementType,
+        elementType: Formatter.asciiEntryElementType,
         data: _asciiData, columns: 8,
-        formatter: Schema.formatASCIIEntry,
+        formatter: Formatter.formatASCIIEntry,
         to: &output
       )
       output += "\n"
@@ -411,6 +423,7 @@ extension RandomAccessCollection {
       Self.printPlaneData(
         name: name + "_bmp",
         tableData: _bmpData,
+        using: Formatter.self,
         to: &output
       )
       output += "\n"
@@ -420,17 +433,19 @@ extension RandomAccessCollection {
       Self.printPlaneData(
         name: name + "_nonbmp",
         tableData: _nonbmpData,
+        using: Formatter.self,
         to: &output
       )
 
       return output
     }
 
-    private static func printPlaneData(
+    private static func printPlaneData<Formatter>(
       name: String,
       tableData: [SplitTable<UInt16, Schema.UnicodeData>],
+      using formatter: Formatter.Type,
       to output: inout String
-    ) {
+    ) where Formatter: CodePointDatabase_Formatter, Formatter.Schema == Schema {
 
       // Print each split table separately.
 
@@ -450,9 +465,9 @@ extension RandomAccessCollection {
 
         printArrayLiteral(
           name: dataTableName,
-          elementType: Schema.unicodeEntryElementType,
+          elementType: Formatter.unicodeEntryElementType,
           data: data.dataTable, columns: 8,
-          formatter: Schema.formatUnicodeEntry,
+          formatter: Formatter.formatUnicodeEntry,
           to: &output
         )
         output += "\n"
@@ -464,7 +479,7 @@ extension RandomAccessCollection {
 
       printArrayLiteral(
         name: "\(name)_splitTables",
-        elementType: "(codePointTable: [UInt16], dataTable: [\(Schema.unicodeEntryElementType)])",
+        elementType: "(codePointTable: [UInt16], dataTable: [\(Formatter.unicodeEntryElementType)])",
         data: subTables, columns: 1,
         formatter: { "(codePointTable: \($0.0), dataTable: \($0.1))" },
         to: &output

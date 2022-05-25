@@ -718,7 +718,7 @@ extension IDNA {
 
 
 @usableFromInline
-internal struct RawBIDIData: CodePointDatabaseSchema {
+internal struct RawBIDIData: CodePointDatabase_Schema {
   @usableFromInline internal typealias ASCIIData = UInt8
   @usableFromInline internal typealias UnicodeData = UInt8
 }

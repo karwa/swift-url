@@ -154,8 +154,19 @@ extension IDNAValidationDatabase {
 
 extension IDNAValidationDatabase {
 
+  struct Formatter: CodePointDatabase_Formatter {
+    typealias Schema = IDNAValidationDataSchema
+
+    static var asciiEntryElementType: String { "UInt8" }
+    static func formatASCIIEntry(_ entry: Schema.ASCIIData) -> String { entry.hexString(format: .fullWidth) }
+
+
+    static var unicodeEntryElementType: String { "UInt8" }
+    static func formatUnicodeEntry(_ entry: Schema.UnicodeData) -> String { entry.hexString(format: .fullWidth) }
+  }
+
   public func printAsSwiftSourceCode(name: String) -> String {
-    var output = codePointDatabase.printAsSwiftSourceCode(name: name)
+    var output = codePointDatabase.printAsSwiftSourceCode(name: name, using: Formatter.self)
     // Fix up trailing newlines.
     precondition(output.last == "\n")
     output.removeLast()
@@ -171,14 +182,9 @@ extension IDNAValidationDatabase {
 
 // TODO: Figure something out for all of this.
 
-struct IDNAValidationDataSchema: CodePointDatabaseBuildSchema {
+struct IDNAValidationDataSchema: CodePointDatabase_Schema {
   typealias ASCIIData = UInt8
-  static var asciiEntryElementType: String { "UInt8" }
-  static func formatASCIIEntry(_ entry: ASCIIData) -> String { entry.hexString(format: .fullWidth) }
-
   typealias UnicodeData = UInt8
-  static var unicodeEntryElementType: String { "UInt8" }
-  static func formatUnicodeEntry(_ entry: UnicodeData) -> String { entry.hexString(format: .fullWidth) }
 }
 
 extension ParsedBidiClassEntry.BidiClass {

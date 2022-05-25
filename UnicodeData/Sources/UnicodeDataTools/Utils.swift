@@ -90,15 +90,15 @@ extension FixedWidthInteger {
 
 extension RangeTable where Bound == UInt32 {
 
-  func generateTable<T>(
-    _: T.Type,
-    mapAsciiValue: (Element) -> T.ASCIIData,
-    mapUnicodeValue: (Element) -> T.UnicodeData
-  ) -> CodePointDatabase<T> where T: CodePointDatabaseBuildSchema {
+  func generateTable<Schema>(
+    _: Schema.Type,
+    mapAsciiValue: (Element) -> Schema.ASCIIData,
+    mapUnicodeValue: (Element) -> Schema.UnicodeData
+  ) -> CodePointDatabase<Schema> where Schema: CodePointDatabase_Schema {
     precondition(self.bounds.lowerBound == 0)
     precondition(self.bounds.upperBound == 0x11_0000)
 
-    var builder = CodePointDatabase<T>.Builder()
+    var builder = CodePointDatabase<Schema>.Builder()
     for (range, value) in spans {
       for asciiCodePoint in range.clamped(to: 0..<0x80) {
         builder.appendAscii(mapAsciiValue(value), for: asciiCodePoint)

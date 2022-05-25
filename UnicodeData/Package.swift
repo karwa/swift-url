@@ -18,28 +18,28 @@
 import PackageDescription
 
 let package = Package(
-    name: "swift-url-unicodedata",
-    products: [
-        .executable(name: "GenerateUnicodeData", targets: ["GenerateUnicodeData"])
-    ],
-    targets: [
-      .target(
-        name: "UnicodeDataFiles",
-        resources: [.copy("TableDefinitions")]
-      ),
-      .target(
-        name: "UnicodeDataTools",
-        swiftSettings: [.define("UNICODE_DB_INCLUDE_BUILDER")]
-      ),
-      .testTarget(
-        name: "UnicodeDataToolsTests",
-        dependencies: ["UnicodeDataTools"],
-        swiftSettings: [.define("UNICODE_DB_INCLUDE_BUILDER")]
-      ),
+  name: "swift-url-unicodedata",
+  products: [
+    .executable(name: "GenerateUnicodeData", targets: ["GenerateUnicodeData"])
+  ],
+  targets: [
+    .target(
+      name: "UnicodeDataFiles",
+      resources: [.copy("TableDefinitions")]
+    ),
+    .target(
+      name: "UnicodeDataTools",
+      swiftSettings: [.define("UNICODE_DB_INCLUDE_BUILDER")]
+    ),
+    .testTarget(
+      name: "UnicodeDataToolsTests",
+      dependencies: ["UnicodeDataTools"],
+      swiftSettings: [.define("UNICODE_DB_INCLUDE_BUILDER")]
+    ),
 
-      .target(
-        name: "GenerateUnicodeData",
-        dependencies: ["UnicodeDataTools", "UnicodeDataFiles"]
-      ),
-    ]
+    .target(
+      name: "GenerateUnicodeData",
+      dependencies: ["UnicodeDataTools", "UnicodeDataFiles"]
+    ),
+  ]
 )

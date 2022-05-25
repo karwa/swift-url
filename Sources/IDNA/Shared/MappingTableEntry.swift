@@ -17,57 +17,10 @@
 // uses. It would be nice to find a protocol hierarchy which let us read data automatically as the nice type.
 
 @usableFromInline
-internal struct IDNAMappingData: CodePointDatabaseBuildSchema {
-
-  // Our ASCII entries contain a simplified valid/mapped/STD3 flag and optional
-  // replacement code-point, packed in a UInt16.
-
-  @inlinable
-  static var asciiEntryElementType: String { "UInt16" }
-
-  @inlinable
-  static func formatASCIIEntry(_ entry: ASCIIData) -> String {
-    #if UNICODE_DB_INCLUDE_BUILDER
-      entry._storage.hexString(format: .fullWidth)
-    #else
-      ""
-    #endif
-  }
-
-  // Our Unicode entries contain more elaborate status and mapping info:
-  // either a full 21-bit replacement scalar, or a new origin to "rebase" against (with offset calculated
-  // relative to where the entry is marked as beginning), or a reference to a region of a separate static data table
-  // (the "replacements table"). Since these store full scalars, they need UInt32s.
-
-  @inlinable
-  static var unicodeEntryElementType: String { "UInt32" }
-
-  @inlinable
-  static func formatUnicodeEntry(_ entry: UnicodeData) -> String {
-    #if UNICODE_DB_INCLUDE_BUILDER
-      entry._storage.hexString(format: .fullWidth)
-    #else
-      ""
-    #endif
-  }
-
-  @inlinable
-  static func entry(_ entry: UnicodeData, copyForStartingAt newStartPoint: UInt32) -> UnicodeData {
-    // If we split a rebase mapping across tables, the entry in the new table need to start with
-    // an offset already applied. As it happens, this never occurs. Even if I implemented it,
-    // the code would never get executed, so better to forbid it and get a message to take a look if it
-    // ever triggers.
-    if case .some(.rebased) = entry.mapping {
-      preconditionFailure("Rebased mappings are never split. Please file a bug report!")
-    }
-    // All other entries don't care which exact code-point they are linked against in the table.
-    // They are "position-independent".
-    return entry
-  }
-}
+internal struct IDNAMappingData: CodePointDatabase_Schema {}
 
 @usableFromInline
-internal struct RawIDNAData: CodePointDatabaseSchema {
+internal struct RawIDNAData: CodePointDatabase_Schema {
   @usableFromInline internal typealias ASCIIData = UInt16
   @usableFromInline internal typealias UnicodeData = UInt32
 }
@@ -248,6 +201,24 @@ extension IDNAMappingData {
         return .table(ReplacementsTable.Index(offset: offset, length: length))
       }
     }
+  }
+
+  // Splitting location-sensitive data.
+
+  @inlinable
+  internal static func unicodeData(
+    _ data: UnicodeData, at originalStart: UInt32, copyForStartingAt newStartPoint: UInt32
+  ) -> UnicodeData {
+    // If we split a rebase mapping across tables, the entry in the new table need to start with
+    // an offset already applied. As it happens, this never occurs. Even if I implemented it,
+    // the code would never get executed, so better to forbid it and get a message to take a look if it
+    // ever triggers.
+    if case .some(.rebased) = data.mapping {
+      preconditionFailure("Rebased mappings are never split. Please file a bug report!")
+    }
+    // All other entries don't care which exact code-point they are linked against in the table.
+    // They are "position-independent".
+    return data
   }
 }
 
