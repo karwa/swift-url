@@ -24,8 +24,11 @@ let package = Package(
     ],
     targets: [
       .target(
+        name: "UnicodeDataFiles",
+        resources: [.copy("TableDefinitions")]
+      ),
+      .target(
         name: "UnicodeDataTools",
-        resources: [.copy("TableDefinitions")],
         swiftSettings: [.define("UNICODE_DB_INCLUDE_BUILDER")]
       ),
       .testTarget(
@@ -36,7 +39,7 @@ let package = Package(
 
       .target(
         name: "GenerateUnicodeData",
-        dependencies: ["UnicodeDataTools"]
+        dependencies: ["UnicodeDataTools", "UnicodeDataFiles"]
       ),
     ]
 )

@@ -878,7 +878,7 @@ extension IDNA {
     var idx = label.startIndex
     while idx < label.endIndex {
       let scalar = label[idx]
-      let scalarInfo = BidiInfo(value: _bidi_db[scalar].get())
+      let scalarInfo = BidiInfo(value: _bidi_db[scalar].value)
       defer { label.formIndex(after: &idx) }
 
       //  7. If CheckJoiners, the label must satisify the ContextJ rules from Appendix A,
@@ -980,7 +980,7 @@ extension IDNA {
     }
 
     if let lastNonSpace = label.dropLast(bidi_trailingNSMs).last {
-      let scalarInfo = BidiInfo(value: _bidi_db[lastNonSpace].get())
+      let scalarInfo = BidiInfo(value: _bidi_db[lastNonSpace].value)
       switch bidi_labelDirection {
       case .LTR:
         // 6.
