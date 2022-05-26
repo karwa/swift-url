@@ -230,34 +230,6 @@ extension IDNAMappingData.UnicodeData.Mapping {
 
 extension IDNAMappingDatabase {
 
-  internal struct Formatter: CodePointDatabase_Formatter {
-    typealias Schema = IDNAMappingData
-
-    // Our ASCII entries contain a simplified valid/mapped/STD3 flag and optional
-    // replacement code-point, packed in a UInt16.
-
-    @inlinable
-    static var asciiEntryElementType: String { "UInt16" }
-
-    @inlinable
-    static func formatASCIIEntry(_ entry: Schema.ASCIIData) -> String {
-      entry._storage.hexString(format: .fullWidth)
-    }
-
-    // Our Unicode entries contain more elaborate status and mapping info:
-    // either a full 21-bit replacement scalar, or a new origin to "rebase" against (with offset calculated
-    // relative to where the entry is marked as beginning), or a reference to a region of a separate static data table
-    // (the "replacements table"). Since these store full scalars, they need UInt32s.
-
-    @inlinable
-    static var unicodeEntryElementType: String { "UInt32" }
-
-    @inlinable
-    static func formatUnicodeEntry(_ entry: Schema.UnicodeData) -> String {
-      entry._storage.hexString(format: .fullWidth)
-    }
-  }
-
   public func printAsSwiftSourceCode(name: String) -> String {
     var output = ""
     // We can print the replacements table as Unicode scalar literals and the compiler still constant-folds them \o/.
@@ -270,7 +242,7 @@ extension IDNAMappingDatabase {
       to: &output
     )
     output += "\n"
-    output += codePointDatabase.printAsSwiftSourceCode(name: name, using: Formatter.self)
+    output += codePointDatabase.printAsSwiftSourceCode(name: name, using: DefaultFormatter<IDNAMappingData>.self)
 
     // Fix up trailing newlines.
     precondition(output.last == "\n")

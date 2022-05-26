@@ -524,9 +524,8 @@ extension IDNA {
   }
 }
 
-
 @usableFromInline
-internal let _idna_db = CodePointDatabase<RawIDNAData>(
+internal let _idna_db = CodePointDatabase<IDNAMappingData>(
   asciiData: _idna_ascii,
   bmpData: _idna_bmp_splitTables,
   nonbmpData: _idna_nonbmp_splitTables
@@ -559,8 +558,7 @@ extension IDNA {
   internal static func mapScalar(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> MappedScalar {
 
     switch _idna_db[scalar] {
-    case .ascii(let rawASCII):
-      let entry = IDNAMappingData.ASCIIData(_storage: rawASCII)
+    case .ascii(let entry):
       if !entry.isMapped {
         if _slowPath(useSTD3ASCIIRules), case .disallowed_STD3_valid = entry.status { return .disallowed }
         return .single(scalar, wasMapped: false)
@@ -568,7 +566,7 @@ extension IDNA {
         return .single(entry.replacement, wasMapped: true)
       }
 
-    case .nonAscii(let entryStorage, startCodePoint: let startingCodePointOfEntry):
+    case .nonAscii(let entry, startCodePoint: let startingCodePointOfEntry):
       func resolve(_ mapping: IDNAMappingData.UnicodeData.Mapping?, at offset: UInt32) -> MappedScalar {
         switch mapping {
         case .single(let single):
@@ -583,7 +581,6 @@ extension IDNA {
           return .disallowed
         }
       }
-      let entry = IDNAMappingData.UnicodeData(_storage: entryStorage)
       let offset = scalar.value &- startingCodePointOfEntry
 
       // Parameters.
@@ -718,41 +715,11 @@ extension IDNA {
 
 
 @usableFromInline
-internal struct RawBIDIData: CodePointDatabase_Schema {
-  @usableFromInline internal typealias ASCIIData = UInt8
-  @usableFromInline internal typealias UnicodeData = UInt8
-}
-
-@usableFromInline
-internal let _bidi_db = CodePointDatabase<RawBIDIData>(
+internal let _validation_db = CodePointDatabase<IDNAValidationData>(
   asciiData: _bidi_ascii,
   bmpData: _bidi_bmp_splitTables,
   nonbmpData: _bidi_nonbmp_splitTables
 )
-
-@usableFromInline
-enum BidiInfo {
-  case L
-  case RorAL
-  case AN
-  case EN
-  case ESorCSorETorONorBN
-  case NSM
-  case other
-
-  @inlinable
-  init(value: UInt8) {
-    switch value {
-    case 0: self = .L  // For 1, 5, 6
-    case 1: self = .RorAL  // For 1, 2, 3
-    case 2: self = .AN  // For 2, 4
-    case 3: self = .EN  // For 2, 4, 5
-    case 4: self = .ESorCSorETorONorBN  // For 2, 5
-    case 5: self = .NSM  // For 2, 3, 5, 6
-    default: self = .other
-    }
-  }
-}
 
 extension IDNA {
 
@@ -878,7 +845,7 @@ extension IDNA {
     var idx = label.startIndex
     while idx < label.endIndex {
       let scalar = label[idx]
-      let scalarInfo = BidiInfo(value: _bidi_db[scalar].value)
+      let scalarInfo = BidiInfo(value: _validation_db[scalar].value.storage)
       defer { label.formIndex(after: &idx) }
 
       //  7. If CheckJoiners, the label must satisify the ContextJ rules from Appendix A,
@@ -980,7 +947,7 @@ extension IDNA {
     }
 
     if let lastNonSpace = label.dropLast(bidi_trailingNSMs).last {
-      let scalarInfo = BidiInfo(value: _bidi_db[lastNonSpace].value)
+      let scalarInfo = BidiInfo(value: _validation_db[lastNonSpace].value.storage)
       switch bidi_labelDirection {
       case .LTR:
         // 6.

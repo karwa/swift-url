@@ -18,7 +18,7 @@
 /// as Swift source code. That's it.
 ///
 public struct IDNAValidationDatabase {
-  internal var codePointDatabase: CodePointDatabase<IDNAValidationDataSchema>
+  internal var codePointDatabase: CodePointDatabase<IDNAValidationData>
 }
 
 
@@ -135,11 +135,13 @@ extension IDNAValidationDatabase {
 
     // - Remove unnecessary data
 
-    var reducedBidiTable = fullBidiTable.mapElements { $0.toInt() }
+    var reducedBidiTable = fullBidiTable.mapElements {
+      IDNAValidationData.ValidationFlags(storage: $0.toProcessed().value)
+    }
     reducedBidiTable.mergeElements()
 
     self.codePointDatabase = reducedBidiTable.generateTable(
-      IDNAValidationDataSchema.self,
+      IDNAValidationData.self,
       mapAsciiValue: { $0 },
       mapUnicodeValue: { $0 }
     )
@@ -154,19 +156,8 @@ extension IDNAValidationDatabase {
 
 extension IDNAValidationDatabase {
 
-  struct Formatter: CodePointDatabase_Formatter {
-    typealias Schema = IDNAValidationDataSchema
-
-    static var asciiEntryElementType: String { "UInt8" }
-    static func formatASCIIEntry(_ entry: Schema.ASCIIData) -> String { entry.hexString(format: .fullWidth) }
-
-
-    static var unicodeEntryElementType: String { "UInt8" }
-    static func formatUnicodeEntry(_ entry: Schema.UnicodeData) -> String { entry.hexString(format: .fullWidth) }
-  }
-
   public func printAsSwiftSourceCode(name: String) -> String {
-    var output = codePointDatabase.printAsSwiftSourceCode(name: name, using: Formatter.self)
+    var output = codePointDatabase.printAsSwiftSourceCode(name: name, using: DefaultFormatter<IDNAValidationData>.self)
     // Fix up trailing newlines.
     precondition(output.last == "\n")
     output.removeLast()
@@ -180,16 +171,10 @@ extension IDNAValidationDatabase {
 // MARK: - Other (TODO)
 // --------------------------------------------
 
-// TODO: Figure something out for all of this.
-
-struct IDNAValidationDataSchema: CodePointDatabase_Schema {
-  typealias ASCIIData = UInt8
-  typealias UnicodeData = UInt8
-}
 
 extension ParsedBidiClassEntry.BidiClass {
-  func toInt() -> UInt8 {
 
+  func toProcessed() -> BidiInfo {
     // 1.  The first character must be a character with Bidi property L, R,
     //     or AL.  If it has the R or AL property, it is an RTL label; if it
     //     has the L property, it is an LTR label.
@@ -211,13 +196,13 @@ extension ParsedBidiClassEntry.BidiClass {
     //     Bidi property L or EN, followed by zero or more characters with
     //     Bidi property NSM.
     switch self {
-    case .L: return 0  // For 1, 5, 6
-    case .R, .AL: return 1  // For 1, 2, 3
-    case .AN: return 2  // For 2, 4
-    case .EN: return 3  // For 2, 4, 5
-    case .ES, .CS, .ET, .ON, .BN: return 4  // For 2, 5
-    case .NSM: return 5  // For 2, 3, 5, 6
-    default: return 6
+    case .L: return .L  // For 1, 5, 6
+    case .R, .AL: return .RorAL  // For 1, 2, 3
+    case .AN: return .AN  // For 2, 4
+    case .EN: return .EN  // For 2, 4, 5
+    case .ES, .CS, .ET, .ON, .BN: return .ESorCSorETorONorBN  // For 2, 5
+    case .NSM: return .NSM  // For 2, 3, 5, 6
+    default: return .other
     }
   }
 }

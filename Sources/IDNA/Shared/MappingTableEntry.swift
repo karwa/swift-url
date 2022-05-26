@@ -12,18 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// FIXME: We have 2 schemas - One to build the database, and another to read it.
-// Building uses nice types, but then it prints its storage as plain integers, so that's what the read schema
-// uses. It would be nice to find a protocol hierarchy which let us read data automatically as the nice type.
-
 @usableFromInline
 internal struct IDNAMappingData: CodePointDatabase_Schema {}
-
-@usableFromInline
-internal struct RawIDNAData: CodePointDatabase_Schema {
-  @usableFromInline internal typealias ASCIIData = UInt16
-  @usableFromInline internal typealias UnicodeData = UInt32
-}
 
 
 // --------------------------------------------
@@ -38,15 +28,18 @@ extension IDNAMappingData {
   /// ASCII code-points have simple entries, stored in a 1:1 lookup table.
   ///
   @usableFromInline
-  internal struct ASCIIData: Equatable {
+  internal struct ASCIIData: HasRawStorage {
+
+    @usableFromInline
+    internal typealias RawStorage = UInt16
 
     // 2 bytes: <status> and <replacement>
     @usableFromInline
-    internal var _storage: UInt16
+    internal var storage: UInt16
 
     @inlinable
-    internal init(_storage: UInt16) {
-      self._storage = _storage
+    internal init(storage: UInt16) {
+      self.storage = storage
     }
 
     // Getting components.
@@ -55,7 +48,7 @@ extension IDNAMappingData {
     ///
     @inlinable
     internal var status: Status {
-      Status(UInt8(truncatingIfNeeded: _storage &>> 8))
+      Status(UInt8(truncatingIfNeeded: storage &>> 8))
     }
 
     /// The replacement code-point to use instead of this code-point.
@@ -64,7 +57,7 @@ extension IDNAMappingData {
     ///
     @inlinable
     internal var replacement: Unicode.Scalar {
-      Unicode.Scalar(UInt8(truncatingIfNeeded: _storage))
+      Unicode.Scalar(UInt8(truncatingIfNeeded: storage))
     }
 
     // Byte values and creation.
@@ -88,17 +81,17 @@ extension IDNAMappingData {
 
     @inlinable
     internal static var valid: Self {
-      ASCIIData(_storage: 0x00_00)
+      ASCIIData(storage: 0x00_00)
     }
 
     @inlinable
     internal static var disallowed_STD3_valid: Self {
-      ASCIIData(_storage: 0x01_00)
+      ASCIIData(storage: 0x01_00)
     }
 
     @inlinable
     internal static func mapped(to replacement: UInt8) -> Self {
-      ASCIIData(_storage: 0x02_00 | UInt16(replacement))
+      ASCIIData(storage: 0x02_00 | UInt16(replacement))
     }
 
     // Other properties.
@@ -109,12 +102,7 @@ extension IDNAMappingData {
     ///
     @inlinable
     internal var isMapped: Bool {
-      _storage >= 0x02_00
-    }
-
-    @inlinable
-    internal static func == (lhs: Self, rhs: Self) -> Bool {
-      lhs._storage == rhs._storage
+      storage >= 0x02_00
     }
   }
 }
@@ -130,16 +118,19 @@ extension IDNAMappingData {
   /// An IDNA mapping table entry, describing the status of a range of code-points.
   ///
   @usableFromInline
-  internal struct UnicodeData {
+  internal struct UnicodeData: HasRawStorage {
+
+    @usableFromInline
+    internal typealias RawStorage = UInt32
 
     // high byte: 4 bits <status> and 4 bits <mapping-kind>
     // remaining: mapping data (3 bytes).
     @usableFromInline
-    internal var _storage: UInt32
+    internal var storage: UInt32
 
     @inlinable
-    internal init(_storage: UInt32) {
-      self._storage = _storage
+    internal init(storage: UInt32) {
+      self.storage = storage
     }
 
     @usableFromInline
@@ -164,7 +155,7 @@ extension IDNAMappingData {
     internal var status: Status {
       // bits 31..<32 (1 bit)  = <unused>
       // bits 28..<31 (3 bits) = Status
-      switch _storage &>> 28 {
+      switch storage &>> 28 {
       case 0: return .valid
       case 1: return .deviation
       case 2: return .disallowed_STD3_valid
@@ -182,28 +173,28 @@ extension IDNAMappingData {
     internal var mapping: Mapping? {
       // bits 26..<28 (2 bit)  = <unused>
       // bits 24..<26 (2 bits) = Mapping Kind
-      switch (_storage &>> 24) & 0b11 {
+      switch (storage &>> 24) & 0b11 {
       case 0:
         return nil
       case 1:
         // bits 22..<24 (2 bit)   = <unused>
         // bits 00..<22 (21 bits) = Replacement
-        return .single(_storage & 0x00FF_FFFF)
+        return .single(storage & 0x00FF_FFFF)
       case 2:
         // bits 22..<24 (2 bit)   = <unused>
         // bits 00..<22 (21 bits) = Origin
-        return .rebased(origin: _storage & 0x00FF_FFFF)
+        return .rebased(origin: storage & 0x00FF_FFFF)
       default:
         // bits 08..<24 (16 bits) = Offset
         // bits 00..<08 (08 bits) = Length
-        let offset = UInt16(truncatingIfNeeded: _storage &>> 8)
-        let length = UInt8(truncatingIfNeeded: _storage)
+        let offset = UInt16(truncatingIfNeeded: storage &>> 8)
+        let length = UInt8(truncatingIfNeeded: storage)
         return .table(ReplacementsTable.Index(offset: offset, length: length))
       }
     }
   }
 
-  // Splitting location-sensitive data.
+  // Location-sensitive data.
 
   @inlinable
   internal static func unicodeData(
@@ -268,7 +259,7 @@ extension IDNAMappingData.UnicodeData {
       value = value | (3 << 24) | (UInt32(index.offset) &<< 8) | UInt32(index.length)
     }
 
-    self._storage = value
+    self.storage = value
   }
 }
 
