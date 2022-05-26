@@ -21,7 +21,7 @@ internal struct IDNAValidationData: CodePointDatabase_Schema {
 extension IDNAValidationData {
 
   @usableFromInline
-  internal struct ValidationFlags: HasRawStorage {
+  internal struct ValidationFlags: HasRawStorage, Equatable {
 
     @usableFromInline
     internal typealias RawStorage = UInt8

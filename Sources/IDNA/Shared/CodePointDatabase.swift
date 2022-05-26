@@ -472,9 +472,9 @@ extension RandomAccessCollection {
 
       printArrayLiteral(
         name: "\(name)_ascii",
-        elementType: Formatter.asciiEntryElementType,
+        elementType: Formatter.asciiStorageElementType,
         data: _asciiData, columns: 8,
-        formatter: Formatter.formatASCIIEntry,
+        formatter: Formatter.formatASCIIStorage,
         to: &output
       )
       output += "\n"
@@ -526,9 +526,9 @@ extension RandomAccessCollection {
 
         printArrayLiteral(
           name: dataTableName,
-          elementType: Formatter.unicodeEntryElementType,
+          elementType: Formatter.unicodeStorageElementType,
           data: data.dataTable, columns: 8,
-          formatter: Formatter.formatUnicodeEntry,
+          formatter: Formatter.formatUnicodeStorage,
           to: &output
         )
         output += "\n"
@@ -540,7 +540,7 @@ extension RandomAccessCollection {
 
       printArrayLiteral(
         name: "\(name)_splitTables",
-        elementType: "(codePointTable: [UInt16], dataTable: [\(Formatter.unicodeEntryElementType)])",
+        elementType: "(codePointTable: [UInt16], dataTable: [\(Formatter.unicodeStorageElementType)])",
         data: subTables, columns: 1,
         formatter: { "(codePointTable: \($0.0), dataTable: \($0.1))" },
         to: &output
