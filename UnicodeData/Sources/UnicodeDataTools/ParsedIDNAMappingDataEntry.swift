@@ -70,18 +70,8 @@ internal struct ParsedIDNAMappingDataEntry {
 
     codePoints: do {
       let stringValue = components[0]
-      if let singleValue = UInt32(stringValue, radix: 16) {
-        self.codePoints = singleValue...singleValue
-      } else {
-        guard
-          stringValue.contains("."),
-          let rangeStart = UInt32(stringValue.prefix(while: { $0 != "." }), radix: 16),
-          let rangeEnd = UInt32(stringValue.suffix(while: { $0 != "." }), radix: 16)
-        else {
-          return nil
-        }
-        self.codePoints = rangeStart...rangeEnd
-      }
+      guard let codePoints = ParsingHelpers.parseCodePointRange(stringValue) else { return nil }
+      self.codePoints = codePoints
     }
     status: do {
       let stringValue = components[1]

@@ -19,10 +19,10 @@ extension UTS46Conformance {
   public struct WebURLIDNAReportHarness {
     public private(set) var report = SimpleTestReport()
     public private(set) var reportedResultCount = 0
-    public let joinerFailures: Set<Int>
+    public let std3Deviations: Set<Int>
 
-    public init(joinerFailures: Set<Int> = []) {
-      self.joinerFailures = joinerFailures
+    public init(std3Deviations: Set<Int> = []) {
+      self.std3Deviations = std3Deviations
     }
   }
 }
@@ -74,60 +74,31 @@ extension UTS46Conformance.WebURLIDNAReportHarness: UTS46Conformance.Harness {
     report.markSection(name)
   }
 
-  private static func shouldSkipTest(statusCodes: ArraySlice<UInt8>) -> Bool {
-    let validationFailures = UTS46Conformance.FailableValidationSteps.parse(statusCodes)
-
-    // The UTS46 tests do not cover the options used by the URL standard.
-    // https://github.com/whatwg/url/issues/341#issuecomment-1115988436
-    //
-    // Error codes "P1" and "V6" mean that the domain contains an invalid code-point
-    // (mapping table status 'disallowed'). However, for some code-points with status
-    // disallowed_STD3_valid/disallowed_STD3_mapped, that status depends on the value
-    // of the UseSTD3ASCIIRules parameter.
-    //
-    // UTS46 isn't clear whether this parameter of ToUnicode/ToASCII should be forwarded
-    // to the 'validation' step of IDNA processing. It seems like it should be, and some
-    // implementations do, but the Unicode org reference implementation which generates
-    // the test file does not.
-    //
-    // What's more, the test file is generated with UseSTD3ASCIIRules=true.
-    // But with our IDNA.toUnicode function, UseSTD3ASCIIRules parameter is actually always false!
-    // And toASCII's UseSTD3ASCIIRules is given by another parameter 'beStrict', which also defaults to false.
-    // Because that's what URL's use.
-    //
-    // So - if the testcase includes expected errors "P1" or "V6", it's hard to say
-    // whether our UseSTD3ASCIIRules=false implementation should still flag that error or let it pass.
-    //
-    // This has been reported to the WHATWG and Unicode organisation (see above).
-    // It would be really great to improve on this situation by marking the errors which depend on
-    // UseSTD3ASCIIRules.
-
-    if validationFailures.contains(.P1) || validationFailures.contains(.V6) {
-      return true
-    }
-
-    // Otherwise, we should run the test.
-
-    return false
-  }
-
   public mutating func reportTestResult(_ result: TestResult<UTS46Conformance>) {
     reportedResultCount += 1
-
-    guard
-      !Self.shouldSkipTest(statusCodes: result.testCase.toUnicode.status),
-      !Self.shouldSkipTest(statusCodes: result.testCase.toAsciiN.status)
-    else {
-      report.skipTest()
-      return
-    }
     report.performTest { reporter in
-      // Some tests contain valid uses of zero-width joiners.
-      // We are overly strict and reject these. We'd need Joining_Type data to confirm that they are valid.
-      if joinerFailures.contains(result.testNumber) {
-        // assert(result.captures!.toUnicodeResult == nil)
-        // assert(result.captures!.toAsciiNResult == nil)
-        reporter.expectedResult = .fail
+      if std3Deviations.contains(result.testNumber) {
+        if !result.failures.isEmpty {
+          // This testcase should expect a disallowed codepoint.
+          let expectedFailures = UTS46Conformance.FailableValidationSteps.parse(result.testCase.toAsciiN.status)
+          assert(expectedFailures.contains(where: { $0 == .P1 || $0 == .V6 }))
+
+          // The expected toUnicode result should contain a scalar which we think is disallowed_STD3_valid.
+          let expectedScalars = String(decoding: result.testCase.toUnicode.result, as: UTF8.self).unicodeScalars
+          let hasSTD3Disallowed = expectedScalars.contains(where: { IDNA._isDisallowed_STD3_valid($0) })
+          assert(hasSTD3Disallowed)
+
+          // The actual result should be the same for toAscii and toUnicode - that we are more lenient.
+          assert(result.failures == [.toUnicode, .toAsciiN])
+          assert(result.captures?.toAsciiNResult != nil)
+          assert(result.captures?.toUnicodeResult != nil)
+
+          // Our toUnicode result must match the expected one at the Unicode scalar level.
+          assert(result.captures?.toUnicodeResult?.unicodeScalars.elementsEqual(expectedScalars) == true)
+
+          // Ok - allow the difference in expected/actual result.
+          reporter.expectedResult = .fail
+        }
       }
       reporter.reportTestResult(result)
     }

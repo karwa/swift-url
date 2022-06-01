@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Slices, trimming.
+// --------------------------------------------
+// MARK: - Slicing and Padding
+// --------------------------------------------
+
 
 extension BidirectionalCollection {
 
@@ -40,8 +43,6 @@ extension Substring {
   }
 }
 
-// Padding.
-
 extension String {
   internal func leftPadding(toLength newLength: Int, withPad character: Character) -> String {
     precondition(count <= newLength, "newLength must be greater than or equal to string length")
@@ -49,63 +50,66 @@ extension String {
   }
 }
 
-// Int to Hex.
 
-@usableFromInline
-internal enum HexStringFormat {
-  /// Format without any leading zeroes, e.g. `0x2`.
-  case minimal
-  /// Format which includes all leading zeroes in a fixed-width integer, e.g. `0x00CE`.
-  case fullWidth
-  /// Format which pads values with enough zeroes to reach a minimum length.
-  case padded(toLength: Int)
-}
+// --------------------------------------------
+// MARK: - Converting SegmentedLine <-> CodePointDatabase
+// --------------------------------------------
 
-extension FixedWidthInteger {
 
-  @usableFromInline
-  internal func hexString(format: HexStringFormat = .fullWidth) -> String {
-    "0x" + unprefixedHexString(format: format)
-  }
-
-  @usableFromInline
-  internal func unprefixedHexString(format: HexStringFormat) -> String {
-    let minimal = String(self, radix: 16, uppercase: true)
-    switch format {
-    case .minimal:
-      return minimal
-    case .fullWidth:
-      return minimal.leftPadding(toLength: Self.bitWidth / 4, withPad: "0")
-    case .padded(toLength: let minLength):
-      if minimal.count < minLength {
-        return minimal.leftPadding(toLength: minLength, withPad: "0")
-      } else {
-        return minimal
-      }
-    }
-  }
-}
-
-// Table generation.
-
-extension RangeTable where Bound == UInt32 {
+extension SegmentedLine where Bound == UInt32 {
 
   func generateTable<Schema>(
     _: Schema.Type,
-    mapAsciiValue: (Element) -> Schema.ASCIIData,
-    mapUnicodeValue: (Element) -> Schema.UnicodeData
+    mapAsciiValue: (Value) -> Schema.ASCIIData,
+    mapUnicodeValue: (Value) -> Schema.UnicodeData
   ) -> CodePointDatabase<Schema> where Schema: CodePointDatabase_Schema {
     precondition(self.bounds.lowerBound == 0)
     precondition(self.bounds.upperBound == 0x11_0000)
 
     var builder = CodePointDatabase<Schema>.Builder()
-    for (range, value) in spans {
+    for (range, value) in segments {
       for asciiCodePoint in range.clamped(to: 0..<0x80) {
         builder.appendAscii(mapAsciiValue(value), for: asciiCodePoint)
       }
-      guard range.upperBound >= 0x80 else { continue }
+      guard range.upperBound > 0x80 else { continue }
       builder.appendUnicode(mapUnicodeValue(value), for: ClosedRange(range.clamped(to: 0x80..<0x110000)))
     }
     return builder.finalize()
   }
 }
+
+// CodePointDatabase -> SegmentedLine (unused right now)
+//
+//extension CodePointDatabase {
+//
+//  static func toRangeTableData(
+//    offset: UInt32, _ input: SplitTable<UInt16, Schema.UnicodeData.RawStorage>
+//  ) -> [(UInt32, Schema.UnicodeData)] {
+//    var result = [(UInt32, Schema.UnicodeData)]()
+//    result.reserveCapacity(input.codePointTable.count)
+//    for i in 0..<input.codePointTable.count {
+//      result.append(
+//        (offset + UInt32(input.codePointTable[i]), Schema.UnicodeData(storage: input.dataTable[i]))
+//      )
+//    }
+//    return result
+//  }
+//
+//  func iterateRangeTables(body: (RangeTable<UInt32, Schema.UnicodeData>) -> Void) {
+//
+//    // FIXME: ASCII?
+//
+//    for (n, bmpSubArray) in _bmpData.enumerated() {
+//      let start = UInt32(bmpSubArray.codePointTable.first!)
+//      let end = start + 0x00_1000
+//      let table = RangeTable(_upperBound: end, _data: Self.toRangeTableData(offset: 0, bmpSubArray))
+//      body(table)
+//    }
+//    for (n, nonbmpArray) in _nonbmpData.enumerated() {
+//      let start = UInt32((n + 1) * 0x1_0000)
+//      let end = start + 0x01_0000
+//      let table = RangeTable(_upperBound: end, _data: Self.toRangeTableData(offset: start, nonbmpArray))
+//      body(table)
+//    }
+//  }
+//}

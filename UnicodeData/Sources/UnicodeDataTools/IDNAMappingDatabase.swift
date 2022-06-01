@@ -32,13 +32,13 @@ public struct IDNAMappingDatabase {
 
 extension IDNAMappingDatabase {
 
-  /// Constructs a databse from the Unicode `IdnaMappingTable.txt` file.
+  /// Constructs a database from the Unicode `IdnaMappingTable.txt` file.
   ///
   /// The latest version is available at: https://www.unicode.org/Public/idna/latest/IdnaMappingTable.txt
   ///
   public init(parsing idnaMappingTableTxt: String) {
 
-    // - Parse Data File in to enties.
+    // - Parse Data File in to entries.
 
     var parsedEntries = [ParsedIDNAMappingDataEntry]()
     do {
@@ -55,7 +55,7 @@ extension IDNAMappingDatabase {
             """
           )
         }
-        // TODO: Replace this merge step with RangeTable
+        // TODO: Replace this merge step with SegmentedLine
         // We do a bit of optimization here already, by merging contiguous entries as they are appended to the table
         // and collapsing contiguous mappings. This can remove 1/3 of entries (from ~9000 to 6000).
         if let last = parsedEntries.last, let merged = last.tryMerge(with: entry) {

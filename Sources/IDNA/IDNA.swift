@@ -356,7 +356,7 @@ extension IDNA {
   /// Unicode scalars.
   ///
   /// This iterator performs the first 2 steps of IDNA Compatibility Processing, as defined by UTS#46 section 4
-  /// <https://www.unicode.org/reports/tr46/#Processing>. Similar procesing is sometimes referred to as "nameprep".
+  /// <https://www.unicode.org/reports/tr46/#Processing>. Similar processing is sometimes referred to as "nameprep".
   ///
   /// Should any stage of processing encounter an error (for example, if the source contains invalid UTF-8,
   /// or disallowed codepoints), the iterator will terminate and its `hasError` flag will be set.
@@ -645,7 +645,7 @@ extension Unicode.Scalar {
 extension IDNA {
 
   /// Consumes an iterator of Unicode scalars, gathering its contents in to a buffer which is yielded
-  /// at each occurence of the domain label separator `U+002E FULL STOP (".")`.
+  /// at each occurrence of the domain label separator `U+002E FULL STOP (".")`.
   ///
   /// When the source iterator terminates, the `checkSourceError` closure is invoked to check whether
   /// the stream finished due to an error. If so, the function returns `false`.
@@ -767,7 +767,7 @@ extension IDNA {
   /// [uts46]: https://www.unicode.org/reports/tr46/#Validity_Criteria
   ///
   /// - parameters:
-  ///   - label:                      The label to check, as a collection of Unicod code-points.
+  ///   - label:                      The label to check, as a collection of Unicode code-points.
   ///   - isKnownMappedAndNormalized: If `true`, declares that the label's code-points have not changed since
   ///                                 undergoing compatibility mapping and normalization, so their status
   ///                                 will be assumed valid. **Important:** If the label has been decoded
@@ -784,7 +784,7 @@ extension IDNA {
 
     // Parameters.
 
-    let checkHypens = FixedParameter(false)
+    let checkHyphens = FixedParameter(false)
     let checkBidi = FixedParameter(true)
     let checkJoiners = FixedParameter(true)
     let transitionalProcessing = FixedParameter(false)
@@ -802,7 +802,7 @@ extension IDNA {
     //  3. If CheckHyphens, the label must neither begin nor end with a U+002D HYPHEN-MINUS
     //     character.
 
-    if checkHypens {
+    if checkHyphens {
       preconditionFailure("CheckHyphens is not supported")
     }
 
@@ -810,14 +810,7 @@ extension IDNA {
 
     assert(!label.contains("."), "Labels should already be split on U+002E")
 
-    //  5. The label must not begin with a combining mark, that is: General_Category=Mark.
-
-    switch label.first?.properties.generalCategory {
-    case .spacingMark, .nonspacingMark, .enclosingMark:
-      return false
-    default:
-      break
-    }
+    // <5. is checked later when we query the validation data>
 
     //  6. Each code point in the label must only have certain status values
     //     according to Section 5, IDNA Mapping Table:
@@ -836,7 +829,9 @@ extension IDNA {
       return false
     }
 
-    // Bidi state.
+    // State for CheckJoiners.
+    var previousScalarInfo: IDNAValidationData.ValidationFlags? = nil
+    // State for CheckBidi.
     var bidi_labelDirection = Bidi_LabelDirection.LTR
     var bidi_trailingNSMs = 0
     var bidi_hasEN = false
@@ -844,33 +839,36 @@ extension IDNA {
 
     var idx = label.startIndex
     while idx < label.endIndex {
-      let scalar = label[idx]
-      let scalarInfo = BidiInfo(value: _validation_db[scalar].value.storage)
-      defer { label.formIndex(after: &idx) }
 
-      //  7. If CheckJoiners, the label must satisify the ContextJ rules from Appendix A,
+      let scalar = label[idx]
+      let scalarInfo = _validation_db[scalar].value
+      defer {
+        previousScalarInfo = scalarInfo
+        label.formIndex(after: &idx)
+      }
+
+      //  5. The label must not begin with a combining mark, that is: General_Category=Mark.
+
+      if idx == label.startIndex, scalarInfo.isMark {
+        return false
+      }
+
+      //  7. If CheckJoiners, the label must satisfy the ContextJ rules from Appendix A,
       //     in The Unicode Code Points and Internationalized Domain Names for Applications (IDNA) [IDNA2008].
       //     https://www.rfc-editor.org/rfc/rfc5892.html#appendix-A
 
-      if checkJoiners {
-        if scalar.value == 0x200C /* ZERO WIDTH NON-JOINER */ {
-
-          if idx > label.startIndex {
-            let previousScalar = label[label.index(before: idx)]
-            if case .virama = previousScalar.properties.canonicalCombiningClass { continue }
+      joiners: if checkJoiners {
+        if scalar.value == 0x200C /* ZERO WIDTH NON-JOINER */ || scalar.value == 0x200D /* ZERO WIDTH JOINER */ {
+          guard let previousScalarInfo = previousScalarInfo else {
+            return false
           }
-          // TODO: We also need to add joining data from the UCD.
-          // https://www.unicode.org/Public/UCD/latest/ucd/extracted/DerivedJoiningType.txt
-          // If RegExpMatch(
-          //   (Joining_Type:{L,D})(Joining_Type:T)*\u200C(Joining_Type:T)*(Joining_Type:{R,D})
-          // ) Then True;
-          return false
-
-        } else if scalar.value == 0x200D /* ZERO WIDTH JOINER */ {
-
-          if idx > label.startIndex {
-            let previousScalar = label[label.index(before: idx)]
-            if case .virama = previousScalar.properties.canonicalCombiningClass { continue }
+          // [Both]: `If Canonical_Combining_Class(Before(cp)) .eq.  Virama Then True;`
+          if previousScalarInfo.isVirama {
+            break joiners
+          }
+          // [ZWNJ]: Check contextual rules.
+          if scalar.value == 0x200C, _validateContextOfZWNJ(at: idx, in: label) {
+            break joiners
           }
           return false
         }
@@ -885,7 +883,7 @@ extension IDNA {
         // See [IDNA2008] RFC 5893, Section 1.4.
 
         if !state.isConfirmedBidiDomain {
-          switch scalarInfo {
+          switch scalarInfo.bidiInfo {
           case .RorAL, .AN: state.isConfirmedBidiDomain = true
           default: break
           }
@@ -914,7 +912,7 @@ extension IDNA {
 
         if idx == label.startIndex {
           // 1.
-          switch scalarInfo {
+          switch scalarInfo.bidiInfo {
           case .L: bidi_labelDirection = .LTR
           case .RorAL: bidi_labelDirection = .RTL
           default: state.hasBidiFailure = true
@@ -923,13 +921,13 @@ extension IDNA {
           switch bidi_labelDirection {
           case .LTR:
             // 5.
-            switch scalarInfo {
+            switch scalarInfo.bidiInfo {
             case .L, .EN, .ESorCSorETorONorBN, .NSM: break
             default: state.hasBidiFailure = true
             }
           case .RTL:
             // 2.
-            switch scalarInfo {
+            switch scalarInfo.bidiInfo {
             case .RorAL, .ESorCSorETorONorBN, .NSM: break
             case .AN: bidi_hasAN = true
             case .EN: bidi_hasEN = true
@@ -938,16 +936,16 @@ extension IDNA {
           }
         }
 
-        if case .NSM = scalarInfo {
+        if case .NSM = scalarInfo.bidiInfo {
           bidi_trailingNSMs += 1
         } else {
           bidi_trailingNSMs = 0
         }
       }
-    }
+    }  // while idx < label.endIndex
 
     if let lastNonSpace = label.dropLast(bidi_trailingNSMs).last {
-      let scalarInfo = BidiInfo(value: _validation_db[lastNonSpace].value.storage)
+      let scalarInfo = _validation_db[lastNonSpace].value.bidiInfo
       switch bidi_labelDirection {
       case .LTR:
         // 6.
@@ -974,6 +972,49 @@ extension IDNA {
     // X. Validation complete.
 
     return true
+  }
+
+  /// Checks contextual rules for `U+200C ZERO WIDTH NON-JOINER`.
+  ///
+  @inlinable
+  internal static func _validateContextOfZWNJ<Label>(
+    at joinerIndex: Label.Index, in label: Label
+  ) -> Bool where Label: BidirectionalCollection, Label.Element == UnicodeScalar {
+
+    // If RegExpMatch(
+    //   (Joining_Type:{L,D})(Joining_Type:T)*\u200C(Joining_Type:T)*(Joining_Type:{R,D})
+    // ) Then True;
+    // https://www.rfc-editor.org/rfc/rfc5892.html#appendix-A
+
+    var cursor = joinerIndex
+
+    searchForLD: do {
+      guard cursor > label.startIndex else { return false }
+      while cursor > label.startIndex {
+        label.formIndex(before: &cursor)
+        switch _validation_db[label[cursor]].value.joiningType {
+        case .L, .D: break searchForLD
+        case .T: continue
+        default: return false
+        }
+      }
+      return false
+    }
+
+    cursor = label.index(after: joinerIndex)
+
+    searchForRD: do {
+      guard cursor < label.endIndex else { return false }
+      while cursor < label.endIndex {
+        switch _validation_db[label[cursor]].value.joiningType {
+        case .R, .D: return true  // Success ✅
+        case .T: break
+        default: return false
+        }
+        label.formIndex(after: &cursor)
+      }
+      return false
+    }
   }
 }
 
@@ -1037,3 +1078,23 @@ internal var IDNA_MappingAndNormalization_NormalizeByBufferingToString: Bool { t
   }
 
 #endif
+
+extension IDNA {
+
+  /// [SPI] - Do Not Use.
+  ///
+  /// This function is not part of the IDNA module's supported interface. It may disappear in any release,
+  /// without a SemVer major version bump. You have been warned.
+  ///
+  /// Returns whether or not the given scalar has mapping status `disallowed_STD3_valid`.
+  ///
+  public static func _isDisallowed_STD3_valid(_ s: Unicode.Scalar) -> Bool {
+    switch _idna_db[s] {
+    case .ascii(let ascii):
+      if case .disallowed_STD3_valid = ascii.status { return true }
+    case .nonAscii(let unicode, _):
+      if case .disallowed_STD3_valid = unicode.status { return true }
+    }
+    return false
+  }
+}

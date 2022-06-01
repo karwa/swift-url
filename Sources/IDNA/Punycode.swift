@@ -114,7 +114,7 @@ extension Punycode {
   /// The encoded label is written by means of the given closure, which is invoked with each ASCII byte
   /// of the result. If the label already consists only of ASCII codepoints, it does not require encoding and
   /// will be passed through unchanged. This also applies to labels that are already Punycode-encoded;
-  /// they will not be decoded or valiated by this function and will simply be passed through as they are.
+  /// they will not be decoded or validated by this function and will simply be passed through as they are.
   ///
   /// If the label _does_ require Punycode encoding, the closure will also be invoked to write
   /// the ACE prefix (`"xn--"`).

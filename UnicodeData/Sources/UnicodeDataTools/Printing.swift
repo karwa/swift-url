@@ -12,7 +12,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-func printArrayLiteral<Data, OutputStream>(
+// --------------------------------------------
+// MARK: - Formatting Integers
+// --------------------------------------------
+
+
+@usableFromInline
+internal enum HexStringFormat {
+  /// Format without any leading zeroes, e.g. `0x2`.
+  case minimal
+  /// Format which includes all leading zeroes in a fixed-width integer, e.g. `0x00CE`.
+  case fullWidth
+  /// Format which pads values with enough zeroes to reach a minimum length.
+  case padded(toLength: Int)
+}
+
+extension FixedWidthInteger {
+
+  @usableFromInline
+  internal func hexString(format: HexStringFormat = .fullWidth) -> String {
+    "0x" + unprefixedHexString(format: format)
+  }
+
+  @usableFromInline
+  internal func unprefixedHexString(format: HexStringFormat) -> String {
+    let minimal = String(self, radix: 16, uppercase: true)
+    switch format {
+    case .minimal:
+      return minimal
+    case .fullWidth:
+      return minimal.leftPadding(toLength: Self.bitWidth / 4, withPad: "0")
+    case .padded(toLength: let minLength):
+      if minimal.count < minLength {
+        return minimal.leftPadding(toLength: minLength, withPad: "0")
+      } else {
+        return minimal
+      }
+    }
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Array Literals
+// --------------------------------------------
+
+
+internal func printArrayLiteral<Data, OutputStream>(
   name: String, elementType: String, data: Data,
   columns: Int = 8, formatter: (Data.Element) -> String = { String(describing: $0) },
   includeSizeComment: Bool = true,

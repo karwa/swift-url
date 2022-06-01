@@ -23,133 +23,6 @@ public struct IDNAValidationDatabase {
 
 
 // --------------------------------------------
-// MARK: - Creation
-// --------------------------------------------
-
-
-extension IDNAValidationDatabase {
-
-  public init(
-    mappingDB: IDNAMappingDatabase,
-    derivedBidiClassTxt: String,
-    derivedJoiningTypeTxt: String
-  ) {
-
-    var fullBidiTable = RangeTable<UInt32, ParsedBidiClassEntry.BidiClass>(
-      bounds: Range(0...0x10_FFFF), initialValue: .L
-    )
-
-    // FIXME: Is it even worth setting unassigned code-points at all?
-    // FIXME: Is it even worth setting code-points other than those with 'valid' status in IDNA?
-
-    // - First, set some defaults for unassigned code points.
-
-    // # Unlike other properties, unassigned code points in blocks
-    // # reserved for right-to-left scripts are given either types R or AL.
-    // #
-    // # The unassigned code points that default to AL are in the ranges:
-    // #     [\u0600-\u07BF \u0860-\u08FF \uFB50-\uFDCF \uFDF0-\uFDFF \uFE70-\uFEFF
-    // #      \U00010D00-\U00010D3F \U00010F30-\U00010F6F
-    // #      \U0001EC70-\U0001ECBF \U0001ED00-\U0001ED4F \U0001EE00-\U0001EEFF]
-    // #
-    // #     This includes code points in the Arabic, Syriac, and Thaana blocks, among others.
-    for range: ClosedRange<UInt32> in [
-      0x0600...0x07BF,
-      0x0860...0x08FF,
-      0xFB50...0xFDCF,
-      0xFDF0...0xFDFF,
-      0xFE70...0xFEFF,
-      0x0001_0D00...0x0001_0D3F,
-      0x0001_0F30...0x0001_0F6F,
-      0x0001_EC70...0x0001_ECBF,
-      0x0001_ED00...0x0001_ED4F,
-      0x0001_EE00...0x0001_EEFF,
-    ] {
-      fullBidiTable.set(Range(range), to: .AL)
-    }
-    // # The unassigned code points that default to R are in the ranges:
-    // #     [\u0590-\u05FF \u07C0-\u085F \uFB1D-\uFB4F
-    // #      \U00010800-\U00010CFF \U00010D40-\U00010F2F \U00010F70-\U00010FFF
-    // #      \U0001E800-\U0001EC6F \U0001ECC0-\U0001ECFF \U0001ED50-\U0001EDFF \U0001EF00-\U0001EFFF]
-    // #
-    // #     This includes code points in the Hebrew, NKo, and Phoenician blocks, among others.
-    for range: ClosedRange<UInt32> in [
-      0x0590...0x05FF,
-      0x07C0...0x085F,
-      0xFB1D...0xFB4F,
-      0x0001_0800...0x0001_0CFF,
-      0x0001_0D40...0x0001_0F2F,
-      0x0001_0F70...0x0001_0FFF,
-      0x0001_E800...0x0001_EC6F,
-      0x0001_ECC0...0x0001_ECFF,
-      0x0001_ED50...0x0001_EDFF,
-      0x0001_EF00...0x0001_EFFF,
-    ] {
-      fullBidiTable.set(Range(range), to: .R)
-    }
-    // # The unassigned code points that default to ET are in the range:
-    // #     [\u20A0-\u20CF]
-    // #
-    // #     This consists of code points in the Currency Symbols block.
-    for range: ClosedRange<UInt32> in [
-      0x20A0...0x20CF
-    ] {
-      fullBidiTable.set(Range(range), to: .ET)
-    }
-    // # The unassigned code points that default to BN have one of the following properties:
-    // #     Default_Ignorable_Code_Point
-    // #     Noncharacter_Code_Point
-    for codePoint in fullBidiTable.bounds {
-      guard let scalar = Unicode.Scalar(codePoint) else { continue }
-      if scalar.properties.generalCategory == .unassigned,
-        scalar.properties.isDefaultIgnorableCodePoint || scalar.properties.isNoncharacterCodePoint
-      {
-        fullBidiTable.set(scalar.value..<scalar.value + 1, to: .BN)
-      }
-    }
-    // # For all other cases:
-    // #  All code points not explicitly listed for Bidi_Class
-    // #  have the value Left_To_Right (L).
-
-    // - Parse Data Files
-
-    do {
-      for line in derivedBidiClassTxt.split(separator: "\n").filter({ !$0.starts(with: "#") }) {
-        let rawDataString = line.prefix { $0 != "#" }
-        let comment = line[rawDataString.endIndex...].dropFirst()
-        guard let entry = ParsedBidiClassEntry(parsing: rawDataString) else {
-          fatalError(
-            """
-            ⚠️ Failed to Parse Entry in Mapping Data! ⚠️
-            line: \(line)
-            rawDataString: \(rawDataString)
-            comment: \(comment)
-            """
-          )
-        }
-        fullBidiTable.set(Range(entry.codePoints), to: entry.value)
-      }
-    }
-    // TODO: Also parse joiner data
-    // TODO: Also get IDNA mapping database?
-
-    // - Remove unnecessary data
-
-    var reducedBidiTable = fullBidiTable.mapElements {
-      IDNAValidationData.ValidationFlags(storage: $0.toProcessed().value)
-    }
-    reducedBidiTable.mergeElements()
-
-    self.codePointDatabase = reducedBidiTable.generateTable(
-      IDNAValidationData.self,
-      mapAsciiValue: { $0 },
-      mapUnicodeValue: { $0 }
-    )
-  }
-}
-
-
-// --------------------------------------------
 // MARK: - Printing
 // --------------------------------------------
 
@@ -168,13 +41,138 @@ extension IDNAValidationDatabase {
 
 
 // --------------------------------------------
-// MARK: - Other (TODO)
+// MARK: - Creation
 // --------------------------------------------
 
 
-extension ParsedBidiClassEntry.BidiClass {
+extension IDNAValidationDatabase {
 
-  func toProcessed() -> BidiInfo {
+  public init(
+    mappingDB: IDNAMappingDatabase,
+    derivedBidiClassTxt: String,
+    derivedJoiningTypeTxt: String
+  ) {
+
+    // - Parse Data Files
+
+    var bidiData = SegmentedLine<UInt32, RawBidiClass>(
+      bounds: Range(0...0x10_FFFF), value: .L
+    )
+    var joiningData = SegmentedLine<UInt32, RawJoiningType>(
+      bounds: Range(0...0x10_FFFF), value: .U
+    )
+
+    do {
+      for line in derivedBidiClassTxt.split(separator: "\n").filter({ !$0.starts(with: "#") }) {
+        let rawDataString = line.prefix { $0 != "#" }
+        let comment = line[rawDataString.endIndex...].dropFirst()
+        guard let entry = ParsingHelpers.CodePointsToProperty<RawBidiClass>(parsing: rawDataString) else {
+          fatalError(
+            """
+            ⚠️ Failed to Parse Entry in Bidi_Class Data! ⚠️
+            line: \(line)
+            rawDataString: \(rawDataString)
+            comment: \(comment)
+            """
+          )
+        }
+        bidiData.set(Range(entry.codePoints), to: entry.value)
+      }
+      bidiData.compactSegments()
+    }
+    do {
+      for line in derivedJoiningTypeTxt.split(separator: "\n").filter({ !$0.starts(with: "#") }) {
+        let rawDataString = line.prefix { $0 != "#" }
+        let comment = line[rawDataString.endIndex...].dropFirst()
+        guard let entry = ParsingHelpers.CodePointsToProperty<RawJoiningType>(parsing: rawDataString) else {
+          fatalError(
+            """
+            ⚠️ Failed to Parse Entry in Joining_Type Data! ⚠️
+            line: \(line)
+            rawDataString: \(rawDataString)
+            comment: \(comment)
+            """
+          )
+        }
+        joiningData.set(Range(entry.codePoints), to: entry.value)
+      }
+      joiningData.compactSegments()
+    }
+
+    // - Create a combined data-set.
+
+    // a. Start with the Bidi_Class data.
+    var validationData: SegmentedLine<UInt32, IDNAValidationData.ValidationFlags> = bidiData.mapValues { parsedInfo in
+      IDNAValidationData.ValidationFlags(
+        bidiInfo: parsedInfo.simplified(),
+        joiningType: .other, isVirama: false, isMark: false  // defaults.
+      )
+    }
+
+    // b. Insert Joining_Type data.
+    for (range, parsedJoinType) in joiningData.segments {
+      let simplified = parsedJoinType.simplified()
+      validationData.modify(range) { $0.joiningType = simplified }
+    }
+
+    // c. Mark virama and marks.
+    for codePoint in 0...(0x10_FFFF as UInt32) {
+      guard let scalar = Unicode.Scalar(codePoint) else { continue }
+
+      // TODO: We should get this data from a stable source.
+      let isVirama = (scalar.properties.canonicalCombiningClass == .virama)
+      let isMark = [.spacingMark, .nonspacingMark, .enclosingMark].contains(scalar.properties.generalCategory)
+
+      if isVirama || isMark {
+        validationData.modify(codePoint..<(codePoint + 1)) {
+          $0.isVirama = isVirama
+          $0.isMark = isMark
+        }
+      }
+    }
+
+    // - Create a DB out of the combined, compacted data.
+
+    validationData.compactSegments()
+
+    self.codePointDatabase = validationData.generateTable(
+      IDNAValidationData.self,
+      mapAsciiValue: { $0 },
+      mapUnicodeValue: { $0 }
+    )
+  }
+}
+
+private enum RawBidiClass: String {
+  case L = "L"
+  case R = "R"
+  case EN = "EN"
+  case ES = "ES"
+  case ET = "ET"
+  case AN = "AN"
+  case CS = "CS"
+  case B = "B"
+  case S = "S"
+  case WS = "WS"
+  case ON = "ON"
+  case BN = "BN"
+  case NSM = "NSM"
+  case AL = "AL"
+  case LRO = "LRO"
+  case RLO = "RLO"
+  case LRE = "LRE"
+  case RLE = "RLE"
+  case PDF = "PDF"
+  case LRI = "LRI"
+  case RLI = "RLI"
+  case FSI = "FSI"
+  case PDI = "PDI"
+
+  func simplified() -> IDNAValidationData.ValidationFlags.BidiInfo {
+
+    // Here's the Bidi rule (it's actually 6 rules).
+    // We don't actually need all the Bidi_Class data for it:
+    //
     // 1.  The first character must be a character with Bidi property L, R,
     //     or AL.  If it has the R or AL property, it is an RTL label; if it
     //     has the L property, it is an LTR label.
@@ -195,14 +193,106 @@ extension ParsedBidiClassEntry.BidiClass {
     // 6.  In an LTR label, the end of the label must be a character with
     //     Bidi property L or EN, followed by zero or more characters with
     //     Bidi property NSM.
+
+    // swift-format-ignore
     switch self {
-    case .L: return .L  // For 1, 5, 6
+    case .L:      return .L      // For 1, 5, 6
     case .R, .AL: return .RorAL  // For 1, 2, 3
-    case .AN: return .AN  // For 2, 4
-    case .EN: return .EN  // For 2, 4, 5
+    case .AN:     return .AN     // For 2, 4
+    case .EN:     return .EN     // For 2, 4, 5
     case .ES, .CS, .ET, .ON, .BN: return .ESorCSorETorONorBN  // For 2, 5
-    case .NSM: return .NSM  // For 2, 3, 5, 6
+    case .NSM:    return .NSM    // For 2, 3, 5, 6
+    default:      return .disallowed  // Everything else
+    }
+  }
+}
+
+private enum RawJoiningType: String {
+  case C = "C"
+  case D = "D"
+  case R = "R"
+  case L = "L"
+  case T = "T"
+  case U = "U"
+
+  func simplified() -> IDNAValidationData.ValidationFlags.JoiningType {
+    switch self {
+    case .L: return .L
+    case .R: return .R
+    case .D: return .D
+    case .T: return .T
     default: return .other
     }
   }
 }
+
+// TODO: Do we need to set unassigned code points? Surely they will be rejected by the mapping table.
+
+//  // - First, set some defaults for unassigned code points.
+//
+//  // # Unlike other properties, unassigned code points in blocks
+//  // # reserved for right-to-left scripts are given either types R or AL.
+//  // #
+//  // # The unassigned code points that default to AL are in the ranges:
+//  // #     [\u0600-\u07BF \u0860-\u08FF \uFB50-\uFDCF \uFDF0-\uFDFF \uFE70-\uFEFF
+//  // #      \U00010D00-\U00010D3F \U00010F30-\U00010F6F
+//  // #      \U0001EC70-\U0001ECBF \U0001ED00-\U0001ED4F \U0001EE00-\U0001EEFF]
+//  // #
+//  // #     This includes code points in the Arabic, Syriac, and Thaana blocks, among others.
+//  for range: ClosedRange<UInt32> in [
+//    0x0600...0x07BF,
+//    0x0860...0x08FF,
+//    0xFB50...0xFDCF,
+//    0xFDF0...0xFDFF,
+//    0xFE70...0xFEFF,
+//    0x0001_0D00...0x0001_0D3F,
+//    0x0001_0F30...0x0001_0F6F,
+//    0x0001_EC70...0x0001_ECBF,
+//    0x0001_ED00...0x0001_ED4F,
+//    0x0001_EE00...0x0001_EEFF,
+//  ] {
+//    bidiData.set(Range(range), to: .AL)
+//  }
+//  // # The unassigned code points that default to R are in the ranges:
+//  // #     [\u0590-\u05FF \u07C0-\u085F \uFB1D-\uFB4F
+//  // #      \U00010800-\U00010CFF \U00010D40-\U00010F2F \U00010F70-\U00010FFF
+//  // #      \U0001E800-\U0001EC6F \U0001ECC0-\U0001ECFF \U0001ED50-\U0001EDFF \U0001EF00-\U0001EFFF]
+//  // #
+//  // #     This includes code points in the Hebrew, NKo, and Phoenician blocks, among others.
+//  for range: ClosedRange<UInt32> in [
+//    0x0590...0x05FF,
+//    0x07C0...0x085F,
+//    0xFB1D...0xFB4F,
+//    0x0001_0800...0x0001_0CFF,
+//    0x0001_0D40...0x0001_0F2F,
+//    0x0001_0F70...0x0001_0FFF,
+//    0x0001_E800...0x0001_EC6F,
+//    0x0001_ECC0...0x0001_ECFF,
+//    0x0001_ED50...0x0001_EDFF,
+//    0x0001_EF00...0x0001_EFFF,
+//  ] {
+//    bidiData.set(Range(range), to: .R)
+//  }
+//  // # The unassigned code points that default to ET are in the range:
+//  // #     [\u20A0-\u20CF]
+//  // #
+//  // #     This consists of code points in the Currency Symbols block.
+//  for range: ClosedRange<UInt32> in [
+//    0x20A0...0x20CF
+//  ] {
+//    bidiData.set(Range(range), to: .ET)
+//  }
+//  // # The unassigned code points that default to BN have one of the following properties:
+//  // #     Default_Ignorable_Code_Point
+//  // #     Noncharacter_Code_Point
+//  for codePoint in bidiData.bounds {
+//    guard let scalar = Unicode.Scalar(codePoint) else { continue }
+//    if scalar.properties.generalCategory == .unassigned,
+//      scalar.properties.isDefaultIgnorableCodePoint || scalar.properties.isNoncharacterCodePoint
+//    {
+//      bidiData.set(scalar.value..<scalar.value + 1, to: .BN)
+//    }
+//  }
+//  // # For all other cases:
+//  // #  All code points not explicitly listed for Bidi_Class
+//  // #  have the value Left_To_Right (L).

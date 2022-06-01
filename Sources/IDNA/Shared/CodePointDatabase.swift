@@ -58,7 +58,7 @@ internal protocol CodePointDatabase_Schema {
   /// If we need to split an entry, we need to calculate an adjusted value for the split region, otherwise
   /// we would loop and start rebasing from 'A' again. This function calculates those adjusted values.
   ///
-  /// The default behaviour is to simply return `data`. Most values do not care about their precise location
+  /// The default behavior is to simply return `data`. Most values do not care about their precise location
   /// in the database this way. If you don't use the `startCodePoint` portion of ``CodePointDatabase/LookupResult``,
   /// you don't need to care about this.
   ///
@@ -207,13 +207,13 @@ extension CodePointDatabase {
       return .ascii(Schema.ASCIIData(storage: _asciiData.withUnsafeBufferPointer { buf in buf[Int(scalar.value)] }))
     }
     if scalar.value < 0x01_0000 {
-      return _bmp_withIndexAndDataTable(containing: scalar) {
+      return _bmp_withIndexAndDataTable(containing: scalar.value) {
         codePointTable, dataTable, offsetWithinBMP in
         let k = codePointTable._codepointdatabase_partitionedIndex { offsetWithinBMP >= $0 } &- 1
         return .nonAscii(Schema.UnicodeData(storage: dataTable[k]), startCodePoint: UInt32(codePointTable[k]))
       }
     }
-    return _nonbmp_withIndexAndDataTable(containing: scalar) {
+    return _nonbmp_withIndexAndDataTable(containing: scalar.value) {
       codePointTable, dataTable, planeStart, offsetWithinPlane in
       let k = codePointTable._codepointdatabase_partitionedIndex { offsetWithinPlane >= $0 } &- 1
       let startCodePoint = planeStart | UInt32(codePointTable[k])
@@ -226,16 +226,17 @@ extension CodePointDatabase {
   //       rather than being stored like "offset: 0x0ABC in table: 0/1/2/...".
   @inlinable
   internal func _bmp_withIndexAndDataTable<T>(
-    containing scalar: Unicode.Scalar,
+    containing codePoint: UInt32,
     body: (
       _ codePointTable: UnsafeBufferPointer<UInt16>,
       _ dataTable: UnsafeBufferPointer<Schema.UnicodeData.RawStorage>,
       _ offsetWithinBMP: UInt16
     ) -> T
   ) -> T {
-    let offsetWithinBMP = UInt16(truncatingIfNeeded: scalar.value)
-    let subplane = offsetWithinBMP &>> 12
     return _bmpData.withUnsafeBufferPointer { subplaneSplitTables in
+      // Safety: 'subplane' only contains 4 bits of data after shifting, so is limited to 0..<16 (all valid indexes).
+      let offsetWithinBMP = UInt16(truncatingIfNeeded: codePoint)
+      let subplane = offsetWithinBMP &>> 12
       let dataForSubplane = subplaneSplitTables[Int(subplane)]
       return dataForSubplane.codePointTable.withUnsafeBufferPointer { codePointTable in
         return dataForSubplane.dataTable.withUnsafeBufferPointer { dataTable in
@@ -247,20 +248,22 @@ extension CodePointDatabase {
 
   @inlinable
   internal func _nonbmp_withIndexAndDataTable<T>(
-    containing scalar: Unicode.Scalar,
+    containing codePoint: UInt32,
     body: (
       _ codePointTable: UnsafeBufferPointer<UInt16>,
       _ dataTable: UnsafeBufferPointer<Schema.UnicodeData.RawStorage>,
       _ planeStart: UInt32, _ offsetWithinPlane: UInt16
     ) -> T
   ) -> T {
-    let (plane, offsetWithinPlane) = (scalar.value &>> 16, UInt16(truncatingIfNeeded: scalar.value))
-    let planeStart = plane &<< 16
     return _nonbmpData.withUnsafeBufferPointer { planeSplitTables in
-      let dataForPlane = planeSplitTables[Int(plane &- 1)]
+      // Safety: 'planeDataIdx' only contains 4 bits of data after masking, so is limited to 0..<16 (all valid indexes).
+      let planeDataIdx = UInt8(truncatingIfNeeded: (codePoint &>> 16) &- 1) & 0xF
+      let dataForPlane = planeSplitTables[Int(planeDataIdx)]
       return dataForPlane.codePointTable.withUnsafeBufferPointer { codePointTable in
         return dataForPlane.dataTable.withUnsafeBufferPointer { dataTable in
-          return body(codePointTable, dataTable, planeStart, offsetWithinPlane)
+          let startOfPlane = UInt32(planeDataIdx &+ 1) &<< 16
+          let offsetWithinPlane = UInt16(truncatingIfNeeded: codePoint)
+          return body(codePointTable, dataTable, startOfPlane, offsetWithinPlane)
         }
       }
     }
