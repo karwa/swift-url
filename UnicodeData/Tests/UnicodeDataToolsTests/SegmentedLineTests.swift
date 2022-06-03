@@ -1400,7 +1400,7 @@ extension SegmentedLineTests {
     ])
   }
 
-  func testCompactSegments() {
+  func testCombineSegmentsWhile() {
 
     // SegmentedLine does not automatically merge segments (Value does not need to be Equatable).
     // It is possible to have lots of segments all tagged with the same value.
@@ -1421,65 +1421,51 @@ extension SegmentedLineTests {
         (80..<100, "zero"),
       ])
 
-      // Merging is done explicitly via compactSegments.
-      line.compactSegments()
+      // We can explicitly fold segments via combineSegments.
+      line.combineSegments(while: { $0.value == $1.value })
       // swift-format-ignore
       XCTAssertSegments(line, [
         (0..<100, "zero"),
       ])
     }
 
-    // Line is already compacted.
-    // Should be a no-op.
+    // 'combineSegments' should visit every segment.
     do {
       var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "zero")
 
+      line.set(20..<80, to: "zero")
+      line.set(40..<60, to: "zero")
+      line.set(45..<55, to: "zero")
       // swift-format-ignore
       XCTAssertSegments(line, [
-        (0..<100, "zero")
-      ])
-      line.compactSegments()
-      // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<100, "zero")
-      ])
-
-      line.set(40..<60, to: "one")
-      // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<40,   "zero"),
-        (40..<60,  "one"),
-        (60..<100, "zero"),
-      ])
-      line.compactSegments()
-      // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<40,   "zero"),
-        (40..<60,  "one"),
-        (60..<100, "zero"),
+        (0..<20,   "zero"),
+        (20..<40,  "zero"),
+        (40..<45,  "zero"),
+        (45..<55,  "zero"),
+        (55..<60,  "zero"),
+        (60..<80,  "zero"),
+        (80..<100, "zero"),
       ])
 
-      line.set(45..<55, to: "two")
-      // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<40,   "zero"),
-        (40..<45,  "one"),
-        (45..<55,  "two"),
-        (55..<60,  "one"),
-        (60..<100, "zero"),
-      ])
-      line.compactSegments()
-      // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<40,   "zero"),
-        (40..<45,  "one"),
-        (45..<55,  "two"),
-        (55..<60,  "one"),
-        (60..<100, "zero"),
-      ])
+      let expectedSegments = Array(line.segments)
+      var visitedSegments = [(range: Range<Int>, value: String)]()
+      line.combineSegments(while: { accumulator, next in
+        if visitedSegments.count > 2 {
+          // Since we're not merging, 'accumulator' should be equal to 'next' from the previous call.
+          XCTAssertEqual(accumulator.range, visitedSegments.last?.range)
+          XCTAssertEqual(accumulator.value, visitedSegments.last?.value)
+        }
+        if visitedSegments.count == 0 { visitedSegments.append(accumulator) }
+        visitedSegments.append(next)
+        return false
+      })
+
+      let areEqual = expectedSegments.elementsEqual(visitedSegments) { $0.range == $1.range && $0.value == $1.value }
+      XCTAssertTrue(areEqual)
     }
 
-    // Merging is driven by the predicate.
+    // Folding merges segments while the closure returns 'true',
+    // but keeps the segment break and starts a new accumulator if the closure returns 'false'.
     do {
       var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "zero")
 
@@ -1498,7 +1484,7 @@ extension SegmentedLineTests {
       ])
 
       // No merge.
-      line.compactSegments(where: { _, _ in false })
+      line.combineSegments(while: { acc, _ in false })
       // swift-format-ignore
       XCTAssertSegments(line, [
         (0..<20,   "zero"),
@@ -1510,48 +1496,68 @@ extension SegmentedLineTests {
         (80..<100, "zero"),
       ])
 
-      // Merge everything (even non-equal values).
-      line.set(40..<60, to: "one")
+      // Merge in groups of 2
+      var count = 0
+      var lineCopy = line
+      lineCopy.combineSegments(while: { acc, _ in
+        count += 1
+        if count < 2 {
+          acc.value += "*"
+          return true
+        } else {
+          count = 0
+          return false
+        }
+      })
       // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<20,   "zero"),
-        (20..<40,  "zero"),
-        (40..<60,  "one"),
-        (60..<80,  "zero"),
-        (80..<100, "zero"),
-      ])
-      line.compactSegments(where: { _, _ in true })
-      // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<100, "zero"),
-      ])
-    }
-
-    // Duplicates at the start and end of the line.
-    do {
-      var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "zero")
-
-      line.set(20..<80, to: "zero")
-      line.set(40..<60, to: "one")
-      // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<20,   "zero"),
-        (20..<40,  "zero"),
-        (40..<60,  "one"),
-        (60..<80,  "zero"),
+      XCTAssertSegments(lineCopy, [
+        (0..<40,   "zero*"),
+        (40..<55,  "zero*"),
+        (55..<80,  "zero*"),
         (80..<100, "zero"),
       ])
 
-      line.compactSegments()
+      // Merge in groups of 3
+      count = 0
+      lineCopy = line
+      lineCopy.combineSegments(while: { acc, _ in
+        count += 1
+        if count < 3 {
+          acc.value += "*"
+          return true
+        } else {
+          count = 0
+          return false
+        }
+      })
       // swift-format-ignore
-      XCTAssertSegments(line, [
-        (0..<40,   "zero"),
-        (40..<60,  "one"),
-        (60..<100, "zero")
+      XCTAssertSegments(lineCopy, [
+        (0..<45,   "zero**"),
+        (45..<80,  "zero**"),
+        (80..<100, "zero"),
+      ])
+
+      // Merge in groups of 4
+      count = 0
+      lineCopy = line
+      lineCopy.combineSegments(while: { acc, _ in
+        count += 1
+        if count < 4 {
+          acc.value += "*"
+          return true
+        } else {
+          count = 0
+          return false
+        }
+      })
+      // swift-format-ignore
+      XCTAssertSegments(lineCopy, [
+        (0..<55,   "zero***"),
+        (55..<100, "zero**"),
       ])
     }
 
-    // A more complex pattern, some mixed-length runs of equal values.
+    // The closure is able to set the segment's value based on its bounds.
     do {
       var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "zero")
 
@@ -1575,7 +1581,93 @@ extension SegmentedLineTests {
         (90..<100, "one")
       ])
 
-      line.compactSegments()
+      line.combineSegments(while: { accumulator, next in
+        if accumulator.value.starts(with: next.value) {
+          // Mark when we fold a segment.
+          accumulator.value += "+"
+          return true
+        }
+        // Mark when we know the final range.
+        accumulator.value += " over \(accumulator.range)"
+        return false
+      })
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<20,   "zero+ over 0..<20"),
+        (20..<30,  "one over 20..<30"),
+        (30..<70,  "zero++ over 30..<70"),
+        (70..<80,  "one over 70..<80"),
+        (80..<90,  "zero over 80..<90"),
+        (90..<100, "one"),
+      ])
+    }
+
+    // The accumulator's range cannot be altered by the caller.
+    do {
+      var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "zero")
+
+      line.set(20..<80, to: "zero")
+      line.set(40..<60, to: "one")
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<20,   "zero"),
+        (20..<40,  "zero"),
+        (40..<60,  "one"),
+        (60..<80,  "zero"),
+        (80..<100, "zero"),
+      ])
+
+      var expectedRange = 0..<20
+      line.combineSegments(while: { accumulator, next in
+        XCTAssertEqual(accumulator.range, expectedRange)
+        // Calculate the expected range for next time and set the range to a bogus value.
+        if accumulator.value == next.value {
+          expectedRange = accumulator.range.lowerBound..<next.range.upperBound
+          accumulator.range = 5..<10
+          return true
+        } else {
+          expectedRange = next.range
+          accumulator.range = 14..<16
+          return false
+        }
+      })
+
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<40,   "zero"),
+        (40..<60,  "one"),
+        (60..<100, "zero"),
+      ])
+    }
+  }
+
+  func testCombineSegmentsEquatable() {
+
+    // Bonus test. Some mixed-length ranges.
+    do {
+      var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "zero")
+
+      line.set(10..<90, to: "zero")
+      line.set(20..<80, to: "zero")
+      line.set(30..<70, to: "zero")
+      line.set(40..<60, to: "zero")
+      line.set(20..<30, to: "one")
+      line.set(70..<80, to: "one")
+      line.set(90..<100, to: "one")
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<10,   "zero"),
+        (10..<20,  "zero"),
+        (20..<30,  "one"),
+        (30..<40,  "zero"),
+        (40..<60,  "zero"),
+        (60..<70,  "zero"),
+        (70..<80,  "one"),
+        (80..<90,  "zero"),
+        (90..<100, "one")
+      ])
+
+      line.combineSegments()
       // swift-format-ignore
       XCTAssertSegments(line, [
         (0..<20, "zero"),
@@ -1584,6 +1676,79 @@ extension SegmentedLineTests {
         (70..<80, "one"),
         (80..<90, "zero"),
         (90..<100, "one")
+      ])
+    }
+
+    // Duplicates at the start and end of the line.
+    do {
+      var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "zero")
+
+      line.set(20..<80, to: "zero")
+      line.set(40..<60, to: "one")
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<20,   "zero"),
+        (20..<40,  "zero"),
+        (40..<60,  "one"),
+        (60..<80,  "zero"),
+        (80..<100, "zero"),
+      ])
+
+      line.combineSegments()
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<40,   "zero"),
+        (40..<60,  "one"),
+        (60..<100, "zero")
+      ])
+    }
+
+    // Line is already compact. Should be a no-op.
+    do {
+      var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "zero")
+
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<100, "zero")
+      ])
+      line.combineSegments()
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<100, "zero")
+      ])
+
+      line.set(40..<60, to: "one")
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<40,   "zero"),
+        (40..<60,  "one"),
+        (60..<100, "zero"),
+      ])
+      line.combineSegments()
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<40,   "zero"),
+        (40..<60,  "one"),
+        (60..<100, "zero"),
+      ])
+
+      line.set(45..<55, to: "two")
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<40,   "zero"),
+        (40..<45,  "one"),
+        (45..<55,  "two"),
+        (55..<60,  "one"),
+        (60..<100, "zero"),
+      ])
+      line.combineSegments()
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<40,   "zero"),
+        (40..<45,  "one"),
+        (45..<55,  "two"),
+        (55..<60,  "one"),
+        (60..<100, "zero"),
       ])
     }
   }

@@ -168,7 +168,7 @@ extension SegmentedLine {
   ///
   /// Segments are created as needed when values are assigned or modified. Consecutive segments with the same value
   /// are _not_ automatically merged (there is not even any requirement that values are `Equatable`),
-  /// but they can be merged explicitly using the ``compactSegments(where:)`` function.
+  /// but they can be merged explicitly using the ``combineSegments(while:)`` function.
   ///
   @inlinable
   public var segments: Segments {
@@ -548,7 +548,7 @@ extension SegmentedLine {
   /// This function can be particularly effective at simplifying lines with lots of segments, as by mapping
   /// complex values to simplified ones (for example, mapping to an `enum` with fewer cases), we can discard
   /// information that isn't needed. This can lead to adjacent segments containing the same value more often,
-  /// to be compacted by ``compactSegments()``.
+  /// to be combined by ``combineSegments()``.
   ///
   /// ```swift
   /// // ℹ️ Imagine we have a complex SegmentedLine with lots of small segments
@@ -573,9 +573,9 @@ extension SegmentedLine {
   /// // | [0..<2]: valid | [2..<4]: valid | [4..<12]: valid | ...
   ///
   /// // 2️⃣ Notice that we have lots of segments for boundaries which
-  /// //    which are no longer important. 'compactSegments' can clean them up.
+  /// //    which are no longer important. 'combineSegments' can clean them up.
   ///
-  /// simplifiedLine.compactSegments()
+  /// simplifiedLine.combineSegments()
   /// print(simplifiedLine)
   /// // | [0..<2000]: valid | [2000..<2024]: invalid | [2024..<2056]: valid | ...
   /// ```
@@ -588,57 +588,44 @@ extension SegmentedLine {
     )
   }
 
-  /// Merges adjacent segments according to the given closure.
+  /// Merges segments according to the given closure.
   ///
-  /// The arguments to the closure are the values of two adjacent segments. If the closure returns `true`,
-  /// the segment containing the first argument (`running`) will consume the segment containing the latter
-  /// argument (`next`).
+  /// This function implements a left-fold, similar to Collection's `reduce`, except that the folding closure
+  /// can decide to preserve a segment break and reset the fold operation.
   ///
-  /// This function can be particularly effective at simplifying lines with lots of segments, as by mapping
-  /// complex values to simplified ones (for example, mapping to an `enum` with fewer cases) using ``mapValues(_:)``,
-  /// we can discard information that isn't needed. This can lead to adjacent segments containing the same value
-  /// more often - segments which can then be combined by this function.
+  /// The closure is invoked with two segments as arguments - an `accumulator`, which has a mutable value,
+  /// and `next`, which is its successor on this line. Given these segments, the closure may decide:
   ///
-  /// ```swift
-  /// // ℹ️ Imagine we have a complex SegmentedLine with lots of small segments
-  /// //    capturing granular details, and we'd like to simplify it.
+  /// - To combine `next` and `accumulator`.
   ///
-  /// enum ComplexData {
-  ///   case categoryA, categoryB, categoryC // ...
-  /// }
-  /// let complexLine: SegmentedLine<Int, ComplexData> = // ...
-  /// print(complexLine)
-  /// // | [0..<2]: categoryA | [2..<4]: categoryB | [4..<12]: categoryC | ...
+  ///   To fold segments, the closure performs any required adjustments to merge `next.value`
+  ///   in to `accumulator.value`, and returns `true`. The segment `next` will be discarded,
+  ///   and the accumulator's range will expand up to `next.range.upperBound`.
   ///
-  /// // 1️⃣ Perhaps we can map these to a smaller number of states.
+  ///   Folding continues with the same accumulator for as long as the closure returns `true`;
+  ///   this process is similar to Collection's `reduce(into:)` function.
   ///
-  /// enum SimplifiedData {
-  ///   case valid, invalid
-  /// }
-  /// var simplifiedLine = complexLine.mapValues { complex in
-  ///   SimplifiedData(validating: complex)
-  /// }
-  /// print(simplifiedLine)
-  /// // | [0..<2]: valid | [2..<4]: valid | [4..<12]: valid | ...
+  /// - To maintain the segment break.
   ///
-  /// // 2️⃣ Notice that we have lots of segments for boundaries which
-  /// //    which are no longer important. 'compactSegments' can clean them up.
-  ///
-  /// simplifiedLine.compactSegments()
-  /// print(simplifiedLine)
-  /// // | [0..<2000]: valid | [2000..<2024]: invalid | [2024..<2056]: valid | ...
-  /// ```
+  ///   If it is not desirable to combine the segments, the closure may return `false`.
+  ///   This finalizes the current accumulator, and restarts folding with `next` as the new accumulator.
   ///
   @inlinable
-  public mutating func compactSegments(where shouldMerge: (_ running: Value, _ next: Value) -> Bool) {
-    var reduced: [(Bound, Value)] = [_data[0]]
-    var lastValue = _data[0].value
-    for breakpoint in _data.dropFirst() {
-      if !shouldMerge(lastValue, breakpoint.value) {
-        reduced.append(breakpoint)
-        lastValue = breakpoint.value
+  public mutating func combineSegments(
+    while shouldMerge: (_ accumulator: inout Segments.Element, _ next: Segments.Element) -> Bool
+  ) {
+    var reduced: [BreakPoint] = []
+    var accumulator = segments[segments.startIndex]
+    for next in segments.dropFirst() {
+      let accumulatorStart = accumulator.range.lowerBound
+      if shouldMerge(&accumulator, next) {
+        accumulator.range = Range(uncheckedBounds: (accumulatorStart, next.range.upperBound))
+      } else {
+        reduced.append((accumulatorStart, accumulator.value))
+        accumulator = next
       }
     }
+    reduced.append((accumulator.range.lowerBound, accumulator.value))
     self._data = reduced
   }
 }
@@ -675,15 +662,15 @@ extension SegmentedLine where Value: Equatable {
   /// // | [0..<2]: valid | [2..<4]: valid | [4..<12]: valid | ...
   ///
   /// // 2️⃣ Notice that we have lots of segments for boundaries which
-  /// //    which are no longer important. 'compactSegments' can clean them up.
+  /// //    which are no longer important. 'combineSegments' can clean them up.
   ///
-  /// simplifiedLine.compactSegments()
+  /// simplifiedLine.combineSegments()
   /// print(simplifiedLine)
   /// // | [0..<2000]: valid | [2000..<2024]: invalid | [2024..<2056]: valid | ...
   /// ```
   ///
   @inlinable
-  public mutating func compactSegments() {
-    compactSegments(where: { $0 == $1 })
+  public mutating func combineSegments() {
+    combineSegments(while: { $0.value == $1.value })
   }
 }

@@ -510,7 +510,7 @@ extension IDNA {
           case .multiple(let idx):
             if position < idx.length {
               self._state = .serializeUnnormalized(mappedScalar, index: position + 1)
-              return idx.get(table: _idna_replacements_table)[position]
+              return idx.get(table: _idna_map_replacements_table)[position]
             } else {
               self._state = .decodeFromSource
             }
@@ -526,9 +526,9 @@ extension IDNA {
 
 @usableFromInline
 internal let _idna_db = CodePointDatabase<IDNAMappingData>(
-  asciiData: _idna_ascii,
-  bmpData: _idna_bmp_splitTables,
-  nonbmpData: _idna_nonbmp_splitTables
+  asciiData: _idna_map_ascii,
+  bmpData: _idna_map_bmp_splitTables,
+  nonbmpData: _idna_map_nonbmp_splitTables
 )
 
 extension IDNA {
@@ -716,9 +716,9 @@ extension IDNA {
 
 @usableFromInline
 internal let _validation_db = CodePointDatabase<IDNAValidationData>(
-  asciiData: _bidi_ascii,
-  bmpData: _bidi_bmp_splitTables,
-  nonbmpData: _bidi_nonbmp_splitTables
+  asciiData: _idna_validate_ascii,
+  bmpData: _idna_validate_bmp_splitTables,
+  nonbmpData: _idna_validate_nonbmp_splitTables
 )
 
 extension IDNA {

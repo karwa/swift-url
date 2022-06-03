@@ -19,7 +19,7 @@
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_ascii: [UInt8] = [
+internal let _idna_validate_ascii: [UInt8] = [
   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
   0x04, 0x06, 0x06, 0x06, 0x06, 0x06, 0x04, 0x04,
   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
@@ -37,11 +37,11 @@ internal let _bidi_ascii: [UInt8] = [
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x04, 0x04, 0x04, 0x04, 0x04,
 ]
-// _bidi_ascii size = 128 elements
+// _idna_validate_ascii size = 128 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_0: [UInt16] = [
+internal let _idna_validate_bmp_0: [UInt16] = [
   0x0080, 0x0085, 0x0086, 0x00AA, 0x00AB, 0x00AD, 0x00AE, 0x00B2, 0x00B4, 0x00B5,
   0x00B6, 0x00B9, 0x00BA, 0x00BB, 0x00C0, 0x00D7, 0x00D8, 0x00F7, 0x00F8, 0x02B9,
   0x02BB, 0x02C2, 0x02D0, 0x02D2, 0x02E0, 0x02E5, 0x02EE, 0x02EF, 0x0300, 0x0370,
@@ -87,11 +87,11 @@ internal let _bidi_bmp_0: [UInt16] = [
   0x0F40, 0x0F71, 0x0F7F, 0x0F80, 0x0F84, 0x0F85, 0x0F86, 0x0F88, 0x0F8D, 0x0F98,
   0x0F99, 0x0FBD, 0x0FC6, 0x0FC7,
 ]
-// _bidi_bmp_0 size = 434 elements
+// _idna_validate_bmp_0 size = 434 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_0: [UInt8] = [
+internal let _idna_validate_bmp_data_0: [UInt8] = [
   0x04, 0x06, 0x04, 0x00, 0x04, 0x0C, 0x04, 0x03,
   0x04, 0x00, 0x04, 0x03, 0x00, 0x04, 0x00, 0x04,
   0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04,
@@ -148,11 +148,11 @@ internal let _bidi_bmp_data_0: [UInt8] = [
   0xCD, 0x00, 0x8D, 0x00, 0x8D, 0x00, 0x8D, 0x00,
   0x8D, 0x00,
 ]
-// _bidi_bmp_data_0 size = 434 elements
+// _idna_validate_bmp_data_0 size = 434 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_1: [UInt16] = [
+internal let _idna_validate_bmp_1: [UInt16] = [
   0x1000, 0x102B, 0x102D, 0x1031, 0x1032, 0x1038, 0x1039, 0x103B, 0x103D, 0x103F,
   0x1056, 0x1058, 0x105A, 0x105E, 0x1061, 0x1062, 0x1065, 0x1067, 0x106E, 0x1071,
   0x1075, 0x1082, 0x1083, 0x1085, 0x1087, 0x108D, 0x108E, 0x108F, 0x1090, 0x109A,
@@ -173,11 +173,11 @@ internal let _bidi_bmp_1: [UInt16] = [
   0x1CF7, 0x1CF8, 0x1CFA, 0x1DC0, 0x1DFA, 0x1DFB, 0x1E00, 0x1FBD, 0x1FBE, 0x1FBF,
   0x1FC2, 0x1FCD, 0x1FD0, 0x1FDD, 0x1FE0, 0x1FED, 0x1FF0, 0x1FFD, 0x1FFF,
 ]
-// _bidi_bmp_1 size = 189 elements
+// _idna_validate_bmp_1 size = 189 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_1: [UInt8] = [
+internal let _idna_validate_bmp_data_1: [UInt8] = [
   0x00, 0x80, 0x8D, 0x80, 0x8D, 0x80, 0xCD, 0x80,
   0x8D, 0x00, 0x80, 0x8D, 0x00, 0x8D, 0x00, 0x80,
   0x00, 0x80, 0x00, 0x8D, 0x00, 0x8D, 0x80, 0x8D,
@@ -203,11 +203,11 @@ internal let _bidi_bmp_data_1: [UInt8] = [
   0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04,
   0x00, 0x04, 0x00, 0x04, 0x00,
 ]
-// _bidi_bmp_data_1 size = 189 elements
+// _idna_validate_bmp_data_1 size = 189 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_2: [UInt16] = [
+internal let _idna_validate_bmp_2: [UInt16] = [
   0x2000, 0x200B, 0x200C, 0x200E, 0x200F, 0x2010, 0x2028, 0x202A, 0x202F, 0x205F,
   0x2060, 0x2065, 0x2066, 0x206A, 0x2070, 0x2071, 0x2074, 0x207A, 0x207F, 0x2080,
   0x208A, 0x208F, 0x20A0, 0x20D0, 0x20F1, 0x2100, 0x2102, 0x2103, 0x2107, 0x2108,
@@ -219,11 +219,11 @@ internal let _bidi_bmp_2: [UInt16] = [
   0x2CF9, 0x2D00, 0x2D7F, 0x2D80, 0x2DE0, 0x2E00, 0x2E5E, 0x2E80, 0x2E9A, 0x2E9B,
   0x2EF4, 0x2F00, 0x2FD6, 0x2FF0, 0x2FFC,
 ]
-// _bidi_bmp_2 size = 95 elements
+// _idna_validate_bmp_2 size = 95 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_2: [UInt8] = [
+internal let _idna_validate_bmp_data_2: [UInt8] = [
   0x06, 0x0C, 0x04, 0x08, 0x09, 0x04, 0x06, 0x0E,
   0x04, 0x06, 0x0C, 0x04, 0x06, 0x0C, 0x03, 0x00,
   0x03, 0x04, 0x00, 0x03, 0x04, 0x00, 0x04, 0x8D,
@@ -237,116 +237,116 @@ internal let _bidi_bmp_data_2: [UInt8] = [
   0x04, 0x00, 0xCD, 0x00, 0x8D, 0x04, 0x00, 0x04,
   0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00,
 ]
-// _bidi_bmp_data_2 size = 95 elements
+// _idna_validate_bmp_data_2 size = 95 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_3: [UInt16] = [
+internal let _idna_validate_bmp_3: [UInt16] = [
   0x3000, 0x3001, 0x3005, 0x3008, 0x3021, 0x302A, 0x302E, 0x3030, 0x3031, 0x3036,
   0x3038, 0x303D, 0x3040, 0x3099, 0x309B, 0x309D, 0x30A0, 0x30A1, 0x30FB, 0x30FC,
   0x31C0, 0x31E4, 0x321D, 0x321F, 0x3250, 0x3260, 0x327C, 0x327F, 0x32B1, 0x32C0,
   0x32CC, 0x32D0, 0x3377, 0x337B, 0x33DE, 0x33E0, 0x33FF, 0x3400,
 ]
-// _bidi_bmp_3 size = 38 elements
+// _idna_validate_bmp_3 size = 38 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_3: [UInt8] = [
+internal let _idna_validate_bmp_data_3: [UInt8] = [
   0x06, 0x04, 0x00, 0x04, 0x00, 0x8D, 0x80, 0x04,
   0x00, 0x04, 0x00, 0x04, 0x00, 0x8D, 0x04, 0x00,
   0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00,
   0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00,
   0x04, 0x00, 0x04, 0x00, 0x04, 0x00,
 ]
-// _bidi_bmp_data_3 size = 38 elements
+// _idna_validate_bmp_data_3 size = 38 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_4: [UInt16] = [
+internal let _idna_validate_bmp_4: [UInt16] = [
   0x4000, 0x4DC0, 0x4E00,
 ]
-// _bidi_bmp_4 size = 3 elements
+// _idna_validate_bmp_4 size = 3 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_4: [UInt8] = [
+internal let _idna_validate_bmp_data_4: [UInt8] = [
   0x00, 0x04, 0x00,
 ]
-// _bidi_bmp_data_4 size = 3 elements
+// _idna_validate_bmp_data_4 size = 3 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_5: [UInt16] = [
+internal let _idna_validate_bmp_5: [UInt16] = [
   0x5000,
 ]
-// _bidi_bmp_5 size = 1 elements
+// _idna_validate_bmp_5 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_5: [UInt8] = [
+internal let _idna_validate_bmp_data_5: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_5 size = 1 elements
+// _idna_validate_bmp_data_5 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_6: [UInt16] = [
+internal let _idna_validate_bmp_6: [UInt16] = [
   0x6000,
 ]
-// _bidi_bmp_6 size = 1 elements
+// _idna_validate_bmp_6 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_6: [UInt8] = [
+internal let _idna_validate_bmp_data_6: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_6 size = 1 elements
+// _idna_validate_bmp_data_6 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_7: [UInt16] = [
+internal let _idna_validate_bmp_7: [UInt16] = [
   0x7000,
 ]
-// _bidi_bmp_7 size = 1 elements
+// _idna_validate_bmp_7 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_7: [UInt8] = [
+internal let _idna_validate_bmp_data_7: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_7 size = 1 elements
+// _idna_validate_bmp_data_7 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_8: [UInt16] = [
+internal let _idna_validate_bmp_8: [UInt16] = [
   0x8000,
 ]
-// _bidi_bmp_8 size = 1 elements
+// _idna_validate_bmp_8 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_8: [UInt8] = [
+internal let _idna_validate_bmp_data_8: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_8 size = 1 elements
+// _idna_validate_bmp_data_8 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_9: [UInt16] = [
+internal let _idna_validate_bmp_9: [UInt16] = [
   0x9000,
 ]
-// _bidi_bmp_9 size = 1 elements
+// _idna_validate_bmp_9 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_9: [UInt8] = [
+internal let _idna_validate_bmp_data_9: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_9 size = 1 elements
+// _idna_validate_bmp_data_9 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_10: [UInt16] = [
+internal let _idna_validate_bmp_10: [UInt16] = [
   0xA000, 0xA490, 0xA4C7, 0xA60D, 0xA610, 0xA66F, 0xA673, 0xA674, 0xA67E, 0xA680,
   0xA69E, 0xA6A0, 0xA6F0, 0xA6F2, 0xA700, 0xA722, 0xA788, 0xA789, 0xA802, 0xA803,
   0xA806, 0xA807, 0xA80B, 0xA80C, 0xA823, 0xA825, 0xA827, 0xA828, 0xA82C, 0xA82D,
@@ -359,11 +359,11 @@ internal let _bidi_bmp_10: [UInt16] = [
   0xAAC2, 0xAAEB, 0xAAEC, 0xAAEE, 0xAAF0, 0xAAF5, 0xAAF6, 0xAAF7, 0xAB6A, 0xAB6C,
   0xABE3, 0xABE5, 0xABE6, 0xABE8, 0xABE9, 0xABEB, 0xABEC, 0xABED, 0xABEE,
 ]
-// _bidi_bmp_10 size = 109 elements
+// _idna_validate_bmp_10 size = 109 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_10: [UInt8] = [
+internal let _idna_validate_bmp_data_10: [UInt8] = [
   0x00, 0x04, 0x00, 0x04, 0x00, 0x8D, 0x04, 0x8D,
   0x04, 0x00, 0x8D, 0x00, 0x8D, 0x00, 0x04, 0x00,
   0x04, 0x00, 0x8D, 0x00, 0xCD, 0x00, 0x8D, 0x00,
@@ -379,78 +379,78 @@ internal let _bidi_bmp_data_10: [UInt8] = [
   0xCD, 0x00, 0x04, 0x00, 0x80, 0x8D, 0x80, 0x8D,
   0x80, 0x00, 0x80, 0xCD, 0x00,
 ]
-// _bidi_bmp_data_10 size = 109 elements
+// _idna_validate_bmp_data_10 size = 109 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_11: [UInt16] = [
+internal let _idna_validate_bmp_11: [UInt16] = [
   0xB000,
 ]
-// _bidi_bmp_11 size = 1 elements
+// _idna_validate_bmp_11 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_11: [UInt8] = [
+internal let _idna_validate_bmp_data_11: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_11 size = 1 elements
+// _idna_validate_bmp_data_11 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_12: [UInt16] = [
+internal let _idna_validate_bmp_12: [UInt16] = [
   0xC000,
 ]
-// _bidi_bmp_12 size = 1 elements
+// _idna_validate_bmp_12 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_12: [UInt8] = [
+internal let _idna_validate_bmp_data_12: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_12 size = 1 elements
+// _idna_validate_bmp_data_12 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_13: [UInt16] = [
+internal let _idna_validate_bmp_13: [UInt16] = [
   0xD000,
 ]
-// _bidi_bmp_13 size = 1 elements
+// _idna_validate_bmp_13 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_13: [UInt8] = [
+internal let _idna_validate_bmp_data_13: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_13 size = 1 elements
+// _idna_validate_bmp_data_13 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_14: [UInt16] = [
+internal let _idna_validate_bmp_14: [UInt16] = [
   0xE000,
 ]
-// _bidi_bmp_14 size = 1 elements
+// _idna_validate_bmp_14 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_14: [UInt8] = [
+internal let _idna_validate_bmp_data_14: [UInt8] = [
   0x00,
 ]
-// _bidi_bmp_data_14 size = 1 elements
+// _idna_validate_bmp_data_14 size = 1 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_15: [UInt16] = [
+internal let _idna_validate_bmp_15: [UInt16] = [
   0xF000, 0xF870, 0xF880, 0xF884, 0xF89A, 0xF89F, 0xF8A0, 0xFB1D, 0xFB1E, 0xFB1F,
   0xFB29, 0xFB2A, 0xFD3E, 0xFD50, 0xFDCF, 0xFDF0, 0xFDFD, 0xFE00, 0xFE10, 0xFE1A,
   0xFE20, 0xFE30, 0xFE53, 0xFE54, 0xFE67, 0xFE68, 0xFE6C, 0xFE70, 0xFEFF, 0xFF00,
   0xFF01, 0xFF10, 0xFF1A, 0xFF21, 0xFF3B, 0xFF41, 0xFF5B, 0xFF66, 0xFFE0, 0xFFE7,
   0xFFE8, 0xFFEF, 0xFFF0, 0xFFF9, 0xFFFC,
 ]
-// _bidi_bmp_15 size = 45 elements
+// _idna_validate_bmp_15 size = 45 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_data_15: [UInt8] = [
+internal let _idna_validate_bmp_data_15: [UInt8] = [
   0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x01,
   0x8D, 0x01, 0x04, 0x01, 0x04, 0x01, 0x04, 0x01,
   0x04, 0x8D, 0x04, 0x00, 0x8D, 0x04, 0x00, 0x04,
@@ -458,33 +458,33 @@ internal let _bidi_bmp_data_15: [UInt8] = [
   0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00,
   0x04, 0x00, 0x04, 0x0C, 0x04,
 ]
-// _bidi_bmp_data_15 size = 45 elements
+// _idna_validate_bmp_data_15 size = 45 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_bmp_splitTables: [(codePointTable: [UInt16], dataTable: [UInt8])] = [
-  (codePointTable: _bidi_bmp_0, dataTable: _bidi_bmp_data_0),
-  (codePointTable: _bidi_bmp_1, dataTable: _bidi_bmp_data_1),
-  (codePointTable: _bidi_bmp_2, dataTable: _bidi_bmp_data_2),
-  (codePointTable: _bidi_bmp_3, dataTable: _bidi_bmp_data_3),
-  (codePointTable: _bidi_bmp_4, dataTable: _bidi_bmp_data_4),
-  (codePointTable: _bidi_bmp_5, dataTable: _bidi_bmp_data_5),
-  (codePointTable: _bidi_bmp_6, dataTable: _bidi_bmp_data_6),
-  (codePointTable: _bidi_bmp_7, dataTable: _bidi_bmp_data_7),
-  (codePointTable: _bidi_bmp_8, dataTable: _bidi_bmp_data_8),
-  (codePointTable: _bidi_bmp_9, dataTable: _bidi_bmp_data_9),
-  (codePointTable: _bidi_bmp_10, dataTable: _bidi_bmp_data_10),
-  (codePointTable: _bidi_bmp_11, dataTable: _bidi_bmp_data_11),
-  (codePointTable: _bidi_bmp_12, dataTable: _bidi_bmp_data_12),
-  (codePointTable: _bidi_bmp_13, dataTable: _bidi_bmp_data_13),
-  (codePointTable: _bidi_bmp_14, dataTable: _bidi_bmp_data_14),
-  (codePointTable: _bidi_bmp_15, dataTable: _bidi_bmp_data_15),
+internal let _idna_validate_bmp_splitTables: [(codePointTable: [UInt16], dataTable: [UInt8])] = [
+  (codePointTable: _idna_validate_bmp_0, dataTable: _idna_validate_bmp_data_0),
+  (codePointTable: _idna_validate_bmp_1, dataTable: _idna_validate_bmp_data_1),
+  (codePointTable: _idna_validate_bmp_2, dataTable: _idna_validate_bmp_data_2),
+  (codePointTable: _idna_validate_bmp_3, dataTable: _idna_validate_bmp_data_3),
+  (codePointTable: _idna_validate_bmp_4, dataTable: _idna_validate_bmp_data_4),
+  (codePointTable: _idna_validate_bmp_5, dataTable: _idna_validate_bmp_data_5),
+  (codePointTable: _idna_validate_bmp_6, dataTable: _idna_validate_bmp_data_6),
+  (codePointTable: _idna_validate_bmp_7, dataTable: _idna_validate_bmp_data_7),
+  (codePointTable: _idna_validate_bmp_8, dataTable: _idna_validate_bmp_data_8),
+  (codePointTable: _idna_validate_bmp_9, dataTable: _idna_validate_bmp_data_9),
+  (codePointTable: _idna_validate_bmp_10, dataTable: _idna_validate_bmp_data_10),
+  (codePointTable: _idna_validate_bmp_11, dataTable: _idna_validate_bmp_data_11),
+  (codePointTable: _idna_validate_bmp_12, dataTable: _idna_validate_bmp_data_12),
+  (codePointTable: _idna_validate_bmp_13, dataTable: _idna_validate_bmp_data_13),
+  (codePointTable: _idna_validate_bmp_14, dataTable: _idna_validate_bmp_data_14),
+  (codePointTable: _idna_validate_bmp_15, dataTable: _idna_validate_bmp_data_15),
 ]
-// _bidi_bmp_splitTables size = 16 elements
+// _idna_validate_bmp_splitTables size = 16 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_0: [UInt16] = [
+internal let _idna_validate_nonbmp_0: [UInt16] = [
   0x0000, 0x0101, 0x0102, 0x0140, 0x018D, 0x0190, 0x019D, 0x01A0, 0x01A1, 0x01FD,
   0x01FE, 0x02E0, 0x02E1, 0x02FC, 0x0376, 0x037B, 0x0800, 0x091F, 0x0920, 0x0A01,
   0x0A04, 0x0A05, 0x0A07, 0x0A0C, 0x0A10, 0x0A38, 0x0A3B, 0x0A3F, 0x0A40, 0x0AC0,
@@ -538,11 +538,11 @@ internal let _bidi_nonbmp_0: [UInt16] = [
   0xFA90, 0xFAAD, 0xFAB0, 0xFABB, 0xFAC0, 0xFAC6, 0xFAD0, 0xFADA, 0xFAE0, 0xFAE8,
   0xFAF0, 0xFAF7, 0xFB00, 0xFB93, 0xFB94, 0xFBCB, 0xFBF0, 0xFBFA, 0xFFFE,
 ]
-// _bidi_nonbmp_0 size = 519 elements
+// _idna_validate_nonbmp_0 size = 519 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_0: [UInt8] = [
+internal let _idna_validate_nonbmp_data_0: [UInt8] = [
   0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04,
   0x00, 0x8D, 0x00, 0x8D, 0x03, 0x00, 0x8D, 0x00,
   0x01, 0x04, 0x01, 0x8D, 0x01, 0x8D, 0x01, 0x8D,
@@ -609,237 +609,237 @@ internal let _bidi_nonbmp_data_0: [UInt8] = [
   0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00,
   0x04, 0x00, 0x04, 0x00, 0x03, 0x00, 0x04,
 ]
-// _bidi_nonbmp_data_0 size = 519 elements
+// _idna_validate_nonbmp_data_0 size = 519 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_1: [UInt16] = [
+internal let _idna_validate_nonbmp_1: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_1 size = 2 elements
+// _idna_validate_nonbmp_1 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_1: [UInt8] = [
+internal let _idna_validate_nonbmp_data_1: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_1 size = 2 elements
+// _idna_validate_nonbmp_data_1 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_2: [UInt16] = [
+internal let _idna_validate_nonbmp_2: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_2 size = 2 elements
+// _idna_validate_nonbmp_2 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_2: [UInt8] = [
+internal let _idna_validate_nonbmp_data_2: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_2 size = 2 elements
+// _idna_validate_nonbmp_data_2 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_3: [UInt16] = [
+internal let _idna_validate_nonbmp_3: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_3 size = 2 elements
+// _idna_validate_nonbmp_3 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_3: [UInt8] = [
+internal let _idna_validate_nonbmp_data_3: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_3 size = 2 elements
+// _idna_validate_nonbmp_data_3 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_4: [UInt16] = [
+internal let _idna_validate_nonbmp_4: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_4 size = 2 elements
+// _idna_validate_nonbmp_4 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_4: [UInt8] = [
+internal let _idna_validate_nonbmp_data_4: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_4 size = 2 elements
+// _idna_validate_nonbmp_data_4 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_5: [UInt16] = [
+internal let _idna_validate_nonbmp_5: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_5 size = 2 elements
+// _idna_validate_nonbmp_5 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_5: [UInt8] = [
+internal let _idna_validate_nonbmp_data_5: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_5 size = 2 elements
+// _idna_validate_nonbmp_data_5 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_6: [UInt16] = [
+internal let _idna_validate_nonbmp_6: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_6 size = 2 elements
+// _idna_validate_nonbmp_6 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_6: [UInt8] = [
+internal let _idna_validate_nonbmp_data_6: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_6 size = 2 elements
+// _idna_validate_nonbmp_data_6 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_7: [UInt16] = [
+internal let _idna_validate_nonbmp_7: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_7 size = 2 elements
+// _idna_validate_nonbmp_7 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_7: [UInt8] = [
+internal let _idna_validate_nonbmp_data_7: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_7 size = 2 elements
+// _idna_validate_nonbmp_data_7 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_8: [UInt16] = [
+internal let _idna_validate_nonbmp_8: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_8 size = 2 elements
+// _idna_validate_nonbmp_8 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_8: [UInt8] = [
+internal let _idna_validate_nonbmp_data_8: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_8 size = 2 elements
+// _idna_validate_nonbmp_data_8 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_9: [UInt16] = [
+internal let _idna_validate_nonbmp_9: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_9 size = 2 elements
+// _idna_validate_nonbmp_9 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_9: [UInt8] = [
+internal let _idna_validate_nonbmp_data_9: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_9 size = 2 elements
+// _idna_validate_nonbmp_data_9 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_10: [UInt16] = [
+internal let _idna_validate_nonbmp_10: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_10 size = 2 elements
+// _idna_validate_nonbmp_10 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_10: [UInt8] = [
+internal let _idna_validate_nonbmp_data_10: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_10 size = 2 elements
+// _idna_validate_nonbmp_data_10 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_11: [UInt16] = [
+internal let _idna_validate_nonbmp_11: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_11 size = 2 elements
+// _idna_validate_nonbmp_11 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_11: [UInt8] = [
+internal let _idna_validate_nonbmp_data_11: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_11 size = 2 elements
+// _idna_validate_nonbmp_data_11 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_12: [UInt16] = [
+internal let _idna_validate_nonbmp_12: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_12 size = 2 elements
+// _idna_validate_nonbmp_12 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_12: [UInt8] = [
+internal let _idna_validate_nonbmp_data_12: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_12 size = 2 elements
+// _idna_validate_nonbmp_data_12 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_13: [UInt16] = [
+internal let _idna_validate_nonbmp_13: [UInt16] = [
   0x0000, 0x0001, 0x0002, 0x0020, 0x0080, 0x0100, 0x01F0, 0x1000, 0xFFFE,
 ]
-// _bidi_nonbmp_13 size = 9 elements
+// _idna_validate_nonbmp_13 size = 9 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_13: [UInt8] = [
+internal let _idna_validate_nonbmp_data_13: [UInt8] = [
   0x04, 0x0C, 0x04, 0x0C, 0x04, 0x8D, 0x04, 0x00,
   0x04,
 ]
-// _bidi_nonbmp_data_13 size = 9 elements
+// _idna_validate_nonbmp_data_13 size = 9 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_14: [UInt16] = [
+internal let _idna_validate_nonbmp_14: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_14 size = 2 elements
+// _idna_validate_nonbmp_14 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_14: [UInt8] = [
+internal let _idna_validate_nonbmp_data_14: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_14 size = 2 elements
+// _idna_validate_nonbmp_data_14 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_15: [UInt16] = [
+internal let _idna_validate_nonbmp_15: [UInt16] = [
   0x0000, 0xFFFE,
 ]
-// _bidi_nonbmp_15 size = 2 elements
+// _idna_validate_nonbmp_15 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_data_15: [UInt8] = [
+internal let _idna_validate_nonbmp_data_15: [UInt8] = [
   0x00, 0x04,
 ]
-// _bidi_nonbmp_data_15 size = 2 elements
+// _idna_validate_nonbmp_data_15 size = 2 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _bidi_nonbmp_splitTables: [(codePointTable: [UInt16], dataTable: [UInt8])] = [
-  (codePointTable: _bidi_nonbmp_0, dataTable: _bidi_nonbmp_data_0),
-  (codePointTable: _bidi_nonbmp_1, dataTable: _bidi_nonbmp_data_1),
-  (codePointTable: _bidi_nonbmp_2, dataTable: _bidi_nonbmp_data_2),
-  (codePointTable: _bidi_nonbmp_3, dataTable: _bidi_nonbmp_data_3),
-  (codePointTable: _bidi_nonbmp_4, dataTable: _bidi_nonbmp_data_4),
-  (codePointTable: _bidi_nonbmp_5, dataTable: _bidi_nonbmp_data_5),
-  (codePointTable: _bidi_nonbmp_6, dataTable: _bidi_nonbmp_data_6),
-  (codePointTable: _bidi_nonbmp_7, dataTable: _bidi_nonbmp_data_7),
-  (codePointTable: _bidi_nonbmp_8, dataTable: _bidi_nonbmp_data_8),
-  (codePointTable: _bidi_nonbmp_9, dataTable: _bidi_nonbmp_data_9),
-  (codePointTable: _bidi_nonbmp_10, dataTable: _bidi_nonbmp_data_10),
-  (codePointTable: _bidi_nonbmp_11, dataTable: _bidi_nonbmp_data_11),
-  (codePointTable: _bidi_nonbmp_12, dataTable: _bidi_nonbmp_data_12),
-  (codePointTable: _bidi_nonbmp_13, dataTable: _bidi_nonbmp_data_13),
-  (codePointTable: _bidi_nonbmp_14, dataTable: _bidi_nonbmp_data_14),
-  (codePointTable: _bidi_nonbmp_15, dataTable: _bidi_nonbmp_data_15),
+internal let _idna_validate_nonbmp_splitTables: [(codePointTable: [UInt16], dataTable: [UInt8])] = [
+  (codePointTable: _idna_validate_nonbmp_0, dataTable: _idna_validate_nonbmp_data_0),
+  (codePointTable: _idna_validate_nonbmp_1, dataTable: _idna_validate_nonbmp_data_1),
+  (codePointTable: _idna_validate_nonbmp_2, dataTable: _idna_validate_nonbmp_data_2),
+  (codePointTable: _idna_validate_nonbmp_3, dataTable: _idna_validate_nonbmp_data_3),
+  (codePointTable: _idna_validate_nonbmp_4, dataTable: _idna_validate_nonbmp_data_4),
+  (codePointTable: _idna_validate_nonbmp_5, dataTable: _idna_validate_nonbmp_data_5),
+  (codePointTable: _idna_validate_nonbmp_6, dataTable: _idna_validate_nonbmp_data_6),
+  (codePointTable: _idna_validate_nonbmp_7, dataTable: _idna_validate_nonbmp_data_7),
+  (codePointTable: _idna_validate_nonbmp_8, dataTable: _idna_validate_nonbmp_data_8),
+  (codePointTable: _idna_validate_nonbmp_9, dataTable: _idna_validate_nonbmp_data_9),
+  (codePointTable: _idna_validate_nonbmp_10, dataTable: _idna_validate_nonbmp_data_10),
+  (codePointTable: _idna_validate_nonbmp_11, dataTable: _idna_validate_nonbmp_data_11),
+  (codePointTable: _idna_validate_nonbmp_12, dataTable: _idna_validate_nonbmp_data_12),
+  (codePointTable: _idna_validate_nonbmp_13, dataTable: _idna_validate_nonbmp_data_13),
+  (codePointTable: _idna_validate_nonbmp_14, dataTable: _idna_validate_nonbmp_data_14),
+  (codePointTable: _idna_validate_nonbmp_15, dataTable: _idna_validate_nonbmp_data_15),
 ]
-// _bidi_nonbmp_splitTables size = 16 elements
+// _idna_validate_nonbmp_splitTables size = 16 elements

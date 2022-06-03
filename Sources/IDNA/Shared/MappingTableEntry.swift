@@ -118,7 +118,7 @@ extension IDNAMappingData {
   /// An IDNA mapping table entry, describing the status of a range of code-points.
   ///
   @usableFromInline
-  internal struct UnicodeData: HasRawStorage {
+  internal struct UnicodeData: Equatable, HasRawStorage {
 
     @usableFromInline
     internal typealias RawStorage = UInt32

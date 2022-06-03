@@ -54,7 +54,7 @@ let header =
 let mappingDataFile = try String(contentsOf: URLOfUnicodeDataFile(named: "IdnaMappingTable")!)
 let mappingDB = IDNAMappingDatabase(parsing: mappingDataFile)
 do {
-  let swiftSourceFile = header + mappingDB.printAsSwiftSourceCode(name: "_idna")
+  let swiftSourceFile = header + mappingDB.printAsSwiftSourceCode(name: "_idna_map")
   try Data(swiftSourceFile.utf8).write(to: outputDir.appendingPathComponent("MappingData.swift", isDirectory: false))
 }
 
@@ -67,7 +67,7 @@ do {
     derivedBidiClassTxt: derivedBidiClassTxt,
     derivedJoiningTypeTxt: derivedJoiningTypeTxt
   )
-  let swiftSourceFile = header + db.printAsSwiftSourceCode(name: "_bidi")
+  let swiftSourceFile = header + db.printAsSwiftSourceCode(name: "_idna_validate")
   try Data(swiftSourceFile.utf8).write(to: outputDir.appendingPathComponent("ValidationData.swift", isDirectory: false))
 }
 print("Files generated in: \(outputDir)")

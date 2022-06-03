@@ -18,10 +18,37 @@
 /// as Swift source code. That's it.
 ///
 public struct IDNAMappingDatabase {
-
   internal var codePointDatabase: CodePointDatabase<IDNAMappingData>
   internal var replacementsTable: ReplacementsTable.Builder
-  // TODO: Include IDNA table version.
+}
+
+
+// --------------------------------------------
+// MARK: - Printing
+// --------------------------------------------
+
+
+extension IDNAMappingDatabase {
+
+  public func printAsSwiftSourceCode(name: String) -> String {
+    var output = ""
+    // We can print the replacements table as Unicode scalar literals
+    // and the compiler still constant-folds them \o/.
+    printArrayLiteral(
+      name: "\(name)_replacements_table",
+      elementType: "Unicode.Scalar",
+      data: replacementsTable.buildReplacementsTable(),
+      columns: 8,
+      formatter: { #""\u{\#($0.unprefixedHexString(format: .padded(toLength: 6)))}""# },
+      to: &output
+    )
+    output += "\n"
+    output += codePointDatabase.printAsSwiftSourceCode(name: name, using: DefaultFormatter<IDNAMappingData>.self)
+
+    precondition(output.last == "\n")
+    precondition(output.dropLast().last != "\n")
+    return output
+  }
 }
 
 
@@ -38,14 +65,16 @@ extension IDNAMappingDatabase {
   ///
   public init(parsing idnaMappingTableTxt: String) {
 
-    // - Parse Data File in to entries.
+    // - Parse Data File.
 
-    var parsedEntries = [ParsedIDNAMappingDataEntry]()
+    var mappingData = SegmentedLine<UInt32, RawIDNAMappingEntry>(
+      bounds: Range(0...0x10_FFFF), value: RawIDNAMappingEntry(status: .disallowed, replacements: nil)
+    )
     do {
       for line in idnaMappingTableTxt.split(separator: "\n").filter({ !$0.starts(with: "#") }) {
         let rawDataString = line.prefix { $0 != "#" }
         let comment = line[rawDataString.endIndex...].dropFirst()
-        guard let entry = ParsedIDNAMappingDataEntry(parsing: rawDataString) else {
+        guard let (codepoints, entry) = RawIDNAMappingEntry.parse(rawDataString) else {
           fatalError(
             """
             ⚠️ Failed to Parse Entry in Mapping Data! ⚠️
@@ -55,97 +84,250 @@ extension IDNAMappingDatabase {
             """
           )
         }
-        // TODO: Replace this merge step with SegmentedLine
-        // We do a bit of optimization here already, by merging contiguous entries as they are appended to the table
-        // and collapsing contiguous mappings. This can remove 1/3 of entries (from ~9000 to 6000).
-        if let last = parsedEntries.last, let merged = last.tryMerge(with: entry) {
-          parsedEntries[parsedEntries.index(before: parsedEntries.endIndex)] = merged
-        } else {
-          parsedEntries.append(entry)
+        mappingData.set(Range(codepoints), to: entry)
+      }
+      mappingData.combineSegments()
+    }
+
+    // - Create rebase mappings.
+
+    // If consecutive single-element segments map to consecutive scalars (e.g. "A" -> "a", "B" -> "b" ... "Z" -> "z"),
+    // we can create a single mapping which takes our offset in a segment and applies it to a new base.
+    // This reduces the number of entries by ~2000. In particular, it halves the size of the SMP table.
+    //
+    // However, these values depend on their segment location. That means we cannot alter segments
+    // after we create these things. Consider rebasing "A-Z" on to "a":
+    //
+    // | ["A"..<after("Z")]: rebase("a") |
+    //
+    // If we then do a SegmentedLine operation which split segments around "K", we would end up with the following:
+    //
+    // | ["A"..<"K"]: rebase("a") | ["K"..<"L"]: newValue | ["L"..<after("Z")]: rebase("a") |
+    //
+    // Which is not correct. "L" would be rebased to "a". We can't just trivially split these values
+    // and copy the new value to the new segment - we would need to calculate an adjusted value.
+    // We also can't combine them - two segments which each rebase to "a" can't just be merged as one big segment
+    // which is all rebased to "a"; we'd still need to reset the origin for rebased code-points in the second segment.
+    //
+    // So it's all very nice, but it means that other table optimizations should happen *BEFORE* creating
+    // rebase mappings.
+
+    mappingData.combineSegments { accumulator, next in
+      // Don't create rebase mappings for ASCII segments;
+      // we're only going to unpack them in the next step when we create the database.
+      guard next.range.upperBound > 0x80 else { return false }
+      switch (accumulator.value.status, next.value.status) {
+      case (.mapped, .mapped):
+        let accuMapping = accumulator.value.replacements!
+        let nextMapping = next.value.replacements!
+        precondition(accuMapping != nextMapping, "Should have been combined previously")
+        if accumulator.range.count == 1, next.range.count == 1,
+          accuMapping.count == 1, nextMapping.count == 1,
+          accuMapping[0] + 1 == nextMapping[0]
+        {
+          accumulator.value.status = .mapped_rebased
+          return true
         }
+        return false
+      case (.mapped_rebased, .mapped):
+        let accuMapping = accumulator.value.replacements!
+        let nextMapping = next.value.replacements!
+        if next.range.count == 1, nextMapping.count == 1,
+          accuMapping[0] + UInt32(accumulator.range.count) == nextMapping[0]
+        {
+          return true
+        }
+        return false
+      default:
+        return false
       }
     }
 
     // - Build database
 
-    // Split the raw mapping data in to separate tables:
-    //
-    // * A database of the IDNA status and mapping data associated with Unicode code-points.
-    //   For example, this tells us if a scalar is valid, or if it should be mapped or rejected.
-    //
-    // * A flattened array containing all the replacements.
-    //   One scalar might be replaced with many other scalars (X -> [A, B, C, D]). The longest is one
-    //   scalar which maps to a string of 18 replacement scalars. Some entries in the database store
-    //   their replacement info here.
-    //
-    var dbBuilder = CodePointDatabase<IDNAMappingData>.Builder()
-    var replacements = ReplacementsTable.Builder()
-
-    for parsedEntry in parsedEntries {
-      var parsedEntry = parsedEntry
-
-      // ASCII.
-      if parsedEntry.codePoints.lowerBound < 0x80 {
-        for asciiCodePoint in parsedEntry.codePoints.lowerBound...min(parsedEntry.codePoints.upperBound, 0x7F) {
-          let entry: IDNAMappingData.ASCIIData
-          switch parsedEntry.status {
-          case .valid:
-            entry = .valid
-          case .disallowed_STD3_valid:
-            entry = .disallowed_STD3_valid
-          case .mapped:
-            let mapping = parsedEntry.mapping!
-            precondition(mapping.count == 1, "ASCII codepoints should only map to a single other codepoint")
-            entry = .mapped(to: UInt8(mapping.first!))
-          case .mapped_rebased:
-            let offset = asciiCodePoint - parsedEntry.codePoints.lowerBound
-            let newOrigin = parsedEntry.mapping!.first!
-            entry = .mapped(to: UInt8(newOrigin + offset))
-          case .ignored, .disallowed, .disallowed_STD3_mapped, .deviation:
-            fatalError("Mapping types unused for ASCII codepoints")
-          }
-          dbBuilder.appendAscii(entry, for: asciiCodePoint)
+    var replacementsTable = ReplacementsTable.Builder()
+    let db = mappingData.generateTable(
+      IDNAMappingData.self,
+      mapAsciiValue: { entry in
+        switch entry.status {
+        case .valid:
+          return .valid
+        case .disallowed_STD3_valid:
+          return .disallowed_STD3_valid
+        case .mapped:
+          let mapping = entry.replacements!
+          precondition(mapping.count == 1, "ASCII codepoints should only map to a single other codepoint")
+          return .mapped(to: UInt8(mapping.first!))
+        case .ignored, .disallowed, .disallowed_STD3_mapped, .deviation, .mapped_rebased:
+          fatalError("Unexpected mapping type for ASCII codepoint")
         }
-        // Slice off the ASCII portion of the rawEntry; it has been handled.
-        guard parsedEntry.codePoints.upperBound >= 0x80 else { continue }
-        parsedEntry.codePoints = 0x80...parsedEntry.codePoints.upperBound
+      },
+      mapUnicodeValue: { entry in
+        switch entry.status {
+        case .valid:
+          return .init(.valid, .none)
+        case .ignored:
+          return .init(.ignored, .none)
+        case .disallowed:
+          return .init(.disallowed, .none)
+        case .disallowed_STD3_valid:
+          return .init(.disallowed_STD3_valid, .none)
+        case .deviation:
+          return .init(.deviation, entry.getOrInsertReplacementsIndex(in: &replacementsTable))
+        case .disallowed_STD3_mapped:
+          return .init(.disallowed_STD3_mapped, entry.getOrInsertReplacementsIndex(in: &replacementsTable)!)
+        case .mapped:
+          return .init(.mapped, entry.getOrInsertReplacementsIndex(in: &replacementsTable)!)
+        case .mapped_rebased:
+          return .init(.mapped, .rebased(origin: entry.replacements!.first!))
+        }
       }
+    )
 
-      precondition(!parsedEntry.codePoints.isEmpty, "Cannot process an empty mapping entry!")
+    // - Done!
 
-      // Non-ASCII.
-      let entry: IDNAMappingData.UnicodeData
-      switch parsedEntry.status {
-      case .valid:
-        entry = .init(.valid, .none)
-      case .ignored:
-        entry = .init(.ignored, .none)
-      case .disallowed:
-        entry = .init(.disallowed, .none)
-      case .disallowed_STD3_valid:
-        entry = .init(.disallowed_STD3_valid, .none)
+    self.codePointDatabase = db
+    self.replacementsTable = replacementsTable
+    self.validate()
+  }
+}
+
+private struct RawIDNAMappingEntry: Equatable {
+
+  var status: Status
+  var replacements: [UInt32]?
+
+  enum Status: String {
+
+    /// The code point is valid, and not modified.
+    case valid = "valid"
+
+    /// The code point is removed: this is equivalent to mapping the code point to an empty string.
+    case ignored = "ignored"
+
+    /// The code point is replaced in the string by the value for the mapping.
+    case mapped = "mapped"
+
+    /// The code point is either mapped or valid, depending on whether the processing is transitional or not.
+    case deviation = "deviation"
+
+    /// The code point is not allowed.
+    case disallowed = "disallowed"
+
+    /// The status is disallowed if `UseSTD3ASCIIRules=true` (the normal case);
+    /// implementations that allow `UseSTD3ASCIIRules=false` would treat the code point as **valid**.
+    case disallowed_STD3_valid = "disallowed_STD3_valid"
+
+    /// the status is disallowed if `UseSTD3ASCIIRules=true` (the normal case);
+    /// implementations that allow `UseSTD3ASCIIRules=false` would treat the code point as **mapped**.
+    case disallowed_STD3_mapped = "disallowed_STD3_mapped"
+
+    case mapped_rebased = "___weburl___mapped_rebased___"
+  }
+
+  /// Parses the code-points, status and mapping from a given line of the IDNA mapping table.
+  /// The given line must be stripped of its trailing comment.
+  ///
+  /// For example:
+  ///
+  /// ```
+  /// 00B8          ; disallowed_STD3_mapped ; 0020 0327
+  /// 00B9          ; mapped                 ; 0031
+  /// 00BA          ; mapped                 ; 006F
+  /// 00BB          ; valid                  ;      ; NV8
+  /// 00BC          ; mapped                 ; 0031 2044 0034
+  /// 00BD          ; mapped                 ; 0031 2044 0032
+  /// 00E0..00F6    ; valid
+  /// ```
+  ///
+  /// The validation here is minimal. The input data is presumed to be a correctly-formatted Unicode data table.
+  ///
+  static func parse(_ tableData: Substring) -> (codePoints: ClosedRange<UInt32>, data: RawIDNAMappingEntry)? {
+
+    let components = tableData.split(separator: ";").map { $0.trimmingSpaces }
+    guard components.count >= 2 else { return nil }
+
+    let codePoints: ClosedRange<UInt32>
+    let status: Status
+    let replacements: [UInt32]?
+
+    parseCodePoints: do {
+      guard let _codePoints = ParsingHelpers.parseCodePointRange(components[0]) else { return nil }
+      codePoints = _codePoints
+    }
+    parseStatus: do {
+      guard let _status = Status(rawValue: String(components[1])) else { return nil }
+      status = _status
+    }
+    if case .mapped_rebased = status {
+      fatalError("Rebased status cannot be used when parsing")
+    }
+    parseReplacements: do {
+      let replacementsString: Substring
+      switch status {
+      case .valid, .ignored, .disallowed, .disallowed_STD3_valid, .mapped_rebased:
+        // No replacements.
+        replacements = nil
+        break parseReplacements
       case .deviation:
-        entry = .init(.deviation, parsedEntry.mapping.map { .insertIfNeeded($0, into: &replacements) })
-      case .disallowed_STD3_mapped:
-        entry = .init(.disallowed_STD3_mapped, .insertIfNeeded(parsedEntry.mapping!, into: &replacements))
-      case .mapped:
-        entry = .init(.mapped, .insertIfNeeded(parsedEntry.mapping!, into: &replacements))
-      case .mapped_rebased:
-        entry = .init(.mapped, .rebased(origin: parsedEntry.mapping!.first!))
+        // May specify replacements.
+        replacementsString = components[2]
+        if replacementsString.isEmpty {
+          replacements = nil
+          break parseReplacements
+        }
+      case .mapped, .disallowed_STD3_mapped:
+        // Must specify replacements.
+        replacementsString = components[2]
+        break
       }
-      dbBuilder.appendUnicode(entry, for: parsedEntry.codePoints)
+
+      guard !replacementsString.isEmpty else { return nil }
+      do {
+        struct InvalidNumber: Error {}
+        replacements = try replacementsString.split(separator: " ").map {
+          try UInt32($0, radix: 16) ?? { throw InvalidNumber() }()
+        }
+        precondition(replacements?.isEmpty == false)
+      } catch {
+        return nil
+      }
     }
 
-    let db = dbBuilder.finalize()
+    return (codePoints, RawIDNAMappingEntry(status: status, replacements: replacements))
+  }
 
-    // - Validate
+  fileprivate func getOrInsertReplacementsIndex(
+    in replacementsBuilder: inout ReplacementsTable.Builder
+  ) -> IDNAMappingData.UnicodeData.Mapping? {
+
+    guard let replacements = replacements, !replacements.isEmpty else {
+      return nil
+    }
+    if replacements.count == 1 {
+      return .single(replacements.first!)
+    } else {
+      return .table(replacementsBuilder.insert(mapping: replacements))
+    }
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Validation
+// --------------------------------------------
+// TODO: This should become some sort of test, I think?
+
+
+extension IDNAMappingDatabase {
+
+  fileprivate func validate() {
 
     for codePoint in 0...0x10FFFF {
-      guard let scalar = Unicode.Scalar(codePoint) else {
-        continue
-      }
 
-      switch db[scalar] {
+      guard let scalar = Unicode.Scalar(codePoint) else { continue }
+
+      switch codePointDatabase[scalar] {
       case .ascii(let entry):
         precondition(codePoint < 0x80)
         // Certain statuses must have a replacement, others must not have a replacement.
@@ -188,66 +370,24 @@ extension IDNAMappingDatabase {
           let replacement = newOrigin + distance
           precondition(Unicode.Scalar(replacement) != nil, "\(codePoint) rebased to invalid scalar \(replacement)")
         case .table(let index):
-          precondition(replacements.isInBounds(index), "Replacement table index is out of bounds!")
+          precondition(replacementsTable.isInBounds(index), "Replacement table index is out of bounds!")
         }
 
       // TODO: Check the status data against the raw mapping entries from the parser.
       }
     }
 
-    // - Done!
-
-    self.codePointDatabase = db
-    self.replacementsTable = replacements
-  }
-}
-
-extension IDNAMappingData.UnicodeData.Mapping {
-
-  /// Processes a single, raw replacement mapping.
-  ///
-  /// If the replacement is another single scalar, it is stored in-line.
-  /// Otherwise, it is inserted in to the given replacements table and stored as an index in to that table.
-  ///
-  fileprivate static func insertIfNeeded(
-    _ rawMapping: [UInt32], into replacements: inout ReplacementsTable.Builder
-  ) -> IDNAMappingData.UnicodeData.Mapping {
-
-    if rawMapping.count == 1 {
-      return .single(rawMapping.first!)
+    // Check that we don't create rebase mappings for consecutive scalars if one mapping is a many-to-one.
+    // This actually happens - we can have one codepoint mapped to "g", then 4 codepoints all mapped to "h".
+    // We shouldn't generate a rebase mapping in that case.
+    if case .nonAscii(IDNAMappingData.UnicodeData(.mapped, .single(0x67)), 0x210A) = codePointDatabase["\u{210A}"],
+      case .nonAscii(IDNAMappingData.UnicodeData(.mapped, .single(0x68)), 0x210B) = codePointDatabase["\u{210B}"],
+      case .nonAscii(IDNAMappingData.UnicodeData(.mapped, .single(0x68)), 0x210B) = codePointDatabase["\u{210C}"],
+      case .nonAscii(IDNAMappingData.UnicodeData(.mapped, .single(0x68)), 0x210B) = codePointDatabase["\u{210D}"],
+      case .nonAscii(IDNAMappingData.UnicodeData(.mapped, .single(0x68)), 0x210B) = codePointDatabase["\u{210E}"]
+    {
     } else {
-      precondition(rawMapping.count > 1, "Raw mappings must not be empty")
-      return .table(replacements.insert(mapping: rawMapping))
+      assertionFailure("Unexpected mapping data")
     }
-  }
-}
-
-
-// --------------------------------------------
-// MARK: - Printing
-// --------------------------------------------
-
-
-extension IDNAMappingDatabase {
-
-  public func printAsSwiftSourceCode(name: String) -> String {
-    var output = ""
-    // We can print the replacements table as Unicode scalar literals and the compiler still constant-folds them \o/.
-    printArrayLiteral(
-      name: "\(name)_replacements_table",
-      elementType: "Unicode.Scalar",
-      data: replacementsTable.buildReplacementsTable(),
-      columns: 8,
-      formatter: { #""\u{\#($0.unprefixedHexString(format: .padded(toLength: 6)))}""# },
-      to: &output
-    )
-    output += "\n"
-    output += codePointDatabase.printAsSwiftSourceCode(name: name, using: DefaultFormatter<IDNAMappingData>.self)
-
-    // Fix up trailing newlines.
-    precondition(output.last == "\n")
-    output.removeLast()
-    precondition(output.last != "\n")
-    return output
   }
 }

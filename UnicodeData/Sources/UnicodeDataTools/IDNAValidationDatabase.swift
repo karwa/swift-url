@@ -30,11 +30,9 @@ public struct IDNAValidationDatabase {
 extension IDNAValidationDatabase {
 
   public func printAsSwiftSourceCode(name: String) -> String {
-    var output = codePointDatabase.printAsSwiftSourceCode(name: name, using: DefaultFormatter<IDNAValidationData>.self)
-    // Fix up trailing newlines.
+    let output = codePointDatabase.printAsSwiftSourceCode(name: name, using: DefaultFormatter<IDNAValidationData>.self)
     precondition(output.last == "\n")
-    output.removeLast()
-    precondition(output.last != "\n")
+    precondition(output.dropLast().last != "\n")
     return output
   }
 }
@@ -78,7 +76,7 @@ extension IDNAValidationDatabase {
         }
         bidiData.set(Range(entry.codePoints), to: entry.value)
       }
-      bidiData.compactSegments()
+      bidiData.combineSegments()
     }
     do {
       for line in derivedJoiningTypeTxt.split(separator: "\n").filter({ !$0.starts(with: "#") }) {
@@ -96,10 +94,10 @@ extension IDNAValidationDatabase {
         }
         joiningData.set(Range(entry.codePoints), to: entry.value)
       }
-      joiningData.compactSegments()
+      joiningData.combineSegments()
     }
 
-    // - Create a combined data-set.
+    // - Create a merged data-set.
 
     // a. Start with the Bidi_Class data.
     var validationData: SegmentedLine<UInt32, IDNAValidationData.ValidationFlags> = bidiData.mapValues { parsedInfo in
@@ -131,9 +129,9 @@ extension IDNAValidationDatabase {
       }
     }
 
-    // - Create a DB out of the combined, compacted data.
+    // - Create a DB out of the combined data.
 
-    validationData.compactSegments()
+    validationData.combineSegments()
 
     self.codePointDatabase = validationData.generateTable(
       IDNAValidationData.self,
@@ -225,74 +223,3 @@ private enum RawJoiningType: String {
     }
   }
 }
-
-// TODO: Do we need to set unassigned code points? Surely they will be rejected by the mapping table.
-
-//  // - First, set some defaults for unassigned code points.
-//
-//  // # Unlike other properties, unassigned code points in blocks
-//  // # reserved for right-to-left scripts are given either types R or AL.
-//  // #
-//  // # The unassigned code points that default to AL are in the ranges:
-//  // #     [\u0600-\u07BF \u0860-\u08FF \uFB50-\uFDCF \uFDF0-\uFDFF \uFE70-\uFEFF
-//  // #      \U00010D00-\U00010D3F \U00010F30-\U00010F6F
-//  // #      \U0001EC70-\U0001ECBF \U0001ED00-\U0001ED4F \U0001EE00-\U0001EEFF]
-//  // #
-//  // #     This includes code points in the Arabic, Syriac, and Thaana blocks, among others.
-//  for range: ClosedRange<UInt32> in [
-//    0x0600...0x07BF,
-//    0x0860...0x08FF,
-//    0xFB50...0xFDCF,
-//    0xFDF0...0xFDFF,
-//    0xFE70...0xFEFF,
-//    0x0001_0D00...0x0001_0D3F,
-//    0x0001_0F30...0x0001_0F6F,
-//    0x0001_EC70...0x0001_ECBF,
-//    0x0001_ED00...0x0001_ED4F,
-//    0x0001_EE00...0x0001_EEFF,
-//  ] {
-//    bidiData.set(Range(range), to: .AL)
-//  }
-//  // # The unassigned code points that default to R are in the ranges:
-//  // #     [\u0590-\u05FF \u07C0-\u085F \uFB1D-\uFB4F
-//  // #      \U00010800-\U00010CFF \U00010D40-\U00010F2F \U00010F70-\U00010FFF
-//  // #      \U0001E800-\U0001EC6F \U0001ECC0-\U0001ECFF \U0001ED50-\U0001EDFF \U0001EF00-\U0001EFFF]
-//  // #
-//  // #     This includes code points in the Hebrew, NKo, and Phoenician blocks, among others.
-//  for range: ClosedRange<UInt32> in [
-//    0x0590...0x05FF,
-//    0x07C0...0x085F,
-//    0xFB1D...0xFB4F,
-//    0x0001_0800...0x0001_0CFF,
-//    0x0001_0D40...0x0001_0F2F,
-//    0x0001_0F70...0x0001_0FFF,
-//    0x0001_E800...0x0001_EC6F,
-//    0x0001_ECC0...0x0001_ECFF,
-//    0x0001_ED50...0x0001_EDFF,
-//    0x0001_EF00...0x0001_EFFF,
-//  ] {
-//    bidiData.set(Range(range), to: .R)
-//  }
-//  // # The unassigned code points that default to ET are in the range:
-//  // #     [\u20A0-\u20CF]
-//  // #
-//  // #     This consists of code points in the Currency Symbols block.
-//  for range: ClosedRange<UInt32> in [
-//    0x20A0...0x20CF
-//  ] {
-//    bidiData.set(Range(range), to: .ET)
-//  }
-//  // # The unassigned code points that default to BN have one of the following properties:
-//  // #     Default_Ignorable_Code_Point
-//  // #     Noncharacter_Code_Point
-//  for codePoint in bidiData.bounds {
-//    guard let scalar = Unicode.Scalar(codePoint) else { continue }
-//    if scalar.properties.generalCategory == .unassigned,
-//      scalar.properties.isDefaultIgnorableCodePoint || scalar.properties.isNoncharacterCodePoint
-//    {
-//      bidiData.set(scalar.value..<scalar.value + 1, to: .BN)
-//    }
-//  }
-//  // # For all other cases:
-//  // #  All code points not explicitly listed for Bidi_Class
-//  // #  have the value Left_To_Right (L).
