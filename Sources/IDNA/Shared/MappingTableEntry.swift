@@ -194,6 +194,14 @@ extension IDNAMappingData {
     }
   }
 
+  // Indexing.
+
+  @inlinable @inline(__always)
+  internal static var BMPIndexBits: Int {
+    // TODO: See if we can make more effective use of the index by chopping out the enormous single CJK entry.
+    7
+  }
+
   // Location-sensitive data.
 
   @inlinable

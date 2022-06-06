@@ -38,11 +38,30 @@ internal protocol HasRawStorage {
 @usableFromInline
 internal protocol CodePointDatabase_Schema {
 
-  /// The type of data that is stored for ASCII code-points.
-  associatedtype ASCIIData: HasRawStorage
-
-  /// The type of data that is stored for non-ASCII code-points.
+  /// The type of data that is stored for Unicode code-points.
+  ///
+  /// The data will be stored in the database in its `RawStorage` form,
+  /// and transparently mapped to its interface type.
+  ///
   associatedtype UnicodeData: HasRawStorage
+
+  /// The type of data that is stored for ASCII code-points.
+  ///
+  /// The data will be stored in the database in its `RawStorage` form,
+  /// and transparently mapped to its interface type.
+  ///
+  associatedtype ASCIIData: HasRawStorage = UnicodeData
+
+  /// How many bits to index from BMP code-points.
+  ///
+  /// Indexing more bits means taking more samples from the location table, reducing the space which needs
+  /// to be binary-searched. However, the number of samples required to index N bits is `(2^N) + 1`,
+  /// so it doubles in size for each additional bit we index.
+  ///
+  /// The default is to index 6 bits, giving 64 samples (130 bytes, since samples are 16 bits each).
+  /// Each database may decide to index more or fewer bits.
+  ///
+  static var BMPIndexBits: Int { get }
 
   /// (Optional) Returns a copy of the given non-ASCII data, adjusted to apply to a different start location.
   ///
@@ -70,6 +89,9 @@ internal protocol CodePointDatabase_Schema {
 extension CodePointDatabase_Schema {
 
   @inlinable
+  internal static var BMPIndexBits: Int { 6 }
+
+  @inlinable
   internal static func unicodeData(
     _ data: UnicodeData, at originalStart: UInt32, copyForStartingAt newStartPoint: UInt32
   ) -> UnicodeData {
@@ -84,7 +106,7 @@ extension CodePointDatabase_Schema {
 
 
 // swift-format-ignore
-/// A static database of information about Unicode code-points.
+/// An immutable database of information about Unicode code-points.
 ///
 /// Databases can be constructed using a `CodePointDatabase.Builder`, after which they may be queried,
 /// or printed as a Swift source file.
@@ -93,10 +115,27 @@ extension CodePointDatabase_Schema {
 ///
 /// - A direct lookup for ASCII code-points, to values of the `Schema.ASCIIData` type.
 ///
-/// - A 4:12 2-stage lookup for BMP code-points, to values of the `Schema.UnicodeData` type.
+/// - A 2-stage, indexed lookup for BMP code-points, to values of the `Schema.UnicodeData` type.
 ///
-/// - A per-plane lookup table for non-BMP code-points, using compressed 16-bit entries,
-///   to values of the `Schema.UnicodeData` type.
+///   The top N bits of the code-point are indexed, where N is chosen by the Schema.
+///   This means a O(1), branchless reduction in the search space to a block of entries covering 2^(16 - N) code-points.
+///   For a list of `n` elements, a binary-search requires a maximum of `log2(n)` comparisons,
+///   meaning that in the worst case, when every code-point has an individual data entry, we would need a maximum
+///   of (16 - N) comparisons to locate the data for an arbitrary code-point.
+///
+///   Often it will be much fewer than that, because the data entries are grouped in to regions.
+///   For example, the IDNA mapping table has about 4000 entries for all 2^16 code-points in the BMP.
+///   Code-point and data tables are split to avoid padding and improve cache performance.
+///
+/// - Per-plane binary-searched tables for non-BMP code-points, to values of the `Schema.UnicodeData` type.
+///
+///   Most planes outside the BMP are [not assigned](https://en.wikipedia.org/wiki/Plane_(Unicode)), but
+///   the ones that are include plane 1, the SMP (mostly historic scripts and emoji), and planes 2 and 3 -
+///   the SIP and TIP respectively, containing CJK ideographs.
+///
+///   Per-plane tables means we can represent code-points as 16-bit values, which more efficiently
+///   packs their contents and improves cache utilization. Code-point and data tables are split
+///   to avoid padding and also improve cache performance.
 ///
 @usableFromInline
 internal struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
@@ -104,23 +143,28 @@ internal struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
   @usableFromInline
   internal typealias SplitTable<CodePoint, Data> = (codePointTable: [CodePoint], dataTable: [Data])
 
-  @usableFromInline internal var _asciiData : [Schema.ASCIIData.RawStorage]
-  @usableFromInline internal var _bmpData   : [SplitTable<UInt16, Schema.UnicodeData.RawStorage>]
-  @usableFromInline internal var _nonbmpData: [SplitTable<UInt16, Schema.UnicodeData.RawStorage>]
+  @usableFromInline internal let _asciiData  : [Schema.ASCIIData.RawStorage]
+  @usableFromInline internal let _bmpData    : IndexedTable<BMPIndex, Schema.UnicodeData.RawStorage>
+  @usableFromInline internal let _nonbmpData : [SplitTable<UInt16, Schema.UnicodeData.RawStorage>]
 
   /// Initializes a database from static data.
   ///
   @inlinable
   internal init(
     asciiData : [Schema.ASCIIData.RawStorage],
-    bmpData   : [SplitTable<UInt16, Schema.UnicodeData.RawStorage>],
+    bmpIndex  : [BMPIndex.IndexStorage],
+    bmpData   : SplitTable<UInt16, Schema.UnicodeData.RawStorage>,
     nonbmpData: [SplitTable<UInt16, Schema.UnicodeData.RawStorage>]
   ) {
     self._asciiData = asciiData
-    self._bmpData = bmpData
+    self._bmpData = IndexedTable<BMPIndex, Schema.UnicodeData.RawStorage>(
+      uncheckedIndex: bmpIndex,
+      columnValues: bmpData.codePointTable,
+      dataValues: bmpData.dataTable
+    )
     self._nonbmpData = nonbmpData
     #if DEBUG
-      validateStructure()
+      self.validateStructure()
     #endif
   }
 }
@@ -140,38 +184,23 @@ extension CodePointDatabase {
   ///
   @usableFromInline
   internal func validateStructure() {
-    do {
-      precondition(_asciiData.count == 128)
-      precondition(_bmpData.count == 16)
-      precondition(_nonbmpData.count == 16)
-    }
-    // Check that the lengths of the split arrays are equal.
-    // This means a valid position in the index table is a valid position in the entry table,
-    // and we don't need to bounds-check when using a position from one table in the other table.
-    do {
-      for splitTable in _bmpData {
-        precondition(
-          splitTable.codePointTable.count == splitTable.dataTable.count,
-          "The split index and entry tables must have the same number of elements"
-        )
-      }
-      for splitTable in _nonbmpData {
-        precondition(
-          splitTable.codePointTable.count == splitTable.dataTable.count,
-          "The split index and entry tables must have the same number of elements"
-        )
-      }
-    }
-    // Every plane/sub-plane table must have at least one entry, for the start of the plane/sub-plane.
-    do {
-      var bmpIter = _bmpData.enumerated().makeIterator()
-      precondition(bmpIter.next()?.element.codePointTable[0] == 0x80, "The first BMP sub-plane should start at 0x80")
-      while let (subplane, splitTable) = bmpIter.next() {
-        precondition(splitTable.codePointTable[0] == (subplane << 12))
-      }
-      for splitTable in _nonbmpData {
-        precondition(splitTable.codePointTable[0] == 0)
-      }
+
+    // ASCII.
+    precondition(_asciiData.count == 128)
+    // BMP.
+    _bmpData.validate()
+    // Non-BMP.
+    precondition(_nonbmpData.count == 16)
+    for splitTable in _nonbmpData {
+      // Check that the lengths of the split arrays are equal.
+      // This means a valid position in the index table is a valid position in the entry table,
+      // and we don't need to bounds-check when using a position from one table in the other table.
+      precondition(
+        splitTable.codePointTable.count == splitTable.dataTable.count,
+        "The split index and entry tables must have the same number of elements"
+      )
+      // Every plane/sub-plane table must have at least one entry, for the start of the plane/sub-plane.
+      precondition(splitTable.codePointTable[0] == 0)
     }
   }
 }
@@ -183,6 +212,19 @@ extension CodePointDatabase {
 
 
 extension CodePointDatabase {
+
+  @usableFromInline
+  internal struct BMPIndex: IndexedTableSchema {
+
+    @usableFromInline
+    internal typealias Column = UInt16
+
+    @usableFromInline
+    internal typealias IndexStorage = UInt16
+
+    @inlinable @inline(__always)
+    internal static var ColumnBitsToIndex: Int { Schema.BMPIndexBits }
+  }
 
   @usableFromInline
   internal enum LookupResult {
@@ -207,10 +249,10 @@ extension CodePointDatabase {
       return .ascii(Schema.ASCIIData(storage: _asciiData.withUnsafeBufferPointer { buf in buf[Int(scalar.value)] }))
     }
     if scalar.value < 0x01_0000 {
-      return _bmp_withIndexAndDataTable(containing: scalar.value) {
-        codePointTable, dataTable, offsetWithinBMP in
-        let k = codePointTable._codepointdatabase_partitionedIndex { offsetWithinBMP >= $0 } &- 1
-        return .nonAscii(Schema.UnicodeData(storage: dataTable[k]), startCodePoint: UInt32(codePointTable[k]))
+      let offsetWithinBMP = UInt16(truncatingIfNeeded: scalar.value)
+      return _bmpData.lookupRows(containing: offsetWithinBMP) { codePoints, data in
+        let k = codePoints._codepointdatabase_partitionedIndex { offsetWithinBMP >= $0 } &- 1
+        return .nonAscii(Schema.UnicodeData(storage: data[k]), startCodePoint: UInt32(codePoints[k]))
       }
     }
     return _nonbmp_withIndexAndDataTable(containing: scalar.value) {
@@ -218,31 +260,6 @@ extension CodePointDatabase {
       let k = codePointTable._codepointdatabase_partitionedIndex { offsetWithinPlane >= $0 } &- 1
       let startCodePoint = planeStart | UInt32(codePointTable[k])
       return .nonAscii(Schema.UnicodeData(storage: dataTable[k]), startCodePoint: startCodePoint)
-    }
-  }
-
-  // Note: The BMP codepoint table stores full scalar values in its 16 bits, since BMP scalars are only 16 bit.
-  //       In other words, 0x0ABC, 0x1ABC, and 0x2ABC are stored like that in the code-point table,
-  //       rather than being stored like "offset: 0x0ABC in table: 0/1/2/...".
-  @inlinable
-  internal func _bmp_withIndexAndDataTable<T>(
-    containing codePoint: UInt32,
-    body: (
-      _ codePointTable: UnsafeBufferPointer<UInt16>,
-      _ dataTable: UnsafeBufferPointer<Schema.UnicodeData.RawStorage>,
-      _ offsetWithinBMP: UInt16
-    ) -> T
-  ) -> T {
-    return _bmpData.withUnsafeBufferPointer { subplaneSplitTables in
-      // Safety: 'subplane' only contains 4 bits of data after shifting, so is limited to 0..<16 (all valid indexes).
-      let offsetWithinBMP = UInt16(truncatingIfNeeded: codePoint)
-      let subplane = offsetWithinBMP &>> 12
-      let dataForSubplane = subplaneSplitTables[Int(subplane)]
-      return dataForSubplane.codePointTable.withUnsafeBufferPointer { codePointTable in
-        return dataForSubplane.dataTable.withUnsafeBufferPointer { dataTable in
-          return body(codePointTable, dataTable, offsetWithinBMP)
-        }
-      }
     }
   }
 
@@ -316,14 +333,6 @@ extension RandomAccessCollection {
 
   extension CodePointDatabase {
 
-    /// For the builder only. Creates an empty database.
-    ///
-    fileprivate init() {
-      _asciiData = []
-      _bmpData = (0x00...0x0F).map { _ in (codePointTable: [], dataTable: []) }
-      _nonbmpData = (0x01...0x10).map { _ in (codePointTable: [], dataTable: []) }
-    }
-
     /// A builder for a static database of information about Unicode code-points.
     ///
     /// Append entries to the database in code-point order, starting with `appendAscii` at code-point 0 (`U+0000`),
@@ -342,16 +351,28 @@ extension RandomAccessCollection {
     /// You must finish with an entry that includes the maximum code-point, `0x10FFFF`.
     ///
     internal struct Builder {
-      private var db: CodePointDatabase
+
+      private var _asciiData: [Schema.ASCIIData.RawStorage]
+      private var _bmpData: SplitTable<UInt16, Schema.UnicodeData.RawStorage>
+      private var _nonbmpData: [SplitTable<UInt16, Schema.UnicodeData.RawStorage>]
       private var top: UInt32
 
       internal init() {
-        db = CodePointDatabase()
+        _asciiData = []
+        _bmpData = (codePointTable: [], dataTable: [])
+        _nonbmpData = (0x01...0x10).map { _ in (codePointTable: [], dataTable: []) }
         top = 0
       }
 
-      internal func finalize() -> CodePointDatabase {
+      internal mutating func finalize() -> CodePointDatabase {
         precondition(top - 1 == 0x10FFFF, "Entries must be inserted up to (including) 0x10FFFF")
+
+        let db = CodePointDatabase(
+          asciiData: _asciiData,
+          bmpIndex: IndexedTable<BMPIndex, Schema.UnicodeData.RawStorage>.buildIndex(_bmpData.codePointTable),
+          bmpData: _bmpData,
+          nonbmpData: _nonbmpData
+        )
         db.validateStructure()
         return db
       }
@@ -363,7 +384,7 @@ extension RandomAccessCollection {
         top += 1
 
         // Insert.
-        db._asciiData.append(data.storage)
+        _asciiData.append(data.storage)
       }
 
       internal mutating func appendUnicode(_ data: Schema.UnicodeData, for codePoints: ClosedRange<UInt32>) {
@@ -405,20 +426,14 @@ extension RandomAccessCollection {
 
         // - Add the data value for any parts of the range which lie within the BMP.
 
-        if codePoints.lowerBound < 0x1_0000 {
-          for subPlane in 0x00...0x0F {
-            let subplaneStart = UInt32(subPlane) << 12
-            let subplaneRange = subplaneStart...subplaneStart + 0x0FFF
-            if addToPlaneTable(&db._bmpData[subPlane], planeRange: subplaneRange) { wasInsertedAtLeastOnce = true }
-          }
-        }
+        if addToPlaneTable(&_bmpData, planeRange: 0x80...0x0_FFFF) { wasInsertedAtLeastOnce = true }
 
         // - Add the data value for any parts of the range which lie above the BMP.
 
         for plane in 1..<17 {
           let planeStart = UInt32(plane) << 16
           let planeRange = planeStart...planeStart + 0xFFFF
-          if addToPlaneTable(&db._nonbmpData[plane - 1], planeRange: planeRange) { wasInsertedAtLeastOnce = true }
+          if addToPlaneTable(&_nonbmpData[plane - 1], planeRange: planeRange) { wasInsertedAtLeastOnce = true }
         }
 
         precondition(wasInsertedAtLeastOnce, "Entry was not inserted: \(data)")
@@ -484,10 +499,28 @@ extension RandomAccessCollection {
 
       // BMP.
 
-      Self.printPlaneData(
-        name: name + "_bmp",
-        tableData: _bmpData,
-        using: Formatter.self,
+      printArrayLiteral(
+        name: "\(name)_bmp_index",
+        elementType: "\(BMPIndex.IndexStorage.self)",
+        data: _bmpData._index, columns: 8,
+        to: &output
+      )
+      output += "\n"
+
+      printArrayLiteral(
+        name: "\(name)_bmp_codepoints",
+        elementType: "UInt16",
+        data: _bmpData._columnValues, columns: 8,
+        formatter: { $0.hexString(format: .fullWidth) },
+        to: &output
+      )
+      output += "\n"
+
+      printArrayLiteral(
+        name: "\(name)_bmp_data",
+        elementType: Formatter.unicodeStorageElementType,
+        data: _bmpData._dataValues, columns: 8,
+        formatter: Formatter.formatUnicodeStorage,
         to: &output
       )
       output += "\n"

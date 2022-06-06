@@ -43,7 +43,7 @@ fileprivate func XCTAssertSegments<Bound, Value>(
 // --------------------------------------------
 
 
-class SegmentedLineTests: XCTestCase {}
+final class SegmentedLineTests: XCTestCase {}
 
 extension SegmentedLineTests {
 
