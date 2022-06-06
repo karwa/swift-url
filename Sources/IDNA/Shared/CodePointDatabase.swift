@@ -141,7 +141,7 @@ extension CodePointDatabase_Schema {
 internal struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
 
   @usableFromInline
-  internal typealias SplitTable<CodePoint, Data> = (codePointTable: [CodePoint], dataTable: [Data])
+  internal typealias SplitTable<CodePoint, Data> = (codepoints: [CodePoint], data: [Data])
 
   @usableFromInline internal let _asciiData  : [Schema.ASCIIData.RawStorage]
   @usableFromInline internal let _bmpData    : IndexedTable<BMPIndex, Schema.UnicodeData.RawStorage>
@@ -159,8 +159,8 @@ internal struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
     self._asciiData = asciiData
     self._bmpData = IndexedTable<BMPIndex, Schema.UnicodeData.RawStorage>(
       uncheckedIndex: bmpIndex,
-      columnValues: bmpData.codePointTable,
-      dataValues: bmpData.dataTable
+      columnValues: bmpData.codepoints,
+      dataValues: bmpData.data
     )
     self._nonbmpData = nonbmpData
     #if DEBUG
@@ -196,11 +196,11 @@ extension CodePointDatabase {
       // This means a valid position in the index table is a valid position in the entry table,
       // and we don't need to bounds-check when using a position from one table in the other table.
       precondition(
-        splitTable.codePointTable.count == splitTable.dataTable.count,
+        splitTable.codepoints.count == splitTable.data.count,
         "The split index and entry tables must have the same number of elements"
       )
       // Every plane/sub-plane table must have at least one entry, for the start of the plane/sub-plane.
-      precondition(splitTable.codePointTable[0] == 0)
+      precondition(splitTable.codepoints[0] == 0)
     }
   }
 }
@@ -276,8 +276,8 @@ extension CodePointDatabase {
       // Safety: 'planeDataIdx' only contains 4 bits of data after masking, so is limited to 0..<16 (all valid indexes).
       let planeDataIdx = UInt8(truncatingIfNeeded: (codePoint &>> 16) &- 1) & 0xF
       let dataForPlane = planeSplitTables[Int(planeDataIdx)]
-      return dataForPlane.codePointTable.withUnsafeBufferPointer { codePointTable in
-        return dataForPlane.dataTable.withUnsafeBufferPointer { dataTable in
+      return dataForPlane.codepoints.withUnsafeBufferPointer { codePointTable in
+        return dataForPlane.data.withUnsafeBufferPointer { dataTable in
           let startOfPlane = UInt32(planeDataIdx &+ 1) &<< 16
           let offsetWithinPlane = UInt16(truncatingIfNeeded: codePoint)
           return body(codePointTable, dataTable, startOfPlane, offsetWithinPlane)
@@ -359,8 +359,8 @@ extension RandomAccessCollection {
 
       internal init() {
         _asciiData = []
-        _bmpData = (codePointTable: [], dataTable: [])
-        _nonbmpData = (0x01...0x10).map { _ in (codePointTable: [], dataTable: []) }
+        _bmpData = (codepoints: [], data: [])
+        _nonbmpData = (0x01...0x10).map { _ in (codepoints: [], data: []) }
         top = 0
       }
 
@@ -369,7 +369,7 @@ extension RandomAccessCollection {
 
         let db = CodePointDatabase(
           asciiData: _asciiData,
-          bmpIndex: IndexedTable<BMPIndex, Schema.UnicodeData.RawStorage>.buildIndex(_bmpData.codePointTable),
+          bmpIndex: IndexedTable<BMPIndex, Schema.UnicodeData.RawStorage>.buildIndex(_bmpData.codepoints),
           bmpData: _bmpData,
           nonbmpData: _nonbmpData
         )
@@ -403,19 +403,19 @@ extension RandomAccessCollection {
 
           if codePoints.contains(planeRange.lowerBound) {
             // Crossing to a new plane table means we may need to split/copy the data.
-            assert(table.codePointTable.isEmpty)
-            assert(table.dataTable.isEmpty)
-            table.codePointTable.append(UInt16(truncatingIfNeeded: planeRange.lowerBound))
+            assert(table.codepoints.isEmpty)
+            assert(table.data.isEmpty)
             let adjusted = Schema.unicodeData(data, at: codePoints.lowerBound, copyForStartingAt: planeRange.lowerBound)
-            table.dataTable.append(adjusted.storage)
+            table.codepoints.append(UInt16(truncatingIfNeeded: planeRange.lowerBound))
+            table.data.append(adjusted.storage)
             return true
           }
           if planeRange.contains(codePoints.lowerBound) {
             // Add this data to an existing plane table.
-            assert(table.codePointTable.isEmpty == false || codePoints.lowerBound == 0x80)
-            assert(table.dataTable.isEmpty == false || codePoints.lowerBound == 0x80)
-            table.codePointTable.append(UInt16(truncatingIfNeeded: codePoints.lowerBound))
-            table.dataTable.append(data.storage)
+            assert(table.codepoints.isEmpty == false || codePoints.lowerBound == 0x80)
+            assert(table.data.isEmpty == false || codePoints.lowerBound == 0x80)
+            table.codepoints.append(UInt16(truncatingIfNeeded: codePoints.lowerBound))
+            table.data.append(data.storage)
             return true
           }
           // Data does not belong in this plane at all.
@@ -474,7 +474,7 @@ extension RandomAccessCollection {
     }
   }
 
-  extension CodePointDatabase {
+  extension CodePointDatabase where Schema.UnicodeData.RawStorage: Equatable {
 
     /// Returns a String of this database as Swift source code.
     ///
@@ -508,7 +508,7 @@ extension RandomAccessCollection {
       output += "\n"
 
       printArrayLiteral(
-        name: "\(name)_bmp_codepoints",
+        name: "\(name)_bmp_codepoint",
         elementType: "UInt16",
         data: _bmpData._columnValues, columns: 8,
         formatter: { $0.hexString(format: .fullWidth) },
@@ -544,41 +544,71 @@ extension RandomAccessCollection {
       to output: inout String
     ) where Formatter: CodePointDatabase_Formatter, Formatter.Schema == Schema {
 
-      // Print each split table separately.
+      // De-dupe the tables.
 
-      var subTables = [(String, String)]()
-      for (plane, data) in tableData.enumerated() {
-        let codePointTableName = "\(name)_\(plane)"
-        let dataTableName = "\(name)_data_\(plane)"
+      var uniqueCodepointTables = [[UInt16]]()
+      var uniqueDataTables = [[Schema.UnicodeData.RawStorage]]()
+      let dedupedPlaneData: [(codepointsIdx: Int, dataIdx: Int)] = tableData.map { splitTable in
 
+        // Use .firstIndex(of:), because we only have 17 planes, and most of the time,
+        // either the count is different or there are just 1 or 2 elements. Not worth hashing everything.
+
+        var codepointTableIdx: Int
+        if let existingCPTable = uniqueCodepointTables.firstIndex(of: splitTable.codepoints) {
+          codepointTableIdx = existingCPTable
+        } else {
+          codepointTableIdx = uniqueCodepointTables.endIndex
+          uniqueCodepointTables.append(splitTable.codepoints)
+        }
+        var dataTableIdx: Int
+        if let existingDataTable = uniqueDataTables.firstIndex(of: splitTable.data) {
+          dataTableIdx = existingDataTable
+        } else {
+          dataTableIdx = uniqueDataTables.endIndex
+          uniqueDataTables.append(splitTable.data)
+        }
+        return (codepointTableIdx, dataTableIdx)
+      }
+
+      // Print each uniqued table separately.
+
+      func codepointTableName(_ n: Int) -> String {
+        "\(name)_codepoint_\(n)"
+      }
+
+      func dataTableName(_ n: Int) -> String {
+        "\(name)_data_\(n)"
+      }
+
+      for (n, codepointTable) in uniqueCodepointTables.enumerated() {
         printArrayLiteral(
-          name: codePointTableName,
+          name: codepointTableName(n),
           elementType: "UInt16",
-          data: data.codePointTable, columns: 10,
+          data: codepointTable, columns: 10,
           formatter: { $0.hexString(format: .fullWidth) },
           to: &output
         )
         output += "\n"
+      }
 
+      for (n, dataTable) in uniqueDataTables.enumerated() {
         printArrayLiteral(
-          name: dataTableName,
+          name: dataTableName(n),
           elementType: Formatter.unicodeStorageElementType,
-          data: data.dataTable, columns: 8,
+          data: dataTable, columns: 8,
           formatter: Formatter.formatUnicodeStorage,
           to: &output
         )
         output += "\n"
-
-        subTables.append((codePointTableName, dataTableName))
       }
 
-      // Print an overall "_splitTables" array for recombining as a CodePointDatabase.
+      // Print an overall array for use when initializing a CodePointDatabase.
 
       printArrayLiteral(
-        name: "\(name)_splitTables",
-        elementType: "(codePointTable: [UInt16], dataTable: [\(Formatter.unicodeStorageElementType)])",
-        data: subTables, columns: 1,
-        formatter: { "(codePointTable: \($0.0), dataTable: \($0.1))" },
+        name: "\(name)",
+        elementType: "(codepoints: [UInt16], data: [\(Formatter.unicodeStorageElementType)])",
+        data: dedupedPlaneData, columns: 1,
+        formatter: { "(\(codepointTableName($0.codepointsIdx)), \(dataTableName($0.dataIdx)))" },
         to: &output
       )
     }

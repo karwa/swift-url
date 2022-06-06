@@ -528,8 +528,8 @@ extension IDNA {
 internal let _idna_db = CodePointDatabase<IDNAMappingData>(
   asciiData: _idna_map_ascii,
   bmpIndex: _idna_map_bmp_index,
-  bmpData: (_idna_map_bmp_codepoints, _idna_map_bmp_data),
-  nonbmpData: _idna_map_nonbmp_splitTables
+  bmpData: (_idna_map_bmp_codepoint, _idna_map_bmp_data),
+  nonbmpData: _idna_map_nonbmp
 )
 
 extension IDNA {
@@ -719,8 +719,8 @@ extension IDNA {
 internal let _validation_db = CodePointDatabase<IDNAValidationData>(
   asciiData: _idna_validate_ascii,
   bmpIndex: _idna_validate_bmp_index,
-  bmpData: (_idna_validate_bmp_codepoints, _idna_validate_bmp_data),
-  nonbmpData: _idna_validate_nonbmp_splitTables
+  bmpData: (_idna_validate_bmp_codepoint, _idna_validate_bmp_data),
+  nonbmpData: _idna_validate_nonbmp
 )
 
 extension IDNA {

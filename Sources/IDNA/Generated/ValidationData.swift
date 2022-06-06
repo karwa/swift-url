@@ -56,7 +56,7 @@ internal let _idna_validate_bmp_index: [UInt16] = [
 
 // swift-format-ignore
 @usableFromInline
-internal let _idna_validate_bmp_codepoints: [UInt16] = [
+internal let _idna_validate_bmp_codepoint: [UInt16] = [
   0x0080, 0x0085, 0x0086, 0x00AA, 0x00AB, 0x00AD, 0x00AE, 0x00B2,
   0x00B4, 0x00B5, 0x00B6, 0x00B9, 0x00BA, 0x00BB, 0x00C0, 0x00D7,
   0x00D8, 0x00F7, 0x00F8, 0x02B9, 0x02BB, 0x02C2, 0x02D0, 0x02D2,
@@ -172,7 +172,7 @@ internal let _idna_validate_bmp_codepoints: [UInt16] = [
   0xFF1A, 0xFF21, 0xFF3B, 0xFF41, 0xFF5B, 0xFF66, 0xFFE0, 0xFFE7,
   0xFFE8, 0xFFEF, 0xFFF0, 0xFFF9, 0xFFFC,
 ]
-// _idna_validate_bmp_codepoints size = 909 elements
+// _idna_validate_bmp_codepoint size = 909 elements
 
 // swift-format-ignore
 @usableFromInline
@@ -296,7 +296,7 @@ internal let _idna_validate_bmp_data: [UInt8] = [
 
 // swift-format-ignore
 @usableFromInline
-internal let _idna_validate_nonbmp_0: [UInt16] = [
+internal let _idna_validate_nonbmp_codepoint_0: [UInt16] = [
   0x0000, 0x0101, 0x0102, 0x0140, 0x018D, 0x0190, 0x019D, 0x01A0, 0x01A1, 0x01FD,
   0x01FE, 0x02E0, 0x02E1, 0x02FC, 0x0376, 0x037B, 0x0800, 0x091F, 0x0920, 0x0A01,
   0x0A04, 0x0A05, 0x0A07, 0x0A0C, 0x0A10, 0x0A38, 0x0A3B, 0x0A3F, 0x0A40, 0x0AC0,
@@ -350,7 +350,21 @@ internal let _idna_validate_nonbmp_0: [UInt16] = [
   0xFA90, 0xFAAD, 0xFAB0, 0xFABB, 0xFAC0, 0xFAC6, 0xFAD0, 0xFADA, 0xFAE0, 0xFAE8,
   0xFAF0, 0xFAF7, 0xFB00, 0xFB93, 0xFB94, 0xFBCB, 0xFBF0, 0xFBFA, 0xFFFE,
 ]
-// _idna_validate_nonbmp_0 size = 519 elements
+// _idna_validate_nonbmp_codepoint_0 size = 519 elements
+
+// swift-format-ignore
+@usableFromInline
+internal let _idna_validate_nonbmp_codepoint_1: [UInt16] = [
+  0x0000, 0xFFFE,
+]
+// _idna_validate_nonbmp_codepoint_1 size = 2 elements
+
+// swift-format-ignore
+@usableFromInline
+internal let _idna_validate_nonbmp_codepoint_2: [UInt16] = [
+  0x0000, 0x0001, 0x0002, 0x0020, 0x0080, 0x0100, 0x01F0, 0x1000, 0xFFFE,
+]
+// _idna_validate_nonbmp_codepoint_2 size = 9 elements
 
 // swift-format-ignore
 @usableFromInline
@@ -425,13 +439,6 @@ internal let _idna_validate_nonbmp_data_0: [UInt8] = [
 
 // swift-format-ignore
 @usableFromInline
-internal let _idna_validate_nonbmp_1: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_1 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
 internal let _idna_validate_nonbmp_data_1: [UInt8] = [
   0x00, 0x04,
 ]
@@ -439,219 +446,30 @@ internal let _idna_validate_nonbmp_data_1: [UInt8] = [
 
 // swift-format-ignore
 @usableFromInline
-internal let _idna_validate_nonbmp_2: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_2 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
 internal let _idna_validate_nonbmp_data_2: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_2 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_3: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_3 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_3: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_3 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_4: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_4 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_4: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_4 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_5: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_5 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_5: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_5 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_6: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_6 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_6: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_6 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_7: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_7 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_7: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_7 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_8: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_8 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_8: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_8 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_9: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_9 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_9: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_9 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_10: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_10 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_10: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_10 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_11: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_11 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_11: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_11 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_12: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_12 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_12: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_12 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_13: [UInt16] = [
-  0x0000, 0x0001, 0x0002, 0x0020, 0x0080, 0x0100, 0x01F0, 0x1000, 0xFFFE,
-]
-// _idna_validate_nonbmp_13 size = 9 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_13: [UInt8] = [
   0x04, 0x0C, 0x04, 0x0C, 0x04, 0x8D, 0x04, 0x00,
   0x04,
 ]
-// _idna_validate_nonbmp_data_13 size = 9 elements
+// _idna_validate_nonbmp_data_2 size = 9 elements
 
 // swift-format-ignore
 @usableFromInline
-internal let _idna_validate_nonbmp_14: [UInt16] = [
-  0x0000, 0xFFFE,
+internal let _idna_validate_nonbmp: [(codepoints: [UInt16], data: [UInt8])] = [
+  (_idna_validate_nonbmp_codepoint_0, _idna_validate_nonbmp_data_0),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_2, _idna_validate_nonbmp_data_2),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
+  (_idna_validate_nonbmp_codepoint_1, _idna_validate_nonbmp_data_1),
 ]
-// _idna_validate_nonbmp_14 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_14: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_14 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_15: [UInt16] = [
-  0x0000, 0xFFFE,
-]
-// _idna_validate_nonbmp_15 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_data_15: [UInt8] = [
-  0x00, 0x04,
-]
-// _idna_validate_nonbmp_data_15 size = 2 elements
-
-// swift-format-ignore
-@usableFromInline
-internal let _idna_validate_nonbmp_splitTables: [(codePointTable: [UInt16], dataTable: [UInt8])] = [
-  (codePointTable: _idna_validate_nonbmp_0, dataTable: _idna_validate_nonbmp_data_0),
-  (codePointTable: _idna_validate_nonbmp_1, dataTable: _idna_validate_nonbmp_data_1),
-  (codePointTable: _idna_validate_nonbmp_2, dataTable: _idna_validate_nonbmp_data_2),
-  (codePointTable: _idna_validate_nonbmp_3, dataTable: _idna_validate_nonbmp_data_3),
-  (codePointTable: _idna_validate_nonbmp_4, dataTable: _idna_validate_nonbmp_data_4),
-  (codePointTable: _idna_validate_nonbmp_5, dataTable: _idna_validate_nonbmp_data_5),
-  (codePointTable: _idna_validate_nonbmp_6, dataTable: _idna_validate_nonbmp_data_6),
-  (codePointTable: _idna_validate_nonbmp_7, dataTable: _idna_validate_nonbmp_data_7),
-  (codePointTable: _idna_validate_nonbmp_8, dataTable: _idna_validate_nonbmp_data_8),
-  (codePointTable: _idna_validate_nonbmp_9, dataTable: _idna_validate_nonbmp_data_9),
-  (codePointTable: _idna_validate_nonbmp_10, dataTable: _idna_validate_nonbmp_data_10),
-  (codePointTable: _idna_validate_nonbmp_11, dataTable: _idna_validate_nonbmp_data_11),
-  (codePointTable: _idna_validate_nonbmp_12, dataTable: _idna_validate_nonbmp_data_12),
-  (codePointTable: _idna_validate_nonbmp_13, dataTable: _idna_validate_nonbmp_data_13),
-  (codePointTable: _idna_validate_nonbmp_14, dataTable: _idna_validate_nonbmp_data_14),
-  (codePointTable: _idna_validate_nonbmp_15, dataTable: _idna_validate_nonbmp_data_15),
-]
-// _idna_validate_nonbmp_splitTables size = 16 elements
+// _idna_validate_nonbmp size = 16 elements
