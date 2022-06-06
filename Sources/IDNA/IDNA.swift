@@ -473,7 +473,7 @@ extension IDNA {
           }
           switch mappedScalar {
           case .single(let scalar, _): _normalizationBuffer.unicodeScalars.append(scalar)
-          case .multiple(let idx): _normalizationBuffer.unicodeScalars += idx.get(table: _idna_replacements_table)
+          case .multiple(let idx): _normalizationBuffer.unicodeScalars += idx.get(table: _idna_map_replacements_table)
           default: fatalError()
           }
           self._state = .decodeFromSource
