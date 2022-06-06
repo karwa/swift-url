@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-@usableFromInline
-internal struct IDNAMappingData: CodePointDatabase_Schema {}
+public struct IDNAMappingData: CodePointDatabase_Schema {}
 
 
 // --------------------------------------------
@@ -27,27 +26,24 @@ extension IDNAMappingData {
   ///
   /// ASCII code-points have simple entries, stored in a 1:1 lookup table.
   ///
-  @usableFromInline
-  internal struct ASCIIData: HasRawStorage {
+  public struct ASCIIData: HasRawStorage {
 
-    @usableFromInline
-    internal typealias RawStorage = UInt16
+    public typealias RawStorage = UInt16
 
     // 2 bytes: <status> and <replacement>
-    @usableFromInline
-    internal var storage: UInt16
+    public var storage: UInt16
 
     @inlinable
-    internal init(storage: UInt16) {
+    public init(storage: UInt16) {
       self.storage = storage
     }
 
-    // Getting components.
+    // Reading properties.
 
     /// The status of this ASCII code-point.
     ///
     @inlinable
-    internal var status: Status {
+    public var status: Status {
       Status(UInt8(truncatingIfNeeded: storage &>> 8))
     }
 
@@ -56,14 +52,22 @@ extension IDNAMappingData {
     /// This value is only specified if `isMapped` is `true`.
     ///
     @inlinable
-    internal var replacement: Unicode.Scalar {
+    public var replacement: Unicode.Scalar {
       Unicode.Scalar(UInt8(truncatingIfNeeded: storage))
+    }
+
+    /// If `true`, this entry's status is `.mapped`.
+    ///
+    /// It is a tiny bit faster to query this property than to check the precise value of `.status`.
+    ///
+    @inlinable
+    public var isMapped: Bool {
+      storage >= 0x02_00
     }
 
     // Byte values and creation.
 
-    @usableFromInline
-    internal enum Status {
+    public enum Status {
       case valid
       case disallowed_STD3_valid
       case mapped
@@ -93,17 +97,6 @@ extension IDNAMappingData {
     internal static func mapped(to replacement: UInt8) -> Self {
       ASCIIData(storage: 0x02_00 | UInt16(replacement))
     }
-
-    // Other properties.
-
-    /// If `true`, this entry's status is `.mapped`.
-    ///
-    /// It is a tiny bit faster to query this property than to check the precise value of `.status`.
-    ///
-    @inlinable
-    internal var isMapped: Bool {
-      storage >= 0x02_00
-    }
   }
 }
 
@@ -117,24 +110,22 @@ extension IDNAMappingData {
 
   /// An IDNA mapping table entry, describing the status of a range of code-points.
   ///
-  @usableFromInline
-  internal struct UnicodeData: Equatable, HasRawStorage {
+  public struct UnicodeData: Equatable, HasRawStorage {
 
-    @usableFromInline
-    internal typealias RawStorage = UInt32
+    public typealias RawStorage = UInt32
 
     // high byte: 4 bits <status> and 4 bits <mapping-kind>
     // remaining: mapping data (3 bytes).
-    @usableFromInline
-    internal var storage: UInt32
+    public var storage: UInt32
 
     @inlinable
-    internal init(storage: UInt32) {
+    public init(storage: UInt32) {
       self.storage = storage
     }
 
-    @usableFromInline
-    internal enum Status {
+    // Reading properties.
+
+    public enum Status {
       case valid
       case deviation
       case disallowed_STD3_valid
@@ -144,15 +135,14 @@ extension IDNAMappingData {
       case disallowed
     }
 
-    @usableFromInline
-    internal enum Mapping {
+    public enum Mapping {
       case single(UInt32)
       case rebased(origin: UInt32)
       case table(ReplacementsTable.Index)
     }
 
     @inlinable
-    internal var status: Status {
+    public var status: Status {
       // bits 31..<32 (1 bit)  = <unused>
       // bits 28..<31 (3 bits) = Status
       switch storage &>> 28 {
@@ -170,7 +160,7 @@ extension IDNAMappingData {
     }
 
     @inlinable
-    internal var mapping: Mapping? {
+    public var mapping: Mapping? {
       // bits 26..<28 (2 bit)  = <unused>
       // bits 24..<26 (2 bits) = Mapping Kind
       switch (storage &>> 24) & 0b11 {
@@ -192,20 +182,62 @@ extension IDNAMappingData {
         return .table(ReplacementsTable.Index(offset: offset, length: length))
       }
     }
-  }
 
-  // Indexing.
+    // Creation.
 
-  @inlinable @inline(__always)
-  internal static var BMPIndexBits: Int {
-    // TODO: See if we can make more effective use of the index by chopping out the enormous single CJK entry.
-    7
+    @inlinable
+    internal init(_ status: Status, _ mapping: Mapping?) {
+
+      var value: UInt32
+
+      // bits 31..<32 (1 bit)  = <unused>
+      // bits 28..<31 (3 bits) = Status
+      switch status {
+      case .valid:
+        value = 0x0000_0000
+      case .deviation:
+        value = 0x1000_0000
+      case .disallowed_STD3_valid:
+        value = 0x2000_0000
+      case .mapped:
+        value = 0x3000_0000
+      case .disallowed_STD3_mapped:
+        value = 0x4000_0000
+      case .ignored:
+        value = 0x5000_0000
+      case .disallowed:
+        value = 0x6000_0000
+      }
+
+      // bits 26..<28 (2 bit)  = <unused>
+      switch mapping {
+      case .none:
+        break
+      case .single(let replacement):
+        // bits 24..<26 (2 bits)  = Mapping Kind
+        // bits 22..<24 (2 bit)   = <unused>
+        // bits 00..<22 (21 bits) = Replacement
+        value = value | (1 << 24) | replacement
+      case .rebased(let origin):
+        // bits 24..<26 (2 bits)  = Mapping Kind
+        // bits 22..<24 (2 bit)   = <unused>
+        // bits 00..<22 (21 bits) = Origin
+        value = value | (2 << 24) | origin
+      case .table(let index):
+        // bits 24..<26 (2 bits)  = Mapping Kind
+        // bits 08..<24 (16 bits) = Offset
+        // bits 00..<08 (08 bits) = Length
+        value = value | (3 << 24) | (UInt32(index.offset) &<< 8) | UInt32(index.length)
+      }
+
+      self.storage = value
+    }
   }
 
   // Location-sensitive data.
 
   @inlinable
-  internal static func unicodeData(
+  public static func unicodeData(
     _ data: UnicodeData, at originalStart: UInt32, copyForStartingAt newStartPoint: UInt32
   ) -> UnicodeData {
     // If we split a rebase mapping across tables, the entry in the new table need to start with
@@ -221,53 +253,14 @@ extension IDNAMappingData {
   }
 }
 
-extension IDNAMappingData.UnicodeData {
+extension IDNAMappingData {
 
-  init(_ status: Status, _ mapping: Mapping?) {
+  // Indexing.
 
-    var value: UInt32
-
-    // bits 31..<32 (1 bit)  = <unused>
-    // bits 28..<31 (3 bits) = Status
-    switch status {
-    case .valid:
-      value = 0x0000_0000
-    case .deviation:
-      value = 0x1000_0000
-    case .disallowed_STD3_valid:
-      value = 0x2000_0000
-    case .mapped:
-      value = 0x3000_0000
-    case .disallowed_STD3_mapped:
-      value = 0x4000_0000
-    case .ignored:
-      value = 0x5000_0000
-    case .disallowed:
-      value = 0x6000_0000
-    }
-
-    // bits 26..<28 (2 bit)  = <unused>
-    switch mapping {
-    case .none:
-      break
-    case .single(let replacement):
-      // bits 24..<26 (2 bits)  = Mapping Kind
-      // bits 22..<24 (2 bit)   = <unused>
-      // bits 00..<22 (21 bits) = Replacement
-      value = value | (1 << 24) | replacement
-    case .rebased(let origin):
-      // bits 24..<26 (2 bits)  = Mapping Kind
-      // bits 22..<24 (2 bit)   = <unused>
-      // bits 00..<22 (21 bits) = Origin
-      value = value | (2 << 24) | origin
-    case .table(let index):
-      // bits 24..<26 (2 bits)  = Mapping Kind
-      // bits 08..<24 (16 bits) = Offset
-      // bits 00..<08 (08 bits) = Length
-      value = value | (3 << 24) | (UInt32(index.offset) &<< 8) | UInt32(index.length)
-    }
-
-    self.storage = value
+  @inlinable @inline(__always)
+  public static var BMPIndexBits: Int {
+    // TODO: See if we can make more effective use of the index by chopping out the enormous single CJK entry.
+    7
   }
 }
 
@@ -277,17 +270,14 @@ extension IDNAMappingData.UnicodeData {
 // --------------------------------------------
 
 
-@usableFromInline
-internal struct ReplacementsTable {
+public struct ReplacementsTable {
 
-  @usableFromInline
-  internal struct Index {
+  public struct Index {
 
     @usableFromInline
     internal var offset: UInt16
 
-    @usableFromInline
-    internal var length: UInt8
+    public var length: UInt8
 
     @inlinable
     internal init(offset: UInt16, length: UInt8) {
@@ -296,46 +286,48 @@ internal struct ReplacementsTable {
     }
 
     @inlinable
-    internal func get(table: [Unicode.Scalar]) -> ArraySlice<Unicode.Scalar> {
+    public func get(table: [Unicode.Scalar]) -> ArraySlice<Unicode.Scalar> {
       let start = Int(offset)
       let end = start &+ Int(length)
       return table[Range(uncheckedBounds: (start, end))]
     }
   }
 
-  // Script only:
+  #if WEBURL_UNICODE_PARSE_N_PRINT
 
-  internal struct Builder {
-    private var data = [[UInt32]: Index]()
-    private var length = 0
+    internal struct Builder {
+      private var data = [[UInt32]: Index]()
+      private var length = 0
 
-    internal mutating func insert(mapping: [UInt32]) -> Index {
-      precondition(!mapping.isEmpty, "Attempt to insert empty mapping")
-      // If there is an existing mapping, return it.
-      if let existingIndex = data[mapping] { return existingIndex }
-      // The 'Index' defines where this appears in the output data;
-      // construct one for the region of data that we need.
-      let newIndex = Index(offset: UInt16(length), length: UInt8(mapping.count))
-      self.length += mapping.count
-      // Assign the region to the mapping.
-      data[mapping] = newIndex
-      return newIndex
+      internal mutating func insert(mapping: [UInt32]) -> Index {
+        precondition(!mapping.isEmpty, "Attempt to insert empty mapping")
+        // If there is an existing mapping, return it.
+        if let existingIndex = data[mapping] { return existingIndex }
+        // The 'Index' defines where this appears in the output data;
+        // construct one for the region of data that we need.
+        let newIndex = Index(offset: UInt16(length), length: UInt8(mapping.count))
+        self.length += mapping.count
+        // Assign the region to the mapping.
+        data[mapping] = newIndex
+        return newIndex
+      }
+
+      internal func isInBounds(_ index: Index) -> Bool {
+        Int(index.offset) + Int(index.length) <= self.length
+      }
+
+      internal func buildReplacementsTable() -> [UInt32] {
+        let allItems =
+          data
+          // Sort by the value's region info. It's a bit confusing because the name is 'Index', but really
+          // it describes where the mapping is supposed to be written.
+          .sorted(by: { left, right in left.value.offset < right.value.offset })
+          // Gather up the mapping tables for each region.
+          .flatMap({ $0.key })
+        precondition(allItems.count == length)
+        return allItems
+      }
     }
 
-    internal func isInBounds(_ index: Index) -> Bool {
-      Int(index.offset) + Int(index.length) <= self.length
-    }
-
-    internal func buildReplacementsTable() -> [UInt32] {
-      let allItems =
-        data
-        // Sort by the value's region info. It's a bit confusing because the name is 'Index', but really
-        // it describes where the mapping is supposed to be written.
-        .sorted(by: { left, right in left.value.offset < right.value.offset })
-        // Gather up the mapping tables for each region.
-        .flatMap({ $0.key })
-      precondition(allItems.count == length)
-      return allItems
-    }
-  }
+  #endif  // WEBURL_UNICODE_PARSE_N_PRINT
 }

@@ -16,46 +16,42 @@
 ///
 /// Validity criteria are described by [UTS#46](https://unicode.org/reports/tr46/#Validity_Criteria).
 ///
-@usableFromInline
-internal struct IDNAValidationData: CodePointDatabase_Schema {
-  @usableFromInline typealias ASCIIData = ValidationFlags
-  @usableFromInline typealias UnicodeData = ValidationFlags
+public struct IDNAValidationData: CodePointDatabase_Schema {
+  public typealias ASCIIData = ValidationFlags
+  public typealias UnicodeData = ValidationFlags
 }
 
 extension IDNAValidationData {
 
-  @usableFromInline
-  internal struct ValidationFlags: HasRawStorage, Equatable {
+  public struct ValidationFlags: HasRawStorage, Equatable {
 
-    @usableFromInline
-    internal typealias RawStorage = UInt8
+    public typealias RawStorage = UInt8
 
-    @usableFromInline
-    internal var storage: UInt8
+    public var storage: UInt8
 
     @inlinable
-    internal init(storage: UInt8) {
+    public init(storage: UInt8) {
       self.storage = storage
     }
 
-    // Getting and setting components.
+    // Reading and writing properties.
 
     @inlinable
-    internal var bidiInfo: BidiInfo {
+    public var bidiInfo: BidiInfo {
       // Bidi_Class gets the low 3 bits.
       get { BidiInfo(value: storage & 0b0000_0111) }
       set { storage = (storage & ~0b0000_0111) | newValue.value }
     }
 
     @inlinable
-    internal var joiningType: JoiningType {
+    public var joiningType: JoiningType {
       // Joining_Type gets the next 3 bits.
       get { JoiningType(value: (storage & 0b0011_1000) &>> 3) }
       set { storage = (storage & ~0b0011_1000) | (newValue.value &<< 3) }
     }
 
     @inlinable
-    internal var isVirama: Bool {
+    public var isVirama: Bool {
       // The next bit marks the 61 code-points with CCC=virama.
       // Having this here means we can avoid a lookup in the standard library's data tables.
       get { (storage & 0b0100_0000) != 0 }
@@ -63,7 +59,7 @@ extension IDNAValidationData {
     }
 
     @inlinable
-    internal var isMark: Bool {
+    public var isMark: Bool {
       // The final bit is to mark the ~2000 code-points with General_Category=Mark.
       // Having this here means we can avoid a lookup in the standard library's data tables.
       get { (storage & 0b1000_0000) != 0 }
@@ -86,16 +82,15 @@ extension IDNAValidationData {
 extension IDNAValidationData.ValidationFlags {
 
   // swift-format-ignore
-  @usableFromInline
-  internal struct BidiInfo: Equatable {
+  public struct BidiInfo: Equatable {
 
-    @inlinable internal static var L: Self                  { Self(value: 0) }
-    @inlinable internal static var RorAL: Self              { Self(value: 1) }
-    @inlinable internal static var AN: Self                 { Self(value: 2) }
-    @inlinable internal static var EN: Self                 { Self(value: 3) }
-    @inlinable internal static var ESorCSorETorONorBN: Self { Self(value: 4) }
-    @inlinable internal static var NSM: Self                { Self(value: 5) }
-    @inlinable internal static var disallowed: Self         { Self(value: 6) }
+    @inlinable public static var L: Self                  { Self(value: 0) }
+    @inlinable public static var RorAL: Self              { Self(value: 1) }
+    @inlinable public static var AN: Self                 { Self(value: 2) }
+    @inlinable public static var EN: Self                 { Self(value: 3) }
+    @inlinable public static var ESorCSorETorONorBN: Self { Self(value: 4) }
+    @inlinable public static var NSM: Self                { Self(value: 5) }
+    @inlinable public static var disallowed: Self         { Self(value: 6) }
 
     @usableFromInline
     internal var value: UInt8
@@ -107,14 +102,13 @@ extension IDNAValidationData.ValidationFlags {
   }
 
   // swift-format-ignore
-  @usableFromInline
-  internal struct JoiningType: Equatable {
+  public struct JoiningType: Equatable {
 
-    @inlinable internal static var other: Self { Self(value: 0) }
-    @inlinable internal static var T: Self     { Self(value: 1) }
-    @inlinable internal static var D: Self     { Self(value: 2) }
-    @inlinable internal static var L: Self     { Self(value: 3) }
-    @inlinable internal static var R: Self     { Self(value: 4) }
+    @inlinable public static var other: Self { Self(value: 0) }
+    @inlinable public static var T: Self     { Self(value: 1) }
+    @inlinable public static var D: Self     { Self(value: 2) }
+    @inlinable public static var L: Self     { Self(value: 3) }
+    @inlinable public static var R: Self     { Self(value: 4) }
 
     @usableFromInline
     internal var value: UInt8

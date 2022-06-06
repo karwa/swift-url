@@ -25,8 +25,7 @@
 ///
 /// It's like `RawRepresentable`, but the initializer cannot fail.
 ///
-@usableFromInline
-internal protocol HasRawStorage {
+public protocol HasRawStorage {
   associatedtype RawStorage
 
   init(storage: RawStorage)
@@ -35,8 +34,7 @@ internal protocol HasRawStorage {
 
 /// Describes the data associated with code-points in a `CodePointDatabase`.
 ///
-@usableFromInline
-internal protocol CodePointDatabase_Schema {
+public protocol CodePointDatabase_Schema {
 
   /// The type of data that is stored for Unicode code-points.
   ///
@@ -89,10 +87,10 @@ internal protocol CodePointDatabase_Schema {
 extension CodePointDatabase_Schema {
 
   @inlinable
-  internal static var BMPIndexBits: Int { 6 }
+  public static var BMPIndexBits: Int { 6 }
 
   @inlinable
-  internal static func unicodeData(
+  public static func unicodeData(
     _ data: UnicodeData, at originalStart: UInt32, copyForStartingAt newStartPoint: UInt32
   ) -> UnicodeData {
     data
@@ -137,11 +135,9 @@ extension CodePointDatabase_Schema {
 ///   packs their contents and improves cache utilization. Code-point and data tables are split
 ///   to avoid padding and also improve cache performance.
 ///
-@usableFromInline
-internal struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
+public struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
 
-  @usableFromInline
-  internal typealias SplitTable<CodePoint, Data> = (codepoints: [CodePoint], data: [Data])
+  public typealias SplitTable<CodePoint, Data> = (codepoints: [CodePoint], data: [Data])
 
   @usableFromInline internal let _asciiData  : [Schema.ASCIIData.RawStorage]
   @usableFromInline internal let _bmpData    : IndexedTable<BMPIndex, Schema.UnicodeData.RawStorage>
@@ -149,8 +145,8 @@ internal struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
 
   /// Initializes a database from static data.
   ///
-  @inlinable
-  internal init(
+  @inlinable @inline(__always)
+  public init(
     asciiData : [Schema.ASCIIData.RawStorage],
     bmpIndex  : [BMPIndex.IndexStorage],
     bmpData   : SplitTable<UInt16, Schema.UnicodeData.RawStorage>,
@@ -166,6 +162,17 @@ internal struct CodePointDatabase<Schema: CodePointDatabase_Schema> {
     #if DEBUG
       self.validateStructure()
     #endif
+  }
+
+  public struct BMPIndex: IndexedTableSchema {
+
+    public typealias IndexStorage = UInt16
+
+    @usableFromInline
+    internal typealias Column = UInt16
+
+    @inlinable @inline(__always)
+    internal static var ColumnBitsToIndex: Int { Schema.BMPIndexBits }
   }
 }
 
@@ -213,21 +220,7 @@ extension CodePointDatabase {
 
 extension CodePointDatabase {
 
-  @usableFromInline
-  internal struct BMPIndex: IndexedTableSchema {
-
-    @usableFromInline
-    internal typealias Column = UInt16
-
-    @usableFromInline
-    internal typealias IndexStorage = UInt16
-
-    @inlinable @inline(__always)
-    internal static var ColumnBitsToIndex: Int { Schema.BMPIndexBits }
-  }
-
-  @usableFromInline
-  internal enum LookupResult {
+  public enum LookupResult {
 
     /// The data associated with an ASCII code-point.
     ///
@@ -244,7 +237,7 @@ extension CodePointDatabase {
   }
 
   @inlinable
-  internal subscript(scalar: Unicode.Scalar) -> LookupResult {
+  public subscript(scalar: Unicode.Scalar) -> LookupResult {
     if scalar.isASCII {
       return .ascii(Schema.ASCIIData(storage: _asciiData.withUnsafeBufferPointer { buf in buf[Int(scalar.value)] }))
     }
@@ -290,7 +283,7 @@ extension CodePointDatabase {
 extension CodePointDatabase.LookupResult where Schema.ASCIIData == Schema.UnicodeData {
 
   @inlinable
-  internal var value: Schema.ASCIIData {
+  public var value: Schema.ASCIIData {
     switch self {
     case .ascii(let v): return v
     case .nonAscii(let v, startCodePoint: _): return v
@@ -329,7 +322,7 @@ extension RandomAccessCollection {
 // --------------------------------------------
 
 
-#if UNICODE_DB_INCLUDE_BUILDER
+#if WEBURL_UNICODE_PARSE_N_PRINT
 
   extension CodePointDatabase {
 
@@ -614,4 +607,4 @@ extension RandomAccessCollection {
     }
   }
 
-#endif  // UNICODE_DB_INCLUDE_BUILDER
+#endif  // WEBURL_UNICODE_PARSE_N_PRINT

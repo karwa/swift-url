@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import UnicodeDataStructures
+
 /// Functions relating to Internationalizing Domain Names for Applications (IDNA).
 ///
 /// IDNA is a way of normalizing and encoding Unicode text as ASCII in a way that is optimized for domain names,

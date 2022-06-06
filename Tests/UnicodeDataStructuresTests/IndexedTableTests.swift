@@ -14,7 +14,7 @@
 
 import XCTest
 
-@testable import UnicodeDataTools
+@testable import UnicodeDataStructures
 
 final class IndexedTableTests: XCTestCase {}
 
