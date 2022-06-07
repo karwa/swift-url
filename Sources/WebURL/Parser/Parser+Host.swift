@@ -130,7 +130,7 @@ extension ParsedHost {
     switch ParsedHost._parseASCIIDomain(domain, isPercentDecoded: isPercentDecoded) {
     case .containsUnicodeOrIDNA:
 
-// ============ HACKY IDNA INTEGRATION ============
+      // ============ HACKY IDNA INTEGRATION ============
 
       // The domain should already be percent-decoded (if required), and we don't decode again after IDNA
       // (anything which gets normalized to percent-encoding, e.g. "％４１.com", will be rejected).
@@ -139,13 +139,8 @@ extension ParsedHost {
 
       var asciiDomain = [UInt8]()
       guard IDNA.toASCII(utf8: domain, writer: { byte in asciiDomain.append(byte) }) else {
-        print("ToASCII Failed! Input: [\(String(decoding: domain, as: UTF8.self))]")
         return nil
       }
-      print(
-        "Original:", "[\(String(decoding: domain, as: UTF8.self))]",
-        "ToASCII:", "[\(String(decoding: asciiDomain, as: UTF8.self))]"
-      )
       guard !asciiDomain.isEmpty else { return nil }
 
       switch ParsedHost._parseASCIIDomain(asciiDomain, isPercentDecoded: false, ignoreIDNAPrefix: true) {
@@ -166,7 +161,7 @@ extension ParsedHost {
         return .idn(asciiDomain)
       }
 
-// ============ END HACKY IDNA INTEGRATION ============
+    // ============ END HACKY IDNA INTEGRATION ============
 
     case .forbiddenDomainCodePoint:
       callback.validationError(.hostOrDomainForbiddenCodePoint)

@@ -63,7 +63,7 @@ extension UTS46ConformanceTests {
 
     let reportURL = fileURLForReport(named: "weburl-idna-uts46-tests")
     try harness.report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
-    print("Report written to: \(reportURL)")
+    print("✏️ Report written to: \(reportURL)")
   }
 }
 

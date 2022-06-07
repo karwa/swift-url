@@ -1450,29 +1450,12 @@ extension WebURLTests {
       XCTAssertFalse(seenOrigins.contains(myURL.origin))
     }
   }
-
-  func testIDNAFastPathIsCaseInsensitive() {
-    // Recently added to the WPT tests in https://github.com/web-platform-tests/wpt/pull/32177
-    // Since we don't support IDNA (yet), it's important that we double-check that all of these fail to parse.
-    XCTAssertNil(WebURL("http://xn--6qqa088eba/"))
-    XCTAssertNil(WebURL("http://XN--6qqa088eba/"))
-    XCTAssertNil(WebURL("http://Xn--6qqa088eba/"))
-    XCTAssertNil(WebURL("http://xN--6qqa088eba/"))
-
-    // Tabs and newlines for non-contiguous path.
-    XCTAssertNil(WebURL("http://x\tn-\n-6qqa088eba/"))
-    XCTAssertNil(WebURL("http://X\tN-\n-6qqa088eba/"))
-    XCTAssertNil(WebURL("http://X\tn-\n-6qqa088eba/"))
-    XCTAssertNil(WebURL("http://x\tN-\n-6qqa088eba/"))
-    // Tabs an newlines, but not IDNA ('ax--').
-    XCTAssertEqual(WebURL("http://ax\tn-\n-6qqa088eba/")?.serialized(), "http://axn--6qqa088eba/")
-  }
 }
 
 extension WebURLTests {
 
   func testIDNA() {
-    let hosts: [(String, String?)] = [
+    let hosts: [(given: String, ascii: String?)] = [
       ("www.foo。bar.com", "www.foo.bar.com"),
       ("GOO 　goo.com", nil),
       ("💩.com", "xn--ls8h.com"),
@@ -1493,25 +1476,46 @@ extension WebURLTests {
       ("caf\u{00E9}.fr", "xn--caf-dma.fr"),
       ("cafe\u{0301}.fr", "xn--caf-dma.fr"),
       ("xn--cafe-yvc.fr", nil),
-
+      ("a.b.c.xn--pokxncvks", nil),
+      // Deviation character.
       ("xn--1ch.com", "xn--1ch.com"),
-
-      ("a.b.c.xn--pokxncvks", nil), // Valid punycode; should be rejected by label validation.
+      // Percent-encoded unicode.
+      ("%F0%9F%92%A9", "xn--ls8h"),
+      // Percent-encoded Punycode.
+      ("%78n--", nil),
+      ("%58n--", nil),
+      ("x%6e--", nil),
+      ("%58%6E--fa-hia", "xn--fa-hia"),
+      ("%58%6E-%2Df%61-hi%61", "xn--fa-hia"),
+      ("%58%6E-%2Df%41-hi%41", "xn--fa-hia"),
+      // Percent-encoded "ₓ" in the ACE prefix.
+      ("%E2%82%93n--n3h", "xn--n3h"),
+      ("%E2%82%93n%2D%2dn3h", "xn--n3h"),
     ]
-    for (inputHost, urlHost) in hosts {
-      // 1. Check that we can parse the input hostname in a URL.
-      let url = WebURL("http://\(inputHost)")
-      // 2. Should be mapped and encoded to the correct value (or fail).
-      XCTAssertEqual(url?.hostname, urlHost)
 
-      defer { print("") }
-      print("URL:", url?.serialized() ?? "nil")
+    for (givenHostname, expectedURLHost) in hosts {
 
-      // 3. Check idemopotence.
-      guard let url = url else { continue }
-      let roundtrip = WebURL(url.serialized())
-      XCTAssertEqual(roundtrip?.serialized(), url.serialized())
-      XCTAssertEqual(roundtrip?.hostname, url.hostname)
+      // Check that we can parse the input hostname in a URL.
+      // The hostname of the result should be normalized and ASCIIfied (or the operation should fail).
+      switch WebURL("http://\(givenHostname)") {
+      case .some(let parserResult):
+        XCTAssertEqual(parserResult.hostname, expectedURLHost)
+        XCTAssertURLIsIdempotent(parserResult)
+      case .none:
+        XCTAssertNil(expectedURLHost)
+      }
+
+      // Same should apply to the .hostname setter.
+      var setterResult = WebURL("http://weburl/")!
+      precondition(setterResult.serialized() == "http://weburl/")
+      switch Result(catching: { try setterResult.setHostname(givenHostname) }) {
+      case .success:
+        XCTAssertEqual(setterResult.hostname, expectedURLHost)
+        XCTAssertURLIsIdempotent(setterResult)
+      case .failure:
+        XCTAssertEqual(setterResult.serialized(), "http://weburl/")
+        XCTAssertURLIsIdempotent(setterResult)
+      }
     }
   }
 }

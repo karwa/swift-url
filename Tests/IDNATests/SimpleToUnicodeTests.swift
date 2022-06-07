@@ -101,8 +101,6 @@ extension SimpleToUnicodeTests {
         XCTFail("Unexpected success: \(input) -> \(actualResult)")
         continue
       }
-      print(Array(actualResult.unicodeScalars))
-      print(actualResult)
       XCTAssertEqualElements(expectedResult.unicodeScalars, actualResult.unicodeScalars)
     }
   }
