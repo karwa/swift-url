@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import IDNA
+
 /// A description of a host that has been parsed from a string.
 ///
 /// - seealso: `ParsedURLString`
 ///
 @usableFromInline
 internal enum ParsedHost {
+  case internationalizedDomain(_InternationalizedDomainInfo)
   case asciiDomain(_ASCIIDomainInfo)
   case ipv4Address(IPv4Address)
   case ipv6Address(IPv6Address)
@@ -60,26 +63,28 @@ extension ParsedHost {
       return
     }
 
-    let result: Optional<ParsedHost>
-
-    if schemeKind.isSpecial {
-      let needsPercentDecoding =
-        hostname.withContiguousStorageIfAvailable {
-          $0.boundsChecked.uncheckedFastContains(ASCII.percentSign.codePoint)
-        } ?? true
-      if !needsPercentDecoding {
-        result = ParsedHost._parseDomainOrIPv4(
-          hostname, scheme: schemeKind, isPercentDecoded: false, callback: &callback
-        )
-      } else {
-        result = ParsedHost._parseDomainOrIPv4(
-          hostname.lazy.percentDecoded(), scheme: schemeKind, isPercentDecoded: true, callback: &callback
-        )
+    guard schemeKind.isSpecial else {
+      guard let opaqueHostInfo = ParsedHost._parseOpaqueHostname(hostname, callback: &callback) else {
+        return nil
       }
-    } else {
-      result = ParsedHost._parseOpaqueHostname(hostname, callback: &callback).map { .opaque($0) }
+      self = .opaque(opaqueHostInfo)
+      return
     }
 
+    let result: Optional<ParsedHost>
+    let needsPercentDecoding =
+      hostname.withContiguousStorageIfAvailable {
+        $0.boundsChecked.uncheckedFastContains(ASCII.percentSign.codePoint)
+      } ?? true
+    if needsPercentDecoding {
+      result = ParsedHost._parseSpecialHostname(
+        hostname.lazy.percentDecoded(), schemeKind, isPercentDecoded: true, callback: &callback
+      )
+    } else {
+      result = ParsedHost._parseSpecialHostname(
+        hostname, schemeKind, isPercentDecoded: false, callback: &callback
+      )
+    }
     if let result = result {
       self = result
     } else {
@@ -117,28 +122,45 @@ extension ParsedHost {
     return hostnameInfo
   }
 
-  /// Parses the given domain or IPv4 address.
+  /// Parses the given special hostname, interpreting it as either some kind of domain or IPv4 address.
   ///
   @inlinable
-  internal static func _parseDomainOrIPv4<UTF8Bytes, Callback>(
-    _ domain: UTF8Bytes, scheme: WebURL.SchemeKind, isPercentDecoded: Bool, callback: inout Callback
+  internal static func _parseSpecialHostname<UTF8Bytes, Callback>(
+    _ hostname: UTF8Bytes, _ scheme: WebURL.SchemeKind, isPercentDecoded: Bool, callback: inout Callback
   ) -> ParsedHost? where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: URLParserCallback {
 
-    switch ParsedHost._parseASCIIDomain(domain, isPercentDecoded: isPercentDecoded) {
+    switch ParsedHost._scanSpecialHostname(hostname, isPercentDecoded: isPercentDecoded, isKnownValidIDNA: false) {
     case .containsUnicodeOrIDNA:
-      // TODO: Handle domains conaining Unicode or IDNA labels.
-      callback.validationError(.domainToASCIIFailure)
-      return nil
+      var encodedHostname = [UInt8]()
+      encodedHostname.reserveCapacity(hostname.underestimatedCount)
+      let isValid = IDNA.toASCII(utf8: hostname) { byte in encodedHostname.append(byte) }
+      guard isValid, !encodedHostname.isEmpty else {
+        return nil
+      }
+      switch ParsedHost._scanSpecialHostname(encodedHostname, isPercentDecoded: false, isKnownValidIDNA: true) {
+      case .containsUnicodeOrIDNA:
+        fatalError("Output of IDNA.toASCII should be ASCII")
+      case .forbiddenDomainCodePoint:
+        callback.validationError(.hostOrDomainForbiddenCodePoint)
+        return nil
+      case .endsInANumber:
+        return IPv4Address(utf8: encodedHostname).map { .ipv4Address($0) }
+      case .asciiDomain:
+        if case .file = scheme, isLocalhost(utf8: encodedHostname) {
+          return .empty
+        }
+        return .internationalizedDomain(_InternationalizedDomainInfo(codeUnits: encodedHostname))
+      }
+
     case .forbiddenDomainCodePoint:
       callback.validationError(.hostOrDomainForbiddenCodePoint)
       return nil
+
     case .endsInANumber:
-      guard let address = IPv4Address(utf8: domain) else {
-        return nil
-      }
-      return .ipv4Address(address)
+      return IPv4Address(utf8: hostname).map { .ipv4Address($0) }
+
     case .asciiDomain(let asciiDomainInfo):
-      if case .file = scheme, isLocalhost(utf8: domain) {
+      if case .file = scheme, isLocalhost(utf8: hostname) {
         return .empty
       }
       return .asciiDomain(asciiDomainInfo)
@@ -149,22 +171,28 @@ extension ParsedHost {
   /// and some details which are useful to write a normalized version of the domain.
   ///
   @inlinable
-  internal static func _parseASCIIDomain<UTF8Bytes>(
-    _ domain: UTF8Bytes, isPercentDecoded: Bool
-  ) -> _DomainParseResult where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
+  internal static func _scanSpecialHostname<UTF8Bytes>(
+    _ hostname: UTF8Bytes, isPercentDecoded: Bool, isKnownValidIDNA: Bool
+  ) -> _ScanSpecialHostnameResult where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
-    assert(!domain.isEmpty)
+    assert(!hostname.isEmpty)
     var domainInfo = _ASCIIDomainInfo(decodedCount: 0, needsPercentDecoding: isPercentDecoded, needsLowercasing: false)
 
-    guard !hasIDNAPrefix(utf8: domain) else {
+    // If 'isKnownValidIDNA = true', we don't need to detect uppercase characters because we trust
+    // IDNA to already provide a lowercased ASCII result. So we can short-circuit any ASCII case checks
+    // later in this function by initializing 'needsLowercasing = true' (counter-intuitive as that may be).
+    // The caller on the IDNA path doesn't even check the _ASCIIDomainInfo result.
+    domainInfo.needsLowercasing = isKnownValidIDNA
+
+    guard isKnownValidIDNA || !hasIDNAPrefix(utf8: hostname) else {
       return .containsUnicodeOrIDNA
     }
 
-    var i = domain.startIndex
+    var i = hostname.startIndex
     var startOfLastLabel = i
 
-    while i < domain.endIndex {
-      guard let char = ASCII(domain[i]) else {
+    while i < hostname.endIndex {
+      guard let char = ASCII(hostname[i]) else {
         return .containsUnicodeOrIDNA
       }
       if char.isForbiddenDomainCodePoint {
@@ -172,22 +200,22 @@ extension ParsedHost {
       }
       domainInfo.needsLowercasing = domainInfo.needsLowercasing || char.isUppercaseAlpha
       domainInfo.decodedCount &+= 1
-      domain.formIndex(after: &i)
+      hostname.formIndex(after: &i)
 
       if char == .period {
-        guard !hasIDNAPrefix(utf8: domain[Range(uncheckedBounds: (i, domain.endIndex))]) else {
+        guard isKnownValidIDNA || !hasIDNAPrefix(utf8: hostname[Range(uncheckedBounds: (i, hostname.endIndex))]) else {
           return .containsUnicodeOrIDNA
         }
-        if i < domain.endIndex {
+        if i < hostname.endIndex {
           startOfLastLabel = i
         }
       }
     }
 
-    var lastLabel = domain[Range(uncheckedBounds: (startOfLastLabel, domain.endIndex))]
+    var lastLabel = hostname[Range(uncheckedBounds: (startOfLastLabel, hostname.endIndex))]
     // Fast path: if the last label does not begin with a digit, it is not any kind of number we recognize.
     if let firstChar = lastLabel.fastPopFirst(), ASCII(firstChar)?.isDigit == true {
-      if _domainLabelIsANumber(firstChar: firstChar, remainder: lastLabel) {
+      if _asciiDomainLabelIsANumber(firstChar: firstChar, remainder: lastLabel) {
         return .endsInANumber
       }
     }
@@ -202,7 +230,7 @@ extension ParsedHost {
   /// If the domain ends with a trailing period, it may be included in `remainder`.
   ///
   @inlinable
-  internal static func _domainLabelIsANumber<UTF8Bytes>(
+  internal static func _asciiDomainLabelIsANumber<UTF8Bytes>(
     firstChar: UInt8, remainder: UTF8Bytes
   ) -> Bool where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, UTF8Bytes.SubSequence == UTF8Bytes {
 
@@ -211,24 +239,25 @@ extension ParsedHost {
     if remainder.last == ASCII.period.codePoint {
       remainder.removeLast()
     }
+
     guard let secondChar = remainder.fastPopFirst().flatMap({ ASCII($0) }) else {
-      return true  // The first character is a digit, and the second is assumed ASCII if present.
+      assert(remainder.isEmpty, "Found a non-ASCII character")
+      return true
     }
+
     if secondChar.isDigit {
-      if remainder.fastAllSatisfy({ ASCII($0)?.isDigit == true }) {
-        return true
-      }
+      return remainder.fastAllSatisfy({ ASCII($0)?.isDigit == true })
+
     } else if firstChar == ASCII.n0.codePoint, secondChar == .x || secondChar == .X {
-      if remainder.fastAllSatisfy({ ASCII($0)?.isHexDigit == true }) {
-        return true
-      }
+      return remainder.fastAllSatisfy({ ASCII($0)?.isHexDigit == true })
+
     }
     return false
   }
 }
 
 @usableFromInline
-internal enum _DomainParseResult {
+internal enum _ScanSpecialHostnameResult {
 
   /// The given domain contains non-ASCII code-points or IDNA labels.
   /// Currently, these are not supported.
@@ -247,6 +276,18 @@ internal enum _DomainParseResult {
   /// The given domain appears to be valid, containing only ASCII characters and no IDNA.
   ///
   case asciiDomain(_ASCIIDomainInfo)
+}
+
+@usableFromInline
+internal struct _InternationalizedDomainInfo {
+
+  @usableFromInline
+  internal var codeUnits: [UInt8]
+
+  @inlinable
+  internal init(codeUnits: [UInt8]) {
+    self.codeUnits = codeUnits
+  }
 }
 
 @usableFromInline
@@ -304,6 +345,10 @@ extension ParsedHost {
     switch self {
     case .empty:
       writer.writeHostname(lengthIfKnown: 0, kind: .empty) { $0(EmptyCollection()) }
+
+    case .internationalizedDomain(let idnaInfo):
+      // TODO: Set a flag on the WebURL object/add a new HostKind case.
+      writer.writeHostname(lengthIfKnown: idnaInfo.codeUnits.count, kind: .domain) { $0(idnaInfo.codeUnits) }
 
     case .asciiDomain(let domainInfo):
       // It isn't worth splitting "needs percent decoding" from "needs lowercasing".

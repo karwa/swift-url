@@ -19,52 +19,80 @@ import PackageDescription
 var package = Package(
   name: "swift-url",
   products: [
-    // Core functionality.
+
+    // 🧩 Core functionality.
+    //    The WebURL type. You definitely want this.
     .library(name: "WebURL", targets: ["WebURL"]),
 
-    // Integration with swift-system.
-    // FIXME: This should become a cross-import overlay once they exist and are supported by SwiftPM.
+    // 🔗 Integration with swift-system.
+    //    Adds WebURL <-> FilePath conversions.
     .library(name: "WebURLSystemExtras", targets: ["WebURLSystemExtras"]),
 
-    // Integration with Foundation.
-    // FIXME: This should become a cross-import overlay once they exist and are supported by SwiftPM.
+    // 🔗 Integration with Foundation.
+    //    Adds WebURL <-> Foundation.URL conversions, and URLSession integration.
     .library(name: "WebURLFoundationExtras", targets: ["WebURLFoundationExtras"]),
 
-    // Test support library.
-    // Various infrastructure components to run the URL web-platform-tests and other tests contained in JSON files.
-    // Used by https://github.com/karwa/swift-url-tools to provide a GUI test runner.
-    .library(name: "WebURLTestSupport", targets: ["WebURLTestSupport"]),
+    // 🧰 Support Libraries (internal use only).
+    // =========================================
+    // These libraries expose some convenient hooks for testing, benchmarking, and other tools
+    // - either in this repo or at <https://github.com/karwa/swift-url-tools>.
+    .library(name: "_WebURLIDNA", targets: ["IDNA"]),
+    .library(name: "_WebURLTestSupport", targets: ["WebURLTestSupport"]),
+
   ],
   dependencies: [
-    // swift-system for WebURLSystemExtras.
+
+    // 🔗 Integrations.
+    // ================
+    // WebURLSystemExtras supports swift-system 1.0+.
     .package(url: "https://github.com/apple/swift-system.git", .upToNextMajor(from: "1.0.0")),
 
-    // [Test Only] No-dependency HTTP server for testing Foundation extensions.
+    // 🧪 Test-Only Dependencies.
+    // ==========================
+    // Swifter - A no-dependency HTTP server for testing Foundation extensions.
     .package(name: "Swifter", url: "https://github.com/httpswift/swifter.git", .upToNextMajor(from: "1.5.0")),
 
-    // [Test Only] Checkit for testing protocol conformances.
+    // Checkit - Exercises for stdlib protocol conformances.
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
+
   ],
   targets: [
-    // Products.
+
+    // 🗺 Unicode and IDNA.
+    // ====================
+
+    .target(
+      name: "UnicodeDataStructures",
+      swiftSettings: [.define("WEBURL_UNICODE_PARSE_N_PRINT", .when(configuration: .debug))]
+    ),
+    .testTarget(
+      name: "UnicodeDataStructuresTests",
+      dependencies: ["UnicodeDataStructures"],
+      resources: [.copy("GenerateData/TableDefinitions")]
+    ),
+
+    .target(
+      name: "IDNA",
+      dependencies: ["UnicodeDataStructures"]
+    ),
+    .testTarget(
+      name: "IDNATests",
+      dependencies: ["IDNA", "WebURLTestSupport"]
+    ),
+
+    // 🌐 WebURL.
+    // ==========
+
     .target(
       name: "WebURL",
+      dependencies: ["IDNA"],
       exclude: ["WebURL.docc"]
     ),
     .target(
-      name: "WebURLSystemExtras",
-      dependencies: ["WebURL", .product(name: "SystemPackage", package: "swift-system")]
-    ),
-    .target(
-      name: "WebURLFoundationExtras",
-      dependencies: ["WebURL"]
-    ),
-    .target(
       name: "WebURLTestSupport",
-      dependencies: ["WebURL"],
+      dependencies: ["WebURL", "IDNA"],
       resources: [.copy("TestFilesData")]
     ),
-    // Tests.
     .testTarget(
       name: "WebURLTests",
       dependencies: ["WebURL", "WebURLTestSupport", "Checkit"]
@@ -73,15 +101,32 @@ var package = Package(
       name: "WebURLDeprecatedAPITests",
       dependencies: ["WebURL"]
     ),
+
+    // 🔗 WebURLSystemExtras.
+    // ======================
+
+    .target(
+      name: "WebURLSystemExtras",
+      dependencies: ["WebURL", .product(name: "SystemPackage", package: "swift-system")]
+    ),
     .testTarget(
       name: "WebURLSystemExtrasTests",
       dependencies: ["WebURLSystemExtras", "WebURL", .product(name: "SystemPackage", package: "swift-system")]
+    ),
+
+    // 🔗 WebURLFoundationExtras.
+    // ==========================
+
+    .target(
+      name: "WebURLFoundationExtras",
+      dependencies: ["WebURL"]
     ),
     .testTarget(
       name: "WebURLFoundationExtrasTests",
       dependencies: ["WebURLFoundationExtras", "WebURLTestSupport", "WebURL"],
       resources: [.copy("Resources")]
-    )
+    ),
+
   ]
 )
 

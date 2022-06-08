@@ -16,7 +16,9 @@ import Foundation
 
 /// A database of test cases.
 ///
-/// Load a database using the ``loadTestFile(_:as:)`` function, providing a type to decode the file as.
+/// Load a database using either
+/// - ``loadBinaryTestFile(_:)``, to load the file as binary data, or
+/// - ``loadTestFile(_:as:)``, providing to decode the file from JSON using Codable.
 ///
 public enum TestFile: String, Equatable, Hashable, Codable {
   case WPTURLConstructorTests = "urltestdata"
@@ -24,6 +26,12 @@ public enum TestFile: String, Equatable, Hashable, Codable {
   case WPTURLSetterTests = "setters_tests"
   case WebURLAdditionalSetterTests = "additional_setters_tests"
   case FilePathTests = "file_url_path_tests"
+  case IdnaTest = "IdnaTestV2"
+
+  fileprivate var fileExtension: String {
+    if case .IdnaTest = self { return "txt" }
+    return "json"
+  }
 }
 
 internal enum LoadTestFileError: Error {
@@ -31,15 +39,14 @@ internal enum LoadTestFileError: Error {
   case failedToDecode(TestFile, error: Error)
 }
 
-/// Loads and decodes the given test database.
+/// Loads the given test database as binary data.
 ///
-/// If the file cannot be loaded or decoded, an error is thrown.
+/// If the file cannot be loaded, an error is thrown.
 ///
-public func loadTestFile<T: Decodable>(_ file: TestFile, as: T.Type) throws -> T {
-
+public func loadBinaryTestFile(_ file: TestFile) throws -> Data {
   let fileData: Data
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
-    let url = Bundle.module.url(forResource: "TestFilesData/\(file.rawValue)", withExtension: "json")!
+    let url = Bundle.module.url(forResource: "TestFilesData/\(file.rawValue)", withExtension: file.fileExtension)!
     fileData = try Result {
       try Data(contentsOf: url)
     }.mapError {
@@ -49,13 +56,22 @@ public func loadTestFile<T: Decodable>(_ file: TestFile, as: T.Type) throws -> T
     // SwiftPM resources don't appear to work on other platforms, so just... load it from the repository (sigh).
     var path = #filePath
     path.removeLast("TestFiles.swift".utf8.count)
-    path += "TestFilesData/\(file.rawValue).json"
+    path += "TestFilesData/\(file.rawValue).\(file.fileExtension)"
     guard let data = FileManager.default.contents(atPath: path) else {
       throw LoadTestFileError.failedToLoad(file, error: nil)
     }
     fileData = data
   #endif
+  return fileData
+}
 
+/// Loads and decodes the given test database.
+///
+/// If the file cannot be loaded or decoded, an error is thrown.
+///
+public func loadTestFile<T: Decodable>(_ file: TestFile, as: T.Type) throws -> T {
+
+  let fileData = try loadBinaryTestFile(file)
   return try Result {
     try JSONDecoder().decode(T.self, from: fileData)
   }.mapError {

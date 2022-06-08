@@ -468,7 +468,7 @@ extension WebURLTests {
     checkOriginalHasNotChanged()
   }
 
-  // Note: This is likely to be a bit fragile, since it relies on optimisations which might not happen at -Onone.
+  // Note: This is likely to be a bit fragile, since it relies on optimizations which might not happen at -Onone.
   //       For now, it works.
 
   /// Tests that setters on a uniquely referenced URL are performed in-place.
@@ -541,7 +541,7 @@ extension WebURLTests {
 // --------------------------------------------
 // MARK: - WebURL component tests.
 // --------------------------------------------
-// The behaviour of getters and setters are tested via the JS model according to the WPT test files.
+// The behavior of getters and setters are tested via the JS model according to the WPT test files.
 // However, the JS model is in many ways not ideal for use in Swift, so these tests only cover deviations from that
 // model, including errors that can be thrown by the setters.
 
@@ -1450,21 +1450,72 @@ extension WebURLTests {
       XCTAssertFalse(seenOrigins.contains(myURL.origin))
     }
   }
+}
 
-  func testIDNAFastPathIsCaseInsensitive() {
-    // Recently added to the WPT tests in https://github.com/web-platform-tests/wpt/pull/32177
-    // Since we don't support IDNA (yet), it's important that we double-check that all of these fail to parse.
-    XCTAssertNil(WebURL("http://xn--6qqa088eba/"))
-    XCTAssertNil(WebURL("http://XN--6qqa088eba/"))
-    XCTAssertNil(WebURL("http://Xn--6qqa088eba/"))
-    XCTAssertNil(WebURL("http://xN--6qqa088eba/"))
+extension WebURLTests {
 
-    // Tabs and newlines for non-contiguous path.
-    XCTAssertNil(WebURL("http://x\tn-\n-6qqa088eba/"))
-    XCTAssertNil(WebURL("http://X\tN-\n-6qqa088eba/"))
-    XCTAssertNil(WebURL("http://X\tn-\n-6qqa088eba/"))
-    XCTAssertNil(WebURL("http://x\tN-\n-6qqa088eba/"))
-    // Tabs an newlines, but not IDNA ('ax--').
-    XCTAssertEqual(WebURL("http://ax\tn-\n-6qqa088eba/")?.serialized(), "http://axn--6qqa088eba/")
+  func testIDNA() {
+    let hosts: [(given: String, ascii: String?)] = [
+      ("www.foo。bar.com", "www.foo.bar.com"),
+      ("GOO 　goo.com", nil),
+      ("💩.com", "xn--ls8h.com"),
+      ("hello.💩.com", "hello.xn--ls8h.com"),
+      ("faß.api.你好你好.com", "xn--fa-hia.api.xn--6qqa088eba.com"),
+      ("faß.ExAmPlE", "xn--fa-hia.example"),
+      ("0x𝟕f.1", "127.0.0.1"),
+      ("０Ｘｃ０．０２５０．０１", "192.168.0.1"),
+      ("ₓn--fa-hia.example", "xn--fa-hia.example"),
+      ("☃", "xn--n3h"),
+      ("xn--n3h", "xn--n3h"),
+      ("你好你好", "xn--6qqa088eba"),
+      ("xn--6qqa088eba", "xn--6qqa088eba"),
+      ("a.أهلا.com", "a.xn--igbi0gl.com"),
+      ("a.هذهالكلمة.com", "a.xn--mgbet1febhkb.com"),
+      ("xn--b1abfaaepdrnnbgefbadotcwatmq2g4l", "xn--b1abfaaepdrnnbgefbadotcwatmq2g4l"),
+      ("xn--bbb", "xn--bbb"),
+      ("caf\u{00E9}.fr", "xn--caf-dma.fr"),
+      ("cafe\u{0301}.fr", "xn--caf-dma.fr"),
+      ("xn--cafe-yvc.fr", nil),
+      ("a.b.c.xn--pokxncvks", nil),
+      // Deviation character.
+      ("xn--1ch.com", "xn--1ch.com"),
+      // Percent-encoded unicode.
+      ("%F0%9F%92%A9", "xn--ls8h"),
+      // Percent-encoded Punycode.
+      ("%78n--", nil),
+      ("%58n--", nil),
+      ("x%6e--", nil),
+      ("%58%6E--fa-hia", "xn--fa-hia"),
+      ("%58%6E-%2Df%61-hi%61", "xn--fa-hia"),
+      ("%58%6E-%2Df%41-hi%41", "xn--fa-hia"),
+      // Percent-encoded "ₓ" in the ACE prefix.
+      ("%E2%82%93n--n3h", "xn--n3h"),
+      ("%E2%82%93n%2D%2dn3h", "xn--n3h"),
+    ]
+
+    for (givenHostname, expectedURLHost) in hosts {
+
+      // Check that we can parse the input hostname in a URL.
+      // The hostname of the result should be the expected ASCII IDN (or the operation should fail).
+      switch WebURL("http://\(givenHostname)") {
+      case .some(let parserResult):
+        XCTAssertEqual(parserResult.hostname, expectedURLHost)
+        XCTAssertURLIsIdempotent(parserResult)
+      case .none:
+        XCTAssertNil(expectedURLHost)
+      }
+
+      // Same should apply to the .hostname setter.
+      var setterResult = WebURL("http://weburl/")!
+      precondition(setterResult.serialized() == "http://weburl/")
+      switch Result(catching: { try setterResult.setHostname(givenHostname) }) {
+      case .success:
+        XCTAssertEqual(setterResult.hostname, expectedURLHost)
+        XCTAssertURLIsIdempotent(setterResult)
+      case .failure:
+        XCTAssertEqual(setterResult.serialized(), "http://weburl/")
+        XCTAssertURLIsIdempotent(setterResult)
+      }
+    }
   }
 }
