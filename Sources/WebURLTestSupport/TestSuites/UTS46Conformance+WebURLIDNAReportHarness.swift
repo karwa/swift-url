@@ -85,7 +85,7 @@ extension UTS46Conformance.WebURLIDNAReportHarness: UTS46Conformance.Harness {
 
           // The expected toUnicode result should contain a scalar which we think is disallowed_STD3_valid.
           let expectedScalars = String(decoding: result.testCase.toUnicode.result, as: UTF8.self).unicodeScalars
-          let hasSTD3Disallowed = expectedScalars.contains(where: { IDNA._isDisallowed_STD3_valid($0) })
+          let hasSTD3Disallowed = expectedScalars.contains(where: { IDNA._SPIs._isDisallowed_STD3_valid($0) })
           assert(hasSTD3Disallowed)
 
           // The actual result should be the same for toAscii and toUnicode - that we are more lenient.

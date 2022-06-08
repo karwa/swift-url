@@ -307,6 +307,12 @@ extension IDNA {
 // --------------------------------------------
 
 
+/// A parameter defined by the UTS46 Specification, which for this implementation is a constant value.
+/// For example, `Transitional_Processing` is always `false`.
+///
+@inlinable @inline(__always)
+internal func FixedParameter(_ value: Bool) -> Bool { value }
+
 extension IDNA {
 
   /// Performs IDNA compatibility processing, as defined by https://www.unicode.org/reports/tr46/#Processing
@@ -393,6 +399,9 @@ extension IDNA {
       self._useSTD3ASCIIRules = useSTD3ASCIIRules
     }
 
+    @inlinable @inline(__always)
+    internal static var DisableNFCNormalization: Bool { false }
+
     @usableFromInline
     internal enum _State {
       case decodeFromSource
@@ -455,7 +464,7 @@ extension IDNA {
         //    That's what this design is intended to work with. We would just feed it scalars on each call to 'next()',
         //    and forward its output.
         //
-        // B. Don't normalize to NFC.
+        // B. Don't normalize to NFC. (See DisableNFCNormalization)
         //
         //    This is not really valid, but is useful for testing because it doesn't force serialization.
         //    That means we process N labels, and might fail on the N+1'th label because of something like a UTF-8
@@ -469,8 +478,8 @@ extension IDNA {
         //      Eventually, '.decodeFromSource' will consume all scalars and go to '.end'.
         //
         case .normalize(let mappedScalar):
-          guard IDNA_MappingAndNormalization_NormalizeByBufferingToString else {
-            self._state = .serializeUnnormalized(mappedScalar, index: 0)  // Normalization disabled!
+          guard !Self.DisableNFCNormalization else {
+            self._state = .serializeUnnormalized(mappedScalar, index: 0)
             break
           }
           switch mappedScalar {
@@ -1024,73 +1033,30 @@ extension IDNA {
 
 
 // --------------------------------------------
-// MARK: - Utils and Shims.
+// MARK: - SPIs
 // --------------------------------------------
+// Technically this whole module is SPI, but these are especially obscure and even less supported.
 
-
-@inlinable @inline(__always)
-internal func FixedParameter(_ value: Bool) -> Bool { value }
-
-// The standard library doesn't currently expose NFC normalization algorithms or data.
-//
-// Also, the current (SPI) implementation uses String as its Unicode codepoint source, but
-// it is actually written generically and should be able to consume our scalars directly.
-// That means we currently have to buffer everything in to a string, but in the future
-// we should be able to avoid that overhead.
-
-@inlinable @inline(__always)
-internal var IDNA_MappingAndNormalization_NormalizeByBufferingToString: Bool { true }
-
-#if USE_SWIFT_STDLIB_UNICODE
-
-  @_spi(_Unicode) import Swift
-
-  @usableFromInline
-  func isNFC<C: Collection>(_ scalars: C) -> Bool where C.Element == Unicode.Scalar {
-    var s = ""
-    s.unicodeScalars.append(contentsOf: scalars)
-    if #available(macOS 9999, *) {
-      return s._nfc.elementsEqual(scalars)
-    } else {
-      fatalError()
-    }
-  }
-
-  @usableFromInline
-  func toNFC(_ string: String) -> [Unicode.Scalar] {
-    if #available(macOS 9999, *) {
-      return Array(string._nfc)
-    } else {
-      fatalError()
-    }
-  }
-
-#else
-
-  import Foundation
-
-  @usableFromInline
-  func isNFC<C: Collection>(_ scalars: C) -> Bool where C.Element == Unicode.Scalar {
-    var str = ""
-    str.unicodeScalars.append(contentsOf: scalars)
-    return str.precomposedStringWithCanonicalMapping.unicodeScalars.elementsEqual(scalars)
-  }
-
-  @usableFromInline
-  func toNFC(_ string: String) -> [Unicode.Scalar] {
-    Array(string.precomposedStringWithCanonicalMapping.unicodeScalars)
-  }
-
-#endif
 
 extension IDNA {
 
-  /// [SPI] - Do Not Use.
+  /// Special-purpose APIs intended for WebURL's support libraries.
   ///
-  /// This function is not part of the IDNA module's supported interface. It may disappear in any release,
-  /// without a SemVer major version bump. You have been warned.
+  /// > Important:
+  /// > This type, any nested types, and all of their static/member functions, are not considered
+  /// > part of this module's supported API. Please **do not use** these APIs.
+  /// > They may disappear, or their behavior may change, at any time.
   ///
-  /// Returns whether or not the given scalar has mapping status `disallowed_STD3_valid`.
+  public struct _SPIs {}
+}
+
+extension IDNA._SPIs {
+
+  /// Whether or not the given scalar has mapping status `disallowed_STD3_valid`.
+  ///
+  /// > Important:
+  /// > This function is not considered part of the module's supported API.
+  /// > Please **do not use** it. It may disappear, or its behavior may change, at any time.
   ///
   public static func _isDisallowed_STD3_valid(_ s: Unicode.Scalar) -> Bool {
     switch _idna_db[s] {
