@@ -45,7 +45,7 @@ internal protocol IndexedTableSchema {
   // - U+AC00 - U+D700 (corresponding to east asian scripts) also have a single mapping entry
   //
   // This means a huge amount of the space is covered by just 2 entries! The index ends up containing this
-  // location a lot, and not of its space is used to help acceleate other code-points. We could hard-code
+  // location a lot, and not of its space is used to help accelerate other code-points. We could hard-code
   // at least the first region for the BMP table, freeing more bits for the other regions.
 
 }
@@ -93,7 +93,7 @@ internal struct IndexedTable<Schema, Data> where Schema: IndexedTableSchema {
   ///
   /// - That the index has (2^N)+1 entries. This means we can take any number of N bits, and it is guaranteed
   ///   to be within bounds of the index table. There is also one entry _after_ every one of those entries,
-  ///   so we can find where the block ends without brancing.
+  ///   so we can find where the block ends without branching.
   ///
   /// - That the index is sorted. This means the block of data we give will always have a positive/zero `count`.
   ///
@@ -150,9 +150,9 @@ internal struct IndexedTable<Schema, Data> where Schema: IndexedTableSchema {
     // - `blockCount` is >= 1
     assert(blockStart < blockEnd, "The index should be sorted and not contain empty blocks")
     let blockCount = Int(blockEnd &- blockStart)
-    return _columnValues.withUnsafeBufferPointer { locnTable in
+    return _columnValues.withUnsafeBufferPointer { locTable in
       _dataValues.withUnsafeBufferPointer { dataTable in
-        let loc = UnsafeBufferPointer(start: locnTable.baseAddress! + Int(blockStart), count: blockCount)
+        let loc = UnsafeBufferPointer(start: locTable.baseAddress! + Int(blockStart), count: blockCount)
         let dat = UnsafeBufferPointer(start: dataTable.baseAddress! + Int(blockStart), count: blockCount)
         return body(loc, dat)
       }

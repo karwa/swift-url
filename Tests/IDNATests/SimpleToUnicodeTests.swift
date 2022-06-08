@@ -116,7 +116,7 @@ extension SimpleToUnicodeTests {
     // the Unicode data in a true stream, without going through String. At that point, UTF-8 validation
     // will occur when the particular label is actually processed.
     //
-    // We can test that behaviour today by disabling normalization, and it is useful for checking
+    // We can test that behavior today by disabling normalization, and it is useful for checking
     // how the rest of the code behaves. This is what this test checks for with `UsingSerializedNFC = false`.
 
     let UsingSerializedNFC = true

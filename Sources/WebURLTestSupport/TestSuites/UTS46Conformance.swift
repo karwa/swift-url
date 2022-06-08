@@ -149,7 +149,7 @@ extension UTS46Conformance: TestSuite {
 ///
 /// The way the Unicode algorithms are structured, all inputs (even erroneous ones) produce a
 /// complete output string, and an error flag to indicate that the string is somehow invalid.
-/// Operations such as `ToUnicode` and `ToAscii` may also be customised with various parameters
+/// Operations such as `ToUnicode` and `ToAscii` may also be customized with various parameters
 /// (for example, `CheckHyphens`, `CheckBidi`, `CheckJoiners`, and `VerifyDnsLength`), so whether
 /// or not an operation produces an error depends on which validation policies the implementation applies.
 ///

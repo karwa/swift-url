@@ -419,7 +419,7 @@ extension Punycode {
 
       // 3b. Process delta.
       //     Use it to adjust the bias for the next integer, then use it to increment our
-      //     { codePoint, insertionPoint} state.
+      //     { codePoint, insertionPoint } state.
 
       do {
         // Increment 'countProcessedScalars' now even though it is actually written later;

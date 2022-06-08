@@ -17,7 +17,7 @@ import Foundation
 /// A database of test cases.
 ///
 /// Load a database using either
-/// - ``loadBinaryTestFile(_:)``, to load the file as bianry data, or
+/// - ``loadBinaryTestFile(_:)``, to load the file as binary data, or
 /// - ``loadTestFile(_:as:)``, providing to decode the file from JSON using Codable.
 ///
 public enum TestFile: String, Equatable, Hashable, Codable {

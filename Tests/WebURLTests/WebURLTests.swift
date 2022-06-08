@@ -468,7 +468,7 @@ extension WebURLTests {
     checkOriginalHasNotChanged()
   }
 
-  // Note: This is likely to be a bit fragile, since it relies on optimisations which might not happen at -Onone.
+  // Note: This is likely to be a bit fragile, since it relies on optimizations which might not happen at -Onone.
   //       For now, it works.
 
   /// Tests that setters on a uniquely referenced URL are performed in-place.
@@ -541,7 +541,7 @@ extension WebURLTests {
 // --------------------------------------------
 // MARK: - WebURL component tests.
 // --------------------------------------------
-// The behaviour of getters and setters are tested via the JS model according to the WPT test files.
+// The behavior of getters and setters are tested via the JS model according to the WPT test files.
 // However, the JS model is in many ways not ideal for use in Swift, so these tests only cover deviations from that
 // model, including errors that can be thrown by the setters.
 
@@ -1496,7 +1496,7 @@ extension WebURLTests {
     for (givenHostname, expectedURLHost) in hosts {
 
       // Check that we can parse the input hostname in a URL.
-      // The hostname of the result should be normalized and ASCIIfied (or the operation should fail).
+      // The hostname of the result should be the expected ASCII IDN (or the operation should fail).
       switch WebURL("http://\(givenHostname)") {
       case .some(let parserResult):
         XCTAssertEqual(parserResult.hostname, expectedURLHost)

@@ -203,7 +203,7 @@ extension PunycodeTests {
       XCTAssertEqualElements(actualReencoded, expectedEncoded.unicodeScalars)
     }
 
-    // Arabic (Egytpian):
+    // Arabic (Egyptian):
     doTest(
       encoded:
         "xn--egbpdaj6bu4bxfgehfvwxn",
