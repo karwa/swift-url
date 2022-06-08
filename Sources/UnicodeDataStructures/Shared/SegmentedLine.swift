@@ -324,9 +324,9 @@ extension SegmentedLine: Equatable where Value: Equatable {
 
 // TODO: Hashable, Codable, etc
 
-#if swift(>=5.5) && canImport(_Concurrency)
-  extension SegmentedLine: Sendable where Bound: Sendable, Value: Sendable {}
-#endif
+//#if swift(>=5.5) && canImport(_Concurrency)
+//  extension SegmentedLine: Sendable where Bound: Sendable, Value: Sendable {}
+//#endif
 
 
 // --------------------------------------------
