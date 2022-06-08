@@ -36,21 +36,7 @@ extension WebPlatformTests {
       "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
     )
 
-    var harness = WPTConstructorTest.WebURLReportHarness(expectedFailures: [
-      // These test failures are due to us not having implemented the `domain2ascii` transform,
-      // often in combination with other features (e.g. with percent encoding).
-      //
-      263,  // domain2ascii: (no-break, zero-width, zero-width-no-break) are name-prepped away to nothing.
-      265,  // domain2ascii: U+3002 is mapped to U+002E (dot).
-      277,  // domain2ascii: fullwidth input should be converted to ASCII and NOT IDN-ized.
-      282,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
-      283,  // domain2ascii: Basic IDN support, UTF-8 and UTF-16 input should be converted to IDN.
-      294,  // domain2ascii: Fullwidth and escaped UTF-8 fullwidth should still be treated as IP.
-      464,  // domain2ascii: Hosts and percent-encoding.
-      465,  // domain2ascii: Hosts and percent-encoding.
-      680,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-      681,  // domain2ascii: IDNA ignored code points in file URLs hosts.
-    ])
+    var harness = WPTConstructorTest.WebURLReportHarness()
     harness.runTests(testFile)
     XCTAssertEqual(harness.reportedResultCount, 737, "Unexpected number of tests executed.")
     XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
