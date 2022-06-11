@@ -85,8 +85,7 @@ let package = Package(
 
     .target(
       name: "WebURL",
-      dependencies: ["IDNA"],
-      exclude: ["WebURL.docc"]
+      dependencies: ["IDNA"]
     ),
     .target(
       name: "WebURLTestSupport",
