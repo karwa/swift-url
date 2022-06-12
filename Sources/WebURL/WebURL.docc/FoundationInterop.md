@@ -6,7 +6,7 @@ Best practices when mixing URL standards
 ## Introduction
 
 
-The WebURL package comes with a number of APIs to support using `WebURL` with Foundation:
+The WebURL package comes with a number of APIs to support using `WebURL` values with Foundation:
 
 1. Conversion initializers.
 
@@ -44,85 +44,85 @@ The WebURL package comes with a number of APIs to support using `WebURL` with Fo
 > import WebURLFoundationExtras  // <--
 > ```
 
-This makes it easier to use `WebURL` for more of your URL processing, while still supporting clients
+These APIs enable you to use `WebURL` for more of your URL processing, while still supporting clients
 or using libraries which require `Foundation.URL`.
 
-
-For many applications, this will "just work". However, if you are developing a library which parses a URL string
-(including from a JSON document or XPC message), there are some additional subtleties which you should be aware of.
-These subtleties are, in fact, defects in URLs themselves; they happen in every programming language, with every
-URL library, and can affect the security and robustness of your code.
+For many applications, this will "just work". However, there are some subtleties you should 
+generally be aware of. The issues we will be discussing are, in fact, defects in URLs themselves;
+and they happen in every programming language, with every URL library, and can affect the security
+and robustness of your code.
 
 
 ## URL Strings are Ambiguous
 
 
-Almost all systems rely on URLs, often for vital operations such as making requests to remote services,
-processing requests from remote clients, locating files, determining who "owns" a particular resource, and more.
-It may be surprising, then, to learn that **URL strings are ambiguous**.
+Almost all systems rely on URLs, often for vital communication with both local and remote services,
+or processing requests from other devices; and data extracted from URLs is often used to make security-
+and privacy-sensitive decisions. It may be surprising, then, to learn that **URL strings are ambiguous**.
 
-URL standards have been revised many times over the decades, introducing subtle differences in how they are interpreted.
+URL standards have been revised many times over the decades, resulting in incompatibilities.
 It is difficult to ensure that all code which processes a URL string interprets it in exactly the same way and
-derives the same information from it - and that applies not only to networked clients, each of which might
-use entirely different languages and libraries to process URLs, but also local applications.
-Moreover, web browsers (typically one of the most important clients) have not been able to conform to any 
-historical standards due to compatibility constraints. There is a surprising amount of variety in how URL strings
-can be interpreted, and sometimes they disagree with each other; and given how much we rely on URLs, that can lead
-to unexpected behavior and even exploitable vulnerabilities.
+derives the same information from it. That is particularly true of networked clients, each of which might
+use entirely different languages and libraries to process URLs, but even local applications
+might expose data to multiple URL parsers, perhaps in dependencies of dependencies.
 
-This is the problem `WebURL` was created to help with; `WebURL` conforms to the latest industry standard,
-which formally defines URL parsing in a way that is compatible with the web platform. You should expect `WebURL`
-to work exactly as your browser does. There is even a shared test-suite which `WebURL`, the major browsers,
-and other libraries all contribute to, which ensures that implementations do not diverge.
+Moreover, web browsers (typically one of the most important clients) have not been able to conform to _any_ 
+historical standards because they must maintain compatibility with the web. The result is a surprising amount
+of variety in how URL strings are actually interpreted, and occasional disagreements; 
+and given how much we rely on URLs, that can lead to unexpected behavior and even exploitable vulnerabilities.
 
-Since `Foundation.URL` conforms to an older standard that is **not** web-compatible, parsing the same string
-with `WebURL` or `Foundation.URL` can expose some of those differences mentioned earlier. Consider the following:
+Enter **WebURL**. WebURL conforms to the latest industry standard, which formally defines URL parsing
+in a way that is compatible with the web platform. You should expect `WebURL` to work exactly as your browser does.
+There is even a shared test-suite between `WebURL`, the major browsers, and other library implementations,
+to help ensure consistency.
+
+So what kind of disagreements and vulnerabilities are we talking about? Consider the following:
 
 ```swift
-// What is the hostname of this URL?
+// Q: What is the hostname of this URL?
 let urlString = "http://foo@evil.com:80@example.com/" 
 
 WebURL(urlString)!.hostname  // "example.com"
 URL(string: urlString)!.host // "evil.com"
 ```
 
-Chrome, Safari, Firefox, Go, Python, NodeJS, and Rust all agree that this URL points to `"example.com"`. 
-Try it - if you paste it in your browser, that's where it will go. But since Foundation's interpretation
-is based on an obsolete standard, it would send a request to `"evil.com"` instead. 
+Chrome, Safari, Firefox, Go, Python, NodeJS, and Rust all agree with WebURL - that this identifier
+points to `"example.com"`. If you paste it in your browser, that's where it will go. 
+But since Foundation's interpretation is based on an obsolete standard that is not web-compatible,
+it would send a request to `"evil.com"` instead. 
 
-There are many subtle differences similar to this - after all, that is what it means for these types to implement
-different URL standards. This is the main way in which `WebURL` and `Foundation.URL` differ, and why you may
-wish to use `WebURL`'s web-compatible URL interpretation together with software that requires `Foundation.URL` values.
+These are the sorts of differences we're talking about - "regular" URLs work like you'd expect, of course
+(again - WebURL works just like your browser; **adopting WebURL won't break everything**), but there are these
+little details which can and have been exploited by attackers in surprising ways. And as you can see,
+generally WebURL's interpretation is the more compatible one, because it matches the web.
 
 > Important:
 >
-> Using multiple URL standards safely requires a holistic understanding of how an application/library treats URLs.
-> We propose the following guidelines, to be taken as best practices:
+> Using multiple URL standards safely is a difficult problem, but in a sense it's a problem we already live with. 
+> We've devised a few simple guidelines to help your code deal with this situation more robustly:
 >
 > - Store and communicate URLs using URL types. Avoid passing them around as strings.
 > - Each URL string should be interpreted by **only one** parser.
 > - If you must store or communicate a URL as a string (e.g. in JSON),
 >   document which parser should be used to interpret it.
-> - If no parser is explicitly specified, prefer `WebURL` as the default.
+> - If no parser is specified, `WebURL` is a good default.
 >
-> The proliferation of URL standards is an issue that is being actively exploited, particularly by 
-> Server-Side Request Forgery (SSRF) vulnerabilities. The following sections discuss this advice in detail,
-> including examples of exploits and how these practices could have avoided them.
+> The lack of alignment in URL standards is an issue that is being actively exploited, particularly in 
+> Server-Side Request Forgery (SSRF) vulnerabilities. In the following sections, we'll discuss the above advice
+> in more detail, including examples of actual exploits and how these practices could have avoided them.
 
 
 ## URL Types are Unambiguous
 
 
-The first guideline is to prefer storing and communicating URLs using URL types, rather than using strings.
-Unlike a raw URL string, which can be ambiguous, values with a type such as `Foundation.URL` or `WebURL` communicate
-precisely how they should be interpreted, and this enables conversion initializers to protect you from ambiguous URLs.
+The first guideline is to prefer storing and communicating URLs using URL types, rather than as strings.
+The meaning of a plain string can be ambiguous, but a value with a type such as `Foundation.URL` or `WebURL`
+communicates precisely how it should be interpreted, and this enables initializers which verify that semantics
+are maintained across a conversion. 
 
-For example, consider the demonstration URL from the previous section. Both `Foundation.URL` and `WebURL` can parse
-the raw URL string, but see different components from it. But if we first parse the string as a `Foundation.URL` value
-and try to convert it to a `WebURL`, the conversion initializer will check that the source and destination types have
-an equivalent interpretation of the URL. In this case, they don't: `WebURL` sees the hostname `"example.com"`, 
-but `Foundation.URL` sees `"evil.com"`, so the conversion fails. 
-This is a **much better outcome** than accidentally sending data to the wrong server!
+For example, consider the demonstration URL from the previous section. Both `Foundation.URL` and `WebURL` were able
+to parse the raw URL string, but saw different components from it. Now, let's try parsing the string as a
+`Foundation.URL`, and converting it to a `WebURL`:
 
 ```swift
 let urlString = "http://foo@evil.com:80@example.com/" 
@@ -132,14 +132,13 @@ print(nsURL.host) // "evil.com"
 WebURL(nsURL)     // ✅ nil - URL is ambiguous
 ```
 
-Something interesting happens if we try this conversion the other way around. Parsing a URL string with `WebURL`
-also normalizes it, so it helps to clean up ambiguous syntax and web-compatibility quirks.
-This means that converting a `WebURL` to a `Foundation.URL` will almost always succeed.
+The initializer checks that both types agree about what the URL means. In this case, they don't,
+so the conversion fails. This is a **much better outcome** than accidentally sending data to the wrong server!
 
-Considering the same URL string again, we see that `WebURL` automatically percent-encodes a problematic 
-`"@"` character, which cleans up the ambiguity about what the hostname is. Once `WebURL` has normalized it,
-there is no question that the URL string expresses a hostname of `"example.com"`, so the conversion to `Foundation.URL`
-succeeds and the result agrees with browsers and other libraries.
+Something interesting happens if we try this conversion the other way around. Parsing a URL string with `WebURL`
+also _normalizes_ it, so it cleans up ambiguous syntax and makes the web-compatible interpretation more obvious
+to other software and systems. This means that converting a `WebURL` to a `Foundation.URL` will almost always succeed,
+even in cases where the reverse order of operations would have failed.
 
 ```swift
 let urlString = "http://foo@evil.com:80@example.com/" 
@@ -149,19 +148,24 @@ print(webURL.hostname)  // "example.com"
 print(webURL)           // "http://foo%40evil.com:80@example.com/"
 //                                    ^^^
 //               Problematic '@' sign has been encoded by WebURL,
-//                   resolving the ambiguity in favor of how
-//                       WebURL interprets this string.
+//                  making the web-compatible interpretation
+//                                more obvious.
 
 URL(webURL)?.host  // ✅ "example.com"
 ```
 
 Successful conversion does **not** necessarily mean that the URLs have identical strings or components.
-The conversion initializers are based on careful study of both standards, and permit certain normalization if the
-result is a valid interpretation of the source value. 
+The conversion initializers are based on careful study of both standards, and although they are careful
+not to permit different interpretations, they are lenient in certain cases when both standards allow it.
 
-In the following example, the standard used by `WebURL` requires that the URL's scheme and hostname be normalized
-to lowercase. RFC-2396 (the standard used by `Foundation.URL`) says that this is allowed, so we consider that the
-URL's meaning is preserved and allow the conversion.
+That means they won't get in your way rejecting irrelevant differences (many times, even a force-unwrap
+would not be unreasonable), but they still catch those edge cases where there are genuine mismatches,
+as we've seen in the previous few examples.
+
+Here is an example of the kind of differences that are allowed. The standard used by `WebURL` requires
+that the URL's scheme and hostname be normalized to lowercase (`WebURL` has to do it; it has no choice).
+Luckily, RFC-2396 (the standard used by `Foundation.URL`) explicitly allows that, so even if those parts
+of the URL are upper/mixed-case (perhaps the user had caps-lock on and didn't notice), the conversion is allowed.
 
 ```swift
 // Foundation's components:
@@ -177,20 +181,23 @@ print(convertedURL.scheme)    // ✅ "http"
 print(convertedURL.hostname)  // ✅ "example.com"
 ```
 
-This safe interoperability is only possible because we are converting URL types, rather than just parsing strings. 
-In the next section, we'll discuss how important it is to apply this throughout an application at every level,
-so we always know how each URL should be interpreted.
+This safe interoperability, which allows as much as it can but also catches real ambiguities, is only possible
+because we are converting URL types rather than simply parsing the string again. In the next section, we'll discuss
+applying this idea throughout your application, so it is always clear how a URL is being interpreted.
 
 
-## Parse Strings Once
+## One Parser Per String
 
 
-Consider the following program, demonstrating a simple proxy server. It accepts a URL as input, and makes
-an authenticated request to it (including some private token) - of course, before making the request,
-the target must be verified to ensure that the proxy only discloses its tokens to servers that are allowed to see them.
+Consider the following program, demonstrating a simple proxy server. Here's how it works:
 
-The implementation is split in to two functions - one function checks that the URL points to an approved server,
-and the other which makes the authenticated HTTP request. Both functions accept URL parameters using strings:
+- 0️⃣ (Not shown) A client connects to us, says "make a request to this URL for me, please".
+- 1️⃣ The server checks the provided URL.
+- 2️⃣ If the hostname is allowed, the server makes the request, including some private token/key in the header.
+- 3️⃣ (Not shown) The response is forwarded to the client.
+
+The part we're interested in is split in to two functions - one gets a URL string and checks that it points
+to an approved server, and the other makes the authenticated HTTP request:
 
 **Application:**
 ```swift
@@ -208,8 +215,7 @@ func checkHostAndMakeRequest(_ urlString: String) throws -> URLSessionDataTask {
 ```swift
 let allowedHosts: Set<String> = [ "example.com", /* ... */ ]
 
-// ⚠️                                vvvvvv
-func checkHostIsAllowed(_ urlString: String) -> Bool {
+func checkHostIsAllowed(_ urlString: /* ⚠️ */ String) -> Bool {
   if let hostname = WebURL(urlString)?.hostname {
     return allowedHosts.contains(hostname)
   }
@@ -219,8 +225,7 @@ func checkHostIsAllowed(_ urlString: String) -> Bool {
 
 **Request Engine:**
 ```swift
-// ⚠️                                      vvvvvv
-func makeAuthenticatedRequest(_ urlString: String, completionHandler: <...>) throws -> URLSessionDataTask {
+func makeAuthenticatedRequest(_ urlString: /* ⚠️ */ String, completionHandler: <...>) throws -> URLSessionDataTask {
   guard let url = Foundation.URL(string: urlString) else {
     throw MyLibraryError.invalidURL
   }
@@ -230,15 +235,10 @@ func makeAuthenticatedRequest(_ urlString: String, completionHandler: <...>) thr
 }
 ```
 
-Each of these functions may look reasonable in isolation, but the effect of combining them is that a single URL string
-is parsed twice, each time by a different parser, and possibly with inconsistent results. In other words,
+Each of these functions is reasonable by itself, but the effect of combining them is that a single URL string
+is parsed **twice**, each time by a different parser, and the results may not be consistent. In other words,
 the hostname verified by `checkHostIsAllowed` might _not_ be the host that `makeAuthenticatedRequest` actually
-makes a request to!
-
-A maliciously-crafted URL could exploit this difference to leak authentication tokens to the attacker's own server;
-indeed, a [recently-disclosed vulnerability][gcp-ssrf] used a similar technique with just such a proxy in order to
-gain unauthorized access to some internal Google Cloud Platform accounts. This is a good demonstration of how
-the proliferation of URL standards leads to security vulnerabilities today, even outside of the Swift ecosystem.
+makes a request to! 😱
 
 ```swift
 // The call:
@@ -258,35 +258,35 @@ func checkHostAndMakeRequest(_ urlString: String) throws -> URLSessionDataTask {
 }
 ```
 
-It can be difficult to spot these sorts of issues: for instance, these functions may live in separate libraries
-and you may not have access to their source code, or the URL string might not be a simple parameter, but instead
-part of a JSON document or XPC message. The common feature is that URLs are communicated without using a URL type,
-so it is difficult to ensure that all parts of the program/distributed system interpret them consistently.
+A maliciously-crafted string could exploit this difference to leak authentication tokens to the attacker's own server;
+in fact, this demonstrates [a real vulnerability][gcp-ssrf] that was used to gain unauthorized access to internal
+Google Cloud Platform accounts. Differences between modern and historic URL standards can cause security vulnerabilities,
+even outside the Swift ecosystem. It's not just a Foundation.URL or WebURL thing - it's something **all developers**
+need to be aware of. URL libraries often do not align to the same standard, and any data derived from one parser
+might be inconsistent with another parser.
 
-For function calls and other, more straightforward examples of this bug, switching to URL types can help.
-This effectively hoists URL parsing out of the leaf functions and moves it closer to the source of the string.
-Generally, you should aim to parse each URL string **once** and only once, and only using one parser.
-After parsing, the URL can be safely converted between `WebURL` and `Foundation.URL` as many times as needed
-using the conversion initializers.
+Spotting these interactions can be difficult - for instance, the functions may live in separate libraries
+and you may not have access to their source code, or the URL string might be in a JSON document or XPC message.
+The common feature is that URLs are communicated **without using a URL type**, so we can't ensure that everybody
+who sees the string interprets it the same way.
 
-We can fix the above example by hoisting URL parsing out of `checkHostIsAllowed` and `makeAuthenticatedRequest`,
-and moving it in to their shared caller, `checkHostAndMakeRequest`. We decide to parse using `WebURL`,
-but `makeAuthenticatedRequest` safely converts that to a `Foundation.URL` in order to make the request
-using `URLSession`.
+We can fix the issue in this case by hoisting URL parsing out of `checkHostIsAllowed` and `makeAuthenticatedRequest`,
+and moving it in to the caller. Now, instead of passing strings around and letting each function choose its own
+parser, the caller parses the string, and passes around strongly-typed URL values (in this case `WebURL`).
+Thanks to checked conversions, the receivers can safely convert to another URL type if they wish - in this case,
+`makeAuthenticatedRequest` converts to a `Foundation.URL` and makes the request using `URLSession`.
 
 **Fixed Allow-List Checker and Request Engine:**
 ```swift
-// ✅                          vvvvvv
-func checkHostIsAllowed(_ url: WebURL) -> Bool {
+func checkHostIsAllowed(_ url: /* ✅ */ WebURL) -> Bool {
   if let hostname = url.hostname {
     return allowedHosts.contains(hostname)
   }
   return false
 }
 
-// ✅                                vvvvvv
-func makeAuthenticatedRequest(_ url: WebURL, completionHandler: <...>) throws -> URLSessionDataTask {
-  // ✅ WebURL -> Foundation.URL conversion preserves meaning.
+func makeAuthenticatedRequest(_ url: /* ✅ */ WebURL, completionHandler: <...>) throws -> URLSessionDataTask {
+  // ✅ checked WebURL -> Foundation.URL conversion.
   guard let convertedURL = Foundation.URL(url) else {
     throw MyLibraryError.invalidURL
   }
@@ -298,8 +298,8 @@ func makeAuthenticatedRequest(_ url: WebURL, completionHandler: <...>) throws ->
 
 > Tip:
 >
-> We're showing the explicit `WebURL -> Foundation.URL` conversions for the sake of clarity, but you can also
-> create a `URLRequest` directly from a `WebURL`. It will do the same, safe conversion behind the scenes.
+> We're showing the explicit `WebURL -> Foundation.URL` conversions for clarity, but WebURL also
+> includes convenience APIs so you can create `URLRequest`s directly. 
 >
 > ```swift
 > func makeAuthenticatedRequest(_ url: WebURL, completionHandler: <...>) throws -> URLSessionDataTask {
@@ -310,8 +310,7 @@ func makeAuthenticatedRequest(_ url: WebURL, completionHandler: <...>) throws ->
 > }
 > ```
 
-Now that these leaf functions no longer parse URL strings, we don't need to worry about them using different parsers.
-URL string parsing now happens once, in the caller:
+Let's see what happens now that we've switched to using URL types rather than strings:
 
 ```swift
 // The call:
@@ -321,7 +320,6 @@ let task = try checkHostAndMakeRequest("http://foo@evil.com:80@example.com/")
 func checkHostAndMakeRequest(_ urlString: String) throws -> URLSessionDataTask {
 
   // ✅ The string is only parsed once.
-  //    Note: best practice would be to hoist this as well :)
   guard let url = WebURL(urlString) else {
     throw MyAppError.invalidURL
   }
@@ -334,16 +332,20 @@ func checkHostAndMakeRequest(_ urlString: String) throws -> URLSessionDataTask {
 }
 ```
 
-For the sake of making this example easier to follow, we're only showing one level of hoisting, but best practice
-would be to hoist URL parsing once again, out of `checkHostAndMakeRequest` and in to its own caller. If we apply that
-hoisting as many times as we can, we can prevent that URL floating around the application as a raw string.
+We could even hoist URL parsing again, and make `checkHostAndMakeRequest` itself accept a URL value
+instead of a string. By applying this process repeatedly, we reduce the number of raw URL strings
+floating around the application, and can leverage the type system to ensure we always interpret values
+correctly.
 
-As we've seen, it can be difficult to ensure that URLs are always interpreted consistently, especially across
-large applications using lots of third-party libraries. For function calls and other situations where Swift's
-type system is available, we **strongly recommend** that you use typed URL values and the conversion initializers
-provided by `WebURLFoundationExtras`. For other situations, such as URLs communicated via JSON documents 
-or XPC messages, we also very much recommend documenting which parser or standard is required to interpret them,
-and ensuring that is used consistently.
+As we've seen, there can be subtle, security-sensitive interactions between URL parsers, but by applying
+some reasonable best-practices, we can get what we want: web-compatible URL parsing and operations
+(notice the request is made to `"example.com"`, not `"evil.com"`), with robustly Foundation interop.
+The guiding rule is that each _string_ should be parsed by only one parser. 
+
+For this reason, we **strongly recommend** that you use typed URL values and the conversion initializers
+provided by `WebURLFoundationExtras`. For more complex situations, such as URLs in JSON documents or XPC messages,
+document which parser should be used, and parse those values early or hide them behind typed APIs, 
+so they do not spread as plain strings.
 
 [gcp-ssrf]: https://bugs.xdavidhu.me/google/2021/12/31/fixing-the-unfixable-story-of-a-google-cloud-ssrf/
 
@@ -351,84 +353,166 @@ and ensuring that is used consistently.
 ## Prefer Parsing Using WebURL
 
 
-We've discussed the importance of parsing raw URL strings in to typed URL values as early as possible,
-and that you should rely on type conversions to move between the different standards. But which URL parser
-should you use for that initial step?
+We've discussed how you can use the type system to ensure safe conversions, but what about the initial step? 
+Which URL parser should you use to turn your strings in to objects?
 
-Firstly, if it is explicitly specified which parser to use for a URL string, **use that parser**.
-If it is not specified, then matching a web browser is typically a good choice, and probably a more reasonable choice
-than the standard used by `Foundation.URL`, which as mentioned previously has been officially obsolete for some time.
+Firstly, if the developer has specified which parser to use for a URL string, **use that parser**.
+Otherwise, matching a web browser is generally a good choice, and probably a more reasonable choice
+than the standard used by `Foundation.URL`, which has been officially obsolete for several decades.
+
+> Tip:
+> I know, this could all sound a bit scary; it's complexity you didn't ask for and would much rather do without.
+> I get it. But I hope this document has helped to illustrate that the status quo has serious problems,
+> and the complexity, annoying as it is, can be managed very well with some simple best-practices.
 
 Using `WebURL` for parsing and URL manipulation comes with a lot of additional benefits:
 
 1. 🌍 It's web-compatible.
 
-   Actors on the web platform need to use a web-compatible parser to interpret URLs. 
-   `Foundation.URL` is simply not web-compatible. It's a simple point, but it is quite compelling.
+   Actors on the web platform should use a web-compatible parser to interpret URLs. 
+   `Foundation.URL` is not web-compatible. It's as simple as that.
+
+   WebURL behaves just like a browser does, just like JavaScript's `URL` class does, and like many other libraries do. 
+   In fact, the ``WebURL/WebURL/jsModel-swift.property`` property exposes the exact JS URL API for mixed Swift/JS
+   code-bases - tested to browser standards, using the same shared test suite that the major browsers use. 
 
 2. 🔩 It's always normalized.
 
-   Parsing a string using `WebURL` cleans up many ambiguous or ill-formatted URLs automatically, according to its
-   interpretation of the contents. That means `WebURL` is easier to work with, and produces URL strings which 
-   are more interoperable with other libraries and systems. They can even be converted to `Foundation.URL` values
-   even in situations where the reverse order of operations would be ambiguous.
+   Parsing a string using `WebURL` cleans up a lot of ambiguous or ill-formatted URLs automatically.
+   That means `WebURL` is easier to work with, and produces URL strings which are more interoperable
+   with other libraries and systems.
 
-   > Tip:
-   >
-   > Every single `WebURL` API ensures the URL is kept normalized - whether you're inserting path components
-   > or query parameters via the ``WebURL/WebURL/pathComponents-swift.property`` or ``WebURL/WebURL/formParams`` views,
-   > or setting entire URL components via properties or the ``WebURL/WebURL/utf8`` view.
-   >
-   > There is no `.standardize()` or `.normalize()` function in `WebURL` - it just always is.
+   For example, when `async-http-client` needs to examine a scheme from a `Foundation.URL` 
+   (like `"http"` or `"https+unix"`), it has to remember to manually normalize it to lowercase it first -
+   like it does [here][ahc-nsurl-scheme-1] and again way over [here][ahc-nsurl-scheme-2], in another file.
+   SwiftPM does the same thing [here][spm-nsurl-scheme-1] and [here][spm-nsurl-scheme-2] and other places.
 
-3. 😌 It's easier to use (and to use correctly).
+   With WebURL, **none of that is necessary** - that boilerplate can just go. Schemes, hostnames, paths, etc
+   are all normalized, all the time. Even if you modify the URL and set components - it is always normalized.
 
-   `WebURL`'s `.pathComponents` and `.formParams` views give you simple and efficient ways to read/write the URL's
-   path and query. There's no awkward `URLComponents`-like type to convert to - it all just works, directly.
+   Your code becomes more predictable. For example, I noticed that some parts of DocC [don't][docc-nsurl-scheme]
+   manually normalize schemes to lowercase - is it intentional or not? Who knows! Like most people,
+   they're probably unaware that URL schemes are case-insensitive. With WebURL, they wouldn't need to worry about it;
+   their code could remain straightforward but still be correct and consistent. 
 
-   If you're on an Apple platform and need to make requests using `URLSession`, you can totally do that!
-   And if you need to interoperate with code that still uses the legacy `Foundation.URL`, you can do that, too!
+3. 😌 Rich, expressive APIs.
 
-   So once you parse a string using `WebURL`, why not just keep like that? 
-   Take advantage of `WebURL`'s great API as far as you can, and convert only when you really need to.
+   `WebURL`'s `.pathComponents` and `.formParams` properties give you efficient access to the URL's path and query.
+    The `.pathComponents` view conforms to `BidirectionalCollection`, so you have immediate access to a huge number of 
+    features and algorithms - such as `map`, `filter`, and `reduce`, not to mention slicing, such as `dropLast()`.
+    And you can even modify through this view, using indexes to perform complex operations super-efficiently. 
+   
+    ```swift
+    let url = WebURL("https://github.com/karwa/swift-url/issues/63")!
+    if url.pathComponents.dropLast().last == "issues",
+      let issueNumber = url.pathComponents.last.flatMap(Int.init) {
+     // ✅ issueNumber = 63
+    }
+    ```
+    ```swift
+    var url = WebURL("https://info.myapp.com")!
+    url.pathComponents += ["music", "bands" "AC/DC"]
+    // ✅ "https://info.myapp.com/music/bands/AC%2FDC"
+    ```
+
+    The `.formParams` view takes query parameters to the next level, with dynamic member lookup. 
+    You just get and set values as if they were properties. Zero fuss:
+
+    ```swift
+    var url = WebURL("https://example.com/search?category=food&client=mobile")!
+    url.formParams.category  // "food"
+    url.formParams.client    // "mobile"
+
+    url.formParams.format = "json"
+    // ✅ "https://example.com/search?category=food&client=mobile&format=json"
+    //                                                            ^^^^^^^^^^^
+    ```
+
+    Here's a challenge: with WebURL, that was 3 lines of super obvious code. 
+    Now try doing that with `Foundation.URL`. Yeah.
+
+    The `.host` API is less frequently used, but even here we can offer a breakthrough in expressive, robust code.
+    With WebURL, the URL type tells applications _directly_ which computer the URL points to. I really love this.
+    I think this is _exactly_ what a Swift URL API should be; it takes a complex, nebulous string
+    and gives you simple, precise, structured values with strong guarantees. 
+
+    ```swift
+    let url = WebURL("http://127.0.0.1:8888/my_site")!
+
+    guard url.scheme == "http" || url.scheme == "https" else {
+      throw UnknownSchemeError()
+    }
+    switch url.host {
+      case .domain(let name): ... // DNS lookup.
+      case .ipv4Address(let address): ... // Connect to known address.
+      case .ipv6Address(let address): ... // Connect to known address.
+      case .opaque, .empty, .none: fatalError("Not possible for http")
+    }
+    ```
+
+    Come for the web-compatible URL parsing, or backwards-deployable IDN support;
+    stay because literally everything else is lightyears ahead as well.
+
+    And you can still hand values over to legacy `Foundation.URL` code whenever you need to. 
+    So you can take advantage of these APIs today, where you need them, without forcing everything to be rewritten. 
 
 4. 📊 It's _really_ well tested.
 
-   `WebURL` is extensively tested by the Web Platform Tests. This is a shared test database used by the major browsers,
-   `WebURL`, and other implementations of the standard; we pool our implementation experience to ensure that
-   any ambiguities or divergent behavior are eliminated. Since `WebURL`'s parser is highly customized and tuned 
-   for performance, we discovered a number of gaps in its coverage and made significant contributions to improve it -
-   often exposing browser bugs that were subsequently fixed. This whole process is an incredibly valuable and positive
-   cycle, and helps give you confidence that all implementations are reliable and work the same way.
+   `WebURL` is extensively tested by the Web Platform Tests. The WPT is a shared test database
+   used by the major browsers and other libraries; we pool our implementation experience to ensure that
+   any ambiguities or divergence is spotted and eliminated (sometimes the standard is ambiguous; that gets corrected).
+   The WebURL project has made a lot of contributions towards that effort, including finding and fixing issues
+   in browsers and elsewhere.
+
+   This whole process is a really valuable positive cycle, and helps give you confidence that WebURL will work
+   just like, say, Safari. We literally use the same test suite.
 
    Unfortunately, `Foundation.URL` simply cannot participate in that process, or anything like it.
    Nobody's writing new implementations of the obsolete RFC-2396.
 
-   Testing has been a major focus of `WebURL` since the beginning. In addition to the Web Platform Tests database
-   (which by itself is over 3x as large as Foundation's database), WebURL is supplemented by _hundreds_ of additional
-   tests, covering every aspect of its API. Currently our coverage is about 88% (generally regarded as excellent),
-   and the gaps are mostly things that can't easily be tested in Swift (assertion failures and the like).
-
-   And if _all of that_ wasn't enough, `WebURL` is regularly fuzz-tested, as are the URL type conversions.
-   Fuzzing is an incredibly powerful technique that discovers bugs programmers wouldn't typically think to search for.
+   The WPT alone is over 3x as large as Foundation's test database, and includes much better quality test-cases
+   because it is exposed to the entire web and actively maintained. Foundation's tests actually include
+   plenty of mistakes (!), so it actually tests incorrect behavior 🤦‍♂️. My guess is that Foundation is not able
+   to fix those due to compatibility, but who knows? They don't respond at all to any of the dozen or so bug reports 
+   I've filed, showing some pretty shocking bugs in `Foundation.URL`. That's not even to mention that lots of
+   publicly-known URL exploits are actually monkey-patched in WebKit rather than being fixed at the source
+   (which is the buggy CFURL parser). Perhaps they can't fix those, either? I don't like to mention that kind of thing
+   due to responsible disclosure, but you deserve to know that your code might be vulnerable. The disclosure process
+   happened years ago.
+   
+   In contrast, testing has been a major focus of `WebURL` since the beginning. As well as the WPT,
+   WebURL is tested by _hundreds_ of additional tests, covering every aspect of its API. Our coverage is about 88%
+   as of writing (generally regarded as excellent), and the gaps are mostly things that can't easily be tested
+   in Swift (such as assertion failures). And if _all of that_ wasn't enough, `WebURL` is regularly fuzz-tested,
+   as are the URL type conversions. Because our checked conversions actually _account for bugs in Foundation_
+   to make sure nothing slips through the cracks.
 
    All of this means that you can have confidence adopting `WebURL` _right now_.
-   It is everything you would expect from a production-quality URL library.
+   Obviously nobody can guarantee zero bugs ever, but WebURL is a massive improvement - and as a Swift package,
+   any fixes can be implemented and deployed immediately. No more chucking bug reports in to a void
+   and being disappointed as year after year they go ignored and unfixed.
 
 5. 🔥 It's blazing fast.
 
    `WebURL` is regularly benchmarked, and comes out faster than `Foundation.URL` for _every_ operation; 
    whether you're parsing URL strings, modifying components, iterating through the path, etc.
-   In particular, it is orders of magnitude faster on low-end/IoT platforms like the Raspberry Pi,
-   enabling applications which were previously so slow they'd be impractical.
+   In particular, it is **orders of magnitude** faster on low-end/IoT platforms like the Raspberry Pi,
+   enabling applications which were previously so slow they'd be impractical. 
    
+
+[ahc-nsurl-scheme-1]: https://github.com/swift-server/async-http-client/blob/0f21b44d1ad5227ccbaa073aa40cd37eb8bbc337/Sources/AsyncHTTPClient/DeconstructedURL.swift#L45
+[ahc-nsurl-scheme-2]: https://github.com/swift-server/async-http-client/blob/0f21b44d1ad5227ccbaa073aa40cd37eb8bbc337/Sources/AsyncHTTPClient/Scheme.swift#L42
+[spm-nsurl-scheme-1]: https://github.com/apple/swift-package-manager/blob/e25a590dc455baa430f2ec97eacc30257c172be2/Sources/PackageCollections/PackageCollections%2BValidation.swift#L35
+[spm-nsurl-scheme-2]: https://github.com/apple/swift-package-manager/blob/e25a590dc455baa430f2ec97eacc30257c172be2/Sources/PackageCollections/Model/Collection.swift#L116
+[docc-nsurl-scheme]: https://github.com/apple/swift-docc/blob/d94139a5e64e9ecf158214b1cded2a2880fc1b02/Sources/SwiftDocC/Model/TaskGroup.swift#L43-L44
+
 
 ## A Note on Round-Tripping
 
 
-Round-tripping refers to taking a value in one type (say `WebURL`), converting it to another type (`Foundation.URL`),
-and then converting back to the original type (to `WebURL` again). This is a useful property for some libraries
-and data structures.
+Round-tripping refers to taking a value (say, a `WebURL`), converting it to another type (`Foundation.URL`),
+and then converting back to the original type (to `WebURL` again). Some libraries and data structures need 
+strong guarantees about that situation, so here it is:
 
 - A `WebURL` which can be converted to a `Foundation.URL` value can **always** be converted back to a `WebURL`.
 
@@ -444,13 +528,14 @@ and data structures.
   > (Foundation "http://te%7Bs%7Dt/") -> (WebURL "http://te{s}t/") -> (Rejected by Foundation)
   >                       ^^^ ^^^                          ^ ^
   > ```
-  > It is worth noting that these are not valid DNS domain names, so this is mostly a theoretical concern.
-  > Generally, you should assume that Foundation -> WebURL conversions can be converted back to `Foundation.URL`s.
+  > These are not valid DNS domain names, so this is mostly a theoretical concern.
+  > Generally, you can assume that Foundation -> WebURL conversion means the result can be converted back
+  > to a `Foundation.URL`.
 
-Sometimes, percent-encoding needs to be added when converting a `WebURL` to Foundation; this means the round-trip
-result will not be equal to the original `WebURL` value. Use the `WebURL.encodedForFoundation` property to add
-percent-encoding in advance; if the result of that property can be converted to a `Foundation.URL`, it is guaranteed
-to round-trip to an identical `WebURL` value.
+Sometimes, when converting a `WebURL` to Foundation, we need to add percent-encoding; this means the round-trip
+result will not be equal to the original `WebURL` value. However, you can use the `WebURL.encodedForFoundation`
+property to add that percent-encoding in advance; if this pre-encoded URL can be converted to a `Foundation.URL`,
+it is guaranteed to round-trip to exactly the same `WebURL` value.
   
 ```swift
 func processURL(_ webURL: WebURL) throws {
@@ -458,18 +543,18 @@ func processURL(_ webURL: WebURL) throws {
   let encodedWebURL = webURL.encodedForFoundation
   // ℹ️                     ^^^^^^^^^^^^^^^^^^^^^
   // Percent-encoding is added by default when converting to Foundation.
-  // If we do it now, we know it will round-trip back to 'encodedWebURL'.
+  // If we do it now, we know the round-trip result will equal 'encodedWebURL'.
 
   guard let convertedURL = URL(encodedWebURL) else { throw InvalidURLError() }
 
-  // Do some stuff with Foundation...
+  // Do whatever you needed to do with Foundation... 
   let dataTask = URLSession.shared.dataTask(from: convertedURL)
   let urlFromDataTask = dataTask.originalRequest!.url!
 
   // ✅ A converted WebURL can always convert back. 
   let roundtripWebURL = WebURL(urlFromDataTask)!
 
-  // ✅ The round-trip result is identical to 'encodedWebURL'. 
+  // ✅ The round-trip result is equal to 'encodedWebURL'. 
   assert(encodedWebURL == roundtripWebURL)
 }
 ```
