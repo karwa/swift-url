@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is a place for deprecated APIs to live until they are eventually removed.
+// There is a separate test target for deprecated APIs, so we can test them
+// without adding a bunch of compile-time warnings to the regular test target.
 // Even if blank, it is useful to keep this file for history purposes,
-// so it doesn't keep being created and deleted all the time.
+// so the test target and its folder don't keep being created and deleted all the time.
 
 // Currently, there are no deprecated APIs.
