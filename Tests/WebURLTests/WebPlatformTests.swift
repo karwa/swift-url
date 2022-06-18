@@ -93,3 +93,32 @@ extension WebPlatformTests {
     print("ℹ️ Report written to \(reportURL)")
   }
 }
+
+
+// --------------------------------------------
+// MARK: - ToASCII
+// --------------------------------------------
+// https://github.com/web-platform-tests/wpt/blob/master/url/resources/toascii.json
+// at version b772ca18865a09f3307440a9a756cb08fc0028a6
+// Adjusted to delete line 2 (the comment)
+
+
+extension WebPlatformTests {
+
+  func testToASCII() throws {
+    let testFile = try loadTestFile(.WPTToASCIITests, as: WPTToASCIITest.TestFile.self)
+    assert(
+      testFile.count == 39,
+      "Incorrect number of test cases. If you updated the test list, be sure to update the expected failure indexes"
+    )
+
+    var harness = WPTToASCIITest.WebURLReportHarness()
+    harness.runTests(testFile)
+    XCTAssertEqual(harness.reportedResultCount, 39, "Unexpected number of tests executed.")
+    XCTAssertFalse(harness.report.hasUnexpectedResults, "Test failed")
+
+    let reportURL = fileURLForReport(named: "weburl_toascii_wpt.txt")
+    try harness.report.generateReport().write(to: reportURL, atomically: false, encoding: .utf8)
+    print("ℹ️ Report written to \(reportURL)")
+  }
+}
