@@ -14,36 +14,80 @@
 
 import UnicodeDataStructures
 
-/// Functions relating to Internationalizing Domain Names for Applications (IDNA).
+/// Functions relating to Internationalizing Domain Names for Applications (IDNA) compatibility processing.
 ///
-/// IDNA is a way of normalizing and encoding Unicode text as ASCII in a way that is optimized for domain names,
-/// compatible with existing DNS infrastructure, and is able to support the important security-related decisions
-/// made by inspecting domains.
+/// IDNA is a way of encoding Unicode domain names as ASCII strings in a way that works essentially identically
+/// to plain ASCII domain names. It is compatible with existing DNS infrastructure, and with existing security-related
+/// decisions applications make by inspecting domains (for example, evaluating whether two domains are equal or
+/// have a common root).
 ///
-/// The resulting ASCII form is not entirely human-readable, and instead, IDNs must be converted
-/// to presentation/Unicode form for display. For example, the string `你好你好` becomes `xn--6qqa088eba` in ASCII form.
-/// Note that it is not always safe to display a decoded IDN, and it is wise to include context-specific logic
-/// as part of a more sophisticated display strategy.
+/// The readability of the ASCII form depends on the properties of the input string. The format is primarily
+/// optimized for compactness, as DNS has strict length limitations (63 bytes per label goes far with ASCII, but much
+/// less far with Unicode; in UTF-8 some scalars can take 4 bytes). For example, the string `你好你好`
+/// becomes `xn--6qqa088eba` in ASCII form.
 ///
-/// This type is a namespace for two APIs, exposed as static functions:
+/// Instead, IDNs in ASCII form may be restored to Unicode form for display.
 ///
-/// - ``toUnicode(utf8:writer:)`` performs IDNA compatibility processing, normalization, decoding, validation, etc -
-///   in order to produce a domain's Unicode form. This is how you would turn `xn--6qqa088eba.com` in to `你好你好.com`.
+/// > Important:
+/// >
+/// > Domains are often displayed in a context which establishes authority. For example, a person
+/// > viewing an email from `"support@apple.com"` expects the sender to represent Apple Inc.
+/// >
+/// > Displaying Unicode text in such contexts should be considered carefully. It is possible for certain
+/// > characters to appear visually similar, or even identically, to other characters - to the extent that
+/// > readers may be mislead about the authority being established.
+/// >
+/// > This does not only apply to domains. For instance, consider an App on a digital storefront,
+/// > claiming to be developed by "Google". It would likely be wise for the storefront to forbid characters
+/// > such as zero-width joiners from developer names, otherwise somebody else could register "Go\{200C}ogle"
+/// > which appears as visually indistinguishable from the original. Additionally, some emoji can be ambiguous,
+/// > especially at smaller font sizes.
+/// >
+/// > The IDNA specification has some basic protection against normalization differences, joiners (as described above),
+/// > and bidirectional text built-in. Nonetheless, it is wise to employ a display strategy to make its
+/// > own determination for a given context.
 ///
-///   This function visits each label of the domain as a buffer of Unicode scalars, allowing for presentation logic
-///   to decide how best to display the label (for example, if the label contains scripts the user does not appear to
-///   be familiar with, or mixes scripts, it may be wise to display in Punycode or show some other warning in the UI).
+/// ## Compatibility Processing
 ///
-/// - ``toASCII(utf8:beStrict:writer:)`` performs the same IDNA compatibility processing as ``toUnicode(utf8:writer:)``,
-///   with an additional `beStrict` parameter (not used by URLs). After being normalized, and validated by
-///   this processing, the labels are converted to their ASCII form. This turns `你好你好.com` in to `xn--6qqa088eba.com`.
+/// This type exposes two static functions, for converting domains to their canonical Unicode or ASCII forms.
 ///
-/// Both of these APIs are idempotent, so running them on already-normalized output returns the same data.
-/// This makes it very convenient to pass a domain through `toUnicode` or `toASCII` as part of existing workflows.
+/// Both functions are idempotent, so applying them to an already-canonicalized input does not change the value.
+/// This makes it convenient to pass a domain through `toUnicode` or `toASCII` as part of an existing workflow,
+/// **without** having to worry about which form its already in and whether you'd be double-encoding, etc.
 ///
-/// These APIs follow definitions in the WHATWG URL Standard, which follow definitions in
-/// [Unicode Technical Standard #46](https://www.unicode.org/reports/tr46/). See each function's documentation
-/// for details on how it relates to UTS46.
+/// ### Converting a domain to Unicode form
+///
+/// - ``toUnicode(utf8:writer:)``
+///
+///    Takes a domain, in ASCII or Unicode form, and converts it to its canonical Unicode form.
+///    It performs all necessary compatibility processing, normalization, validation, etc.
+///
+///    This is how you would turn `www.xn--6qqa088eba.com` in to `www.你好你好.com`.
+///
+///    This function visits each label of the domain as a buffer of Unicode scalars, which is where you can apply
+///    your own logic to detect confusable domains, and decide how you want to present them.
+///    For example, if the label contains scripts the user is not known to be familiar with, or mixes scripts,
+///    it may be wise to display it as Punycode or show some other warning in the UI.
+///
+/// ### Converting a domain to ASCII form
+///
+/// - ``toASCII(utf8:beStrict:writer:)``
+///
+///    Takes a domain, in ASCII or Unicode form, and converts it to its canonical ASCII form.
+///    It performs the same IDNA compatibility processing as ``toUnicode(utf8:writer:)``, with an additional
+///    `beStrict` parameter to enforce STD3 ASCII rules, and encodes all canonicalized domains as Punycode.
+///
+///    This is how you would turn `www.你好你好.com` in to `www.xn--6qqa088eba.com`.
+///
+/// These APIs follow definitions in the WHATWG URL Standard, which implements IDNA-2008
+/// according to the compatibility guidelines in [Unicode Technical Standard #46](https://www.unicode.org/reports/tr46/).
+///
+/// ## Topics
+///
+/// ### IDNA Compatibility Processing
+///
+/// - ``IDNA/toUnicode(utf8:writer:)``
+/// - ``IDNA/toASCII(utf8:beStrict:writer:)``
 ///
 public enum IDNA {}
 
@@ -55,13 +99,14 @@ public enum IDNA {}
 
 extension IDNA {
 
-  /// Converts a domain to its Unicode representation.
+  /// Converts a domain to its canonical Unicode form.
   ///
-  /// This function performs IDNA Compatibility Processing on the given domain, including
-  /// applying a compatibility mapping, normalization, and splitting in to domain labels.
-  /// Punycode labels are decoded in to Unicode, and all labels are validated.
+  /// The domain may be given in ASCII or Unicode form. This function will perform all required
+  /// compatibility processing, including mapping and case-folding, normalization, Punycode decoding, etc.
+  /// Finally, each label and the entire domain are validated, producing a nice, canonicalized, Unicode-form domain.
   ///
-  /// This processing is idempotent, so it may be reapplied without changing the result.
+  /// This function is idempotent, so if it is applied to a domain that is already in canonical Unicode form,
+  /// it just produces the same value, unchanged.
   ///
   /// ```swift
   /// // ASCII domains.
@@ -80,83 +125,102 @@ extension IDNA {
   /// toUnicode("www.xn--caf-dma.fr")   // ✅ "www.café.fr" ("caf\u{00E9}")
   ///
   /// // IDN validation.
-  /// // This is how you would Punycode "cafe\u{0301}"
-  /// // but that isn't normalized, so it doesn't pass validation.
-  /// toUnicode("xn--cafe-yvc.fr")  // ✅ <nil> - Not a valid IDN!
+  /// // Zero-width joiners are only allowed in certain contexts.
+  /// // Other uses don't pass validation.
+  /// let notApple = "a\u{200C}pple.com"     // 🤫 Psst! There's a zero-width joiner hiding there!
+  /// print(notApple)           "a‌pple.com"  // To a human, it looks like "apple.com"
+  /// print(notApple == "apple.com")  false  // A computer knows it ISN'T "apple.com"
+  /// toUnicode("a\u{200C}pple.com")  <nil>  // ❎ Not a valid IDN!
+  ///
+  /// // "xn--cafe-yvc" is how you would Punycode "cafe\u{0301}" (the non-NFC "café")
+  /// // but that doesn't pass validation.
+  /// toUnicode("www.caf\u{00E9}.fr")  // ✅ "www.café.fr" ("caf\u{00E9}")
+  /// toUnicode("xn--cafe-yvc.fr")     // ❎ <nil> - Not a valid IDN!
   /// ```
   ///
-  /// When rendering a domain for UI, the IDNA Compatibility Processing standard (UTS46)
-  /// recommends considering carefully which domain presentation is appropriate for the context:
+  /// ## Rendering Domains
   ///
-  /// > Implementations are advised to apply additional tests to these labels,
-  /// > such as those described in [Unicode Technical Report #36][UTR36] and
-  /// > [Unicode Technical Standard #39][UTS39], and take appropriate actions.
-  /// >
-  /// > For example, a label with mixed scripts or confusables may be called out in the UI.
-  /// > Note that the use of Punycode to signal problems may be counter-productive,
-  /// > as described in [UTR36][UTR36].
+  /// Domains are often displayed in a context which establishes authority. For example, a person
+  /// viewing an email from `"support@apple.com"` expects the sender to represent Apple Inc.
   ///
-  /// Some sophisticated presentation strategies consider information such as which scripts
-  /// the user is familiar with when deciding how to display a domain.
+  /// Displaying Unicode text in such contexts should be considered carefully. It is possible for certain
+  /// characters to appear visually similar, or even identically, to other characters - to the extent that
+  /// readers may be mislead about the authority being established. [Unicode Technical Report #36][UTR36]
+  /// and [Unicode Technical Standard #39][UTS39] explain these issues in more detail, with examples.
   ///
-  /// To facilitate that kind of high-level processing, this function visits each label of the domain
-  /// using a callback closure. Labels are provided to the closure as a buffer of Unicode scalars.
-  /// After deciding how to present the label, the closure can construct the full domain by appending it
-  /// to a String or encoding it with UTF-8/UTF-16/etc, followed by ASCII full-stops (U+002E)
-  /// where instructed.
+  /// Applications can decide how this applies to them; perhaps they can consider which scripts the user is familiar
+  /// with, or perhaps they will render potentially-confusable labels with a different font or other UI marker.
+  /// Alternatively, they might render confusable labels as Punycode, although note that this can be counter-productive
+  /// (see UTR36). It's a bit of an open question: how can we present text that is truly unambiguous, such that you
+  /// can trust its authority? The best answer we have so far is: do what makes sense in your context 🤷‍♂️.
   ///
-  /// Let's say we have a function, `DecidePresentationStrategyForLabel`, which decides the best way to render
-  /// a domain label in our UI, given our user's locale preferences and other heuristics. Here's how we
-  /// could integrate it:
+  /// To facilitate high-level Unicode processing, this function takes a callback closure which visits each label
+  /// of the domain. Labels are provided to the closure as a buffer of canonicalized Unicode scalars
+  /// (i.e. NFC normalized, case-folded, and validated). The closure can then decide how it wishes to present
+  /// the Unicode label for display, or which flags it wishes to remember about this domain.
+  ///
+  /// Here's how we might implement that. Let's say we have a function, `DecidePresentationStrategyForLabel`,
+  /// which decides the best way to render a domain label in our UI, given our user's locale preferences
+  /// and other heuristics:
   ///
   /// ```swift
-  /// func RenderDomain(_ input: String) -> String? {
+  /// func DecidePresentationStrategyForLabel(
+  ///   _ label: some RandomAccessCollection<Unicode.Scalar>
+  /// ) -> PresentationStrategy {
+  ///   // Your logic here...
+  /// }
   ///
+  /// func RenderDomain(_ input: String) -> String? {
   ///   var result = ""
   ///   let success = IDNA.toUnicode(utf8: input.utf8) { label, needsTrailingDot in
   ///     switch DecidePresentationStrategyForLabel(label) {
   ///     // Unicode presentation.
   ///     case .unicode:
-  ///       result.unicodeScalars.append(contentsOf: label)
-  ///     // The checker think the Unicode presentation is potentially misleading,
-  ///     // and we should write it as Punycode instead.
+  ///       result.unicodeScalars += label
+  ///
+  ///     // Punycode can also be a valid way to write this label.
+  ///     // Note that it can _also_ be ambiguous, so use with caution!
   ///     case .punycode:
   ///       Punycode.encode(label) { ascii in
   ///         result.unicodeScalars.append(Unicode.Scalar(ascii))
   ///       }
-  ///     // Other strategies, beyond Punycode...?
-  ///     case .highlightConfusableWithKnownBrand:
-  ///       /* ... Maybe use AttributedString to flag it for UI code? */
-  ///       /* ... Maybe an extra warning for certain actions, like making a purchase/entering a password? */
+  ///
+  ///     // Other context-appropriate responses, beyond Punycode...
+  ///     case .confusableWithKnownBrand:
+  ///       /* Use AttributedString to force a certain font/spacing/color? */
+  ///       /* Add an extra warning for certain actions, like making a purchase/entering a password? */
   ///     }
   ///
-  ///     // Remember the dot :)
   ///     if needsTrailingDot { result += "." }
   ///     return true
   ///   }
   ///   return success ? result : nil
   /// }
+  /// ```
   ///
+  /// And then we would use that function to decide how to display the domain:
+  ///
+  /// ```swift
   /// RenderDomain("x.example.com")
   /// // ✅ "x.example.com" (ASCII)
   ///
   /// RenderDomain("shop.xn--igbi0gl.com")
   /// // ✅ "shop.أهلا.com"
   ///
-  /// RenderDomain("xn--pple-poa.com")
+  /// RenderDomain("åpple.com")
   /// // ✅ "xn--pple-poa.com", NOT "åpple.com"
   ///
-  /// RenderDomain("岍岊岊岅岉岎.com")
+  /// RenderDomain("xn--citibank.com")
   /// // ✅ "岍岊岊岅岉岎.com" NOT "xn--citibank.com"
   /// ```
   ///
   /// If an error occurs, the function will stop processing the domain and return `false`,
-  /// and any previously-written data should be discarded. The callback closure can also ask
-  /// for processing to stop by returning `false`.
+  /// and any previously-written data should be discarded. The callback closure can also
+  /// signal a validation error and halt further processing by returning `false`.
   ///
   /// ### UTS46 Parameters
   ///
-  /// This function is defined by the [WHATWG URL Standard][WHATWG-ToUnicode] as `"domain to Unicode"`.
+  /// This function implements `"domain to Unicode"` as defined by the [WHATWG URL Standard][WHATWG-ToUnicode].
   /// It is the same as the `ToUnicode` function defined by [Unicode Technical Standard #46][UTS46-ToUnicode],
   /// with parameters bound as follows:
   ///
@@ -172,14 +236,16 @@ extension IDNA {
   /// [UTS39]: https://www.unicode.org/reports/tr39/
   ///
   /// - parameters:
-  ///   - utf8:   A domain to convert to Unicode, as a Collection of UTF-8 code-units.
-  ///   - writer: A closure which receives the labels of the domain emitted by this function.
-  ///             The labels should be written in the order they are visited, and if `needsTrailingDot` is true,
-  ///             should be followed by U+002E FULL STOP ("."). If this closure returns `false`,
-  ///             processing will stop and the function will return `false`.
+  ///   - utf8:   A domain in either Unicode or ASCII form, expressed as a Collection of UTF-8 code-units.
+  ///   - writer: A closure which receives the domain labels emitted by this function.
+  ///             The labels should be written in the order they are received, and if `needsTrailingDot` is true,
+  ///             the label should be followed by U+002E FULL STOP ("."). Processing continues for as long as
+  ///             the closure returns `true`; meaning that it may perform validation, and may signal that processing
+  ///             should stop by returning `false`.
   ///
   /// - returns: Whether or not the operation was successful.
-  ///            If `false`, any data previously yielded to `writer` should be discarded.
+  ///            If `false`, the given domain is not valid, and any data previously yielded to `writer`
+  ///            should be discarded.
   ///
   @inlinable
   public static func toUnicode<Source>(
@@ -190,13 +256,15 @@ extension IDNA {
     }
   }
 
-  /// Converts a domain to its ASCII representation.
+  /// Converts a domain to its canonical ASCII form.
   ///
-  /// This function performs IDNA Compatibility Processing on the given domain, including
-  /// applying a compatibility mapping, normalization, and splitting in to domain labels.
-  /// Punycode labels are decoded in to Unicode, and all labels are validated.
+  /// The domain may be given in ASCII or Unicode form. This function will perform all required
+  /// compatibility processing, including mapping and case-folding, normalization, Punycode decoding, etc.
+  /// Finally, each label and the entire domain are validated, and the result is encoded as ASCII using
+  /// the Punycode encoding.
   ///
-  /// This processing is idempotent, so it may be reapplied without changing the result.
+  /// This function is idempotent, so if it is applied to a domain that is already in canonical ASCII form,
+  /// it just produces the same value, unchanged.
   ///
   /// ```swift
   /// // ASCII domains.
@@ -214,29 +282,30 @@ extension IDNA {
   /// toASCII("cafe\u{0301}.fr")  // ✅ "xn--caf-dma.fr"
   ///
   /// // IDN validation.
-  /// // The '-yvc' version is how you would Punycode "cafe\u{0301}"
-  /// // but that isn't normalized, so it doesn't pass validation.
+  /// // Zero-width joiners are only allowed in certain contexts.
+  /// // Other uses don't pass validation.
+  /// let notApple = "a\u{200C}pple.com"     // 🤫 Psst! There's a zero-width joiner hiding there!
+  /// print(notApple)           "a‌pple.com"  // To a human, it looks like "apple.com"
+  /// print(notApple == "apple.com")  false  // A computer knows it ISN'T "apple.com"
+  /// toASCII("a\u{200C}pple.com")  <nil>    // ❎ Not a valid IDN!
+  ///
+  /// // "xn--cafe-yvc" is how you would Punycode "cafe\u{0301}" (the non-NFC "café")
+  /// // but that doesn't pass validation.
   /// toASCII("xn--caf-dma.fr")   // ✅ "xn--caf-dma.fr" - valid IDN
   /// toASCII("xn--cafe-yvc.fr")  // ❎ <nil> - Not a valid IDN!
   /// ```
   ///
-  /// Although the ASCII representation is less commonly used to render a domain,
-  /// it is still worth considering carefully which domain presentation is appropriate for the context:
+  /// ## Rendering Domains
   ///
-  /// > Implementations are advised to apply additional tests to these labels,
-  /// > such as those described in [Unicode Technical Report #36][UTR36] and
-  /// > [Unicode Technical Standard #39][UTS39], and take appropriate actions.
-  /// >
-  /// > For example, a label with mixed scripts or confusables may be called out in the UI.
-  /// > Note that the use of Punycode to signal problems may be counter-productive,
-  /// > as described in [UTR36][UTR36].
+  /// Although the ASCII representation is less commonly used to render a domain,
+  /// it is still worth considering carefully whether it is an appropriate presentation for the context:
   ///
   /// In particular, note that in situations such as `"岍岊岊岅岉岎.com"` (or `"xn--citibank.com"`),
   /// the ASCII representation may do more to mislead than the Unicode representation. For more information
   /// about rendering domains for display, see ``toUnicode(utf8:writer:)``.
   ///
-  /// This function visits the ASCII bytes of the result using a callback closure. To construct the full domain,
-  /// the bytes can be converted to scalars and appended to a String, or written to a buffer.
+  /// This function emits the ASCII bytes of the result using a callback closure. To construct the full domain,
+  /// the bytes can be written to a buffer or appended to a string as individual scalars.
   ///
   /// ```swift
   /// func idna_encode(_ input: String) -> String? {
@@ -259,7 +328,7 @@ extension IDNA {
   ///
   /// ### UTS46 Parameters
   ///
-  /// This function is defined by the [WHATWG URL Standard][WHATWG-ToASCII] as `"domain to ASCII"`.
+  /// This function implements `"domain to ASCII"` as defined by the [WHATWG URL Standard][WHATWG-ToASCII].
   /// It is the same as the `ToASCII` function defined by [Unicode Technical Standard #46][UTS46-ToASCII],
   /// with parameters bound as follows:
   ///
@@ -269,22 +338,25 @@ extension IDNA {
   /// - `UseSTD3ASCIIRules` is given by the parameter `beStrict`
   /// - `Transitional_Processing` is `false`
   ///
-  /// `VerifyDnsLength` is not implemented, and so is effectively always `false`.
-  /// URLs do not enforce DNS' length limits so it is not necessary for current users of this API,
-  /// and limiting the length of the written domain can be composed on top of the current design.
+  /// Additionally, for this implementation, `VerifyDnsLength` is `false`.
+  /// URLs do not enforce DNS length limits, so it is not necessary for users of this API who wish to process
+  /// domains as URLs do.
   ///
   /// [WHATWG-ToASCII]: https://url.spec.whatwg.org/#concept-domain-to-ascii
   /// [UTS46-ToASCII]: https://www.unicode.org/reports/tr46/#ToASCII
   ///
   /// - parameters:
-  ///   - utf8:      An Internationalized Domain Name (IDN) to encode, as a Collection of UTF-8 code-units.
-  ///   - beStrict:  Limits allowed domain names as described by STD3/RFC-1122, such as limiting ASCII characters
-  ///                to alphanumerics and hyphens. URLs tend to less strict than this, and have their own disallowed
-  ///                characters sets (for example, they allow underscores, such as in `"some_hostname"`).
+  ///   - utf8:      A domain in either Unicode or ASCII form, expressed as a Collection of UTF-8 code-units.
+  ///   - beStrict:  If `true`, limits allowed domain names as described by STD3/RFC-1122 - i.e. ASCII letters, digits,
+  ///                and hyphens only (LHD). URLs do not assume STD3 name restrictions apply, and have a
+  ///                less restrictive set of disallowed characters based on URL syntax requirements
+  ///                (for example, they allow underscores, such as in `"http://some_hostname/"`, whereas STD3 does not).
+  ///                The default is `false`.
   ///   - writer:    A closure which receives the ASCII bytes emitted by this function.
   ///
   /// - returns: Whether or not the operation was successful.
-  ///            If `false`, any data previously yielded to `writer` should be discarded.
+  ///            If `false`, the given domain is not valid, and any data previously yielded to `writer`
+  ///            should be discarded.
   ///
   @inlinable
   public static func toASCII<Source>(
