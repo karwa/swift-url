@@ -25,6 +25,7 @@ public enum TestFile: String, Equatable, Hashable, Codable {
   case WebURLAdditionalConstructorTests = "additional_constructor_tests"
   case WPTURLSetterTests = "setters_tests"
   case WebURLAdditionalSetterTests = "additional_setters_tests"
+  case WPTToASCIITests = "toascii"
   case FilePathTests = "file_url_path_tests"
   case IdnaTest = "IdnaTestV2"
 
