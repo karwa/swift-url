@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// A collection of sample URLs shared by several benchmark suites.
-/// 
+///
 enum SampleURLs {}
 
 
@@ -213,5 +213,32 @@ extension SampleURLs {
     "http:/\t/\t[:\n:53.\n197.134.182]",
     "http:/\t/\t[6\n880:\n1845:26e0:6df1:f7e6:9e4b:7b7:7bc4]",
     "http:/\t/\t[1\nf09:\nbebc:131f:3de7:8bfb:3192:9f6a:fc64]",
+  ]
+}
+
+
+// --------------------------------------------
+// MARK: - IDNA
+// --------------------------------------------
+
+
+extension SampleURLs {
+
+  /// 10 HTTP(S) URLs with IDNs.
+  ///
+  /// These are basically like the AverageURLs, with IDNs.
+  ///
+  internal static let IDNAURLs: [String] = [
+    #"http://ₓn--fa-hia.example/foo/bar/baz?a=b&c=d&e=f"#,
+    #"http://caf\u{00E9}.fr/bar?baz=qux&search=nothing#top"#,
+    #"http://xn--caf-dma.fr/one/two?coffee"#,
+    #"https://a.xn--igbi0gl.com/wiki/Swift_(programming_language)"#,
+    #"https://a.xn--mgbet1febhkb.com/w/index.php?title=Swift_(programming_language)&action=edit"#,
+
+    #"https://xn--b1abfaaepdrnnbgefbadotcwatmq2g4l/w/index.php?title=Swift_programming_language&redirect=no"#,
+    #"https://xn--1ch.com/wiki/Swift_(parallel_scripting_language)"#,
+    #"https://국립중앙도서관.한국/foo/bar?baz"#,
+    #"https://日本語.jp/foo/bar?baz"#,
+    #"http://中国移动.中国/foo/bar?baz"#,
   ]
 }
