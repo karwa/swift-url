@@ -42,6 +42,14 @@ extension Constructor {
         }
       }
 
+      // IDNA.
+
+      suite.benchmark("IDNA") {
+        for string in SampleURLs.IDNAURLs {
+          blackHole(WebURL(string))
+        }
+      }
+
       // IPv4.
 
       suite.benchmark("IPv4") {

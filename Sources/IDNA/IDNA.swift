@@ -39,7 +39,7 @@ import UnicodeDataStructures
 /// >
 /// > This does not only apply to domains. For instance, consider an App on a digital storefront,
 /// > claiming to be developed by "Google". It would likely be wise for the storefront to forbid characters
-/// > such as zero-width joiners from developer names, otherwise somebody else could register "Go\{200C}ogle"
+/// > such as zero-width non-joiners from developer names, otherwise somebody else could register "Go\{200C}ogle"
 /// > which appears as visually indistinguishable from the original. Additionally, some emoji can be ambiguous,
 /// > especially at smaller font sizes.
 /// >
@@ -123,19 +123,22 @@ extension IDNA {
   /// toUnicode("www.caf\u{00E9}.fr")   // ✅ "www.café.fr" ("caf\u{00E9}")
   /// toUnicode("www.cafe\u{0301}.fr")  // ✅ "www.café.fr" ("caf\u{00E9}")
   /// toUnicode("www.xn--caf-dma.fr")   // ✅ "www.café.fr" ("caf\u{00E9}")
+  /// ```
   ///
-  /// // IDN validation.
-  /// // Zero-width joiners are only allowed in certain contexts.
-  /// // Other uses don't pass validation.
-  /// let notApple = "a\u{200C}pple.com"     // 🤫 Psst! There's a zero-width joiner hiding there!
+  /// Validation ensures that domains are NFC normalized and case-folded, and enforces some rules
+  /// with regards to use of joiners and bidirectional text.
+  ///
+  /// ```swift
+  /// // Zero-width joiners and non-joiners are only allowed in certain contexts.
+  /// let notApple = "a\u{200C}pple.com"     // 🥸 Hey! There's a zero-width non-joiner hiding there!
   /// print(notApple)           "a‌pple.com"  // To a human, it looks like "apple.com"
   /// print(notApple == "apple.com")  false  // A computer knows it ISN'T "apple.com"
   /// toUnicode("a\u{200C}pple.com")  <nil>  // ❎ Not a valid IDN!
   ///
-  /// // "xn--cafe-yvc" is how you would Punycode "cafe\u{0301}" (the non-NFC "café")
-  /// // but that doesn't pass validation.
-  /// toUnicode("www.caf\u{00E9}.fr")  // ✅ "www.café.fr" ("caf\u{00E9}")
-  /// toUnicode("xn--cafe-yvc.fr")     // ❎ <nil> - Not a valid IDN!
+  /// // "xn--cafe-yvc" is how you would Punycode "cafe\u{0301}" (the non-NFC "café").
+  /// // This ensures there is only one "café.fr".
+  /// toUnicode("xn--caf-dma.fr")   // ✅ "café.fr" ("caf\u{00E9}")
+  /// toUnicode("xn--cafe-yvc.fr")  // ❎ <nil> - Not a valid IDN!
   /// ```
   ///
   /// ## Rendering Domains
@@ -271,7 +274,7 @@ extension IDNA {
   /// toASCII("example.com")  // ✅ "example.com"
   ///
   /// // Unicode.
-  /// toASCII("we❤️swift")       // ✅ "xn--weswift-z98d"
+  /// toASCII("we❤️swift")        // ✅ "xn--weswift-z98d"
   /// toASCII("api.你好你好.com")  // ✅ "api.xn--6qqa088eba.com"
   ///
   /// // Idempotent.
@@ -280,17 +283,20 @@ extension IDNA {
   /// // Normalizes Unicode domains.
   /// toASCII("caf\u{00E9}.fr")   // ✅ "xn--caf-dma.fr"
   /// toASCII("cafe\u{0301}.fr")  // ✅ "xn--caf-dma.fr"
+  /// ```
   ///
-  /// // IDN validation.
-  /// // Zero-width joiners are only allowed in certain contexts.
-  /// // Other uses don't pass validation.
-  /// let notApple = "a\u{200C}pple.com"     // 🤫 Psst! There's a zero-width joiner hiding there!
+  /// Validation ensures that domains are NFC normalized and case-folded, and enforces some rules
+  /// with regards to use of joiners and bidirectional text.
+  ///
+  /// ```swift
+  /// // Zero-width joiners and non-joiners are only allowed in certain contexts.
+  /// let notApple = "a\u{200C}pple.com"     // 🥸 Hey! There's a zero-width non-joiner hiding there!
   /// print(notApple)           "a‌pple.com"  // To a human, it looks like "apple.com"
   /// print(notApple == "apple.com")  false  // A computer knows it ISN'T "apple.com"
-  /// toASCII("a\u{200C}pple.com")  <nil>    // ❎ Not a valid IDN!
+  /// toASCII("a\u{200C}pple.com")    <nil>  // ❎ Not a valid IDN!
   ///
-  /// // "xn--cafe-yvc" is how you would Punycode "cafe\u{0301}" (the non-NFC "café")
-  /// // but that doesn't pass validation.
+  /// // "xn--cafe-yvc" is how you would Punycode "cafe\u{0301}" (the non-NFC "café").
+  /// // This ensures there is only one "café.fr".
   /// toASCII("xn--caf-dma.fr")   // ✅ "xn--caf-dma.fr" - valid IDN
   /// toASCII("xn--cafe-yvc.fr")  // ❎ <nil> - Not a valid IDN!
   /// ```
@@ -396,30 +402,30 @@ extension IDNA {
   ) -> Bool where Source: Collection, Source.Element == UInt8 {
 
     // 1 & 2. Map & Normalize.
-    var preppedScalarsStream = _MappedAndNormalized(source: source.makeIterator(), useSTD3ASCIIRules: useSTD3ASCIIRules)
-
-    var validationState = CrossLabelValidationState()
+    var preppedScalars = _MappedAndNormalized(source: source.makeIterator(), useSTD3ASCIIRules: useSTD3ASCIIRules)
+    var validationState = DomainValidationState()
 
     // 3. Break.
-    return _breakLabels(consuming: &preppedScalarsStream, checkSourceError: { $0.hasError }) {
+    return _breakLabels(consuming: &preppedScalars, checkSourceError: { $0.hasError }) {
       encodedLabel, needsTrailingDot in
 
-      // TODO: Fast paths.
-
       // 4(a). Convert.
-      guard let (label, wasDecoded) = _decodePunycodeIfNeeded(&encodedLabel) else { return false }
+      guard let (count, wasDecoded) = _decodePunycodeIfNeeded(&encodedLabel) else { return false }
+      let decodedLabel = encodedLabel.prefix(count)
 
       // 4(b). Validate.
       guard
         _validate(
-          label: label, isKnownMappedAndNormalized: !wasDecoded, useSTD3ASCIIRules: useSTD3ASCIIRules,
+          label: decodedLabel,
+          isKnownMappedAndNormalized: !wasDecoded,
+          useSTD3ASCIIRules: useSTD3ASCIIRules,
           state: &validationState)
       else { return false }
 
       guard validationState.checkFinalValidationState() else { return false }
 
       // Yield the label.
-      return writer(label, needsTrailingDot)
+      return writer(decodedLabel, needsTrailingDot)
     }
   }
 }
@@ -471,19 +477,16 @@ extension IDNA {
       self._useSTD3ASCIIRules = useSTD3ASCIIRules
     }
 
-    @inlinable @inline(__always)
-    internal static var DisableNFCNormalization: Bool { false }
-
     @usableFromInline
     internal enum _State {
       case decodeFromSource
 
       case map(Unicode.Scalar)
+      // TODO: Split STD3 validation in to its own state, or to general label validation.
 
-      case normalize(MappedScalar)
-      case end
-      case serializeNormalized([Unicode.Scalar], index: Int)
-      case serializeUnnormalized(MappedScalar, index: Int)
+      case feedNormalizer(MappedScalar)
+      case sourceConsumed
+      case emitNormalized(NFCIterator)
     }
 
     @inlinable
@@ -501,106 +504,81 @@ extension IDNA {
             self.hasError = true
             fallthrough
           case .emptyInput:
-            self._state = .end
+            self._state = .sourceConsumed
           }
 
-        // 1. Map the code-points using the IDNA mapping table.
+        // 1. Map the scalar using the UTS46 mapping table.
         //
         case .map(let decodedScalar):
           let mappedScalar = IDNA.mapScalar(decodedScalar, useSTD3ASCIIRules: _useSTD3ASCIIRules)
           switch mappedScalar {
           case .single, .multiple:
-            self._state = .normalize(mappedScalar)
+            self._state = .feedNormalizer(mappedScalar)
           case .ignored:
             self._state = .decodeFromSource
           case .disallowed:
             self.hasError = true
-            self._state = .end
+            self._state = .sourceConsumed
           }
 
-        // 2. Normalize the resulting stream of code-points to NFC.
-        //
-
-        // === HACK HACK HACK ===
-        //
-        // We have a couple of different paths here.
-        //
-        // A. Normalize to NFC (like we're supposed to).
-        //
-        //    There are 2 ways to get this: from an unstable standard library SPI, or from Foundation.
-        //    In both cases, the functions accept a String, not a stream of Unicode scalars, so we need to consume
-        //    the entire input source, mapping everything, normalize it, and serialize the result as a stream
-        //    of scalars. It's a really ugly mess of states. Sorry.
-        //
-        //    The standard library's implementation is generic and could work directly with a stream of scalars.
-        //    That's what this design is intended to work with. We would just feed it scalars on each call to 'next()',
-        //    and forward its output.
-        //
-        // B. Don't normalize to NFC. (See DisableNFCNormalization)
-        //
-        //    This is not really valid, but is useful for testing because it doesn't force serialization.
-        //    That means we process N labels, and might fail on the N+1'th label because of something like a UTF-8
-        //    decoding error, which would have been caught much earlier if we serialized everything.
-        //
-        //    It means more ugly mess of states. Again, sorry.
+        // 2. Normalize the scalars to NFC.
         //
         // === HACK HACK HACK ===
-
-        // A.i. Gather the mapped scalars in to a String.
-        //      Eventually, '.decodeFromSource' will consume all scalars and go to '.end'.
         //
-        case .normalize(let mappedScalar):
-          guard !Self.DisableNFCNormalization else {
-            self._state = .serializeUnnormalized(mappedScalar, index: 0)
-            break
-          }
+        // There are 2 ways to do this: using an unstable standard library SPI, or using Foundation.
+        // In both cases, the functions accept a String, not an iterator of Unicode scalars - so, we need to
+        // consume the entire input source in to a string, mapping everything, normalize that string, then serialize
+        // the result as a stream of scalars. It's pretty ugly, ngl.
+        //
+        // The standard library's implementation is generic and could work directly with a stream of scalars.
+        // That's what this design is intended to work with. We would just feed the stream of mapped scalars
+        // and it would emit them as a stream of NFC scalars. But we're not there yet.
+        //
+        // === HACK HACK HACK ===
+        //
+        // i. Gather the mapped scalar in to a String... then return to '.decodeFromSource' to decode the next scalar.
+        //    This will consume the entire input, eventually landing at '.sourceConsumed'.
+        //
+        case .feedNormalizer(let mappedScalar):
           switch mappedScalar {
-          case .single(let scalar, _): _normalizationBuffer.unicodeScalars.append(scalar)
-          case .multiple(let idx): _normalizationBuffer.unicodeScalars += idx.get(table: _idna_map_replacements_table)
-          default: fatalError()
+          case .single(let scalar, _):
+            _normalizationBuffer.unicodeScalars.append(scalar)
+          case .multiple(let idx):
+            // String.unicodeScalars.replaceSubrange is faster than append(contentsOf:)
+            _normalizationBuffer.unicodeScalars.replaceSubrange(
+              Range(uncheckedBounds: (_normalizationBuffer.endIndex, _normalizationBuffer.endIndex)),
+              with: idx.get(table: _idna_map_replacements_table)
+            )
+          default:
+            fatalError()
           }
           self._state = .decodeFromSource
 
-        // A.ii. End state. This is *SUPPOSED* to always return nil and remain in the end state.
-        //       But if we have an unprocessed "normalization buffer" (String from [a]), we have to flush it.
+        // ii. In an ideal world, this would be a terminal state and always just return `nil`.
+        //     As things are, we may have an unprocessed "normalization buffer" (String from [i]).
+        //     Now that the input is all consumed, we can do the NFC normalization and forward those scalars.
         //
-        case .end:
-          if !self.hasError && !_normalizationBuffer.isEmpty {
-            self._state = .serializeNormalized(toNFC(_normalizationBuffer), index: 0)
+        case .sourceConsumed:
+          if self.hasError {
+            return nil
+          }
+          if !_normalizationBuffer.isEmpty {
+            self._state = .emitNormalized(toNFC(_normalizationBuffer))
             _normalizationBuffer = ""
             continue
           }
           return nil
 
-        // A.iii. Yield each of the resulting NFC scalar(s), then go back to '.decodeFromSource'.
+        // iii. Yield the NFC scalars, then return to '.sourceConsumed'.
         //
-        case .serializeNormalized(let scalars, index: let position):
-          if position < scalars.endIndex {
-            self._state = .serializeNormalized(scalars, index: position + 1)
-            return scalars[position]
-          } else {
-            assert(_normalizationBuffer.isEmpty)
-            self._state = .decodeFromSource
+        case .emitNormalized(var nfcScalars):
+          // move the iterator out of '.state'.
+          self._state = .sourceConsumed
+          if let next = nfcScalars.next() {
+            self._state = .emitNormalized(nfcScalars)
+            return next
           }
-
-        // B. Yield non-normalized scalar(s) straight from the mapping table, then go back to '.decodeFromSource'.
-        //
-        case .serializeUnnormalized(let mappedScalar, index: let position):
-          switch mappedScalar {
-          case .single(let scalar, _):
-            self._state = .decodeFromSource
-            return scalar
-          case .multiple(let idx):
-            if position < idx.length {
-              self._state = .serializeUnnormalized(mappedScalar, index: position + 1)
-              return idx.get(table: _idna_map_replacements_table)[position]
-            } else {
-              self._state = .decodeFromSource
-            }
-          default: fatalError()
-          }
-
-        // === END HACK HACK HACK (for now) ===
+          assert(_normalizationBuffer.isEmpty)
         }
       }
     }
@@ -621,7 +599,6 @@ extension IDNA {
   ///
   @usableFromInline
   internal enum MappedScalar {
-    // TODO: IIRC, it's important for NFC checking to know if this was a deviation character.
     case single(Unicode.Scalar, wasMapped: Bool)
     case multiple(ReplacementsTable.Index)
     case ignored
@@ -773,19 +750,19 @@ extension IDNA {
 extension IDNA {
 
   /// If the given buffer contains a Punycode-encoded domain label, decodes it in-place.
-  /// Otherwise, returns the given buffer, unchanged.
+  /// A `nil` result means failure (e.g. nonsense Punycode).
   ///
   @inlinable
   internal static func _decodePunycodeIfNeeded<Buffer>(
     _ buffer: inout Buffer
-  ) -> (label: Buffer.SubSequence, wasDecoded: Bool)?
+  ) -> (count: Int, wasDecoded: Bool)?
   where Buffer: RandomAccessCollection & MutableCollection, Buffer.Element == Unicode.Scalar {
 
     switch Punycode.decodeInPlace(&buffer) {
     case .success(let count):
-      return (buffer.prefix(count), wasDecoded: true)
+      return (count, wasDecoded: true)
     case .notPunycode:
-      return (buffer[...], wasDecoded: false)
+      return (buffer.count, wasDecoded: false)
     case .failed:
       return nil
     }
@@ -809,7 +786,7 @@ internal let _validation_db = CodePointDatabase<IDNAValidationData>(
 extension IDNA {
 
   @usableFromInline
-  internal struct CrossLabelValidationState {
+  internal struct DomainValidationState {
 
     @usableFromInline
     internal var isConfirmedBidiDomain = false
@@ -864,7 +841,7 @@ extension IDNA {
   ///
   @inlinable
   internal static func _validate<Label>(
-    label: Label, isKnownMappedAndNormalized: Bool, useSTD3ASCIIRules: Bool, state: inout CrossLabelValidationState
+    label: Label, isKnownMappedAndNormalized: Bool, useSTD3ASCIIRules: Bool, state: inout DomainValidationState
   ) -> Bool where Label: BidirectionalCollection, Label.Element == UnicodeScalar {
 
     // Parameters.
@@ -888,14 +865,14 @@ extension IDNA {
     //     character.
 
     if checkHyphens {
-      preconditionFailure("CheckHyphens is not supported")
+      fatalError("CheckHyphens is not supported")
     }
 
     //  4. The label must not contain a U+002E ( . ) FULL STOP.
 
     assert(!label.contains("."), "Labels should already be split on U+002E")
 
-    // <5. is checked later when we query the validation data>
+    // < 5. is checked later when we query the validation data >
 
     //  6. Each code point in the label must only have certain status values
     //     according to Section 5, IDNA Mapping Table:

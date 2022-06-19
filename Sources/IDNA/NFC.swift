@@ -16,21 +16,22 @@
 
   @_spi(_Unicode) import Swift
 
-  @inlinable
+  @usableFromInline
+  internal typealias NFCIterator = AnyIterator<Unicode.Scalar>
+
+  @usableFromInline
   internal func isNFC<C: Collection>(_ scalars: C) -> Bool where C.Element == Unicode.Scalar {
-    var s = ""
-    s.unicodeScalars.append(contentsOf: scalars)
     if #available(macOS 9999, *) {
-      return s._nfc.elementsEqual(scalars)
+      return String(scalars)._nfc.elementsEqual(scalars)
     } else {
       fatalError()
     }
   }
 
-  @inlinable
-  internal func toNFC(_ string: String) -> [Unicode.Scalar] {
+  @usableFromInline
+  internal func toNFC(_ string: String) -> NFCIterator {
     if #available(macOS 9999, *) {
-      return Array(string._nfc)
+      return AnyIterator(string._nfc.makeIterator())
     } else {
       fatalError()
     }
@@ -40,16 +41,41 @@
 
   import Foundation
 
+  @usableFromInline
+  internal typealias NFCIterator = String.UnicodeScalarView.Iterator
+
   @inlinable
   internal func isNFC<C: Collection>(_ scalars: C) -> Bool where C.Element == Unicode.Scalar {
-    var str = ""
-    str.unicodeScalars.append(contentsOf: scalars)
-    return str.precomposedStringWithCanonicalMapping.unicodeScalars.elementsEqual(scalars)
+    // These are scalars which have been decoded from Punycode, and are therefore non-ASCII.
+    String(scalars).precomposedStringWithCanonicalMapping.unicodeScalars.elementsEqual(scalars)
   }
 
   @inlinable
-  internal func toNFC(_ string: String) -> [Unicode.Scalar] {
-    Array(string.precomposedStringWithCanonicalMapping.unicodeScalars)
+  internal func toNFC(_ string: String) -> NFCIterator {
+    string.precomposedStringWithCanonicalMapping.unicodeScalars.makeIterator()
   }
 
 #endif
+
+// Why is this not in the standard library?
+extension String {
+
+  @inlinable
+  internal init<C>(_ scalars: C) where C: Collection, C.Element == Unicode.Scalar {
+    // Unicode.Scalar is a UInt32:
+    // https://github.com/apple/swift/blob/0c67ce64874d83b2d4f8d73b899ee58f2a75527f/stdlib/public/core/UnicodeScalar.swift#L38
+    // Again, would be cool if the standard library would offer this interface,
+    // so we wouldn't need to do... what I'm about to do.
+    let _contiguousResult = scalars.withContiguousStorageIfAvailable { ptr in
+      ptr.withMemoryRebound(to: UInt32.self) { utf32 in
+        String(decoding: utf32, as: UTF32.self)
+      }
+    }
+    if let contiguousResult = _contiguousResult {
+      self = contiguousResult
+      return
+    }
+    self = ""
+    self.unicodeScalars.replaceSubrange(Range(uncheckedBounds: (endIndex, endIndex)), with: scalars)
+  }
+}
