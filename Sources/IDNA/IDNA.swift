@@ -422,7 +422,7 @@ extension IDNA {
           state: &validationState)
       else { return false }
 
-      guard validationState.checkFinalValidationState() else { return false }
+      guard !validationState.hasFailure() else { return false }
 
       // Yield the label.
       return writer(decodedLabel, needsTrailingDot)
@@ -469,6 +469,9 @@ extension IDNA {
     @usableFromInline
     internal private(set) var _normalizationBuffer = ""
 
+    @usableFromInline
+    internal private(set) var _nfcIterator: Optional<NFCIterator> = .none
+
     @inlinable
     internal init(source: UTF8Bytes) {
       self._source = source
@@ -480,7 +483,7 @@ extension IDNA {
       case map(Unicode.Scalar)
       case feedNormalizer(MappedScalar)
       case sourceConsumed
-      case emitNormalized(NFCIterator)
+      case emitNormalized
     }
 
     @inlinable
@@ -557,21 +560,20 @@ extension IDNA {
             return nil
           }
           if !_normalizationBuffer.isEmpty {
-            self._state = .emitNormalized(toNFC(_normalizationBuffer))
-            _normalizationBuffer = ""
+            self._nfcIterator = toNFC(_normalizationBuffer)
+            self._normalizationBuffer = ""
+            self._state = .emitNormalized
             continue
           }
           return nil
 
         // iii. Yield the NFC scalars, then return to '.sourceConsumed'.
         //
-        case .emitNormalized(var nfcScalars):
-          // move the iterator out of '.state'.
-          self._state = .sourceConsumed
-          if let next = nfcScalars.next() {
-            self._state = .emitNormalized(nfcScalars)
+        case .emitNormalized:
+          if let next = self._nfcIterator?.next() {
             return next
           }
+          self._state = .sourceConsumed
           assert(_normalizationBuffer.isEmpty)
         }
       }
@@ -788,7 +790,7 @@ extension IDNA {
   internal struct DomainValidationState {
 
     @usableFromInline
-    internal var isConfirmedBidiDomain = false
+    internal var isBidiDomain = false
 
     @usableFromInline
     internal var hasBidiFailure = false
@@ -798,11 +800,11 @@ extension IDNA {
     }
 
     @inlinable
-    internal func checkFinalValidationState() -> Bool {
-      if isConfirmedBidiDomain {
-        return !hasBidiFailure
+    internal func hasFailure() -> Bool {
+      if isBidiDomain {
+        return hasBidiFailure
       }
-      return true
+      return false
     }
   }
 
@@ -870,8 +872,8 @@ extension IDNA {
 
     assert(!label.contains("."), "Labels should already be split on U+002E")
 
-    // < 5. is checked later when we query the validation data >
-
+    // <5. is checked later>
+    //
     //  6. Each code point in the label must only have certain status values
     //     according to Section 5, IDNA Mapping Table: [ ... ]
     //     - For Nontransitional Processing, each value must be either valid or deviation.
@@ -882,22 +884,22 @@ extension IDNA {
     //   - For things which have been mapped, folded, and NFC-ed already, we don't need to do this
     //     (unless we're doing it to enforce STD3 ASCII rules; see below).
     //
-    //   - UseSTD3ASCIIRules should also be considered as part of step 6, even though UTS46 doesn't say it.
-    //     Have asked for clarification. https://github.com/whatwg/url/issues/341#issuecomment-1119193904
-    //
-    //   - This is where we enforce UseSTD3ASCIIRules; just because it happens to live in the same codepoint database.
+    //   - UseSTD3ASCIIRules should also be considered as part of step 6.
+    //     UTS46 doesn't actually say explicitly _where_ you are supposed to enforce UseSTD3ASCIIRules.
+    //     We enforce it here, which makes sense and seems to pass all of the tests, so that's good.
+    //     Have asked Unicode for clarification.
 
-    if !isKnownMappedAndNormalized || _slowPath(useSTD3ASCIIRules) {
+    if !isKnownMappedAndNormalized || useSTD3ASCIIRules {
       guard label.allSatisfy({ _isValidForDomainNT($0, useSTD3ASCIIRules: useSTD3ASCIIRules) }) else {
         return false
       }
     }
 
-    // State for CheckJoiners.
-    var previousScalarInfo: IDNAValidationData.ValidationFlags? = nil
-    // State for CheckBidi.
+    // -
+
+    var previousScalarInfo = Optional<IDNAValidationData.ValidationFlags>.none
     var bidi_labelDirection = Bidi_LabelDirection.LTR
-    var bidi_trailingNSMs = 0
+    var bidi_infoBeforeTrailingNSMs = Optional<IDNAValidationData.ValidationFlags>.none
     var bidi_hasEN = false
     var bidi_hasAN = false
 
@@ -922,6 +924,7 @@ extension IDNA {
       //     https://www.rfc-editor.org/rfc/rfc5892.html#appendix-A
 
       joiners: if checkJoiners {
+
         if scalar.value == 0x200C /* ZERO WIDTH NON-JOINER */ || scalar.value == 0x200D /* ZERO WIDTH JOINER */ {
           guard let previousScalarInfo = previousScalarInfo else {
             return false
@@ -936,6 +939,7 @@ extension IDNA {
           }
           return false
         }
+
       }
 
       //  8. If CheckBidi, and if the domain name is a  Bidi domain name, then the label must satisfy
@@ -946,13 +950,15 @@ extension IDNA {
         // A Bidi domain name is a domain name containing at least one character with Bidi_Class R, AL, or AN.
         // See [IDNA2008] RFC 5893, Section 1.4.
 
-        if !state.isConfirmedBidiDomain {
+        if !state.isBidiDomain {
           switch scalarInfo.bidiInfo {
-          case .RorAL, .AN: state.isConfirmedBidiDomain = true
+          case .RorAL, .AN: state.isBidiDomain = true
           default: break
           }
         }
 
+        // "The Bidi Rule" is six rules:
+        //
         // 1.  The first character must be a character with Bidi property L, R,
         //     or AL.  If it has the R or AL property, it is an RTL label; if it
         //     has the L property, it is an LTR label.
@@ -975,22 +981,34 @@ extension IDNA {
         //     Bidi property NSM.
 
         if idx == label.startIndex {
-          // 1.
+
+          // [Bidi 1].
           switch scalarInfo.bidiInfo {
-          case .L: bidi_labelDirection = .LTR
-          case .RorAL: bidi_labelDirection = .RTL
-          default: state.hasBidiFailure = true
+          case .L:
+            bidi_labelDirection = .LTR
+          case .RorAL:
+            bidi_labelDirection = .RTL
+          default:
+            state.hasBidiFailure = true
           }
+
         } else {
+
+          // (Used by [Bidi 3] and [Bidi 6] later).
+          if case .NSM = scalarInfo.bidiInfo {
+            if bidi_infoBeforeTrailingNSMs == nil { bidi_infoBeforeTrailingNSMs = previousScalarInfo }
+          } else {
+            bidi_infoBeforeTrailingNSMs = nil
+          }
           switch bidi_labelDirection {
+          // [Bidi 5].
           case .LTR:
-            // 5.
             switch scalarInfo.bidiInfo {
             case .L, .EN, .ESorCSorETorONorBN, .NSM: break
             default: state.hasBidiFailure = true
             }
+          // [Bidi 2].
           case .RTL:
-            // 2.
             switch scalarInfo.bidiInfo {
             case .RorAL, .ESorCSorETorONorBN, .NSM: break
             case .AN: bidi_hasAN = true
@@ -998,42 +1016,39 @@ extension IDNA {
             default: state.hasBidiFailure = true
             }
           }
-        }
 
-        if case .NSM = scalarInfo.bidiInfo {
-          bidi_trailingNSMs += 1
-        } else {
-          bidi_trailingNSMs = 0
         }
       }
     }  // while idx < label.endIndex
 
-    if let lastNonSpace = label.dropLast(bidi_trailingNSMs).last {
-      let scalarInfo = _validation_db[lastNonSpace].value.bidiInfo
-      switch bidi_labelDirection {
-      case .LTR:
-        // 6.
-        switch scalarInfo {
-        case .L, .EN: break
-        default: state.hasBidiFailure = true
-        }
-      case .RTL:
-        // 3.
-        switch scalarInfo {
-        case .RorAL, .EN, .AN: break
-        default: state.hasBidiFailure = true
+    bidi: if checkBidi {
+
+      if let lastNonNSM = (bidi_infoBeforeTrailingNSMs ?? previousScalarInfo)?.bidiInfo {
+        switch bidi_labelDirection {
+        // [Bidi 6].
+        case .LTR:
+          switch lastNonNSM {
+          case .L, .EN: break
+          default: state.hasBidiFailure = true
+          }
+        // [Bidi 3].
+        case .RTL:
+          switch lastNonNSM {
+          case .RorAL, .EN, .AN: break
+          default: state.hasBidiFailure = true
+          }
         }
       }
-    }
-
-    if case .RTL = bidi_labelDirection {
-      // 4.
-      if bidi_hasEN && bidi_hasAN {
-        state.hasBidiFailure = true
+      // [Bidi 4].
+      if case .RTL = bidi_labelDirection {
+        if bidi_hasEN && bidi_hasAN {
+          state.hasBidiFailure = true
+        }
       }
+
     }
 
-    // X. Validation complete.
+    // X. Label validation complete.
 
     return true
   }

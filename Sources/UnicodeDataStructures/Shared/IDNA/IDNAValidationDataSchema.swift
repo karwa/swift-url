@@ -99,6 +99,11 @@ extension IDNAValidationData.ValidationFlags {
     init(value: UInt8) {
       self.value = value
     }
+
+    @inlinable
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+      lhs.value == rhs.value
+    }
   }
 
   // swift-format-ignore
@@ -116,6 +121,11 @@ extension IDNAValidationData.ValidationFlags {
     @inlinable
     init(value: UInt8) {
       self.value = value
+    }
+
+    @inlinable
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+      lhs.value == rhs.value
     }
   }
 }
