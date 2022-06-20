@@ -402,7 +402,7 @@ extension IDNA {
   ) -> Bool where Source: Collection, Source.Element == UInt8 {
 
     // 1 & 2. Map & Normalize.
-    var preppedScalars = _MappedAndNormalized(source: source.makeIterator(), useSTD3ASCIIRules: useSTD3ASCIIRules)
+    var preppedScalars = _MappedAndNormalized(source: source.makeIterator())
     var validationState = DomainValidationState()
 
     // 3. Break.
@@ -443,6 +443,7 @@ extension IDNA {
   ///
   /// This iterator performs the first 2 steps of IDNA Compatibility Processing, as defined by UTS#46 section 4
   /// <https://www.unicode.org/reports/tr46/#Processing>. Similar processing is sometimes referred to as "nameprep".
+  /// The mapping is applied with parameters `Transitional_Processing=false`and `UseSTD3ASCIIRules=false`.
   ///
   /// Should any stage of processing encounter an error (for example, if the source contains invalid UTF-8,
   /// or disallowed codepoints), the iterator will terminate and its `hasError` flag will be set.
@@ -466,24 +467,17 @@ extension IDNA {
     internal private(set) var _decoder = UTF8()
 
     @usableFromInline
-    internal private(set) var _useSTD3ASCIIRules: Bool
-
-    @usableFromInline
     internal private(set) var _normalizationBuffer = ""
 
     @inlinable
-    internal init(source: UTF8Bytes, useSTD3ASCIIRules: Bool) {
+    internal init(source: UTF8Bytes) {
       self._source = source
-      self._useSTD3ASCIIRules = useSTD3ASCIIRules
     }
 
     @usableFromInline
     internal enum _State {
       case decodeFromSource
-
       case map(Unicode.Scalar)
-      // TODO: Split STD3 validation in to its own state, or to general label validation.
-
       case feedNormalizer(MappedScalar)
       case sourceConsumed
       case emitNormalized(NFCIterator)
@@ -510,7 +504,7 @@ extension IDNA {
         // 1. Map the scalar using the UTS46 mapping table.
         //
         case .map(let decodedScalar):
-          let mappedScalar = IDNA.mapScalar(decodedScalar, useSTD3ASCIIRules: _useSTD3ASCIIRules)
+          let mappedScalar = IDNA.mapScalar(decodedScalar)
           switch mappedScalar {
           case .single, .multiple:
             self._state = .feedNormalizer(mappedScalar)
@@ -541,7 +535,7 @@ extension IDNA {
         //
         case .feedNormalizer(let mappedScalar):
           switch mappedScalar {
-          case .single(let scalar, _):
+          case .single(let scalar):
             _normalizationBuffer.unicodeScalars.append(scalar)
           case .multiple(let idx):
             // String.unicodeScalars.replaceSubrange is faster than append(contentsOf:)
@@ -599,66 +593,49 @@ extension IDNA {
   ///
   @usableFromInline
   internal enum MappedScalar {
-    case single(Unicode.Scalar, wasMapped: Bool)
+    case single(Unicode.Scalar)
     case multiple(ReplacementsTable.Index)
     case ignored
     case disallowed
 
     @inlinable
-    internal var originalScalarWasValid: Bool {
-      if case .single(_, false) = self { return true }
-      return false
+    internal static func resolve(_ mapping: IDNAMappingData.UnicodeData.Mapping?, at offset: UInt32) -> MappedScalar {
+      switch mapping {
+      case .single(let single):
+        // ✅ When constructing the status table, we check every in-line scalar value.
+        return .single(Unicode.Scalar(_unchecked: single))
+      case .rebased(let origin):
+        // ✅ When constructing the status table, we check every rebased mapping.
+        return .single(Unicode.Scalar(_unchecked: origin &+ offset))
+      case .table(let idx):
+        return .multiple(idx)
+      case .none:
+        return .disallowed
+      }
     }
   }
 
   /// Maps a Unicode scalar using the IDNA compatibility mapping table.
   ///
-  /// The mapping is always performed with `Transitional_Processing=false`.
+  /// The mapping is always performed with `Transitional_Processing=false` and `UseSTD3ASCIIRules=false`.
   ///
   @inlinable @inline(__always)
-  internal static func mapScalar(_ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool) -> MappedScalar {
+  internal static func mapScalar(_ scalar: Unicode.Scalar) -> MappedScalar {
 
     switch _idna_db[scalar] {
     case .ascii(let entry):
-      if !entry.isMapped {
-        if _slowPath(useSTD3ASCIIRules), case .disallowed_STD3_valid = entry.status { return .disallowed }
-        return .single(scalar, wasMapped: false)
+      if entry.isMapped {
+        return .single(entry.replacement)
       } else {
-        return .single(entry.replacement, wasMapped: true)
+        return .single(scalar)
       }
-
     case .nonAscii(let entry, startCodePoint: let startingCodePointOfEntry):
-      func resolve(_ mapping: IDNAMappingData.UnicodeData.Mapping?, at offset: UInt32) -> MappedScalar {
-        switch mapping {
-        case .single(let single):
-          // ✅ When constructing the status table, we check every in-line scalar value.
-          return .single(Unicode.Scalar(_unchecked: single), wasMapped: true)
-        case .rebased(let origin):
-          // ✅ When constructing the status table, we check every rebased mapping.
-          return .single(Unicode.Scalar(_unchecked: origin &+ offset), wasMapped: true)
-        case .table(let idx):
-          return .multiple(idx)
-        case .none:
-          return .disallowed
-        }
-      }
-      let offset = scalar.value &- startingCodePointOfEntry
-
-      // Parameters.
-      let transitionalProcessing = FixedParameter(false)
-      // Resolve status.
       switch entry.status {
-      case .valid:
-        return .single(scalar, wasMapped: false)
-      case .deviation:
-        return transitionalProcessing && entry.mapping != nil
-          ? resolve(entry.mapping, at: offset) : .single(scalar, wasMapped: false)
-      case .disallowed_STD3_valid:
-        return _slowPath(useSTD3ASCIIRules) ? .disallowed : .single(scalar, wasMapped: false)
-      case .mapped:
-        return resolve(entry.mapping, at: offset)
-      case .disallowed_STD3_mapped:
-        return _slowPath(useSTD3ASCIIRules) ? .disallowed : resolve(entry.mapping, at: offset)
+      case .valid, .deviation, .disallowed_STD3_valid:
+        return .single(scalar)
+      case .mapped, .disallowed_STD3_mapped:
+        let offset = scalar.value &- startingCodePointOfEntry
+        return .resolve(entry.mapping, at: offset)
       case .ignored:
         return .ignored
       case .disallowed:
@@ -667,25 +644,47 @@ extension IDNA {
     }
   }
 
-  /// Whether the code point is valid to be used in a domain label.
+  /// Whether the given scalar is valid for use in a domain label.
   ///
   /// From UTS46:
   ///
   /// > 4.1 Validity Criteria
   /// >
   /// > `6`. Each code point in the label must only have certain status values according to Section 5, IDNA Mapping Table:
-  /// >    - For Transitional Processing, each value must be valid.
   /// >    - For Nontransitional Processing, each value must be either valid or deviation.
-  /// >
   ///
   /// https://www.unicode.org/reports/tr46/#Validity_Criteria
   ///
+  /// This implementation performs **Nontransitional Processing**, so it returns `true` if the scalar's mapping status
+  /// is `valid` or `deviation`, and scalars with status `disallowed_STD3_valid` are considered valid
+  /// if `useSTD3ASCIIRules` is `false`. STD3 rules are more restrictive, so turning them off
+  /// means to be more lenient.
+  ///
   @inlinable
-  internal static func _validateStatus(
-    _ scalar: Unicode.Scalar, transitionalProcessing: Bool, useSTD3ASCIIRules: Bool
+  internal static func _isValidForDomainNT(
+    _ scalar: Unicode.Scalar, useSTD3ASCIIRules: Bool
   ) -> Bool {
-    precondition(transitionalProcessing == false, "transition processing not implemented")
-    return mapScalar(scalar, useSTD3ASCIIRules: useSTD3ASCIIRules).originalScalarWasValid
+
+    switch _idna_db[scalar] {
+    case .ascii(let entry):
+      switch entry.status {
+      case .valid:
+        return true
+      case .disallowed_STD3_valid:
+        return !useSTD3ASCIIRules
+      case .mapped:
+        return false
+      }
+    case .nonAscii(let entry, _):
+      switch entry.status {
+      case .valid, .deviation:
+        return true
+      case .disallowed_STD3_valid:
+        return !useSTD3ASCIIRules
+      case .mapped, .disallowed_STD3_mapped, .ignored, .disallowed:
+        return false
+      }
+    }
   }
 }
 
@@ -849,7 +848,6 @@ extension IDNA {
     let checkHyphens = FixedParameter(false)
     let checkBidi = FixedParameter(true)
     let checkJoiners = FixedParameter(true)
-    let transitionalProcessing = FixedParameter(false)
 
     //  4.1 Validity Criteria
     //
@@ -875,20 +873,24 @@ extension IDNA {
     // < 5. is checked later when we query the validation data >
 
     //  6. Each code point in the label must only have certain status values
-    //     according to Section 5, IDNA Mapping Table:
-    //     - For Transitional Processing, each value must be valid.
+    //     according to Section 5, IDNA Mapping Table: [ ... ]
     //     - For Nontransitional Processing, each value must be either valid or deviation.
+    //
+    //   Impl. Notes:
+    //   -----------
+    //
+    //   - For things which have been mapped, folded, and NFC-ed already, we don't need to do this
+    //     (unless we're doing it to enforce STD3 ASCII rules; see below).
+    //
+    //   - UseSTD3ASCIIRules should also be considered as part of step 6, even though UTS46 doesn't say it.
+    //     Have asked for clarification. https://github.com/whatwg/url/issues/341#issuecomment-1119193904
+    //
+    //   - This is where we enforce UseSTD3ASCIIRules; just because it happens to live in the same codepoint database.
 
-    // Note: it is not clear whether or not UseSTD3ASCIIRules should be propagated to this point.
-    //       I think so, and some implementations seem to. Have asked for clarification.
-    //       https://github.com/whatwg/url/issues/341#issuecomment-1119193904
-    guard
-      isKnownMappedAndNormalized
-        || label.allSatisfy({
-          _validateStatus($0, transitionalProcessing: transitionalProcessing, useSTD3ASCIIRules: useSTD3ASCIIRules)
-        })
-    else {
-      return false
+    if !isKnownMappedAndNormalized || _slowPath(useSTD3ASCIIRules) {
+      guard label.allSatisfy({ _isValidForDomainNT($0, useSTD3ASCIIRules: useSTD3ASCIIRules) }) else {
+        return false
+      }
     }
 
     // State for CheckJoiners.
