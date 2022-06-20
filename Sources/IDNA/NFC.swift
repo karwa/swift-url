@@ -19,13 +19,9 @@
   @usableFromInline
   internal typealias NFCIterator = AnyIterator<Unicode.Scalar>
 
-  @usableFromInline
+  @inlinable
   internal func isNFC<C: Collection>(_ scalars: C) -> Bool where C.Element == Unicode.Scalar {
-    if #available(macOS 9999, *) {
-      return String(scalars)._nfc.elementsEqual(scalars)
-    } else {
-      fatalError()
-    }
+    toNFC(String(scalars)).elementsEqual(scalars)
   }
 
   @usableFromInline
@@ -46,8 +42,7 @@
 
   @inlinable
   internal func isNFC<C: Collection>(_ scalars: C) -> Bool where C.Element == Unicode.Scalar {
-    // These are scalars which have been decoded from Punycode, and are therefore non-ASCII.
-    String(scalars).precomposedStringWithCanonicalMapping.unicodeScalars.elementsEqual(scalars)
+    IteratorSequence(toNFC(String(scalars))).elementsEqual(scalars)
   }
 
   @inlinable
