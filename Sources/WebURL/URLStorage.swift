@@ -574,9 +574,12 @@ extension URLStructure {
       }
 
       switch hostKind {
-      case .ipv4Address, .domain:
+      case .ipv4Address, .domain, .domainWithIDN:
         assert(schemeKind.isSpecial, "Only URLs with special schemes can have IPv4 or domain hosts")
         assert(hostnameLength > 0, "IPv4/domain hostKinds cannot have empty hostnames")
+        if case .domainWithIDN = hostKind {
+          assert(hostnameLength >= 5, "A domain with IDN label cannot have fewer than 5 characters ('xn--' + 1)")
+        }
       case .empty:
         if schemeKind.isSpecial {
           assert(schemeKind == .file, "The only special URL which allows empty hostnames is file")

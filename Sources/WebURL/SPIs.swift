@@ -210,7 +210,7 @@ extension WebURL._SPIs {
       return .ipv4Address(IPv4Address(dottedDecimalUTF8: hostnameUTF8)!)
     case .ipv6Address:
       return .ipv6Address(IPv6Address(utf8: hostnameUTF8.dropFirst().dropLast())!)
-    case .domain:
+    case .domain, .domainWithIDN:
       return .domain(hostnameUTF8)
     case .opaque:
       return .opaque(hostnameUTF8)
@@ -360,8 +360,8 @@ extension WebURL._SPIs {
 
     // Hostname.
     switch _url.storage.structure.hostKind {
-    case .some(.domain):
-      guard _url.utf8.hostname?.contains(where: { encodeSet.shouldPercentEncode(ascii: $0) }) != true else {
+    case .some(.domain), .some(.domainWithIDN):
+      guard _url.utf8.hostname?.contains(where: { encodeSet.shouldPercentEncode(ascii: $0) }) == false else {
         // Domains are not allowed to contain percent-encoding.
         return .unableToEncode
       }

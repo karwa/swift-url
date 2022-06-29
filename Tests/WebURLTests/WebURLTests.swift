@@ -1288,6 +1288,40 @@ extension WebURLTests {
       }
     }
 
+    // Unicode domains in special URLs are encoded using IDNA.
+    do {
+      let url = WebURL("http://💩.com/aPath?aQuery#andFragment, too")!
+      XCTAssertEqual(url.hostKind, .domainWithIDN)
+      if case .domain("xn--ls8h.com") = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
+    }
+
+    // HostKind.domain vs .domainWithIDN is determined by the presence of Punycode labels,
+    // not the processing path which was taken. Unicode domains which map to ASCII are just HostKind.domain.
+    do {
+      let url = WebURL("http://www.foo。bar.com")!
+      XCTAssertEqual(url.hostKind, .domain)
+      if case .domain("www.foo.bar.com") = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
+    }
+
+    // In non-special URLs, they are percent-encoded.
+    do {
+      let url = WebURL("foo://💩.com/aPath?aQuery#andFragment, too")!
+      XCTAssertEqual(url.hostKind, .opaque)
+      if case .opaque("%F0%9F%92%A9.com") = url.host {
+        XCTAssertEqual(url.host?.serialized, url.hostname)
+      } else {
+        XCTFail("Unexpected host: \(String(describing: url.host))")
+      }
+    }
+
     // Special URLs detect IPv4 addresses.
     do {
       let url = WebURL("http://0xbadf00d/aPath?aQuery#andFragment, too")!
@@ -1455,51 +1489,52 @@ extension WebURLTests {
 extension WebURLTests {
 
   func testIDNA() {
-    let hosts: [(given: String, ascii: String?)] = [
-      ("www.foo。bar.com", "www.foo.bar.com"),
-      ("GOO 　goo.com", nil),
-      ("💩.com", "xn--ls8h.com"),
-      ("hello.💩.com", "hello.xn--ls8h.com"),
-      ("faß.api.你好你好.com", "xn--fa-hia.api.xn--6qqa088eba.com"),
-      ("faß.ExAmPlE", "xn--fa-hia.example"),
-      ("0x𝟕f.1", "127.0.0.1"),
-      ("０Ｘｃ０．０２５０．０１", "192.168.0.1"),
-      ("ₓn--fa-hia.example", "xn--fa-hia.example"),
-      ("☃", "xn--n3h"),
-      ("xn--n3h", "xn--n3h"),
-      ("你好你好", "xn--6qqa088eba"),
-      ("xn--6qqa088eba", "xn--6qqa088eba"),
-      ("a.أهلا.com", "a.xn--igbi0gl.com"),
-      ("a.هذهالكلمة.com", "a.xn--mgbet1febhkb.com"),
-      ("xn--b1abfaaepdrnnbgefbadotcwatmq2g4l", "xn--b1abfaaepdrnnbgefbadotcwatmq2g4l"),
-      ("xn--bbb", "xn--bbb"),
-      ("caf\u{00E9}.fr", "xn--caf-dma.fr"),
-      ("cafe\u{0301}.fr", "xn--caf-dma.fr"),
-      ("xn--cafe-yvc.fr", nil),
-      ("a.b.c.xn--pokxncvks", nil),
+    let hosts: [(given: String, ascii: String?, kind: WebURL.HostKind?)] = [
+      ("www.foo。bar.com", "www.foo.bar.com", .domain),
+      ("GOO 　goo.com", nil, nil),
+      ("💩.com", "xn--ls8h.com", .domainWithIDN),
+      ("hello.💩.com", "hello.xn--ls8h.com", .domainWithIDN),
+      ("faß.api.你好你好.com", "xn--fa-hia.api.xn--6qqa088eba.com", .domainWithIDN),
+      ("faß.ExAmPlE", "xn--fa-hia.example", .domainWithIDN),
+      ("0x𝟕f.1", "127.0.0.1", .ipv4Address),
+      ("０Ｘｃ０．０２５０．０１", "192.168.0.1", .ipv4Address),
+      ("ₓn--fa-hia.example", "xn--fa-hia.example", .domainWithIDN),
+      ("☃", "xn--n3h", .domainWithIDN),
+      ("xn--n3h", "xn--n3h", .domainWithIDN),
+      ("你好你好", "xn--6qqa088eba", .domainWithIDN),
+      ("xn--6qqa088eba", "xn--6qqa088eba", .domainWithIDN),
+      ("a.أهلا.com", "a.xn--igbi0gl.com", .domainWithIDN),
+      ("a.هذهالكلمة.com", "a.xn--mgbet1febhkb.com", .domainWithIDN),
+      ("xn--b1abfaaepdrnnbgefbadotcwatmq2g4l", "xn--b1abfaaepdrnnbgefbadotcwatmq2g4l", .domainWithIDN),
+      ("xn--bbb", "xn--bbb", .domainWithIDN),
+      ("caf\u{00E9}.fr", "xn--caf-dma.fr", .domainWithIDN),
+      ("cafe\u{0301}.fr", "xn--caf-dma.fr", .domainWithIDN),
+      ("xn--cafe-yvc.fr", nil, nil),
+      ("a.b.c.xn--pokxncvks", nil, nil),
       // Deviation character.
-      ("xn--1ch.com", "xn--1ch.com"),
+      ("xn--1ch.com", "xn--1ch.com", .domainWithIDN),
       // Percent-encoded unicode.
-      ("%F0%9F%92%A9", "xn--ls8h"),
+      ("%F0%9F%92%A9", "xn--ls8h", .domainWithIDN),
       // Percent-encoded Punycode.
-      ("%78n--", nil),
-      ("%58n--", nil),
-      ("x%6e--", nil),
-      ("%58%6E--fa-hia", "xn--fa-hia"),
-      ("%58%6E-%2Df%61-hi%61", "xn--fa-hia"),
-      ("%58%6E-%2Df%41-hi%41", "xn--fa-hia"),
+      ("%78n--", nil, nil),
+      ("%58n--", nil, nil),
+      ("x%6e--", nil, nil),
+      ("%58%6E--fa-hia", "xn--fa-hia", .domainWithIDN),
+      ("%58%6E-%2Df%61-hi%61", "xn--fa-hia", .domainWithIDN),
+      ("%58%6E-%2Df%41-hi%41", "xn--fa-hia", .domainWithIDN),
       // Percent-encoded "ₓ" in the ACE prefix.
-      ("%E2%82%93n--n3h", "xn--n3h"),
-      ("%E2%82%93n%2D%2dn3h", "xn--n3h"),
+      ("%E2%82%93n--n3h", "xn--n3h", .domainWithIDN),
+      ("%E2%82%93n%2D%2dn3h", "xn--n3h", .domainWithIDN),
     ]
 
-    for (givenHostname, expectedURLHost) in hosts {
+    for (givenHostname, expectedURLHost, expectedHostKind) in hosts {
 
       // Check that we can parse the input hostname in a URL.
       // The hostname of the result should be the expected ASCII IDN (or the operation should fail).
       switch WebURL("http://\(givenHostname)") {
       case .some(let parserResult):
         XCTAssertEqual(parserResult.hostname, expectedURLHost)
+        XCTAssertEqual(parserResult.hostKind, expectedHostKind)
         XCTAssertURLIsIdempotent(parserResult)
       case .none:
         XCTAssertNil(expectedURLHost)
@@ -1508,12 +1543,15 @@ extension WebURLTests {
       // Same should apply to the .hostname setter.
       var setterResult = WebURL("http://weburl/")!
       precondition(setterResult.serialized() == "http://weburl/")
+      precondition(setterResult.hostKind == .domain)
       switch Result(catching: { try setterResult.setHostname(givenHostname) }) {
       case .success:
         XCTAssertEqual(setterResult.hostname, expectedURLHost)
+        XCTAssertEqual(setterResult.hostKind, expectedHostKind)
         XCTAssertURLIsIdempotent(setterResult)
       case .failure:
         XCTAssertEqual(setterResult.serialized(), "http://weburl/")
+        XCTAssertEqual(setterResult.hostKind, .domain)
         XCTAssertURLIsIdempotent(setterResult)
       }
     }

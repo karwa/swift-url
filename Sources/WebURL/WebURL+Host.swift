@@ -21,6 +21,7 @@ extension WebURL {
     case ipv4Address
     case ipv6Address
     case domain
+    case domainWithIDN
     case opaque
     case empty
   }
@@ -109,24 +110,18 @@ extension WebURL {
   /// - ``IPv6Address``
   ///
   public var host: Host? {
-    guard let hostnameCodeUnits = utf8.hostname else { return nil }
-    var callback = IgnoreValidationErrors()
-    switch ParsedHost(hostnameCodeUnits, schemeKind: schemeKind, callback: &callback) {
-    case .none:
-      assertionFailure("Normalized hostname failed to reparse")
-      return nil
-    case .ipv4Address(let address):
-      return .ipv4Address(address)
-    case .ipv6Address(let address):
-      return .ipv6Address(address)
-    case .empty:
-      return .empty
-    case .internationalizedDomain:
-      return .domain(String(decoding: hostnameCodeUnits, as: UTF8.self))
-    case .asciiDomain:
+    guard let hostKind = hostKind, let hostnameCodeUnits = utf8.hostname else { return nil }
+    switch hostKind {
+    case .ipv4Address:
+      return .ipv4Address(IPv4Address(dottedDecimalUTF8: hostnameCodeUnits)!)
+    case .ipv6Address:
+      return .ipv6Address(IPv6Address(utf8: hostnameCodeUnits.dropFirst().dropLast())!)
+    case .domain, .domainWithIDN:
       return .domain(String(decoding: hostnameCodeUnits, as: UTF8.self))
     case .opaque:
       return .opaque(String(decoding: hostnameCodeUnits, as: UTF8.self))
+    case .empty:
+      return .empty
     }
   }
 
