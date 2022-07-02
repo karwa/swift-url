@@ -650,12 +650,12 @@ internal protocol HostnameWriter {
   ) where T: Collection, T.Element == UInt8
 }
 
-/// A `HostnameWriter` which does not actually write to any storage, only gathering information about what the hostname would look like.
+/// A `HostnameWriter` which does not actually write to any storage, only gathering information
+/// about what the written hostname would look like.
 ///
-/// Note that the information collected by this object is calculated without regards to overflow,
-/// or invalid collections which return a negative `count`. The measured capacity is sufficient to predict
-/// the size of the allocation required, although actually writing to that allocation must employ bounds-checking
-/// to ensure memory safety.
+/// The capacity measured by this writer is calculated without regard to things like overflow or invalid
+/// collections which return a negative `count`. It is sufficient to predict the allocation size needed
+/// to write the host, but writing should still employ bounds-checking to ensure memory safety.
 ///
 @usableFromInline
 internal struct HostnameLengthCounter: HostnameWriter {
@@ -731,6 +731,64 @@ internal struct UnsafeBufferHostnameWriter: HostnameWriter {
         start: buffer.baseAddress.unsafelyUnwrapped + bytesWritten,
         count: buffer.count &- bytesWritten
       )
+    }
+  }
+}
+
+/// A `HostnameWriter` which writes domains and opaque hosts in normalized form to a `String`.
+///
+/// IP addresses and empty hosts should not be written using this writer.
+///
+@usableFromInline
+internal struct _DomainOrOpaqueStringWriter: HostnameWriter {
+
+  @usableFromInline
+  internal private(set) var __result: Optional<(string: String, kind: WebURL.HostKind)>
+
+  @inlinable
+  internal init() {
+    self.__result = nil
+  }
+
+  @inlinable
+  internal mutating func writeHostname<T>(
+    lengthIfKnown: Int?, kind: WebURL.HostKind?, _ hostnameWriter: ((T) -> Void) -> Void
+  ) where T: Collection, T.Element == UInt8 {
+
+    switch kind {
+    case .none:
+      self.result = nil
+    case .domain, .domainWithIDN, .opaque:
+      let string = String(_unsafeUninitializedCapacity: lengthIfKnown!) { buffer in
+        var count = 0
+        var remaining = buffer
+        hostnameWriter { codeunits in
+          precondition(!remaining.isEmpty)
+          count += remaining.fastInitialize(from: codeunits)
+          remaining = UnsafeMutableBufferPointer(start: buffer.baseAddress! + count, count: buffer.count - count)
+        }
+        return count
+      }
+      self.result = (string, kind!)
+    case .ipv4Address, .ipv6Address, .empty:
+      fatalError("Unexpected host kind")
+    }
+  }
+
+  // This is a workaround to avoid expensive 'outlined init with take' calls.
+  // https://bugs.swift.org/browse/SR-15215
+  // https://forums.swift.org/t/expensive-calls-to-outlined-init-with-take/52187
+  @inlinable @inline(__always)
+  internal var result: Optional<(string: String, kind: WebURL.HostKind)> {
+    get {
+      // This field should be loadable from an offset, but perhaps the compiler will decide to pack it
+      // and use the spare bits.
+      guard let offset = MemoryLayout.offset(of: \Self.__result) else { return __result }
+      return withUnsafeBytes(of: self) { $0.load(fromByteOffset: offset, as: Optional<(String, WebURL.HostKind)>.self) }
+    }
+    set {
+      // We're not seeing the same expensive runtime calls for the setter, so there's nothing to work around here.
+      __result = newValue
     }
   }
 }
