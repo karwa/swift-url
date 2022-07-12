@@ -195,6 +195,7 @@ The WebURL package includes a number of integration libraries for popular first-
 
 ### Network Hosts and Origins
 
+- ``Host-swift.enum``
 - ``host-swift.property``
 - ``origin-swift.property``
 
