@@ -14,13 +14,35 @@
 
 extension WebURL {
 
-  /// The specific kind of host found in a URL.
+  /// A host, as interpreted by the URL Standard. A host is a network address or opaque identifier.
   ///
-  /// A URL's Host is a network address or opaque identifier. The URL Standard defines several specific kinds
-  /// of network addresses which can be found in a URL - for example, IP addresses and domains. The kinds
-  /// of hosts which are detected depend on the URL's ``scheme``.
+  /// A URL's host is interpreted from its ``WebURL/WebURL/hostname``.
+  /// In general, hosts are simply opaque strings; for example, in the URL `redis://some_host/42`,
+  /// the way in which `"some_host"` is interpreted is an implementation detail of the `"redis:"` URL scheme
+  /// and request library being used - it might be some kind of network address, a path to a local file,
+  /// a device/application ID, etc. It is up to the request library to parse the identifier
+  /// and decide which kind of host it is, or if it is even valid.
   ///
-  /// Access a URL's host through its ``WebURL/host-swift.property`` property.
+  /// However, a few URL schemes (such as `"http(s):"` and `"file:"`) are known to the URL Standard,
+  /// and it is necessary that all implementations interpret their hosts as specific, supported network addresses.
+  /// For example, hostnames containing Unicode characters must be converted to ASCII using
+  /// a special compatibility processing known as IDNA, and certain numerical hostnames (like `"127.0.0.1"`)
+  /// are interpreted as IPv4 addresses.
+  ///
+  /// - **Recognized Hosts**
+  ///
+  /// The [URL Standard][URL-hostcombinations] interprets the following kinds of hosts for each scheme:
+  ///
+  /// | Scheme              | Domain | IPv4 | IPv6 | Opaque | Empty | Nil (not present) |
+  /// |:-------------------:|:------:|:----:|:----:|:------:|:-----:|:-----------------:|
+  /// | http(s), ws(s), ftp |   ✅   |  ✅  |  ✅  |    -   |   -   |         -         |
+  /// |                file |   ✅   |  ✅  |  ✅  |    -   |   ✅  |         -         |
+  /// |     everything else |    -   |   -  |  ✅  |   ✅   |   ✅  |         ✅        |
+  ///
+  /// - **Accessing a URL's host**
+  ///
+  /// A URL's host is given by its ``WebURL/WebURL/host-swift.property`` property.
+  /// This is especially useful when processing URLs whose schemes are known to the URL Standard.
   ///
   /// ```swift
   /// let url = WebURL("http://127.0.0.1:8888/my_site")!
@@ -29,15 +51,98 @@ extension WebURL {
   ///   throw UnknownSchemeError()
   /// }
   /// switch url.host {
-  ///   case .domain(let name): ... // DNS lookup.
-  ///   case .ipv6Address(let address): ... // Connect to known address.
-  ///   case .ipv4Address(let address): ... // Connect to known address.
-  ///   case .opaque, .empty, .none: fatalError("Not possible for http")
+  ///   case .domain(let domain):
+  ///     // Look up name (e.g. using the system resolver/getaddrinfo).
+  ///   case .ipv6Address(let address):
+  ///     // Connect to known address.
+  ///   case .ipv4Address(let address):
+  ///     // Connect to known address.
+  ///   case .opaque, .empty, .none:
+  ///     fatalError("Not possible for http")
   /// }
   /// ```
   ///
-  /// > Tip:
-  /// > The documentation for this type can be found at: ``WebURL/host-swift.property``.
+  /// - **Parsing opaque hostnames**
+  ///
+  /// Applications and libraries may wish to parse opaque hostnames as HTTP URLs do.
+  /// For example, if we were writing a library to process `"ssh:"` URLs, it could be valuable
+  /// to support IPv4 addresses and IDNA. Similarly, if a hostname is provided on its own
+  /// (perhaps as a command-line argument or configuration file entry), it can be useful to guarantee
+  /// it is interpreted as an HTTP URL to that hostname would be.
+  ///
+  /// This can be achieved using the ``WebURL/WebURL/Host-swift.enum/init(_:scheme:)`` initializer,
+  /// which parses and interprets a hostname in the context of a given scheme.
+  ///
+  /// ```swift
+  /// // "http:" URLs use a special Unicode -> ASCII conversion
+  /// // (called "IDNA"), designed for compatibility with existing
+  /// // internet infrastructure.
+  ///
+  /// let httpURL = WebURL("http://alice@أهلا.com/data")!
+  /// httpURL       // "http://alice@xn--igbi0gl.com/data"
+  ///               //               ^^^^^^^^^^^
+  /// httpURL.host  // ✅ .domain("xn--igbi0gl.com")
+  ///
+  /// // "ssh:" URLs have opaque hostnames, so Unicode characters
+  /// // are just percent-encoded. Internet domain registries don't
+  /// // generally support these kinds of hostnames, but the URL Standard
+  /// // doesn't even know this a network address, so we don't get any
+  /// // automatic processing.
+  ///
+  /// let sshURL = WebURL("ssh://alice@أهلا.com/data")!
+  /// sshURL       // "ssh://alice@%D8%A3%D9%87%D9%84%D8%A7.com/data"
+  ///              //              ^^^^^^^^^^^^^^^^^^^^^^^^
+  /// sshURL.host  // 😐 .opaque("%D8%A3%D9%87%D9%84%D8%A7.com")
+  ///
+  /// // Using the WebURL.Host initializer, we can interpret our
+  /// // SSH hostname as if it were in an HTTP URL.
+  ///
+  /// let sshAsHttp = WebURL.Host(sshURL.hostname!, scheme: "http")
+  /// // ✅ .domain("xn--igbi0gl.com")
+  /// ```
+  ///
+  /// This also allows us to detect and support IPv4 addresses:
+  ///
+  /// ```swift
+  /// // By the standard, IPv4 addresses are not detected
+  /// // in URLs with custom schemes.
+  ///
+  /// let url = WebURL("ssh://user@192.168.15.21/data")!
+  /// url       // "ssh://user@192.168.15.21/data"
+  /// url.host  // 😐 .opaque("192.168.15.21")
+  ///           //     ^^^^^^
+  ///
+  /// WebURL.Host(url.hostname!, scheme: "http")
+  /// // ✅ .ipv4Address(IPv4Address { 192.168.15.21 })
+  /// ```
+  ///
+  /// [URL-hostcombinations]: https://url.spec.whatwg.org/#url-representation
+  ///
+  /// ## Topics
+  ///
+  /// ### Kinds of Host
+  ///
+  /// - ``WebURL/WebURL/Host-swift.enum/domain(_:)``
+  /// - ``WebURL/WebURL/Host-swift.enum/ipv4Address(_:)``
+  /// - ``WebURL/WebURL/Host-swift.enum/ipv6Address(_:)``
+  /// - ``WebURL/WebURL/Host-swift.enum/opaque(_:)``
+  /// - ``WebURL/WebURL/Host-swift.enum/empty``
+  ///
+  /// ### Parsing a Host from a String and Context
+  ///
+  /// - ``WebURL/WebURL/Host-swift.enum/init(_:scheme:)``
+  /// - ``WebURL/WebURL/Host-swift.enum/init(utf8:scheme:)``
+  ///
+  /// ### Obtaining a Host's String Representation
+  ///
+  /// - ``WebURL/WebURL/Host-swift.enum/serialized``
+  ///
+  /// ## See Also
+  ///
+  /// - ``WebURL/WebURL/host-swift.property``
+  /// - ``WebURL/WebURL/hostname``
+  /// - ``WebURL/IPv4Address``
+  /// - ``WebURL/IPv6Address``
   ///
   public enum Host {
 
@@ -170,89 +275,59 @@ extension WebURL {
     case empty
   }
 
-  /// The host of this URL.
+  /// The host of this URL, as interpreted by the standard.
   ///
-  /// A host is a network address or opaque identifier, whose serialization is the URL's ``hostname``.
-  /// Hosts are interpreted from string values using context such as a URL's ``scheme``.
+  /// A URL's host is interpreted from its ``WebURL/WebURL/hostname``.
+  /// In general, hosts are simply opaque strings; for example, in the URL `redis://some_host/42`,
+  /// the way in which `"some_host"` is interpreted is an implementation detail of the `"redis:"` URL scheme
+  /// and request library being used - it might be some kind of network address, a path to a local file,
+  /// a device/application ID, etc. It is up to the request library to parse the identifier
+  /// and decide which kind of host it is, or if it is even valid.
   ///
-  /// For example, we know that the host of `"http://example.com/"` refers to a kind of network address because HTTP
-  /// is a well-known network protocol, but in a custom URL scheme - say `"app.settings://example.com"`,
-  /// the same hostname might not refer to a network address at all.
-  ///
-  /// The `Host` enumeration tells you precisely how the URL Standard interprets a host in a given context,
-  /// as well as utilities to interpret hostnames as various other URLs do.
+  /// However, a few URL schemes (such as `"http(s):"` and `"file:"`) are known to the URL Standard,
+  /// and it is necessary that all implementations interpret their hosts as specific, supported network addresses.
+  /// For example, hostnames containing Unicode characters must be converted to ASCII using
+  /// a special compatibility processing known as IDNA, and certain numerical hostnames (like `"127.0.0.1"`)
+  /// are interpreted as IPv4 addresses.
   ///
   /// ```swift
   /// let url = WebURL("http://127.0.0.1:8888/my_site")!
   ///
-  /// // 🤓 Get precise information about the URL's host.
+  /// guard url.scheme == "http" || url.scheme == "https" else {
+  ///   throw UnknownSchemeError()
+  /// }
   /// switch url.host {
-  ///   case .domain(let domain): ... // Perform DNS lookup.
-  ///   case .ipv4Address(let address): ... // Connect to known address.
-  ///   case .ipv6Address(let address): ... // Connect to known address.
-  ///   case .opaque, .empty, .none: fatalError("Not possible for http")
+  ///   case .domain(let domain):
+  ///     // Look up name (e.g. using the system resolver/getaddrinfo).
+  ///   case .ipv6Address(let address):
+  ///     // Connect to known address.
+  ///   case .ipv4Address(let address):
+  ///     // Connect to known address.
+  ///   case .opaque, .empty, .none:
+  ///     fatalError("Not possible for http")
   /// }
   /// ```
   ///
-  /// See the ``WebURL/WebURL/Domain``, ``IPv6Address``, and ``IPv4Address`` documentation
-  /// for more information about how to use them to establish a network connection or perform other processing.
-  /// They are the recommended way to process hostnames in URLs, as they capture more information and provide
-  /// stronger guarantees than is possible with hostname strings.
+  /// The ``WebURL/WebURL/Host-swift.enum`` enum contains additional APIs, which allow you to interpret hostnames
+  /// in the context of schemes known to the standard. This means that applications and libraries which process
+  /// custom URL schemes or standalone hostname strings can also support Unicode hostnames via IDNA
+  /// and IPv4 addresses.
   ///
-  /// ### Allowed Hosts
+  /// - **Recognized Hosts**
   ///
-  /// The kinds of hosts supported by a URL are defined by the [URL Standard][URL-hostcombinations].
+  /// The [URL Standard][URL-hostcombinations] interprets the following kinds of hosts for each scheme:
   ///
-  /// | Schemes             | Domain | IPv4 | IPv6 | Opaque | Empty | Nil (not present) |
+  /// | Scheme              | Domain | IPv4 | IPv6 | Opaque | Empty | Nil (not present) |
   /// |:-------------------:|:------:|:----:|:----:|:------:|:-----:|:-----------------:|
   /// | http(s), ws(s), ftp |   ✅   |  ✅  |  ✅  |    -   |   -   |         -         |
   /// |                file |   ✅   |  ✅  |  ✅  |    -   |   ✅  |         -         |
   /// |     everything else |    -   |   -  |  ✅  |   ✅   |   ✅  |         ✅        |
   ///
-  /// In other words:
-  ///
-  /// - For **special schemes** (`"http://..."`, etc), the standard knows the hostname is supposed to be
-  ///   some kind of network address, so it parses and normalizes them, and rejects hostnames it doesn't understand
-  ///   or which result in invalid addresses.
-  ///
-  ///   Note that "domain" does not mean that the host is a valid DNS name.
-  ///   Valid DNS names have requirements which are not enforced at the URL level.
-  ///
-  /// - For **custom schemes** (`"my.app://..."`, etc), the URL Standard cannot know what the hostname means,
-  ///   so it considers it an opaque string. The only exception is that square brackets are reserved for
-  ///   IPv6 addresses (`"[::1]"`). IPv6 addresses are syntactically supported in every URL.
-  ///
-  ///   Often, it is helpful to interpret and normalize the opaque string as though it were a domain -
-  ///   for example, to detect IPv4 addresses or to apply IDNA compatibility processing. The URL Standard
-  ///   cannot do this by default, but you can with **FIXME**
-  ///
-  /// - **`http` and `https` URLs** always have a host, and it is never opaque or empty.
-  ///
   /// [URL-hostcombinations]: https://url.spec.whatwg.org/#url-representation
-  ///
-  /// ## Topics
-  ///
-  /// ### Kinds of Host
-  ///
-  /// - ``WebURL/WebURL/Host-swift.enum/domain(_:)``
-  /// - ``WebURL/WebURL/Host-swift.enum/ipv4Address(_:)``
-  /// - ``WebURL/WebURL/Host-swift.enum/ipv6Address(_:)``
-  /// - ``WebURL/WebURL/Host-swift.enum/opaque(_:)``
-  /// - ``WebURL/WebURL/Host-swift.enum/empty``
-  ///
-  /// ### Obtaining a Host's String Representation
-  ///
-  /// - ``WebURL/WebURL/Host-swift.enum/serialized``
-  ///
-  /// ### Host Type
-  ///
-  /// - ``WebURL/WebURL/Host-swift.enum``
   ///
   /// ## See Also
   ///
-  /// - ``WebURL/hostname``
-  /// - ``IPv4Address``
-  /// - ``IPv6Address``
+  /// - ``WebURL/WebURL/Host-swift.enum/init(_:scheme:)``
   ///
   public var host: Host? {
     guard let kind = hostKind, let name = utf8.hostname else { return nil }
@@ -279,64 +354,111 @@ extension WebURL {
 
 extension WebURL.Host {
 
-  /// Interprets a hostname in a given URL context.
+  /// Parses a hostname in the context of a given URL scheme.
   ///
-  /// This initializer allows you to understand and normalize hostnames as the URL parser does,
-  /// using the [host parser][url-hostparser] from the URL Standard.
+  /// In general, the URL Standard considers hosts to simply be opaque strings;
+  /// for example, in the URL `redis://some_host/42`, the way in which `"some_host"` is interpreted
+  /// is an implementation detail of the `"redis:"` URL scheme and request library being used -
+  /// it might be some kind of network address, a path to a local file, a device/application ID, etc.
+  /// It is up to the request library to parse the identifier and decide which kind of host it is,
+  /// or if it is even valid.
   ///
-  /// For example, if you are reading a hostname from a command-line argument or configuration file,
-  /// it may be desirable to parse it in the context of an HTTP URL. Doing so would provide reasonable validation
-  /// of the input, automatic support for IPv4/v6 addresses and Unicode domains via IDNA compatibility processing,
-  /// and other useful normalization such as percent-decoding and lowercasing - all of which are standard in HTTP URLs.
+  /// However, a few URL schemes (such as `"http(s):"` and `"file:"`) are known to the URL Standard,
+  /// and it is necessary that all implementations interpret their hosts as specific, supported network addresses.
+  /// For example, hostnames containing Unicode characters must be converted to ASCII using
+  /// a special compatibility processing known as IDNA, and certain numerical hostnames (like `"127.0.0.1"`)
+  /// are interpreted as IPv4 addresses.
+  ///
+  /// This initializer allows you to understand, validate, and normalize hostnames
+  /// using the [host parser][url-hostparser] from the URL Standard, in the context of the given `scheme`.
   ///
   /// ```swift
-  /// // For custom URL schemes (e.g. redis:/mongodb:/etc URLs), the URL Standard generally
-  /// // considers hostnames to be opaque and doesn't interpret them.
-  /// // Request engines end up parsing the hostname themselves to figure out what it means.
+  /// // For custom URL schemes (e.g. redis:/mongodb:/etc URLs),
+  /// // the URL Standard generally considers hostnames to be opaque.
+  /// // Request libraries have to parse the hostname themselves
+  /// // to figure out what it means.
   ///
-  /// WebURL.Host("EXAMPLE.com", scheme: "foo")   // 😐 .opaque, "EXAMPLE.com"
-  /// WebURL.Host("abc.أهلا.com", scheme: "foo")   // 😕 .opaque, "abc.%D8%A3%D9%87%D9%84%D8%A7.com"
-  /// WebURL.Host("192.168.0.1", scheme: "foo")   // 🤨 .opaque, "192.168.0.1"
+  /// WebURL.Host("EXAMPLE.com", scheme: "foo")
+  /// // 😐 .opaque, "EXAMPLE.com"
   ///
-  /// // Matching the behavior of HTTP URLs can be a useful strategy -
-  /// // especially as it comes with Unicode domain names (IDNA) and IPv4 support.
+  /// WebURL.Host("abc.أهلا.com", scheme: "foo")
+  /// // 😕 .opaque, "abc.%D8%A3%D9%87%D9%84%D8%A7.com"
   ///
-  /// WebURL.Host("EXAMPLE.com", scheme: "http")  // 😍 .domain, "example.com"
-  /// WebURL.Host("abc.أهلا.com", scheme: "http")  // 🤩 .domain, "abc.xn--igbi0gl.com"
-  /// WebURL.Host("192.168.0.1", scheme: "http")  // 🥳 .ipv4Address, IPv4Address { 192.168.0.1 }
+  /// WebURL.Host("192.168.0.1", scheme: "foo")
+  /// // 🤨 .opaque, "192.168.0.1"
   ///
-  /// // IPv6 addresses are supported by all schemes.
+  /// // Matching the behavior of HTTP URLs can be very useful -
+  /// // especially as it comes with Unicode domain names (IDNA)
+  /// // and IPv4 support.
   ///
-  /// WebURL.Host("[::ca08:99]", scheme: "http")  // ✅ .ipv6Address, IPv6Address { ... }
-  /// WebURL.Host("[::ca08:99]", scheme: "foo")   // ✅ .ipv6Address, IPv6Address { ... }
+  /// WebURL.Host("EXAMPLE.com", scheme: "http")
+  /// // 😍 .domain, "example.com"
+  ///
+  /// WebURL.Host("abc.أهلا.com", scheme: "http")
+  /// // 🤩 .domain, "abc.xn--igbi0gl.com"
+  ///
+  /// WebURL.Host("192.168.0.1", scheme: "http")
+  /// // 🥳 .ipv4Address, IPv4Address { 192.168.0.1 }
   /// ```
+  ///
+  /// If the host is not valid for the given scheme, this initializer fails and returns `nil`.
+  ///
+  /// The ``WebURL/WebURL/Host-swift.enum`` documentation has more information about
+  /// which kinds of hosts are supported for each `scheme`.
   ///
   /// [url-hostparser]: https://url.spec.whatwg.org/#concept-host-parser
   ///
   /// - parameters:
   ///   - string: The string to parse.
-  ///   - scheme: The
+  ///   - scheme: The URL scheme which provides the context for interpreting the given string.
   ///
   @inlinable
   public init?<StringType>(_ string: StringType, scheme: String) where StringType: StringProtocol {
-    guard let contig = string._withContiguousUTF8({ WebURL.Host(utf8: $0, scheme: scheme) }) else {
+    guard let value = string._withContiguousUTF8({ WebURL.Host(utf8: $0, scheme: scheme) }) else {
       return nil
     }
-    self = contig
+    self = value
   }
 
+  /// Parses a hostname string from a collection of UTF-8 code-units.
+  ///
+  /// This initializer constructs a `Host` from raw UTF-8 bytes rather than requiring
+  /// they be stored as a `String`. It uses precisely the same parsing algorithm as ``init(_:scheme:)``.
+  ///
+  /// The following example demonstrates loading a file as a Foundation `Data` object, and parsing each line
+  /// as a host directly from the binary text. Doing this saves allocating a String and UTF-8 validation.
+  /// Hosts which are interpreted as containing Unicode text are transformed to ASCII via
+  /// IDNA compatibility processing, which performs its own UTF-8 validation.
+  ///
+  /// ```swift
+  /// let fileContents: Data = getFileContents()
+  ///
+  /// for lineBytes = fileContents.lazy.split(0x0A /* ASCII line feed */) {
+  ///   // ℹ️ Initialize from binary text.
+  ///   let host = WebURL.Host(utf8: lineBytes, scheme: "http")
+  ///   ...
+  /// }
+  /// ```
+  ///
+  /// - parameters:
+  ///   - utf8: The string to parse, as a collection of UTF-8 code-units.
+  ///   - scheme: The URL scheme which provides the context for interpreting the given string.
+  ///
   @inlinable
   public init?<UTF8Bytes>(
     utf8: UTF8Bytes, scheme: String
   ) where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
 
-    // Parse the scheme.
+    // Parse the scheme. This will generally be a string literal, so fast-path HTTP family URLs.
     let schemeKind: WebURL.SchemeKind
     if scheme == "http" || scheme == "https" {
       schemeKind = .http
     } else {
       schemeKind = scheme._withContiguousUTF8 { WebURL.SchemeKind(parsing: $0) }
     }
+
+    // This is a simplified version of the logic from the `hostname` setter,
+    // omitting checks that consider details such as whether the URL has a port number.
 
     // Check empty hostnames.
     guard !utf8.isEmpty else {

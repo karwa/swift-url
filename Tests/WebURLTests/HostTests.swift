@@ -577,6 +577,13 @@ extension HostTests {
       }
     }
 
+    // Hosts which get IDNA-mapped to the empty string. Not allowed even in file URLs.
+    do {
+      XCTAssertEqual(WebURL.Host("%AD", scheme: "foo"), .opaque("%AD"))
+      XCTAssertNil(WebURL.Host("%AD", scheme: "file"))
+      XCTAssertNil(WebURL.Host("%AD", scheme: "http"))
+    }
+
     // Localhost is normalized to empty in file URLs, to lowercase in other special URLs,
     // and not at all in non-special URLs.
     do {
