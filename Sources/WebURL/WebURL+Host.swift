@@ -457,6 +457,24 @@ extension WebURL.Host {
       schemeKind = scheme._withContiguousUTF8 { WebURL.SchemeKind(parsing: $0) }
     }
 
+    let _parsed =
+      utf8.withContiguousStorageIfAvailable {
+        WebURL.Host.parse(utf8: $0.boundsChecked, schemeKind: schemeKind)
+      } ?? WebURL.Host.parse(utf8: utf8, schemeKind: schemeKind)
+    guard let parsed = _parsed else {
+      return nil
+    }
+    self = parsed
+  }
+}
+
+extension WebURL.Host {
+
+  @inlinable
+  internal static func parse<UTF8Bytes>(
+    utf8: UTF8Bytes, schemeKind: WebURL.SchemeKind
+  ) -> Self? where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8 {
+
     // This is a simplified version of the logic from the `hostname` setter,
     // omitting checks that consider details such as whether the URL has a port number.
 
@@ -465,9 +483,7 @@ extension WebURL.Host {
       if schemeKind.isSpecial, schemeKind != .file {
         return nil  // .schemeDoesNotSupportNilOrEmptyHostnames
       }
-      // The operation is valid. Calculate the new structure and replace the code-units.
-      self = .empty
-      return
+      return .empty
     }
 
     // Parse the hostname in the context of the given scheme.
@@ -477,19 +493,19 @@ extension WebURL.Host {
     }
     switch newHost {
     case .ipv4Address(let address):
-      self = .ipv4Address(address)
+      return .ipv4Address(address)
     case .ipv6Address(let address):
-      self = .ipv6Address(address)
+      return .ipv6Address(address)
     case .empty:
-      self = .empty
+      return .empty
     case .toASCIINormalizedDomain, .simpleDomain, .opaque:
       var writer = _DomainOrOpaqueStringWriter()
       newHost.write(bytes: utf8, using: &writer)
       let result = writer.result!
       if case .opaque = result.kind {
-        self = .opaque(result.string)
+        return .opaque(result.string)
       } else {
-        self = .domain(result.string)
+        return .domain(result.string)
       }
     }
   }
