@@ -540,7 +540,7 @@ extension FoundationToWebTests {
 
       XCTAssertEqual(convertedURL.serialized(), "http://example.com/")
       XCTAssertEqual(convertedURL.scheme, "http")
-      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("example.com")!))
     }
     test: do {
       let foundationURL = URL(string: "sChEmE://example.com/")!
@@ -576,7 +576,7 @@ extension FoundationToWebTests {
       XCTAssertEqual(convertedURL.scheme, "http")
       XCTAssertEqual(convertedURL.username, "us%3Der")
       XCTAssertEqual(convertedURL.password, "pa%3Bss")
-      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("example.com")!))
     }
 
     // [Hostname]: may be percent-decoded and lowercased, if the URL has a special scheme.
@@ -593,7 +593,7 @@ extension FoundationToWebTests {
 
       XCTAssertEqual(convertedURL.serialized(), "http://example.com/")
       XCTAssertEqual(convertedURL.scheme, "http")
-      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("example.com")!))
     }
     test: do {
       let foundationURL = URL(string: "http://%3127%2e0%2e0%2e1/")!
@@ -657,7 +657,7 @@ extension FoundationToWebTests {
       }
 
       XCTAssertEqual(convertedURL.serialized(), "http://ab.0a/")
-      XCTAssertEqual(convertedURL.host, .domain("ab.0a"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("ab.0a")!))
     }
     // Non-special schemes are not even interpreted by the WHATWG standard,
     // so this concern would never have applied to them anyway.
@@ -689,7 +689,7 @@ extension FoundationToWebTests {
 
       XCTAssertEqual(convertedURL.serialized(), "http://example.com/")
       XCTAssertEqual(convertedURL.scheme, "http")
-      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("example.com")!))
       XCTAssertEqual(convertedURL.port, nil)
       XCTAssertEqual(convertedURL.portOrKnownDefault, 80)
     }
@@ -707,7 +707,7 @@ extension FoundationToWebTests {
 
       XCTAssertEqual(convertedURL.serialized(), "https://example.com/")
       XCTAssertEqual(convertedURL.scheme, "https")
-      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("example.com")!))
       XCTAssertEqual(convertedURL.port, nil)
       XCTAssertEqual(convertedURL.portOrKnownDefault, 443)
     }
@@ -726,7 +726,7 @@ extension FoundationToWebTests {
 
       XCTAssertEqual(convertedURL.serialized(), "http://example.com:8080/")
       XCTAssertEqual(convertedURL.scheme, "http")
-      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("example.com")!))
       XCTAssertEqual(convertedURL.port, 8080)
       XCTAssertEqual(convertedURL.portOrKnownDefault, 8080)
     }
@@ -746,7 +746,7 @@ extension FoundationToWebTests {
 
       XCTAssertEqual(convertedURL.serialized(), "http://example.com/foo/bar/qux")
       XCTAssertEqual(convertedURL.scheme, "http")
-      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("example.com")!))
       XCTAssertEqual(convertedURL.path, "/foo/bar/qux")
     }
     // This includes Windows drive letter compatibility quirks.
@@ -785,7 +785,7 @@ extension FoundationToWebTests {
 
       XCTAssertEqual(convertedURL.serialized(), "http://example.com/?what%27s+the+time=qu%61rter+past+nine")
       XCTAssertEqual(convertedURL.scheme, "http")
-      XCTAssertEqual(convertedURL.host, .domain("example.com"))
+      XCTAssertEqual(convertedURL.host, .domain(WebURL.Domain("example.com")!))
       XCTAssertEqual(convertedURL.path, "/")
       XCTAssertEqual(convertedURL.query, "what%27s+the+time=qu%61rter+past+nine")
     }
