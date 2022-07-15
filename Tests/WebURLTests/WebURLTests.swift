@@ -1269,28 +1269,53 @@ extension WebURLTests {
     // In special URLs, all non-IP hostnames are domains.
     test: do {
       let url = WebURL("http://example.com/aPath?aQuery#andFragment, too")
-      guard case .domain("example.com") = url?.host else {
+      guard case .domain(let domain) = url?.host else {
         XCTFail("Unexpected host: \(String(describing: url?.host))")
         break test
       }
       XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
+      XCTAssertEqual(domain.serialized, "example.com")
+      XCTAssertFalse(domain.isIDN)
+    }
+    test: do {
+      let url = WebURL("http://nodots/aPath?aQuery#andFragment, too")
+      guard case .domain(let domain) = url?.host else {
+        XCTFail("Unexpected host: \(String(describing: url?.host))")
+        break test
+      }
+      XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
+      XCTAssertEqual(domain.serialized, "nodots")
+      XCTAssertFalse(domain.isIDN)
     }
 
     // In special URLs, Unicode hostnames are validated and normalized using IDNA.
     test: do {
       var url = WebURL("http://💩.com/foo")
-      guard case .domain("xn--ls8h.com") = url?.host else {
+      guard case .domain(let domain) = url?.host else {
         XCTFail("Unexpected host: \(String(describing: url?.host))")
         break test
       }
       XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
+      XCTAssertEqual(domain.serialized, "xn--ls8h.com")
+      XCTAssertTrue(domain.isIDN)
 
       url = WebURL("http://www.foo。bar.com/foo")
-      guard case .domain("www.foo.bar.com") = url?.host else {
+      guard case .domain(let domain2) = url?.host else {
         XCTFail("Unexpected host: \(String(describing: url?.host))")
         break test
       }
       XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
+      XCTAssertEqual(domain2.serialized, "www.foo.bar.com")
+      XCTAssertFalse(domain2.isIDN)
+
+      url = WebURL("http://xn--caf-dma.com/foo")
+      guard case .domain(let domain3) = url?.host else {
+        XCTFail("Unexpected host: \(String(describing: url?.host))")
+        break test
+      }
+      XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
+      XCTAssertEqual(domain3.serialized, "xn--caf-dma.com")
+      XCTAssertTrue(domain3.isIDN)
 
       url = WebURL("http://xn--cafe-dma.com/foo")
       guard case .none = url else {
@@ -1298,6 +1323,13 @@ extension WebURLTests {
         break test
       }
       XCTAssertNil(WebURL.Host("xn--cafe-dma.com", scheme: "http"))
+
+      url = WebURL("http://xn--cafe-yvc.com/foo")
+      guard case .none = url else {
+        XCTFail("Unexpected URL: \(String(describing: url))")
+        break test
+      }
+      XCTAssertNil(WebURL.Host("xn--cafe-yvc.com", scheme: "http"))
 
       url = WebURL("http://has a space.com/foo")
       guard case .none = url else {
@@ -1372,6 +1404,13 @@ extension WebURLTests {
       }
       XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
 
+      url = WebURL("foo://xn--cafe-yvc.com/foo")
+      guard case .opaque("xn--cafe-yvc.com") = url?.host else {
+        XCTFail("Unexpected host: \(String(describing: url?.host))")
+        break test
+      }
+      XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
+
       url = WebURL("foo://has a space.com/foo")
       guard case .none = url else {
         XCTFail("Unexpected URL: \(String(describing: url))")
@@ -1438,16 +1477,20 @@ extension WebURLTests {
     // Special URLs interpret domains and IPv4 addresses through percent-encoding.
     test: do {
       var url = WebURL("http://www.foo%E3%80%82bar.com/foo")
-      guard case .domain("www.foo.bar.com") = url?.host else {
+      guard case .domain(let domain) = url?.host else {
         XCTFail("Unexpected host: \(String(describing: url?.host))")
         break test
       }
+      XCTAssertEqual(domain.serialized, "www.foo.bar.com")
+      XCTAssertFalse(domain.isIDN)
 
       url = WebURL("http://%F0%9F%92%A9.com/foo")
-      guard case .domain("xn--ls8h.com") = url?.host else {
+      guard case .domain(let domain2) = url?.host else {
         XCTFail("Unexpected host: \(String(describing: url?.host))")
         break test
       }
+      XCTAssertEqual(domain2.serialized, "xn--ls8h.com")
+      XCTAssertTrue(domain2.isIDN)
 
       url = WebURL("http://0x%F0%9D%9F%95f.1/foo")
       guard case .ipv4Address(IPv4Address(octets: (127, 0, 0, 1))) = url?.host else {
@@ -1459,17 +1502,21 @@ extension WebURLTests {
     // Only File and non-special URLs may have empty hostnames.
     test: do {
       var url = WebURL("http:///foo")
-      guard case .domain("foo") = url?.host else {
+      guard case .domain(let domain) = url?.host else {
         XCTFail("Unexpected host: \(String(describing: url?.host))")
         break test
       }
+      XCTAssertEqual(domain.serialized, "foo")
+      XCTAssertFalse(domain.isIDN)
       XCTAssertNil(WebURL.Host("", scheme: "http"))
 
       url = WebURL("ftp:///foo")
-      guard case .domain("foo") = url?.host else {
+      guard case .domain(let domain2) = url?.host else {
         XCTFail("Unexpected host: \(String(describing: url?.host))")
         break test
       }
+      XCTAssertEqual(domain2.serialized, "foo")
+      XCTAssertFalse(domain2.isIDN)
       XCTAssertNil(WebURL.Host("", scheme: "ftp"))
 
       url = WebURL("file:///foo")
@@ -1487,6 +1534,19 @@ extension WebURLTests {
       XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
     }
 
+    // Hosts which get IDNA-mapped to the empty string. Not allowed even in file URLs.
+    test: do {
+      let url = WebURL("foo://\u{AD}/bar")
+      guard case .opaque("%C2%AD") = url?.host else {
+        XCTFail("Unexpected host: \(String(describing: url?.host))")
+        break test
+      }
+      XCTAssertEqual(url!.host, WebURL.Host(url!.hostname!, scheme: url!.scheme))
+
+      XCTAssertNil(WebURL("file://\u{AD}/bar"))
+      XCTAssertNil(WebURL("http://\u{AD}/bar"))
+    }
+
     // Localhost is normalized to empty in file URLs, to a lowercase domain in other special URLs,
     // and not at all in non-special URLs.
     // WebURL.Host.init?(String) equivalence is tested in `HostTests.testParsing`.
@@ -1496,10 +1556,11 @@ extension WebURLTests {
       XCTAssertEqual(WebURL("file://loc%61lhost/foo")?.host, .empty)
       XCTAssertEqual(WebURL("file://loC𝐀𝐋𝐇𝐨𝐬𝐭/foo")?.host, .empty)
 
-      XCTAssertEqual(WebURL("http://localhost/foo")?.host, .domain("localhost"))
-      XCTAssertEqual(WebURL("http://loCAlhost/foo")?.host, .domain("localhost"))
-      XCTAssertEqual(WebURL("http://loc%61lhost/foo")?.host, .domain("localhost"))
-      XCTAssertEqual(WebURL("http://loC𝐀𝐋𝐇𝐨𝐬𝐭/foo")?.host, .domain("localhost"))
+      let localhostDomain = WebURL.Domain("localhost")!
+      XCTAssertEqual(WebURL("http://localhost/foo")?.host, .domain(localhostDomain))
+      XCTAssertEqual(WebURL("http://loCAlhost/foo")?.host, .domain(localhostDomain))
+      XCTAssertEqual(WebURL("http://loc%61lhost/foo")?.host, .domain(localhostDomain))
+      XCTAssertEqual(WebURL("http://loC𝐀𝐋𝐇𝐨𝐬𝐭/foo")?.host, .domain(localhostDomain))
 
       XCTAssertEqual(WebURL("foo://localhost/foo")?.host, .opaque("localhost"))
       XCTAssertEqual(WebURL("foo://loCAlhost/foo")?.host, .opaque("loCAlhost"))

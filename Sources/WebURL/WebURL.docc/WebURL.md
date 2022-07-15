@@ -29,6 +29,7 @@ which scales to give you the best possible performance.
 
 ### Network Hosts
 
+- ``WebURL/WebURL/Domain``
 - ``IPv4Address``
 - ``IPv6Address``
 

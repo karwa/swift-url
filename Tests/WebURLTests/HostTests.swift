@@ -29,35 +29,43 @@ extension HostTests {
 
   func testCustomStringConvertible() {
 
-    let ipv4 = IPv4Address(octets: (192, 168, 0, 1))
-    XCTAssertEqual(WebURL.Host.ipv4Address(ipv4).description, "192.168.0.1")
-    XCTAssertEqual(ipv4.description, ipv4.serialized)
+    let ipv4Addr = IPv4Address(octets: (192, 168, 0, 1))
+    let ipv4Host = WebURL.Host.ipv4Address(ipv4Addr)
+    XCTAssertEqual(ipv4Host.description, "192.168.0.1")
+    XCTAssertEqual(ipv4Host.description, ipv4Host.serialized)
 
     // IPv6 description includes square brackets, so it can be re-parsed as a hostname
     // (although the brackets will need removing for `IPv6Address.init`).
 
-    let ipv6 = IPv6Address(pieces: (0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334), .numeric)
-    XCTAssertEqual(WebURL.Host.ipv6Address(ipv6).description, "[2001:db8:85a3::8a2e:370:7334]")
-    XCTAssertEqual(ipv6.description, ipv6.serialized)
+    let ipv6Addr = IPv6Address(pieces: (0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334), .numeric)
+    let ipv6Host = WebURL.Host.ipv6Address(ipv6Addr)
+    XCTAssertEqual(ipv6Host.description, "[2001:db8:85a3::8a2e:370:7334]")
+    XCTAssertEqual(ipv6Host.description, ipv6Host.serialized)
 
-    // These are just strings; we can't prevent users creating them from invalid values.
-    // We just return the string they gave us.
+    let asciiDomain = WebURL.Domain("example.com")!
+    let asciiHost = WebURL.Host.domain(asciiDomain)
+    XCTAssertEqual(asciiHost.description, "example.com")
+    XCTAssertEqual(asciiHost.description, asciiHost.serialized)
 
-    let asciiDomain = WebURL.Host.domain("example.com")
-    XCTAssertEqual(asciiDomain.description, "example.com")
-    XCTAssertEqual(asciiDomain.description, asciiDomain.serialized)
+    let idnDomain = WebURL.Domain("a.xn--igbi0gl.com")!
+    let idnHost = WebURL.Host.domain(idnDomain)
+    XCTAssertEqual(idnHost.description, "a.xn--igbi0gl.com")
+    XCTAssertEqual(idnHost.description, idnHost.serialized)
 
-    let idnDomain = WebURL.Host.domain("a.xn--igbi0gl.com")
-    XCTAssertEqual(idnDomain.description, "a.xn--igbi0gl.com")
-    XCTAssertEqual(idnDomain.description, idnDomain.serialized)
-
-    let opaque = WebURL.Host.opaque("some string")
-    XCTAssertEqual(opaque.description, "some string")
-    XCTAssertEqual(opaque.description, opaque.serialized)
+    let idnDomain2 = WebURL.Domain("a.أهلا.com")!
+    let idnHost2 = WebURL.Host.domain(idnDomain2)
+    XCTAssertEqual(idnHost2.description, "a.xn--igbi0gl.com")
+    XCTAssertEqual(idnHost2.description, idnHost2.serialized)
 
     let empty = WebURL.Host.empty
     XCTAssertEqual(empty.description, "")
     XCTAssertEqual(empty.description, empty.serialized)
+
+    // These are just strings; we can't prevent users creating them from invalid values.
+    // We just return the string they gave us.
+    let opaque = WebURL.Host.opaque("some string")
+    XCTAssertEqual(opaque.description, "some string")
+    XCTAssertEqual(opaque.description, opaque.serialized)
   }
 
   func testCodable() throws {
@@ -177,11 +185,9 @@ extension HostTests {
     }
 
     domain: do {
-      // Because ".domain" is just a string and "Host" is just an enum, users can construct non-normalized values.
-
       // Normalized values round-trip exactly, including IDNA.
       try roundTripJSON(
-        WebURL.Host.domain("example.com"),
+        WebURL.Host.domain(WebURL.Domain("example.com")!),
         expectedJSON:
           #"""
           {
@@ -191,7 +197,7 @@ extension HostTests {
           """#
       )
       try roundTripJSON(
-        WebURL.Host.domain("a.xn--igbi0gl.com"),
+        WebURL.Host.domain(WebURL.Domain("a.xn--igbi0gl.com")!),
         expectedJSON:
           #"""
           {
@@ -241,28 +247,38 @@ extension HostTests {
           """#
         )
       )
+      XCTAssertThrowsError(
+        try fromJSON(
+          #"""
+          {
+            "hostname" : "xn--caf-yvc.fr",
+            "kind" : "domain"
+          }
+          """#
+        )
+      )
       // When decoding, values are normalized as domains.
-      try roundTripJSON(
-        WebURL.Host.domain("EX%61MPLE.com"),
-        expectedJSON:
+      XCTAssertEqual(
+        try fromJSON(
           #"""
           {
             "hostname" : "EX%61MPLE.com",
             "kind" : "domain"
           }
-          """#,
-        expectedDecoded: .domain("example.com")
+          """#
+        ),
+        .domain(WebURL.Domain("example.com")!)
       )
-      try roundTripJSON(
-        WebURL.Host.domain("a.أهلا.com"),
-        expectedJSON:
+      XCTAssertEqual(
+        try fromJSON(
           #"""
           {
             "hostname" : "a.أهلا.com",
             "kind" : "domain"
           }
-          """#,
-        expectedDecoded: .domain("a.xn--igbi0gl.com")
+          """#
+        ),
+        .domain(WebURL.Domain("a.xn--igbi0gl.com")!)
       )
     }
 
@@ -440,27 +456,56 @@ extension HostTests {
     // In special URL contexts, all non-IP hostnames are domains.
     test: do {
       let host = WebURL.Host("example.com", scheme: "http")
-      guard case .domain("example.com") = host else {
+      guard case .domain(let domain) = host else {
         XCTFail("Unexpected host: \(String(describing: host))")
         break test
       }
+      XCTAssertEqual(domain.serialized, "example.com")
+      XCTAssertFalse(domain.isIDN)
+    }
+    test: do {
+      let host = WebURL.Host("nodots", scheme: "http")
+      guard case .domain(let domain) = host else {
+        XCTFail("Unexpected host: \(String(describing: host))")
+        break test
+      }
+      XCTAssertEqual(domain.serialized, "nodots")
+      XCTAssertFalse(domain.isIDN)
     }
 
     // In special URL contexts, Unicode hostnames are validated and normalized using IDNA.
     test: do {
       var host = WebURL.Host("💩.com", scheme: "http")
-      guard case .domain("xn--ls8h.com") = host else {
+      guard case .domain(let domain) = host else {
         XCTFail("Unexpected host: \(String(describing: host))")
         break test
       }
+      XCTAssertEqual(domain.serialized, "xn--ls8h.com")
+      XCTAssertTrue(domain.isIDN)
 
       host = WebURL.Host("www.foo。bar.com", scheme: "http")
-      guard case .domain("www.foo.bar.com") = host else {
+      guard case .domain(let domain2) = host else {
+        XCTFail("Unexpected host: \(String(describing: host))")
+        break test
+      }
+      XCTAssertEqual(domain2.serialized, "www.foo.bar.com")
+      XCTAssertFalse(domain2.isIDN)
+
+      host = WebURL.Host("xn--caf-dma.com", scheme: "http")
+      guard case .domain(let domain3) = host else {
+        XCTFail("Unexpected host: \(String(describing: host))")
+        break test
+      }
+      XCTAssertEqual(domain3.serialized, "xn--caf-dma.com")
+      XCTAssertTrue(domain3.isIDN)
+
+      host = WebURL.Host("xn--cafe-dma.com", scheme: "http")
+      guard case .none = host else {
         XCTFail("Unexpected host: \(String(describing: host))")
         break test
       }
 
-      host = WebURL.Host("xn--cafe-dma.com", scheme: "http")
+      host = WebURL.Host("xn--cafe-yvc.com", scheme: "http")
       guard case .none = host else {
         XCTFail("Unexpected host: \(String(describing: host))")
         break test
@@ -524,8 +569,20 @@ extension HostTests {
         break test
       }
 
+      host = WebURL.Host("xn--caf-dma.com", scheme: "foo")
+      guard case .opaque("xn--caf-dma.com") = host else {
+        XCTFail("Unexpected host: \(String(describing: host))")
+        break test
+      }
+
       host = WebURL.Host("xn--cafe-dma.com", scheme: "foo")
       guard case .opaque("xn--cafe-dma.com") = host else {
+        XCTFail("Unexpected host: \(String(describing: host))")
+        break test
+      }
+
+      host = WebURL.Host("xn--cafe-yvc.com", scheme: "foo")
+      guard case .opaque("xn--cafe-yvc.com") = host else {
         XCTFail("Unexpected host: \(String(describing: host))")
         break test
       }
@@ -588,16 +645,20 @@ extension HostTests {
     // Special URL contexts interpret domains and IPv4 addresses through percent-encoding.
     test: do {
       var host = WebURL.Host("www.foo%E3%80%82bar.com", scheme: "http")
-      guard case .domain("www.foo.bar.com") = host else {
+      guard case .domain(let domain) = host else {
         XCTFail("Unexpected host: \(String(describing: host))")
         break test
       }
+      XCTAssertEqual(domain.serialized, "www.foo.bar.com")
+      XCTAssertFalse(domain.isIDN)
 
       host = WebURL.Host("%F0%9F%92%A9.com", scheme: "http")
-      guard case .domain("xn--ls8h.com") = host else {
+      guard case .domain(let domain2) = host else {
         XCTFail("Unexpected host: \(String(describing: host))")
         break test
       }
+      XCTAssertEqual(domain2.serialized, "xn--ls8h.com")
+      XCTAssertTrue(domain2.isIDN)
 
       host = WebURL.Host("0x%F0%9D%9F%95f.1", scheme: "http")
       guard case .ipv4Address(IPv4Address(octets: (127, 0, 0, 1))) = host else {
@@ -635,9 +696,9 @@ extension HostTests {
 
     // Hosts which get IDNA-mapped to the empty string. Not allowed even in file URLs.
     do {
-      XCTAssertEqual(WebURL.Host("%AD", scheme: "foo"), .opaque("%AD"))
-      XCTAssertNil(WebURL.Host("%AD", scheme: "file"))
-      XCTAssertNil(WebURL.Host("%AD", scheme: "http"))
+      XCTAssertEqual(WebURL.Host("\u{AD}", scheme: "foo"), .opaque("%C2%AD"))
+      XCTAssertNil(WebURL.Host("\u{AD}", scheme: "file"))
+      XCTAssertNil(WebURL.Host("\u{AD}", scheme: "http"))
     }
 
     // Localhost is normalized to empty in file URLs, to lowercase in other special URLs,
