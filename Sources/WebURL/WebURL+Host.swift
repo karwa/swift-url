@@ -81,7 +81,7 @@ extension WebURL {
   /// let httpURL = WebURL("http://alice@أهلا.com/data")!
   /// httpURL       // "http://alice@xn--igbi0gl.com/data"
   ///               //               ^^^^^^^^^^^
-  /// httpURL.host  // ✅ .domain("xn--igbi0gl.com")
+  /// httpURL.host  // ✅ .domain(Domain { "xn--igbi0gl.com" })
   ///
   /// // "ssh:" URLs have opaque hostnames, so Unicode characters
   /// // are just percent-encoded. Internet domain registries don't
@@ -98,7 +98,7 @@ extension WebURL {
   /// // SSH hostname as if it were in an HTTP URL.
   ///
   /// let sshAsHttp = WebURL.Host(sshURL.hostname!, scheme: "http")
-  /// // ✅ .domain("xn--igbi0gl.com")
+  /// // ✅ .domain(Domain { "xn--igbi0gl.com" })
   /// ```
   ///
   /// This also allows us to detect and support IPv4 addresses:
@@ -141,6 +141,7 @@ extension WebURL {
   ///
   /// - ``WebURL/WebURL/host-swift.property``
   /// - ``WebURL/WebURL/hostname``
+  /// - ``WebURL/WebURL/Domain``
   /// - ``WebURL/IPv4Address``
   /// - ``WebURL/IPv6Address``
   ///
@@ -164,7 +165,7 @@ extension WebURL {
 
     /// A domain is a non-empty ASCII string which identifies a realm within a network.
     ///
-    case domain(String)
+    case domain(Domain)
 
     /// An opaque host is a non-empty percent-encoded string which can be used for further processing.
     ///
@@ -337,7 +338,8 @@ extension WebURL {
     case .ipv6Address:
       return .ipv6Address(IPv6Address(utf8: name.dropFirst().dropLast())!)
     case .domain, .domainWithIDN:
-      return .domain(String(decoding: name, as: UTF8.self))
+      let hasPunycodeLabels = (kind == .domainWithIDN)
+      return .domain(Domain(serialization: String(decoding: name, as: UTF8.self), hasPunycodeLabels: hasPunycodeLabels))
     case .opaque:
       return .opaque(String(decoding: name, as: UTF8.self))
     case .empty:
@@ -392,10 +394,10 @@ extension WebURL.Host {
   /// // and IPv4 support.
   ///
   /// WebURL.Host("EXAMPLE.com", scheme: "http")
-  /// // 😍 .domain, "example.com"
+  /// // 😍 .domain, Domain { "example.com" }
   ///
   /// WebURL.Host("abc.أهلا.com", scheme: "http")
-  /// // 🤩 .domain, "abc.xn--igbi0gl.com"
+  /// // 🤩 .domain, Domain { "abc.xn--igbi0gl.com" }
   ///
   /// WebURL.Host("192.168.0.1", scheme: "http")
   /// // 🥳 .ipv4Address, IPv4Address { 192.168.0.1 }
@@ -505,7 +507,8 @@ extension WebURL.Host {
       if case .opaque = result.kind {
         return .opaque(result.string)
       } else {
-        return .domain(result.string)
+        let hasPunycodeLabels = (result.kind == .domainWithIDN)
+        return .domain(WebURL.Domain(serialization: result.string, hasPunycodeLabels: hasPunycodeLabels))
       }
     }
   }
@@ -534,7 +537,8 @@ extension WebURL.Host {
     switch self {
     case .ipv4Address(let address): return address.serialized
     case .ipv6Address(let address): return "[\(address.serialized)]"
-    case .domain(let name), .opaque(let name): return name
+    case .domain(let domain): return domain.serialized
+    case .opaque(let name): return name
     case .empty: return ""
     }
   }
