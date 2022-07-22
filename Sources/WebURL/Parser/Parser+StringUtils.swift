@@ -196,8 +196,8 @@ internal func hasIDNAPrefix<UTF8Bytes>(
   utf8: UTF8Bytes
 ) -> Bool where UTF8Bytes: Collection, UTF8Bytes.Element == UInt8 {
   let contiguousResult = utf8.withContiguousStorageIfAvailable { utf8 -> Bool in
-    guard utf8.count >= 4 else { return false }
-    var prefix = UnsafeRawPointer(utf8.baseAddress.unsafelyUnwrapped).loadUnaligned(as: UInt32.self)
+    guard let ptr = utf8.baseAddress, utf8.count >= 4 else { return false }
+    var prefix = UnsafeRawPointer(ptr).loadUnaligned(as: UInt32.self)
     prefix &= (0b11011111_11011111_11111111_11111111 as UInt32).bigEndian  // Make first 2 chars uppercase
     return prefix == _idnaPrefix
   }

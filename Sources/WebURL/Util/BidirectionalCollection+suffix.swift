@@ -18,7 +18,7 @@ extension BidirectionalCollection {
   ///
   /// If no elements match the predicate, the returned slice is empty, from `endIndex..<endIndex`.
   ///
-  @usableFromInline
+  @inlinable
   internal func suffix(while predicate: (Element) -> Bool) -> SubSequence {
     var i = endIndex
     while i > startIndex {

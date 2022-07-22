@@ -319,3 +319,404 @@ extension DomainTests {
     }
   }
 }
+
+
+// --------------------------------------------
+// MARK: - Rendering
+// --------------------------------------------
+
+
+extension DomainTests {
+
+  func testUncheckedUnicodeString() {
+
+    XCTAssertEqual(WebURL.Domain("localhost")?.render(.uncheckedUnicodeString), "localhost")
+    XCTAssertEqual(WebURL.Domain("example.com")?.render(.uncheckedUnicodeString), "example.com")
+    XCTAssertEqual(WebURL.Domain("foo.bar.example.com.")?.render(.uncheckedUnicodeString), "foo.bar.example.com.")
+
+    XCTAssertEqual(WebURL.Domain("api.xn--ls8h.com")?.render(.uncheckedUnicodeString), "api.💩.com")
+    XCTAssertEqual(WebURL.Domain("api.xn--igbi0gl.com.")?.render(.uncheckedUnicodeString), "api.أهلا.com.")
+    // These are spoofs.
+    XCTAssertEqual(WebURL.Domain("xn--16-1ik.com")?.render(.uncheckedUnicodeString), "16კ.com")
+    XCTAssertEqual(WebURL.Domain("xn--pal-vxc83d5c.com")?.render(.uncheckedUnicodeString), "раγpal.com")
+
+    XCTAssertEqual(
+      Array(WebURL.Domain("xn--caf-dma")!.render(.uncheckedUnicodeString).unicodeScalars),
+      ["c", "a", "f", "\u{E9}"] as [Unicode.Scalar]
+    )
+    XCTAssertEqual(
+      Array(WebURL.Domain("cafe\u{301}")!.render(.uncheckedUnicodeString).unicodeScalars),
+      ["c", "a", "f", "\u{E9}"] as [Unicode.Scalar]
+    )
+  }
+
+  func testRenderer_earlyExit() {
+
+    // The render function processes domains in 2 phases:
+    //
+    // 1. Full-domain
+    // 2. Per-label
+    //
+    // If 'readyToReturn' is true after full-domain processing, no labels will be processed.
+
+    struct FullDomainEarlyExit: WebURL.Domain.Renderer {
+      var readyToReturn = false
+      var result = false
+
+      mutating func processDomain(_ domain: WebURL.Domain) {
+        result = true
+        readyToReturn = true
+      }
+      mutating func processLabel(_ label: inout Label, isEnd: Bool) {
+        result = false
+        XCTFail("Should not be called")
+      }
+    }
+
+    XCTAssertEqual(WebURL.Domain("example.com")?.render(FullDomainEarlyExit()), true)
+    XCTAssertEqual(WebURL.Domain("bar.foo.example.com")?.render(FullDomainEarlyExit()), true)
+    XCTAssertEqual(WebURL.Domain("xn--16-1ik.com")?.render(FullDomainEarlyExit()), true)
+
+    // During (2), 'readyToReturn' is checked before every call to processLabel/processASCIILabel.
+
+    struct LabelsEarlyExit: WebURL.Domain.Renderer {
+      var maxLabels: UInt
+      var result: [String] = []
+
+      var readyToReturn: Bool {
+        maxLabels == 0
+      }
+      mutating func processLabel(_ label: inout DomainRendererLabel, isEnd: Bool) {
+        XCTAssertGreaterThan(maxLabels, 0)
+        maxLabels -= 1
+        result.insert(String(label.ascii), at: 0)
+      }
+    }
+
+    do {
+      let domain = WebURL.Domain("bar.xn--e28h.foo.example.com")
+      XCTAssertEqual(domain?.render(LabelsEarlyExit(maxLabels: 8)), ["bar", "xn--e28h", "foo", "example", "com"])
+      XCTAssertEqual(domain?.render(LabelsEarlyExit(maxLabels: 3)), ["foo", "example", "com"])
+      XCTAssertEqual(domain?.render(LabelsEarlyExit(maxLabels: 2)), ["example", "com"])
+      XCTAssertEqual(domain?.render(LabelsEarlyExit(maxLabels: 1)), ["com"])
+      XCTAssertEqual(domain?.render(LabelsEarlyExit(maxLabels: 0)), [])
+    }
+  }
+
+  func testRenderLabel_bufferState() {
+
+    // Scalar buffer should not be allocated unless we access the public '.unicodeScalars' property.
+    // Even if the domain is an IDN.
+
+    struct ScalarBufferNotAllocated: WebURL.Domain.Renderer {
+      var result: Void { () }
+      func processLabel(_ label: inout Label, isEnd: Bool) {
+        XCTAssert(!label.ascii.isEmpty)
+        XCTAssertEqual(label._bufferState, .unreserved)
+        XCTAssertEqual(label._scalarBuffer.capacity, 0)
+      }
+    }
+
+    WebURL.Domain("bar.xn--e28h.foo.example.com")!.render(ScalarBufferNotAllocated())
+
+    // Check that the buffer is allocated on-demand, that it remains allocated after we asked for it,
+    // but that its state gets reset to 'reserved' rather than 'decodedContents'
+    // (indicating that the content hasn't been updated)
+
+    struct ScalarBufferAllocatedOnRequest: WebURL.Domain.Renderer {
+      // Whether or not the label is expected to be an IDN.
+      // The buffer will be allocated at the first IDN label.
+      var expected: AnyIterator<Bool>
+      var hasAllocated = false
+      var result = ""
+      mutating func processLabel(_ label: inout Label, isEnd: Bool) {
+        guard let nextIsUnicode = expected.next() else {
+          XCTFail("Unexpected label - \(label.ascii)")
+          return
+        }
+        XCTAssertEqual(nextIsUnicode, label.isIDN)
+        XCTAssert(!label.ascii.isEmpty)
+        if hasAllocated {
+          XCTAssertEqual(label._bufferState, .reserved)
+          XCTAssertGreaterThan(label._scalarBuffer.capacity, 0)
+        } else {
+          XCTAssertEqual(label._bufferState, .unreserved)
+          XCTAssertEqual(label._scalarBuffer.capacity, 0)
+        }
+
+        if label.isIDN {
+          result.unicodeScalars += label.unicodeScalars
+          XCTAssertEqual(label._bufferState, .decodedContents)
+          XCTAssertGreaterThan(label._scalarBuffer.capacity, 0)
+          hasAllocated = true
+        }
+      }
+    }
+
+    let result = WebURL.Domain("xn--16-1ik.baz.bar.xn--e28h.foo.example.com")!.render(
+      ScalarBufferAllocatedOnRequest(
+        expected: AnyIterator([false, false, false, true, false, false, true].makeIterator())
+      ))
+    XCTAssertEqual(result, "😀16კ")
+  }
+
+  func testMoreCustomRenderers() {
+
+    // Demo renderer which displays labels containing math symbols in Punycode form.
+    // 'isMath' just happens to be a convenient scalar property without standard library availability issues.
+
+    struct NoMath: WebURL.Domain.Renderer {
+      var result = ""
+      mutating func processLabel(_ label: inout Label, isEnd: Bool) {
+        if label.unicodeScalars.contains(where: { $0.properties.isMath }) {
+          result.insert(contentsOf: label.ascii, at: result.startIndex)
+        } else {
+          result.unicodeScalars.insert(contentsOf: label.unicodeScalars, at: result.startIndex)
+        }
+        if !isEnd { result.insert(".", at: result.startIndex) }
+      }
+    }
+
+    do {
+      var domain = WebURL.Domain("example.com")
+      XCTAssertEqual(domain?.render(.uncheckedUnicodeString), "example.com")
+      XCTAssertEqual(domain?.render(NoMath()), "example.com")
+
+      domain = WebURL.Domain("xn--ls8h.com")
+      XCTAssertEqual(domain?.render(.uncheckedUnicodeString), "💩.com")
+      XCTAssertEqual(domain?.render(NoMath()), "💩.com")
+
+      domain = WebURL.Domain("xn--ls8h.⊈.com")
+      XCTAssertEqual(domain?.render(.uncheckedUnicodeString), "💩.⊈.com")
+      XCTAssertEqual(domain?.render(NoMath()), "💩.xn--6dh.com")
+    }
+
+    // Demo renderer which shortens domains using a list of suffix rules.
+    //
+    // Shortening domain names is very useful, but we need a list to gauge where the trust relationship is.
+    // For example, it may be okay to shorten 'developer.apple.com' to just 'apple.com',
+    // but it's likely not okay to shorten 'karwa.github.io' to just 'github.io'.
+    // 'github.io' gives out subdomains, so all "{x}.github.io" sites should be treated as distinct.
+
+    struct FakeRegistrableDomainPrinter: WebURL.Domain.Renderer {
+
+      // Err, doesn't support overlapping rules. Just a barely-functional demo.
+      static let rules: [String] = [
+        "com",
+        "co.uk",
+        "*.github.io",
+      ]
+
+      var suffix: String = ""
+      var suffixMatchState: MatchState = .unmatched
+      var prefix: String? = nil
+
+      enum MatchState {
+        case unmatched
+        case wildcardLabel
+        case complete
+      }
+
+      mutating func processLabel(_ label: inout Label, isEnd: Bool) {
+
+        if case .complete = suffixMatchState {
+          // The registrable domain consists of 1 label plus the matched suffix.
+          precondition(prefix == nil)
+          var s = ""
+          s.unicodeScalars += label.unicodeScalars
+          prefix = s
+          return
+        }
+
+        // If we haven't matched a suffix, all labels get accumulated in to the suffix.
+        suffix.unicodeScalars.insert(contentsOf: label.unicodeScalars, at: suffix.startIndex)
+
+        // We don't need to bother matching the final label.
+        guard !isEnd else { return }
+        switch suffixMatchState {
+        case .unmatched:
+          if FakeRegistrableDomainPrinter.rules.contains(suffix) {
+            suffixMatchState = .complete
+            return
+          }
+          if FakeRegistrableDomainPrinter.rules.contains("*.\(suffix)") {
+            suffixMatchState = .wildcardLabel  // The match is completed on the next label.
+          }
+          suffix.insert(".", at: suffix.startIndex)
+        case .wildcardLabel:
+          suffixMatchState = .complete
+        case .complete:
+          fatalError("completed suffix should have early-exited")
+        }
+      }
+
+      var readyToReturn: Bool {
+        suffixMatchState == .complete && prefix != nil
+      }
+
+      var result: String {
+        if let prefix = prefix {
+          return "\(prefix).\(suffix)"
+        }
+        return suffix
+      }
+    }
+
+    do {
+      let regDomain = FakeRegistrableDomainPrinter()
+
+      // Unmatched
+
+      var domain = WebURL.Domain("foo.bar.baz.qux")
+      XCTAssertEqual(domain?.serialized, "foo.bar.baz.qux")
+      XCTAssertEqual(domain?.render(regDomain), "foo.bar.baz.qux")
+
+      // 2 labels, e.g. "x.com"
+
+      domain = WebURL.Domain("example.com")
+      XCTAssertEqual(domain?.serialized, "example.com")
+      XCTAssertEqual(domain?.render(regDomain), "example.com")
+
+      domain = WebURL.Domain("foo.example.com")
+      XCTAssertEqual(domain?.serialized, "foo.example.com")
+      XCTAssertEqual(domain?.render(regDomain), "example.com")
+
+      domain = WebURL.Domain("bar.foo.example.com")
+      XCTAssertEqual(domain?.serialized, "bar.foo.example.com")
+      XCTAssertEqual(domain?.render(regDomain), "example.com")
+
+      // 3 labels, e.g. "x.co.uk"
+
+      domain = WebURL.Domain("example.co.uk")
+      XCTAssertEqual(domain?.serialized, "example.co.uk")
+      XCTAssertEqual(domain?.render(regDomain), "example.co.uk")
+
+      domain = WebURL.Domain("foo.example.co.uk")
+      XCTAssertEqual(domain?.serialized, "foo.example.co.uk")
+      XCTAssertEqual(domain?.render(regDomain), "example.co.uk")
+
+      domain = WebURL.Domain("bar.foo.example.co.uk")
+      XCTAssertEqual(domain?.serialized, "bar.foo.example.co.uk")
+      XCTAssertEqual(domain?.render(regDomain), "example.co.uk")
+
+      // Wildcard.
+
+      domain = WebURL.Domain("qux.baz.bar.foo.hello.io")
+      XCTAssertEqual(domain?.serialized, "qux.baz.bar.foo.hello.io")
+      XCTAssertEqual(domain?.render(regDomain), "qux.baz.bar.foo.hello.io")
+
+      domain = WebURL.Domain("qux.baz.bar.foo.github.io")
+      XCTAssertEqual(domain?.serialized, "qux.baz.bar.foo.github.io")
+      XCTAssertEqual(domain?.render(regDomain), "bar.foo.github.io")
+
+      // IDNA.
+
+      domain = WebURL.Domain("qux.baz.xn--ls8h.foo.github.io")
+      XCTAssertEqual(domain?.serialized, "qux.baz.xn--ls8h.foo.github.io")
+      XCTAssertEqual(domain?.render(regDomain), "💩.foo.github.io")
+    }
+
+    // Composing renderers.
+    //
+    // It would be nice to efficiently run multiple renderers in a single pass over a domain, taking advantage
+    // of each renderer's fast-paths and early-exits before reducing their data in to an overall result.
+    //
+    // If the renderers are known, you can use any API you like to feed them data, but if they are unknown (generic),
+    // we need to use the DomainRenderer API in a way that is compatible with its normal flow.
+
+    struct CombinedRenderer<Left: DomainRenderer, Right: DomainRenderer>: DomainRenderer {
+
+      var _left: Left
+      var _right: Right
+
+      typealias Output = (Left.Output, Right.Output)
+
+      var readyToReturn: Bool {
+        _left.readyToReturn && _right.readyToReturn
+      }
+
+      var result: (Left.Output, Right.Output) {
+        (_left.result, _right.result)
+      }
+
+      mutating func processDomain(_ domain: WebURL.Domain) {
+        assert(!_left.readyToReturn)
+        _left.processDomain(domain)
+
+        assert(!_right.readyToReturn)
+        _right.processDomain(domain)
+      }
+
+      mutating func processLabel(_ label: inout Label, isEnd: Bool) {
+        if !_left.readyToReturn {
+          _left.processLabel(&label, isEnd: isEnd)
+        }
+        if !_right.readyToReturn {
+          _right.processLabel(&label, isEnd: isEnd)
+        }
+      }
+    }
+
+    do {
+      var domain = WebURL.Domain("xn--ls8h.⊈.example.com")
+      let composed = CombinedRenderer(_left: NoMath(), _right: FakeRegistrableDomainPrinter())
+      let composedResult = domain?.render(composed)
+      XCTAssertEqual(composedResult?.0, "💩.xn--6dh.example.com")  // NoMath
+      XCTAssertEqual(composedResult?.1, "example.com")  // FakeRegistrableDomainPrinter
+
+      domain = WebURL.Domain("xn--ls8h.⊈.apple.com")
+      let composedResult2 = domain?.render(CombinedRenderer(_left: .uncheckedUnicodeString, _right: composed))
+      XCTAssertEqual(composedResult2?.0, "💩.⊈.apple.com")  // uncheckedUnicodeString
+      XCTAssertEqual(composedResult2?.1.0, "💩.xn--6dh.apple.com")  // NoMath
+      XCTAssertEqual(composedResult2?.1.1, "apple.com")  // FakeRegistrableDomainPrinter
+    }
+
+    do {
+      let domain = WebURL.Domain("xn--e28h.xn--ls8h.⊈.apple.com")
+
+      struct ArrayAddressWatcher: WebURL.Domain.Renderer {
+        var result: [(OpaquePointer, Int)] = []
+        mutating func processLabel(_ label: inout DomainRendererLabel, isEnd: Bool) {
+          result.append(label.unicodeScalars.withUnsafeBufferPointer { (OpaquePointer($0.baseAddress!), $0.count) })
+        }
+      }
+
+      let bigResult = domain?.render(
+        CombinedRenderer(
+          _left: CombinedRenderer(
+            _left: UncheckedUnicodeDomainRenderer(),
+            _right: CombinedRenderer(
+              _left: CombinedRenderer(
+                _left: NoMath(),
+                _right: FakeRegistrableDomainPrinter()
+              ),
+              _right: ArrayAddressWatcher()
+            )
+          ),
+          _right: ArrayAddressWatcher()
+        )
+      )
+
+      XCTAssertEqual(bigResult?.0.0, "😀.💩.⊈.apple.com")  // uncheckedUnicodeString
+      XCTAssertEqual(bigResult?.0.1.0.0, "😀.💩.xn--6dh.apple.com")  // NoMath
+      XCTAssertEqual(bigResult?.0.1.0.1, "apple.com")  // FakeRegistrableDomainPrinter
+
+      // These two address watchers should see the same array buffers on each callback.
+      let arrayAddressList1 = bigResult!.1
+      let arrayAddressList2 = bigResult!.0.1.1
+      XCTAssertEqual(arrayAddressList1.count, 5)
+      XCTAssertEqual(arrayAddressList2.count, 5)
+      for labelIdx in 0..<5 {
+        let left = arrayAddressList1[labelIdx]
+        let right = arrayAddressList2[labelIdx]
+        XCTAssertEqual(left.0, right.0)
+        XCTAssertEqual(left.1, right.1)
+      }
+
+      // Moreover, even though the content changes, the array shouldn't COW
+      // between labels; the render function should reuse the allocation.
+      let uniqueArrays = Set(arrayAddressList1.map { $0.0 })
+      XCTAssertEqual(uniqueArrays.count, 1)
+    }
+  }
+}
