@@ -71,7 +71,7 @@ extension WebURL {
   ///
   /// ### Rendering a Domain
   ///
-  /// - ``WebURL/WebURL/Domain/render(_:)``
+  /// - ``WebURL/WebURL/Domain/render(_:)-lssu``
   /// - ``WebURL/WebURL/Domain/Renderer``
   /// - ``WebURL/DomainRenderer/uncheckedUnicodeString``
   ///
@@ -332,7 +332,7 @@ extension WebURL.Domain {
   ///
   /// ### The `render` function
   ///
-  /// The ``WebURL/WebURL/Domain/render(_:)`` function processes domains in 2 stages:
+  /// The ``WebURL/WebURL/Domain/render(_:)-lssu`` function processes domains in 2 stages:
   ///
   /// 1. Full-domain processing.
   ///
@@ -388,6 +388,8 @@ extension WebURL.Domain {
 /// This protocol exists because Swift does not allow protocols to be nested in types.
 ///
 public protocol DomainRenderer {
+
+  typealias _Member = _StaticMember<Self>
 
   /// The contents of a domain label.
   ///
@@ -577,6 +579,12 @@ extension WebURL.Domain {
   ///
   /// - returns: The result of the given renderer.
   ///
+  /// ## Topics
+  ///
+  /// ### Compatibility with older versions of Swift
+  ///
+  /// - ``WebURL/WebURL/Domain/render(_:)-6xt1s``
+  ///
   @inlinable
   public func render<Renderer: WebURL.Domain.Renderer>(_ renderer: Renderer) -> Renderer.Output {
 
@@ -642,6 +650,17 @@ extension WebURL.Domain {
     }
 
     return renderer.result
+  }
+
+  /// Processes this domain with the given renderer.
+  ///
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers.
+  /// > Please refer to ``WebURL/WebURL/Domain/render(_:)-lssu``.
+  ///
+  @inlinable @inline(__always) @_disfavoredOverload
+  public func render<Renderer: WebURL.Domain.Renderer>(_ renderer: Renderer._Member) -> Renderer.Output {
+    render(renderer.base)
   }
 }
 
@@ -803,39 +822,59 @@ public struct DomainRendererLabel {
   }
 }
 
-extension WebURL.Domain.Renderer where Self == UncheckedUnicodeDomainRenderer {
+#if swift(>=5.5)
+
+  extension WebURL.Domain.Renderer where Self == UncheckedUnicodeDomainRenderer {
+
+    /// A renderer which produces a domain's full Unicode form, without any confusable/spoof detection.
+    ///
+    /// When presenting a domain to a human, it is advised to make use of spoof detection algorithms
+    /// (such as ICU's [`USpoofChecker`][icu]), and to display confusable labels in Punycode or otherwise
+    /// highlight that they may be an attempt to deceive. See [UTR36][utr36] and [UTS39][uts39] for more information
+    /// about the dangers of confusable text.
+    ///
+    /// This renderer should only be used in situations where that is not necessary.
+    ///
+    /// ```swift
+    /// WebURL.Domain("example.com")!
+    ///   .render(.uncheckedUnicodeString)  // ✅ "example.com"
+    /// WebURL.Domain("api.xn--igbi0gl.com")!
+    ///   .render(.uncheckedUnicodeString)  // ✅ "api.أهلا.com"
+    /// WebURL.Domain("xn--6qqa088eba.com")!
+    ///   .render(.uncheckedUnicodeString)  // ✅ "你好你好.com"
+    ///
+    /// // Consider whether spoof-checking is required
+    /// // for your context.
+    ///
+    /// WebURL.Domain("xn--pal-vxc83d5c.com")!
+    ///   .render(.uncheckedUnicodeString)  // ❗️  "раγpal.com" - possible spoof!
+    ///                                     // NOT "paypal.com"
+    /// ```
+    ///
+    /// [utr36]: https://unicode.org/reports/tr36/#international_domain_names
+    /// [uts39]: http://unicode.org/reports/tr39/
+    /// [icu]: https://unicode-org.github.io/icu-docs/apidoc/dev/icu4c/uspoof_8h.html
+    ///
+    @inlinable
+    public static var uncheckedUnicodeString: Self { .init() }
+  }
+
+#endif
+
+// For older versions of Swift, use _StaticMember to provide a source-compatible interface.
+// Unfortunately, we don't know whether our clients need compatibility with pre-5.5 toolchains,
+// so these can't be only conditionally included.
+
+extension _StaticMember where Base: WebURL.Domain.Renderer {
 
   /// A renderer which produces a domain's full Unicode form, without any confusable/spoof detection.
   ///
-  /// When presenting a domain to a human, it is advised to make use of spoof detection algorithms
-  /// (such as ICU's [`USpoofChecker`][icu]), and to display confusable labels in Punycode or otherwise
-  /// highlight that they may be an attempt to deceive. See [UTR36][utr36] and [UTS39][uts39] for more information
-  /// about the dangers of confusable text.
-  ///
-  /// This renderer should only be used in situations where that is not necessary.
-  ///
-  /// ```swift
-  /// WebURL.Domain("example.com")!
-  ///   .render(.uncheckedUnicodeString)  // ✅ "example.com"
-  /// WebURL.Domain("api.xn--igbi0gl.com")!
-  ///   .render(.uncheckedUnicodeString)  // ✅ "api.أهلا.com"
-  /// WebURL.Domain("xn--6qqa088eba.com")!
-  ///   .render(.uncheckedUnicodeString)  // ✅ "你好你好.com"
-  ///
-  /// // You should consider whether spoof-checking is necessary
-  /// // for your context.
-  ///
-  /// WebURL.Domain("xn--16-1ik.com")!
-  ///   .render(.uncheckedUnicodeString)  // ❗️  "16კ.com" - possible spoof!
-  ///                                     // NOT "163.com"
-  /// ```
-  ///
-  /// [utr36]: https://unicode.org/reports/tr36/#international_domain_names
-  /// [uts39]: http://unicode.org/reports/tr39/
-  /// [icu]: https://unicode-org.github.io/icu-docs/apidoc/dev/icu4c/uspoof_8h.html
+  /// > Note:
+  /// > This is a fallback API for pre-5.5 Swift compilers.
+  /// > Please refer to ``WebURL/DomainRenderer/uncheckedUnicodeString``.
   ///
   @inlinable
-  public static var uncheckedUnicodeString: Self { .init() }
+  public static var uncheckedUnicodeString: _StaticMember<UncheckedUnicodeDomainRenderer> { .init(.init()) }
 }
 
 /// A renderer which produces a domain's full Unicode form, without any confusable/spoof detection.

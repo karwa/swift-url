@@ -665,7 +665,7 @@ extension DomainTests {
       XCTAssertEqual(composedResult?.1, "example.com")  // FakeRegistrableDomainPrinter
 
       domain = WebURL.Domain("xn--ls8h.⊈.apple.com")
-      let composedResult2 = domain?.render(CombinedRenderer(_left: .uncheckedUnicodeString, _right: composed))
+      let composedResult2 = domain?.render(CombinedRenderer(_left: UncheckedUnicodeDomainRenderer(), _right: composed))
       XCTAssertEqual(composedResult2?.0, "💩.⊈.apple.com")  // uncheckedUnicodeString
       XCTAssertEqual(composedResult2?.1.0, "💩.xn--6dh.apple.com")  // NoMath
       XCTAssertEqual(composedResult2?.1.1, "apple.com")  // FakeRegistrableDomainPrinter
