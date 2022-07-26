@@ -215,6 +215,26 @@ extension HostTests {
         try fromJSON(
           #"""
           {
+            "hostname" : "[::123]",
+            "kind" : "domain"
+          }
+          """#
+        )
+      )
+      XCTAssertThrowsError(
+        try fromJSON(
+          #"""
+          {
+            "hostname" : "127.0.0.1",
+            "kind" : "domain"
+          }
+          """#
+        )
+      )
+      XCTAssertThrowsError(
+        try fromJSON(
+          #"""
+          {
             "hostname" : "xn--cafe-dma.fr",
             "kind" : "domain"
           }
@@ -268,12 +288,48 @@ extension HostTests {
           }
           """#
       )
+      try roundTripJSON(
+        WebURL.Host.opaque("xn--cafe-dma.com"),
+        expectedJSON:
+          #"""
+          {
+            "hostname" : "xn--cafe-dma.com"
+          }
+          """#
+      )
+      try roundTripJSON(
+        WebURL.Host.opaque("xn--caf-yvc.com"),
+        expectedJSON:
+          #"""
+          {
+            "hostname" : "xn--caf-yvc.com"
+          }
+          """#
+      )
+      try roundTripJSON(
+        WebURL.Host.opaque("127.0.0.1"),
+        expectedJSON:
+          #"""
+          {
+            "hostname" : "127.0.0.1"
+          }
+          """#
+      )
       // When decoding, invalid hostnames are rejected.
       XCTAssertThrowsError(
         try fromJSON(
           #"""
           {
             "hostname" : "EX%61 MPLE.com"
+          }
+          """#
+        )
+      )
+      XCTAssertThrowsError(
+        try fromJSON(
+          #"""
+          {
+            "hostname" : "[::123]"
           }
           """#
         )
