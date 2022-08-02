@@ -21,26 +21,22 @@ extension UTS46ConformanceTests {
 
   func testConformance() throws {
     let lines = Array(try loadBinaryTestFile(.IdnaTest)).split(separator: UInt8(ascii: "\n"))
-    var harness = WebURLTestSupport.UTS46Conformance.WebURLIDNAReportHarness(std3Deviations: [
+    var harness = WebURLTestSupport.UTS46Conformance.WebURLIDNAReportHarness(std3Tests: [
 
-      // The UTS46 tests do not cover the options used by the URL standard.
-      // https://github.com/whatwg/url/issues/341#issuecomment-1115988436
+      // From UTS46:
       //
-      // Error codes "P1" and "V6" mean that the domain contains an invalid code-point.
-      // However, the validity of some code-points depends on the value of the UseSTD3ASCIIRules parameter.
-      // STD3 ASCII rules are very strict - only ASCII alphanumerics and hyphens, not even underscores are allowed.
-      // URLs are more lenient - we won't fail if the hostname contains an '=' sign, for example.
+      // > A conformance testing file (IdnaTestV2.txt) is provided for each version of Unicode
+      // > starting with Unicode 6.0, in versioned directories under [IDNA-Table].
+      // > 👉 ** It only provides test cases for UseSTD3ASCIIRules=true. ** 👈
+      // https://unicode.org/reports/tr46/#Conformance_Testing
       //
-      // The test file is generated with UseSTD3ASCIIRules=true. This has been reported to the Unicode org and WHATWG.
-      // Hopefully we'll get a unique status tag in future so we don't need to hardcode a list of deviations.
-
-      // For each of these specific testcases, the harness will assert that:
-      // - the testcase expects that errors "P1" or "V6" could be raised,
-      // - the ToUnicode result contains a scalar which we think is disallowed_STD3_valid, and
-      // - we are more lenient, and didn't raise an error.
-      // - that our ToUnicode result matches the expected one.
+      // - The URL Standard uses UseSTD3ASCIIRules=false.
+      // - We ^want^ to test UseSTD3ASCIIRules=false, because that's the code-path WebURL will actually take.
+      // - Our implementation supports setting UseSTD3ASCIIRules=true, but only in toASCII,
+      //   and we might remove it one day.
       //
-      // And in those cases, it will set the test as an _expected_ failure.
+      // The test-cases listed here are all rely on UseSTD3ASCIIRules=true.
+      // The harness puts them through some additional checks to make sure that we produce the correct result.
 
       425, 461, 1756, 1817, 1818, 1819, 1890, 1891,
       1892, 1893, 1894, 1895, 1896, 1897, 1898, 1899,
