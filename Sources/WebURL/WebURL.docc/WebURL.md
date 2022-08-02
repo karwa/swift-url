@@ -4,15 +4,16 @@ A new URL type for Swift.
 
 ## Overview
 
-WebURL is a new URL library, built to conform to the latest [industry standard](https://url.spec.whatwg.org/)
-for parsing and manipulating URLs. It has a very lenient parser which matches modern browsers,
-JavaScript's native URL class, and other modern libraries. WebURL values are automatically normalized according
-to the standard, meaning they remain highly interoperable with legacy systems and other libraries,
-and are much easier to work with.
+WebURL provides support for creating and interpreting URLs according to the latest [industry standard][whatwg-url].
+The API is more expressive than Swift's current `URL` type and more comprehensive, yet also simpler, 
+with more intuitive semantics. Integration libraries mean that it works seamlessly with Foundation,
+swift-system, and other libraries which use the current URL type.
 
-The API incorporates modern best practices, so it helps you write robust, correct code. It also takes full advantage
-of Swift language features such as generics and zero-cost wrapper views to deliver an expressive, easy-to-use API
-which scales to give you the best possible performance.
+URLs are universal identifiers, and while most of us probably think of websites (HTTP URLs) or other network services,
+they can be used for anything, including local applications and databases. With a better URL library,
+you can _do more_ with URLs, in a way that is more obvious and robust, and compatible with existing tooling.
+
+[whatwg-url]: https://url.spec.whatwg.org/
 
 ➡️ **Visit the ``WebURL/WebURL`` type to get started.**
 
