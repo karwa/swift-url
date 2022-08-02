@@ -18,7 +18,7 @@ which scales to give you the best possible performance.
 
 ## Topics
 
-### Parsing and Manipulating URLs
+### Creating or Modifying URLs
 
 - ``WebURL/WebURL``
 - <doc:PercentEncoding>
