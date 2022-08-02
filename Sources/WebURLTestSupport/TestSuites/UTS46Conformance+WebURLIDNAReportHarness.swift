@@ -19,10 +19,10 @@ extension UTS46Conformance {
   public struct WebURLIDNAReportHarness {
     public private(set) var report = SimpleTestReport()
     public private(set) var reportedResultCount = 0
-    public let std3Deviations: Set<Int>
+    public let std3Tests: Set<Int>
 
-    public init(std3Deviations: Set<Int> = []) {
-      self.std3Deviations = std3Deviations
+    public init(std3Tests: Set<Int> = []) {
+      self.std3Tests = std3Tests
     }
   }
 }
@@ -77,28 +77,55 @@ extension UTS46Conformance.WebURLIDNAReportHarness: UTS46Conformance.Harness {
   public mutating func reportTestResult(_ result: TestResult<UTS46Conformance>) {
     reportedResultCount += 1
     report.performTest { reporter in
-      if std3Deviations.contains(result.testNumber) {
-        if !result.failures.isEmpty {
-          // This testcase should expect a disallowed codepoint.
-          let expectedFailures = UTS46Conformance.FailableValidationSteps.parse(result.testCase.toAsciiN.status)
-          assert(expectedFailures.contains(where: { $0 == .P1 || $0 == .V6 }))
 
-          // The expected toUnicode result should contain a scalar which we think is disallowed_STD3_valid.
-          let expectedScalars = String(decoding: result.testCase.toUnicode.result, as: UTF8.self).unicodeScalars
-          let hasSTD3Disallowed = expectedScalars.contains(where: { IDNA._SPIs._isDisallowed_STD3_valid($0) })
-          assert(hasSTD3Disallowed)
+      // From UTS46:
+      //
+      // > A conformance testing file (IdnaTestV2.txt) is provided for each version of Unicode
+      // > starting with Unicode 6.0, in versioned directories under [IDNA-Table].
+      // > 👉 ** It only provides test cases for UseSTD3ASCIIRules=true. ** 👈
+      // https://unicode.org/reports/tr46/#Conformance_Testing
+      //
+      // - The URL Standard uses UseSTD3ASCIIRules=false.
+      // - We ^want^ to test UseSTD3ASCIIRules=false, because that's the code-path WebURL will actually take.
+      // - Our implementation supports setting UseSTD3ASCIIRules=true, but only in toASCII,
+      //   and we might remove it one day.
+      //
+      // So how do we test UseSTD3ASCIIRules=false?
+      //
+      // The spec functions always produce an output string, sometimes with an accompanying set of errors.
+      // Our implementation should always return the same string as the spec/test file, but where it expects us
+      // to also return an STD3-related validation error, we won't return that error.
+      // Result is the same; we're just more lenient about some particular scalars and don't consider them an "error".
 
-          // The actual result should be the same for toAscii and toUnicode - that we are more lenient.
-          assert(result.failures == [.toUnicode, .toAsciiN])
-          assert(result.captures?.toAsciiNResult != nil)
-          assert(result.captures?.toUnicodeResult != nil)
+      if std3Tests.contains(result.testNumber) {
 
-          // Our toUnicode result must match the expected one at the Unicode scalar level.
-          assert(result.captures?.toUnicodeResult?.unicodeScalars.elementsEqual(expectedScalars) == true)
+        // 1. The testcase expects the function to produce a validation error
+        //    due to a disallowed codepoint in the input (P1/V6).
+        let expectedFailures = UTS46Conformance.FailableValidationSteps.parse(result.testCase.toAsciiN.status)
+        assert(expectedFailures.contains(where: { $0 == .P1 || $0 == .V6 }))
 
-          // Ok - allow the difference in expected/actual result.
-          reporter.expectedResult = .fail
-        }
+        // 2. But neither toUnicode nor toASCII actually produced an error for this input.
+        assert(result.failures == [.toUnicode, .toAsciiN])
+        assert(result.captures!.toAsciiNResult != nil)
+        assert(result.captures!.toUnicodeResult != nil)
+
+        // 3. The output we produced matches what was expected, besides the lack of error.
+        //    And it should be an exact match - the same scalars, same code-units. Not just "canonically equivalent".
+        assert(result.captures!.toUnicodeResult?.utf8.elementsEqual(result.testCase.toUnicode.result) == true)
+        assert(result.captures!.toAsciiNResult?.utf8.elementsEqual(result.testCase.toAsciiN.result) == true)
+
+        // 4. Also, toASCII with (beStrict = true) does indeed fail with an error.
+        let successInStrictMode = IDNA.toASCII(utf8: result.testCase.source, beStrict: true) { _ in }
+        assert(!successInStrictMode)
+
+        // 5. Sure enough, if we examine the _expected_ toUnicode result,
+        //    we find a scalar which we have marked as `disallowed_STD3_valid`.
+        let expectedToUnicode = String(decoding: result.testCase.toUnicode.result, as: UTF8.self)
+        assert(expectedToUnicode.unicodeScalars.contains(where: { IDNA._SPIs._isDisallowed_STD3_valid($0) }))
+
+        // X. If all of these checks passed, we appear to be producing the correct result
+        //    for an implementation where UseSTD3ASCIIRules=false.
+        reporter.expectedResult = .fail
       }
       reporter.reportTestResult(result)
     }
