@@ -386,7 +386,7 @@ extension DomainTests {
       var readyToReturn: Bool {
         maxLabels == 0
       }
-      mutating func processLabel(_ label: inout DomainRendererLabel, isEnd: Bool) {
+      mutating func processLabel(_ label: inout Label, isEnd: Bool) {
         XCTAssertGreaterThan(maxLabels, 0)
         maxLabels -= 1
         result.insert(String(label.ascii), at: 0)
@@ -405,19 +405,21 @@ extension DomainTests {
 
   func testRenderLabel_bufferState() {
 
-    // Scalar buffer should not be allocated unless we access the public '.unicodeScalars' property.
-    // Even if the domain is an IDN.
+    // Neither scalar not UTF8 buffers should be allocated unless we access the public '.unicodeScalars'
+    // or '.unicode' properties. Even if the domain is an IDN.
 
-    struct ScalarBufferNotAllocated: WebURL.Domain.Renderer {
+    struct BuffersNotAllocated: WebURL.Domain.Renderer {
       var result: Void { () }
       func processLabel(_ label: inout Label, isEnd: Bool) {
         XCTAssert(!label.ascii.isEmpty)
-        XCTAssertEqual(label._bufferState, .unreserved)
+        XCTAssertEqual(label._scalarBufferState, .unreserved)
         XCTAssertEqual(label._scalarBuffer.capacity, 0)
+        XCTAssertEqual(label._utf8BufferState, .unreserved)
+        XCTAssertEqual(label._utf8Buffer.isEmpty, true)
       }
     }
 
-    WebURL.Domain("bar.xn--e28h.foo.example.com")!.render(ScalarBufferNotAllocated())
+    WebURL.Domain("bar.xn--e28h.foo.example.com")!.render(BuffersNotAllocated())
 
     // Check that the buffer is allocated on-demand, that it remains allocated after we asked for it,
     // but that its state gets reset to 'reserved' rather than 'decodedContents'
@@ -437,27 +439,73 @@ extension DomainTests {
         XCTAssertEqual(nextIsUnicode, label.isIDN)
         XCTAssert(!label.ascii.isEmpty)
         if hasAllocated {
-          XCTAssertEqual(label._bufferState, .reserved)
+          XCTAssertEqual(label._scalarBufferState, .reserved)
           XCTAssertGreaterThan(label._scalarBuffer.capacity, 0)
         } else {
-          XCTAssertEqual(label._bufferState, .unreserved)
+          XCTAssertEqual(label._scalarBufferState, .unreserved)
           XCTAssertEqual(label._scalarBuffer.capacity, 0)
         }
 
         if label.isIDN {
           result.unicodeScalars += label.unicodeScalars
-          XCTAssertEqual(label._bufferState, .decodedContents)
+          XCTAssertEqual(label._scalarBufferState, .decodedContents)
           XCTAssertGreaterThan(label._scalarBuffer.capacity, 0)
           hasAllocated = true
         }
       }
     }
 
+    do {
+      let result = WebURL.Domain("xn--16-1ik.baz.bar.xn--e28h.foo.example.com")!.render(
+        ScalarBufferAllocatedOnRequest(
+          expected: AnyIterator([true, false, false, true, false, false, false].reversed().makeIterator())
+        ))
+      XCTAssertEqual(result, "😀16კ")
+    }
+
+    // Same as above, but accessing the '.unicode' UTF8 buffer.
+
+    struct UTF8BufferAllocatedOnRequest: WebURL.Domain.Renderer {
+      // Whether or not the label is expected to be an IDN.
+      // The buffer will be allocated at the first IDN label.
+      var expected: AnyIterator<Bool>
+      var hasAllocated = false
+      var result = ""
+      mutating func processLabel(_ label: inout Label, isEnd: Bool) {
+        guard let nextIsUnicode = expected.next() else {
+          XCTFail("Unexpected label - \(label.ascii)")
+          return
+        }
+        XCTAssertEqual(nextIsUnicode, label.isIDN)
+        XCTAssert(!label.ascii.isEmpty)
+        if hasAllocated {
+          XCTAssertEqual(label._scalarBufferState, .reserved)
+          XCTAssertGreaterThan(label._scalarBuffer.capacity, 0)
+          XCTAssertEqual(label._utf8BufferState, .reserved)
+          XCTAssertEqual(label._utf8Buffer.isEmpty, false)
+        } else {
+          XCTAssertEqual(label._scalarBufferState, .unreserved)
+          XCTAssertEqual(label._scalarBuffer.capacity, 0)
+          XCTAssertEqual(label._utf8BufferState, .unreserved)
+          XCTAssertEqual(label._utf8Buffer.isEmpty, true)
+        }
+
+        if label.isIDN {
+          result += label.unicode + "-"
+          XCTAssertEqual(label._scalarBufferState, .decodedContents)
+          XCTAssertGreaterThan(label._scalarBuffer.capacity, 0)
+          XCTAssertEqual(label._utf8BufferState, .decodedContents)
+          XCTAssertEqual(label._utf8Buffer.isEmpty, false)
+          hasAllocated = true
+        }
+      }
+    }
+
     let result = WebURL.Domain("xn--16-1ik.baz.bar.xn--e28h.foo.example.com")!.render(
-      ScalarBufferAllocatedOnRequest(
-        expected: AnyIterator([false, false, false, true, false, false, true].makeIterator())
+      UTF8BufferAllocatedOnRequest(
+        expected: AnyIterator([true, false, false, true, false, false, false].reversed().makeIterator())
       ))
-    XCTAssertEqual(result, "😀16კ")
+    XCTAssertEqual(result, "😀-16კ-")
   }
 
   func testMoreCustomRenderers() {
@@ -471,7 +519,7 @@ extension DomainTests {
         if label.unicodeScalars.contains(where: { $0.properties.isMath }) {
           result.insert(contentsOf: label.ascii, at: result.startIndex)
         } else {
-          result.unicodeScalars.insert(contentsOf: label.unicodeScalars, at: result.startIndex)
+          result.insert(contentsOf: label.unicode, at: result.startIndex)
         }
         if !isEnd { result.insert(".", at: result.startIndex) }
       }
@@ -522,14 +570,12 @@ extension DomainTests {
         if case .complete = suffixMatchState {
           // The registrable domain consists of 1 label plus the matched suffix.
           precondition(prefix == nil)
-          var s = ""
-          s.unicodeScalars += label.unicodeScalars
-          prefix = s
+          prefix = String(label.unicode)
           return
         }
 
         // If we haven't matched a suffix, all labels get accumulated in to the suffix.
-        suffix.unicodeScalars.insert(contentsOf: label.unicodeScalars, at: suffix.startIndex)
+        suffix.insert(contentsOf: label.unicode, at: suffix.startIndex)
 
         // We don't need to bother matching the final label.
         guard !isEnd else { return }
@@ -618,11 +664,13 @@ extension DomainTests {
 
     // Composing renderers.
     //
-    // It would be nice to efficiently run multiple renderers in a single pass over a domain, taking advantage
-    // of each renderer's fast-paths and early-exits before reducing their data in to an overall result.
+    // It would be nice if renderers could be composed relatively efficiently - so you could
+    // run multiple renderers over a domain in a single pass, while still being able to take advantage
+    // of the fast-paths and early-exits each renderer implements.
     //
-    // If the renderers are known, you can use any API you like to feed them data, but if they are unknown (generic),
-    // we need to use the DomainRenderer API in a way that is compatible with its normal flow.
+    // If the renderers are known, you can use any API you like to feed them data,
+    // but if they are unknown (generic), we need to use the DomainRenderer API in a way that is compatible
+    // with its normal flow. So it can't be too complex.
 
     struct CombinedRenderer<Left: DomainRenderer, Right: DomainRenderer>: DomainRenderer {
 
@@ -671,12 +719,18 @@ extension DomainTests {
       XCTAssertEqual(composedResult2?.1.1, "apple.com")  // FakeRegistrableDomainPrinter
     }
 
+    // Lazy calculations and buffer reuse.
+    //
+    // Using the above, we can check whether the Label object is effective
+    // at lazily computing and caching expensive properties,
+    // and whether buffers are being reused by the render function.
+
     do {
       let domain = WebURL.Domain("xn--e28h.xn--ls8h.⊈.apple.com")
 
       struct ArrayAddressWatcher: WebURL.Domain.Renderer {
         var result: [(OpaquePointer, Int)] = []
-        mutating func processLabel(_ label: inout DomainRendererLabel, isEnd: Bool) {
+        mutating func processLabel(_ label: inout Label, isEnd: Bool) {
           result.append(label.unicodeScalars.withUnsafeBufferPointer { (OpaquePointer($0.baseAddress!), $0.count) })
         }
       }
@@ -701,7 +755,10 @@ extension DomainTests {
       XCTAssertEqual(bigResult?.0.1.0.0, "😀.💩.xn--6dh.apple.com")  // NoMath
       XCTAssertEqual(bigResult?.0.1.0.1, "apple.com")  // FakeRegistrableDomainPrinter
 
-      // These two address watchers should see the same array buffers on each callback.
+      // Lazy computation/caching.
+      // These two address watchers should have seen the same array buffers,
+      // even though they made separate calls to '.unicodeScalars'.
+
       let arrayAddressList1 = bigResult!.1
       let arrayAddressList2 = bigResult!.0.1.1
       XCTAssertEqual(arrayAddressList1.count, 5)
@@ -713,10 +770,61 @@ extension DomainTests {
         XCTAssertEqual(left.1, right.1)
       }
 
-      // Moreover, even though the content changes, the array shouldn't COW
-      // between labels; the render function should reuse the allocation.
+      // Buffer reuse.
+      // Even though the content changes, the array shouldn't COW between labels;
+      // the render function should reuse the allocation.
+
       let uniqueArrays = Set(arrayAddressList1.map { $0.0 })
       XCTAssertEqual(uniqueArrays.count, 1)
+    }
+
+    do {
+      let domain = WebURL.Domain("xn--e28h.xn--ls8h.⊈.apple.com")
+
+      struct StringAddressWatcher: WebURL.Domain.Renderer {
+        var result: [(OpaquePointer?, Int)] = []
+        mutating func processLabel(_ label: inout Label, isEnd: Bool) {
+          let addrAndCount: (OpaquePointer?, Int) =
+            label.unicode.base.utf8.withContiguousStorageIfAvailable {
+              (OpaquePointer($0.baseAddress!), $0.count)
+            } ?? (nil, 0)
+          result.append(addrAndCount)
+        }
+      }
+
+      let bigResult = domain?.render(
+        CombinedRenderer(
+          _left: CombinedRenderer(
+            _left: UncheckedUnicodeDomainRenderer(),
+            _right: CombinedRenderer(
+              _left: CombinedRenderer(
+                _left: NoMath(),
+                _right: FakeRegistrableDomainPrinter()
+              ),
+              _right: StringAddressWatcher()
+            )
+          ),
+          _right: StringAddressWatcher()
+        )
+      )
+
+      // Lazy computation/caching.
+      // These two address watchers should have seen the same string buffers,
+      // even though they made separate calls to '.unicode'.
+
+      let stringAddressList1 = bigResult!.1
+      let stringAddressList2 = bigResult!.0.1.1
+      XCTAssertEqual(stringAddressList1.count, 5)
+      XCTAssertEqual(stringAddressList2.count, 5)
+      for labelIdx in 0..<5 {
+        let left = stringAddressList1[labelIdx]
+        let right = stringAddressList2[labelIdx]
+        XCTAssertEqual(left.0, right.0)
+        XCTAssertEqual(left.1, right.1)
+      }
+
+      // Buffer reuse.
+      // For String, the story is less excellent. This does not seem to work reliably (at -Onone).
     }
   }
 }
