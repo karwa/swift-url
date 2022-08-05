@@ -64,38 +64,35 @@ extension WebURL {
   ///
   /// - **Parsing opaque hostnames**
   ///
-  /// Applications and libraries may wish to parse opaque hostnames as HTTP URLs do.
-  /// For example, if we were writing a library to process `"ssh:"` URLs, it could be valuable
-  /// to support IPv4 addresses and IDNA. Similarly, if a hostname is provided on its own
+  /// Applications may wish to parse opaque hostnames as HTTP URLs do. For example, if we were processing `"ssh:"` URLs,
+  /// it could be valuable to support IPv4 addresses and IDNA. Similarly, if a hostname is provided on its own
   /// (perhaps as a command-line argument or configuration file entry), it can be useful to guarantee
-  /// it is interpreted as an HTTP URL to that hostname would be.
+  /// it is interpreted as an HTTP URL with that hostname.
   ///
   /// This can be achieved using the ``WebURL/WebURL/Host-swift.enum/init(_:scheme:)`` initializer,
   /// which parses and interprets a hostname in the context of a given scheme.
   ///
   /// ```swift
-  /// // "http:" URLs use a special Unicode -> ASCII conversion
-  /// // (called "IDNA"), designed for compatibility with existing
-  /// // internet infrastructure.
+  /// // 🚩 "http:" URLs use a special Unicode -> ASCII conversion
+  /// //    (called "IDNA"), designed for compatibility with existing
+  /// //    internet infrastructure.
   ///
   /// let httpURL = WebURL("http://alice@أهلا.com/data")!
   /// httpURL       // "http://alice@xn--igbi0gl.com/data"
   ///               //               ^^^^^^^^^^^
   /// httpURL.host  // ✅ .domain("xn--igbi0gl.com")
   ///
-  /// // "ssh:" URLs have opaque hostnames, so Unicode characters
-  /// // are just percent-encoded. Internet domain registries don't
-  /// // generally support these kinds of hostnames, but the URL Standard
-  /// // doesn't even know this a network address, so we don't get any
-  /// // automatic processing.
+  /// // 🚩 "ssh:" URLs have opaque hostnames, so Unicode characters
+  /// //    are just percent-encoded. The URL Standard doesn't even know
+  /// //    this a network address, so we don't get any automatic processing.
   ///
   /// let sshURL = WebURL("ssh://alice@أهلا.com/data")!
   /// sshURL       // "ssh://alice@%D8%A3%D9%87%D9%84%D8%A7.com/data"
   ///              //              ^^^^^^^^^^^^^^^^^^^^^^^^
   /// sshURL.host  // 😐 .opaque("%D8%A3%D9%87%D9%84%D8%A7.com")
   ///
-  /// // Using the WebURL.Host initializer, we can interpret our
-  /// // SSH hostname as if it were in an HTTP URL.
+  /// // 🚩 Using the WebURL.Host initializer, we can interpret our
+  /// //    SSH hostname as if it were in an HTTP URL.
   ///
   /// let sshAsHttp = WebURL.Host(sshURL.hostname!, scheme: "http")
   /// // ✅ .domain("xn--igbi0gl.com")
@@ -104,9 +101,6 @@ extension WebURL {
   /// This also allows us to detect and support IPv4 addresses:
   ///
   /// ```swift
-  /// // By the standard, IPv4 addresses are not detected
-  /// // in URLs with custom schemes.
-  ///
   /// let url = WebURL("ssh://user@192.168.15.21/data")!
   /// url       // "ssh://user@192.168.15.21/data"
   /// url.host  // 😐 .opaque("192.168.15.21")

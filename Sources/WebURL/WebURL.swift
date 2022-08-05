@@ -25,19 +25,19 @@ public struct WebURL {
     self.storage = storage
   }
 
-  /// Parses a URL string.
+  /// Create a URL from a string.
   ///
-  /// The string is parsed according to the [WHATWG URL Standard][URL-spec], which governs how browsers and other
-  /// actors on the web platform should interpret URLs. The string must contain an absolute URL
-  /// (i.e. including a scheme), but otherwise the parser is quite forgiving and will accept a wide range of
-  /// improperly-formatted inputs.
+  /// Strings are parsed according to the [WHATWG URL Standard][URL-spec], which is the standard
+  /// used by modern web browsers. It has excellent compatibility with real-world URLs as seen across the web.
+  ///
+  /// Strings must contain an absolute URL (meaning they must include a scheme),
+  /// but the parser is forgiving and will repair many ill-formatted URLs if it can understand them.
   ///
   /// ```swift
   /// WebURL("https://github.com/karwa/swift-url") // ✅ Typical HTTPS URL.
   /// WebURL("file:///usr/bin/swift")              // ✅ Typical file URL.
   /// WebURL("my.app:/settings/language?debug")    // ✅ Typical custom URL.
-  /// WebURL("  https://github.com/karwa/  ")      // ✅ Extra spaces are no problem.
-  /// WebURL("https://github.com/🦆/swift-url")    // ✅ Will be automatically encoded.
+  /// WebURL("https://🦆.example.com/?search=😀")  // ✅ Encoded as needed.
   ///
   /// WebURL("invalid")         // ❌ No scheme.
   /// WebURL("/usr/bin/swift")  // ❌ No scheme.
@@ -46,7 +46,6 @@ public struct WebURL {
   /// ## See Also
   ///
   /// - ``WebURL/resolve(_:)``
-  /// - ``WebURL/serialized(excludingFragment:)``
   ///
   /// [URL-spec]: https://url.spec.whatwg.org/
   ///
@@ -59,16 +58,15 @@ public struct WebURL {
     }
   }
 
-  /// Parses a URL string from a collection of UTF-8 code-units.
+  /// Create a URL from a string, expressed as UTF-8 bytes.
   ///
-  /// This initializer constructs a URL from raw UTF-8 bytes rather than requiring they be stored as a `String`.
-  /// The bytes must contain an absolute URL string. This initializer uses precisely the same parsing algorithm
-  /// as ``init(_:)``, meaning it also allows for extra spaces, non-ASCII characters, and other improperly-formatted
-  /// URLs.
+  /// This initializer parses a URL from UTF-8 bytes, including those stored in other containers than `String`.
+  /// This initializer uses precisely the same parsing algorithm as ``init(_:)``, so the bytes must contain
+  /// an absolute URL string.
   ///
   /// The following example demonstrates loading a file as a Foundation `Data` object,
-  /// and parsing each line as a URL directly from the binary data. Doing this saves allocating a `String`
-  /// and UTF-8 validation.
+  /// and parsing each line as a URL directly from the binary data. Doing this can reduce overheads
+  /// in applications which process large numbers of URLs.
   ///
   /// ```swift
   /// let fileContents: Data = getFileContents()
@@ -80,9 +78,10 @@ public struct WebURL {
   /// }
   /// ```
   ///
-  /// The way in which improper UTF-8 is handled depends on where it is within the URL. Most components will simply
-  /// percent-encode anything which is not ASCII, but the hostname component may perform Unicode normalization
-  /// for certain schemes and thus may reject invalid UTF-8.
+  /// The given bytes are assumed to be valid UTF-8, and otherwise-valid URLs containing invalid UTF-8
+  /// are not guaranteed to fail. For most URL components, all non-ASCII bytes are opaque and will be preserved
+  /// in the resulting URL string by percent-encoding, but some components may perform Unicode processing and thus
+  /// may reject invalid UTF-8.
   ///
   /// ## See Also
   ///
@@ -96,8 +95,11 @@ public struct WebURL {
 
   /// Resolves a relative reference, with this as the base URL.
   ///
-  /// This function supports a wide range of relative URL strings, producing the same result as following
-  /// an HTML `<a>` tag on this URL's "page".
+  /// Relative references allow resources to be specified with respect to an origin, or _base URL_.
+  ///
+  /// Links in HTML documents, such as `<img src="cat.png">`, or `<a href="../photos">`,
+  /// are relative references, which are resolved against the URL of the page they are on.
+  /// You can also use relative references in your own applications, and with your own URL schemes.
   ///
   /// ```swift
   /// let base = WebURL("https://github.com/karwa/swift-url/")!
@@ -107,25 +109,27 @@ public struct WebURL {
   /// base.resolve("..?tab=repositories") // ✅ "https://github.com/karwa/?tab=repositories"
   /// ```
   ///
-  /// The process for resolving a relative references is defined by the [WHATWG URL Standard][URL-spec].
-  /// Some forms of relative reference may be surprising, so you are advised to consider validating result
-  /// if the relative reference is derived from runtime data.
+  /// The references supported by this parser are defined in the [WHATWG URL Standard][URL-spec].
   ///
-  /// For example, protocol-relative references can direct to a hostname which is different to the base URL,
-  /// and absolute URL strings may also be used as relative references.
+  /// > Note:
+  /// >
+  /// > Although _specified_ relative to a base URL, references are able to change any component of the result,
+  /// > including its hostname and even scheme. This can result in URLs with a different ``origin-swift.property``
+  /// > to the base URL. Be mindful of this if URLs are used to calculate domains of trust over resources.
+  /// >
+  /// > ```swift
+  /// > let base = WebURL("https://github.com/karwa/swift-url/")!
+  /// >
+  /// > base.resolve("//evil.com/boo")
+  /// > // ❗️ "https://evil.com/boo"
+  /// > //            ^^^^^^^^ - hostname changed
+  /// >
+  /// > base.resolve("http://evil.com/boo")
+  /// > // ❗️ "http://evil.com/boo"
+  /// > //     ^^^^   ^^^^^^^^ - scheme and hostname changed
+  /// > ```
   ///
-  /// ```swift
-  /// let base = WebURL("https://github.com/karwa/swift-url/")!
-  ///
-  /// base.resolve("//evil.com/wicked/thing")
-  /// // ❗️ "https://evil.com/wicked/thing"
-  /// //            ^^^^^^^^
-  /// base.resolve("http://evil.com/wicked/thing")
-  /// // ❗️ "http://evil.com/wicked/thing"
-  /// //     ^^^^   ^^^^^^^^
-  /// ```
-  ///
-  /// [URL-spec]: https://url.spec.whatwg.org/
+  /// [URL-spec]: https://url.spec.whatwg.org/#url-writing
   ///
   @inlinable @inline(__always)
   public func resolve<StringType>(_ string: StringType) -> WebURL? where StringType: StringProtocol {
@@ -265,9 +269,7 @@ extension WebURL {
   /// The scheme of this URL, for example `https` or `file`.
   ///
   /// A URL’s `scheme` is a non-empty, lowercased ASCII string that identifies the type of URL and can be used to
-  /// dispatch a URL for further processing. For example, a URL with the "http" scheme should be processed
-  /// by software that understands the HTTP protocol and may have unique requirements.
-  /// Every URL **must** have a scheme.
+  /// dispatch a URL for further processing. Every URL **must** have a scheme.
   ///
   /// ```swift
   /// WebURL("https://example.com/")!.scheme     // "https"
@@ -275,24 +277,32 @@ extension WebURL {
   /// WebURL("my.app:/profile/settings")!.scheme // "my.app"
   /// ```
   ///
-  /// The following example demonstrates a function which ensures a URL uses TLS to establish an encrypted connection.
+  /// Examples of URL schemes [include][wiki-schemes] `bitcoin`, `data`, `fax` (!), `rdar`, `redis`, and `spotify`.
+  /// URL components, such as the ``hostname`` and ``path``, can mean quite different things in each of these schemes.
+  ///
+  /// Some schemes (known as _"special"_ schemes) are known to the URL Standard:
+  ///
+  /// - `http`, and `https`,
+  /// - `ws`, and `wss`
+  /// - `ftp`,
+  /// - `file`
+  ///
+  /// URLs with these schemes may use different validation or normalization logic than other URLs.
+  /// For example, they may be required to have a hostname, or to have a non-empty path,
+  /// and that is checked at the URL level.
+  ///
+  /// The following example demonstrates setting a URL's scheme, as part of a function which upgrades
+  /// insecure HTTP and WebSocket requests to use encryption.
   ///
   /// ```swift
   /// func ensureSecure(_ url: WebURL) -> WebURL? {
   ///   switch url.scheme {
-  ///   // Already secure.
   ///   case "https", "wss":
   ///     return url
-  ///   // http and ws can be upgraded to use TLS.
-  ///   case "http":
+  ///   case "http", "ws":
   ///     var secureURL = url
-  ///     secureURL.scheme = "https"
+  ///     secureURL.scheme += "s"
   ///     return secureURL
-  ///   case "ws":
-  ///     var secureURL = url
-  ///     secureURL.scheme = "wss"
-  ///     return secureURL
-  ///   // Unknown scheme, unable to secure.
   ///   default:
   ///     return nil
   ///   }
@@ -303,23 +313,17 @@ extension WebURL {
   /// ensureSecure(WebURL("file:///var/tmp/")!)    // ✅ nil
   /// ```
   ///
-  /// > Tip: Schemes do not contain percent-encoding and are normalized to lowercase,
-  /// > so they may be directly compared to literals such as `"http"`.
-  ///
-  /// Some schemes are referred to as being _"special"_. The URL Standard enforces additional, protocol-specific
-  /// restrictions and guarantees about URLs with the following schemes:
-  ///
-  /// - `http`, and `https`,
-  /// - `ws`, and `wss`
-  /// - `ftp`,
-  /// - `file`
-  ///
-  /// For example, http and https URLs have hostnames which are known to be _domains_; they may not have empty
-  /// hostnames, and require additional normalization and Unicode processing that is not required of other URLs.
+  /// > Tip:
+  /// >
+  /// > Schemes do not contain percent-encoding and are normalized to lowercase,
+  /// > so they may be directly compared to literals such as `"http"` or `"ws"`.
   ///
   /// > Note:
+  /// >
   /// > Setting this property may silently fail if the new scheme is invalid or incompatible with
   /// > the URL's previous scheme. Use ``setScheme(_:)`` to catch failures.
+  ///
+  /// [wiki-schemes]: https://en.wikipedia.org/wiki/List_of_URI_schemes
   ///
   /// ## See Also
   ///
@@ -332,23 +336,35 @@ extension WebURL {
 
   /// The username of this URL.
   ///
-  /// If present, the username is as a non-empty, percent-encoded string.
-  /// Note that the entire practice of including credentials in URLs is officially deprecated.
+  /// If present, the username is a non-empty ASCII string.
+  /// Note that the practice of including credentials in URLs is officially deprecated.
   ///
   /// ```swift
   /// var url = WebURL("ftp://user@ftp.example.com/")!
-  /// url.username        // "user"
-  /// url.username = "😀" // ✅ "ftp://%F0%9F%98%80@ftp.example.com/"
   ///
-  /// // ℹ️ Values derived at runtime should be percent-encoded.
+  /// url.username
+  /// // ✅ "user"
+  ///
   /// url.username = someString.percentEncoded(using: .urlComponentSet)
+  /// // ✅ "ftp://100%25%20%F0%9F%98%8E@ftp.example.com/"
+  /// //           ^^^^^^^^^^^^^^^^^^^^^
+  ///
+  /// url.username
+  /// // ✅ "100%25%20%F0%9F%98%8E"
+  ///
+  /// url.username?.percentDecoded()
+  /// // ✅ "100% 😎"
   /// ```
   ///
-  /// When setting this property, the new value is expected to be percent-encoded,
-  /// although additional encoding will be added if necessary. If the value derives from runtime data
-  /// (for example, user input), you must at least encode the percent-sign in order to ensure the value
-  /// is represented accurately in the URL. The ``PercentEncodeSet/urlComponentSet`` includes the percent-sign
-  /// and is suitable for encoding arbitrary strings. See <doc:PercentEncoding> to learn more.
+  /// When modifying this component, percent-encoding in the new value is preserved.
+  /// Additionally, should the value contain any characters that are disallowed in this component,
+  /// they will also be percent-encoded. This offers precise control over whether characters
+  /// are percent-encoded or not, which may be necessary when constructing certain URLs.
+  ///
+  /// If assigning an arbitrary (non-percent-encoded) string to the component,
+  /// you should percent-encode it first to ensure its contents are accurately represented.
+  /// At a minimum you should encode the `"%"` character as `"%25"`, or
+  /// encode the string using the ``PercentEncodeSet/urlComponentSet``.
   ///
   /// > Note:
   /// > Setting this property may silently fail if the URL does not support credentials.
@@ -365,23 +381,35 @@ extension WebURL {
 
   /// The password of this URL.
   ///
-  /// If present, the password is a non-empty, percent-encoded string.
-  /// Note that the entire practice of including credentials in URLs is officially deprecated.
+  /// If present, the password is a non-empty ASCII string.
+  /// Note that the practice of including credentials in URLs is officially deprecated.
   ///
   /// ```swift
   /// var url = WebURL("ftp://user:secret@ftp.example.com/")!
-  /// url.password        // "secret"
-  /// url.password = "🤫" // ✅ "ftp://user:%F0%9F%A4%AB@ftp.example.com/"
   ///
-  /// // ℹ️ Values derived at runtime should be percent-encoded.
+  /// url.password
+  /// // ✅ "secret"
+  ///
   /// url.password = someString.percentEncoded(using: .urlComponentSet)
+  /// // ✅ "ftp://user:%F0%9F%A4%AB@ftp.example.com/"
+  /// //                ^^^^^^^^^^^^
+  ///
+  /// url.password
+  /// // ✅ "%F0%9F%A4%AB"
+  ///
+  /// url.password?.percentDecoded()
+  /// // ✅ "🤫"
   /// ```
   ///
-  /// When setting this property, the new value is expected to be percent-encoded,
-  /// although additional encoding will be added if necessary. If the value derives from runtime data
-  /// (for example, user input), you must at least encode the percent-sign in order to ensure the value
-  /// is represented accurately in the URL. The ``PercentEncodeSet/urlComponentSet`` includes the percent-sign
-  /// and is suitable for encoding arbitrary strings. See <doc:PercentEncoding> to learn more.
+  /// When modifying this component, percent-encoding in the new value is preserved.
+  /// Additionally, should the value contain any characters that are disallowed in this component,
+  /// they will also be percent-encoded. This offers precise control over whether characters
+  /// are percent-encoded or not, which may be necessary when constructing certain URLs.
+  ///
+  /// If assigning an arbitrary (non-percent-encoded) string to the component,
+  /// you should percent-encode it first to ensure its contents are accurately represented.
+  /// At a minimum you should encode the `"%"` character as `"%25"`, or
+  /// encode the string using the ``PercentEncodeSet/urlComponentSet``.
   ///
   /// > Note:
   /// > Setting this property may silently fail if the URL does not support credentials.
@@ -396,38 +424,52 @@ extension WebURL {
     set { try? setPassword(newValue) }
   }
 
-  /// The hostname of this URL.
+  /// The serialization of this URL's host.
   ///
-  /// If present, the hostname is a percent-encoded string which describes this URL's ``host-swift.property``.
-  /// Typically a host serves as a network address, but is sometimes used as an opaque identifier in URLs
+  /// If present, the hostname is an ASCII string which describes this URL's ``host-swift.property``.
+  /// Typically a host serves as a network address, but is sometimes an opaque identifier in URLs
   /// where a network address is not necessary.
-  ///
-  /// When setting this property, the new value is parsed as one of the hosts allowed by this URL's ``scheme``
-  /// (see ``host-swift.property`` for information about which kinds of hosts are allowed for each scheme).
-  /// If valid, the new host will be normalized before it is written to the URL. Any values set to this property
-  /// must be percent-encoded in advance, otherwise the host may be considered invalid.
   ///
   /// ```swift
   /// var url = WebURL("http://example.com/foo?bar")!
-  /// url.hostname            // "example.com"
-  /// url.hostname = "0x7F.1" // ✅ "http://127.0.0.1/foo?bar"
   ///
-  /// // ❌ http(s) URLs may not have empty hosts.
-  /// url.hostname = ""       // "http://127.0.0.1/foo?bar" (Unchanged)
+  /// url.hostname
+  /// // ✅ "example.com"
+  ///
+  /// url.hostname = "127.0.0.1"
+  /// // ✅ "http://127.0.0.1/foo?bar"
+  /// //            ^^^^^^^^^
+  ///
+  /// url.hostname
+  /// // ✅ "127.0.0.1"
+  ///
+  /// url.host
+  /// // ℹ️ .ipv4Address(IPv4Address { 127.0.0.1 })
   /// ```
   ///
-  /// > Tip:
-  /// > As an optimization, if this URL is known to have a special scheme (such as http/https), there is no need to
-  /// > percent-encode the new hostname. Percent-encoding will be decoded by the host parser for these schemes
-  /// > and will not make any invalid domains/IP addresses valid. It is, however, **required** for URLs with
-  /// > non-special schemes.
-  /// >
-  /// > ```swift
-  /// > var nonSpecial = WebURL("my.app://my-host/baz")!
-  /// > nonSpecial.hostname = "foo^bar"   // ❌ Fails. '^' is forbidden in hostnames.
-  /// > nonSpecial.hostname = "foo%5Ebar" // ✅ "my.app://foo%5Ebar/baz"
-  /// > //                        ^^^
-  /// > ```
+  /// When modifying this component, the new value is parsed as one of this URL's supported kinds of
+  /// ``WebURL/WebURL/Host-swift.enum``, and the URL's hostname will be its ASCII serialization.
+  /// Be aware that _special_ schemes (such as `http(s)`) may disallow certain kinds of host.
+  ///
+  /// ```swift
+  /// // http(s) URLs may not have empty hosts.
+  ///
+  /// url.hostname = ""
+  /// // ❌ "http://127.0.0.1/foo?bar" (Unchanged)
+  /// //            ^^^^^^^^^
+  /// ```
+  ///
+  /// For non-special schemes, hosts are either opaque strings or IPv6 addresses.
+  /// Opaque strings must be percent-encoded in advance, or the operation will fail.
+  /// This differs from other component setters, which typically encode disallowed characters.
+  ///
+  /// ```swift
+  /// var nonSpecial = WebURL("my.app://my-host/baz")!
+  ///
+  /// nonSpecial.hostname = "foo^bar"   // ❌ Fails. '^' is forbidden in hostnames.
+  /// nonSpecial.hostname = "foo%5Ebar" // ✅ "my.app://foo%5Ebar/baz"
+  /// //                        ^^^
+  /// ```
   ///
   /// > Note:
   /// > Setting this property may silently fail if the new value is invalid for the URL's scheme.
@@ -508,79 +550,90 @@ extension WebURL {
     port ?? schemeKind.defaultPort.map { Int($0) }
   }
 
-  /// The path of this URL.
+  /// The serialization of this URL's path.
   ///
-  /// A URL’s path is either a list of percent-encoded strings, or an opaque percent-encoded string,
+  /// A URL’s path is either a list of zero or more ASCII strings, or an opaque ASCII string,
   /// and usually identifies a location. The ``hasOpaquePath`` property can be used to determine
-  /// if a URL has an opaque path.
+  /// whether a URL's path is a list or opaque.
   ///
   /// ### List-style Paths
   ///
-  /// List-style paths contain a number of hierarchical components delimited by the "`/`" character,
-  /// and are by far the most common style of paths. If a URL has a host (including an empty host),
-  /// or its path begins with a "`/`", it has a list-style path. URLs with a special ``scheme``
-  /// (such as http, https, or file URLs) _always_ have list-style paths.
+  /// List-style paths contain zero or more segments ("path components") delimited by the "`/`" character,
+  /// and are the most common style of path:
+  ///
+  /// - URLs with special schemes (such as `http(s)` or `file`) always have list-style paths.
+  /// - If a URL has a host, it has a list-style path.
+  /// - If a path's serialization begins with "`/`", it is a list-style path.
   ///
   /// ```swift
   /// var url = WebURL("https://github.com/karwa/swift-url")!
-  /// url.path                   // "/karwa/swift-url"
-  /// url.path = "/apple/swift"  // ✅ "https://github.com/apple/swift"
   ///
-  /// // ℹ️ List-style paths are automatically normalized.
-  /// url.path = "/apple/swift/../../whatwg/url"  // "https://github.com/whatwg/url"
-  /// ```
+  /// url.path
+  /// // ✅ "/karwa/swift-url"
   ///
-  /// When constructing list-style path strings using data obtained at runtime, be mindful that paths
-  /// are lists of percent-encoded components, **not** percent-encoded lists of components. Each component must
-  /// be encoded/decoded individually to guarantee that the path has the correct structure.
+  /// url.path = "/apple/swift"
+  /// // ✅ "https://github.com/apple/swift"
+  /// //                       ^^^^^^^^^^^^
   ///
-  /// ```swift
-  /// func urlForBand(_ name: String) -> WebURL {
-  ///   var url  = WebURL("https://example.com/")!
-  ///   url.path = "/music/bands/" + name.percentEncoded(using: .urlComponentSet)
-  ///   return url
-  /// }
-  /// urlForBand("The Rolling Stones")
-  /// // ✅ "https://example.com/music/bands/The%20Rolling%20Stones"
-  /// urlForBand("AC/DC")
-  /// // ✅ "https://example.com/music/bands/AC%2FDC"
+  /// url.path = "/apple/swift/../../whatwg/url"
+  /// // ✅ "https://github.com/whatwg/url"
+  /// //                       ^^^^^^^^^^^
+  /// // List-style paths are automatically compacted.
   /// ```
   ///
   /// > Tip:
-  /// > Correctly handling list-style paths in string form is non-trivial, which is why `WebURL` includes
-  /// > a ``pathComponents-swift.property`` write-through view to read and modify these kinds of paths.
+  /// > To read or modify the segments _within_ a list-style path string,
+  /// > use the ``pathComponents-swift.property`` view.
+  ///
+  /// When modifying this component, the new value is interpreted as a list of path components
+  /// and compacted. The percent-encoding of each path component is preserved,
+  /// although additional characters will be encoded if they are disallowed from this component.
+  /// This offers precise control over whether characters are percent-encoded or not,
+  /// which may be necessary when constructing certain URLs.
+  ///
+  /// Constructing path strings manually can be delicate. Using the pathComponents view is recommended.
   ///
   /// ### Opaque Paths
   ///
-  /// If a URL has no host and its path does not begin with a "`/`", that path is considered by the URL Standard to
-  /// be an opaque string. Since they are opaque, these paths have no assumed hierarchical structure, and are
-  /// incompatible with the ``pathComponents-swift.property`` view. Modifying a URL's opaque path is unsupported
-  /// and will fail.
+  /// If a URL has no host and its path does not begin with a "`/`", it is said to have an _opaque path_.
+  /// These URLs look like the following. You can recognize them by the lack of any slashes following the scheme.
   ///
-  /// These URLs tend to be quite rare. See the ``hasOpaquePath`` property for more information about them.
+  /// ```
+  /// mailto:bob@example.com
+  /// └─┬──┘ └──────┬──────┘
+  /// scheme       path
+  ///
+  /// javascript:alert("hello");
+  /// └───┬────┘ └──────┬──────┘
+  ///  scheme          path
+  ///
+  /// data:text/plain;base64,...
+  /// └┬─┘ └─────────┬─────────┘
+  /// scheme        path
+  /// ```
+  ///
+  /// These URLs are rather special in a number of ways. Since the path and query components of a URL are
+  /// also opaque strings, every aspect of these URLs (other than the scheme prefix) is opaque.
+  /// They are very flexible, but are incompatible with some ways of working with URLs - for example,
+  /// they are incompatible with the ``pathComponents-swift.property`` view. These URLs tend to be quite rare.
+  /// See the ``hasOpaquePath`` property for more information.
+  ///
+  /// Modifying a URL's opaque path is unsupported and will fail.
   ///
   /// ```swift
   /// var url = WebURL("mailto:bob@example.com")!
-  /// url.path           // "bob@example.com"
-  /// url.hasOpaquePath  // true
   ///
-  /// // ❌ Modifying opaque paths is unsupported.
-  /// url.path = "monica@example.com" // "bob@example.com" (Unchanged)
+  /// url.path
+  /// // ✅ "bob@example.com"
+  ///
+  /// url.hasOpaquePath
+  /// // ✅ true
+  ///
+  /// url.path = "monica@example.com"
+  /// // ❌ "mailto:bob@example.com" (Unchanged)
+  /// //            ^^^^^^^^^^^^^^^
+  /// //  Modifying opaque paths is unsupported.
   /// ```
-  ///
-  /// ### Examples
-  ///
-  /// The following table contains some sample URLs, their paths, and whether those paths are lists or opaque.
-  ///
-  /// | URL                                 | Path                     | Style  |
-  /// | ----------------------------------- | ------------------------ | ------ |
-  /// |`https://github.com/karwa/swift-url` | `/karwa/swift-url`       | List   |
-  /// |`file:///var/tmp/some%20file`        | `/var/tmp/some%20file`   | List   |
-  /// |`my.app:/profile/settings`           | `/profile/settings`      | List   |
-  /// |`mailto:bob@example.com`             | `bob@example.com`        | Opaque |
-  /// |`javascript:alert("hello");`         | `alert("hello")`         | Opaque |
-  /// |`data:text/plain;base64,...`         | `text/plain;base64,...`  | Opaque |
-  /// |`blob:https://example.com`           | `https://example.com`    | Opaque |
   ///
   /// > Note:
   /// > Setting this property will silently fail if the URL has an opaque path.
@@ -599,45 +652,32 @@ extension WebURL {
 
   /// The query of this URL.
   ///
-  /// If present, a URL's query is a percent-encoded or form-encoded string. It contains non-hierarchical
-  /// data that, along with the ``path``, serves to identify a resource. The precise structure of the query string
-  /// is not standardized, but is often used to store a list of key-value pairs ("query parameters").
+  /// If present, the query is an ASCII string. The precise structure of the string is not standardized,
+  /// but it is often a list of encoded key-value pairs ("query parameters").
   ///
   /// ```swift
   /// var url = WebURL("https://example.com/currency?v=20&from=USD&to=EUR")!
-  /// url.query                          // "v=20&from=USD&to=EUR"
-  /// url.query = "v=56&from=GBP&to=RUB" // ✅ "https://example.com/currency?v=56&from=GBP&to=RUB"
+  ///
+  /// url.query
+  /// // ✅ "v=20&from=USD&to=EUR"
+  ///
+  /// url.query = "v=56&from=GBP&to=RUB"
+  /// // ✅ "https://example.com/currency?v=56&from=GBP&to=RUB"
+  /// //                                  ^^^^^^^^^^^^^^^^^^^^
   /// ```
-  ///
-  /// The following example demonstrates constructing a query string containing percent-encoded key-value pairs.
-  ///
-  /// ```swift
-  /// // ℹ️ To use form-encoding instead, write:
-  /// // '.percentEncoded(using: .formEncoding)'
-  /// //                         ^^^^^^^^^^^^^
-  /// func conversionURL(_ amount: Int, from: String, to: String) -> WebURL {
-  ///   var url      = WebURL("https://example.com/currency")!
-  ///   var newQuery = "v=\(amount)"
-  ///   newQuery    += "&from=\(from.percentEncoded(using: .urlComponentSet))"
-  ///   newQuery    += "&to=\(to.percentEncoded(using: .urlComponentSet))"
-  ///   url.query    = newQuery
-  ///   return url
-  /// }
-  ///
-  /// conversionURL(99, from: "GBP", to: "JPY")
-  /// // ✅ "https://example.com/currency?v=99&from=GBP&to=JPY"
-  /// conversionURL(42, from: "¥", to: "€")
-  /// // ✅ "https://example.com/currency?v=42&from=%C2%A5&to=%E2%82%AC"
-  /// ```
-  ///
-  /// Percent-encoding and form-encoding look similar, but are incompatible with each other. To ensure information
-  /// is conveyed accurately, confirm which style of encoding the URL's receiver expects, and build your query string
-  /// accordingly. Form-encoding can be recognized by its use of the "`+`" character to encode spaces.
   ///
   /// > Tip:
-  /// > Correctly handling encoded key-value pairs in string form is non-trivial, which is why `WebURL` includes
-  /// > a ``formParams`` write-through view to read and modify these kinds of query strings.
-  /// > Currently it only supports form-encoded query strings.
+  /// > To read or modify query parameters _within_ the query string, use the ``formParams`` view.
+  ///
+  /// When modifying this component, percent-encoding in the new value is preserved.
+  /// Additionally, should the value contain any characters that are disallowed in this component,
+  /// they will also be percent-encoded. This offers precise control over whether characters
+  /// are percent-encoded or not, which may be necessary when constructing certain URLs.
+  ///
+  /// If assigning an arbitrary (non-percent-encoded) string to the component,
+  /// you should percent-encode it first to ensure its contents are accurately represented.
+  /// At a minimum you should encode the `"%"` character as `"%25"`, or
+  /// encode the string using the ``PercentEncodeSet/urlComponentSet``.
   ///
   /// > Note:
   /// > Whilst there are currently no invalid queries, failures may be added as the standard evolves.
@@ -655,26 +695,40 @@ extension WebURL {
 
   /// The fragment of this URL.
   ///
-  /// If present, the fragment is a percent-encoded string, which may be used for further processing
-  /// on the resource identified by the other components. The precise structure of the fragment is not standardized,
-  /// and some protocols allow the client to use it for application-specific purposes. For example, the HTTP protocol
-  /// does not include the fragment as part of any request, so it is sometimes used by websites to refer to important
-  /// headings within their HTML documents.
+  /// If present, the fragment is an ASCII string, which may be used for further processing
+  /// on the resource identified by the other components. The precise structure of the string is not standardized,
+  /// and some protocols allow the client to use it for application-specific purposes.
+  ///
+  /// For example, some video streaming websites allow the fragment to contain a timestamp (e.g. `"#3m15s"`).
+  /// The HTTP protocol does not send this to the server - instead, scripts on the website's page
+  /// interpret this value and skip to the indicated time.
   ///
   /// ```swift
   /// var url = WebURL("my.app:/docs/shopping_list#groceries")!
-  /// url.fragment              // "groceries"
-  /// url.fragment = "bathroom" // ✅ "my.app:/docs/shopping_list#bathroom"
   ///
-  /// // ℹ️ Values derived at runtime should be percent-encoded.
-  /// url.fragment = someString.percentEncoded(using: .urlComponentSet)
+  /// url.fragment
+  /// // ✅ "groceries"
+  ///
+  /// url.fragment = "birthday party".percentEncoded(using: .urlComponentSet)
+  /// // ✅ "my.app:/docs/shopping_list#birthday%20party"
+  /// //                                ^^^^^^^^^^^^^^^^
+  ///
+  /// url.fragment
+  /// // ✅ "birthday%20party"
+  ///
+  /// url.fragment?.percentDecoded()
+  /// // ✅ "birthday party"
   /// ```
   ///
-  /// When setting this property, the new value is expected to be percent-encoded,
-  /// although additional encoding will be added if necessary. If the value derives from runtime data
-  /// (for example, user input), you must at least encode the percent-sign in order to ensure the value
-  /// is represented accurately in the URL. The ``PercentEncodeSet/urlComponentSet`` includes the percent-sign
-  /// and is suitable for encoding arbitrary strings. See <doc:PercentEncoding> to learn more.
+  /// When modifying this component, percent-encoding in the new value is preserved.
+  /// Additionally, should the value contain any characters that are disallowed in this component,
+  /// they will also be percent-encoded. This offers precise control over whether characters
+  /// are percent-encoded or not, which may be necessary when constructing certain URLs.
+  ///
+  /// If assigning an arbitrary (non-percent-encoded) string to the component,
+  /// you should percent-encode it first to ensure its contents are accurately represented.
+  /// At a minimum you should encode the `"%"` character as `"%25"`, or
+  /// encode the string using the ``PercentEncodeSet/urlComponentSet``.
   ///
   /// > Note:
   /// > Whilst there are currently no invalid fragments, failures may be added as the standard evolves.
@@ -691,9 +745,39 @@ extension WebURL {
 
   /// Whether this URL has an opaque path.
   ///
-  /// URLs with opaque paths are non-hierarchical: they do not specify a host, and their paths are opaque strings
-  /// rather than lists of path components. They can be recognized by the lack of slashes immediately following the
-  /// scheme delimiter.
+  /// A URL's path can either be a list, or an opaque string.
+  ///
+  /// - URLs with special schemes (such as `http(s)` or `file`) always have list-style paths.
+  /// - If a URL has a host, it has a list-style path.
+  /// - If a path's serialization begins with "`/`", it is a list-style path.
+  ///
+  /// If a URL has no host and its path does not begin with a "`/`", it is said to have an _opaque path_.
+  /// These following URLs have opaque paths. Notice the lack of slashes immediately following the scheme.
+  ///
+  /// ```
+  /// mailto:bob@example.com
+  /// └─┬──┘ └──────┬──────┘
+  /// scheme       path
+  ///
+  /// javascript:alert("hello");
+  /// └───┬────┘ └──────┬──────┘
+  ///  scheme          path
+  ///
+  /// data:text/plain;base64,...
+  /// └┬─┘ └─────────┬─────────┘
+  /// scheme        path
+  /// ```
+  ///
+  /// URLs with opaque paths are special in a number of ways. Since the path and query components of a URL are
+  /// also opaque strings, every aspect of these URLs (other than the scheme prefix) is opaque.
+  /// They are very flexible, but are incompatible with some ways of working with URLs.
+  ///
+  /// It is invalid for any operation to turn a URL with an opaque path in to one with a list-style path, or vice versa.
+  /// As such, attempting to set any authority components (the ``username``, ``password``, ``hostname`` and ``port``)
+  /// on a URL with an opaque path will fail. Additionally, the ``path`` may not be set on these URLs, and they do
+  /// not support the ``pathComponents-swift.property`` view.
+  ///
+  /// ### Examples
   ///
   /// | URL                                 | Path                     | Style  |
   /// | ----------------------------------- | ------------------------ | ------ |
@@ -705,18 +789,8 @@ extension WebURL {
   /// |`data:text/plain;base64,...`         | `text/plain;base64,...`  | Opaque |
   /// |`blob:https://example.com`           | `https://example.com`    | Opaque |
   ///
-  /// It is invalid for any operation to turn a URL with an opaque path in to one with a list-style path, or vice versa.
-  /// As such, attempting to set any authority components (the ``username``, ``password``, ``hostname`` and ``port``)
-  /// on a URL with an opaque path will fail. Additionally, the ``path`` may not be set on these URLs, and they do
-  /// not support the ``pathComponents-swift.property`` view.
-  ///
   /// > Tip:
-  /// > URLs with a special ``scheme`` (such as http, https, and file URLs) never have opaque paths.
-  ///
-  /// It may sound frightening that a class of URLs exist for which so many operations will silently fail,
-  /// but it tends not to be a significant issue in practice. As mentioned above, http(s) and file URLs never
-  /// have opaque paths, and custom schemes typically require validating their structure before they are processed
-  /// anyway.
+  /// > Remember that URLs with a special ``scheme`` (such as http, https, and file URLs) never have opaque paths.
   ///
   /// ## See Also
   ///
@@ -766,15 +840,19 @@ extension WebURL {
 
   /// Replaces this URL's ``username`` or throws an error.
   ///
-  /// This function has the same semantics as the ``username`` property setter.
+  /// This function has the same behavior as the ``username`` property setter.
   ///
   /// This function throws if the URL does not support credentials (for example, because it does not specify a host).
   ///
-  /// When setting this component, the new value is expected to be percent-encoded,
-  /// although additional encoding will be added if necessary. If the value derives from runtime data
-  /// (for example, user input), you must at least encode the percent-sign in order to ensure the value
-  /// is represented accurately in the URL. The ``PercentEncodeSet/urlComponentSet`` includes the percent-sign
-  /// and is suitable for encoding arbitrary strings. See <doc:PercentEncoding> to learn more.
+  /// When modifying this component, percent-encoding in the new value is preserved.
+  /// Additionally, should the value contain any characters that are disallowed in this component,
+  /// they will also be percent-encoded. This offers precise control over whether characters
+  /// are percent-encoded or not, which may be necessary when constructing certain URLs.
+  ///
+  /// If assigning an arbitrary (non-percent-encoded) string to the component,
+  /// you should percent-encode it first to ensure its contents are accurately represented.
+  /// At a minimum you should encode the `"%"` character as `"%25"`, or
+  /// encode the string using the ``PercentEncodeSet/urlComponentSet``.
   ///
   /// > Note:
   /// > The WHATWG URL Standard is a [living standard][WHATWG-LS], so new failure conditions may be added
@@ -796,15 +874,19 @@ extension WebURL {
 
   /// Replaces this URL's ``password`` or throws an error.
   ///
-  /// This function has the same semantics as the ``password`` property setter.
+  /// This function has the same behavior as the ``password`` property setter.
   ///
   /// This function throws if the URL does not support credentials (for example, because it does not specify a host).
   ///
-  /// When setting this component, the new value is expected to be percent-encoded,
-  /// although additional encoding will be added if necessary. If the value derives from runtime data
-  /// (for example, user input), you must at least encode the percent-sign in order to ensure the value
-  /// is represented accurately in the URL. The ``PercentEncodeSet/urlComponentSet`` includes the percent-sign
-  /// and is suitable for encoding arbitrary strings. See <doc:PercentEncoding> to learn more.
+  /// When modifying this component, percent-encoding in the new value is preserved.
+  /// Additionally, should the value contain any characters that are disallowed in this component,
+  /// they will also be percent-encoded. This offers precise control over whether characters
+  /// are percent-encoded or not, which may be necessary when constructing certain URLs.
+  ///
+  /// If assigning an arbitrary (non-percent-encoded) string to the component,
+  /// you should percent-encode it first to ensure its contents are accurately represented.
+  /// At a minimum you should encode the `"%"` character as `"%25"`, or
+  /// encode the string using the ``PercentEncodeSet/urlComponentSet``.
   ///
   /// > Note:
   /// > The WHATWG URL Standard is a [living standard][WHATWG-LS], so new failure conditions may be added
@@ -826,13 +908,14 @@ extension WebURL {
 
   /// Replaces this URL's ``hostname`` or throws an error.
   ///
-  /// This function has the same semantics as the ``hostname`` property setter.
+  /// This function has the same behavior as the ``hostname`` property setter.
   ///
   /// This function throws if the hostname cannot be parsed as a valid host for the URL's ``scheme``,
   /// or if the URL does not support hostnames (for example, because it has an opaque path, ``hasOpaquePath``).
   ///
-  /// When setting this property, the new value is expected to be percent-encoded,
-  /// otherwise it may be considered invalid. See ``WebURL/hostname`` for more information.
+  /// When modifying this component, the new value is parsed as one of this URL's supported kinds of
+  /// ``WebURL/WebURL/Host-swift.enum``, and the URL's hostname will be its ASCII serialization.
+  /// Opaque hostnames must be percent-encoded in advance, or the operation will fail.
   ///
   /// > Note:
   /// > The WHATWG URL Standard is a [living standard][WHATWG-LS], so new failure conditions may be added
@@ -857,7 +940,7 @@ extension WebURL {
 
   /// Replaces this URL's ``port`` or throws an error.
   ///
-  /// This function has the same semantics as the ``port`` property setter.
+  /// This function has the same behavior as the ``port`` property setter.
   ///
   /// This function throws if the new value is out of range, or if the URL does not support port numbers
   /// (for example, because it does not have a host).
@@ -886,13 +969,15 @@ extension WebURL {
 
   /// Replaces this URL's ``path`` or throws an error.
   ///
-  /// This function has the same semantics as the ``path`` property setter.
+  /// This function has the same behavior as the ``path`` property setter.
   ///
   /// Currently, this function only throws if the URL has an opaque path (see ``hasOpaquePath``).
   ///
-  /// When setting this property, the new value is expected to be percent-encoded,
-  /// although additional encoding will be added if necessary. Constructing a correctly-encoded path string
-  /// is non-trivial; see ``WebURL/path`` for more information.
+  /// When modifying this component, the new value is interpreted as a list of path components
+  /// and compacted. The percent-encoding of each path component is preserved,
+  /// although additional characters will be encoded if they are disallowed from this component.
+  /// This offers precise control over whether characters are percent-encoded or not,
+  /// which may be necessary when constructing certain URLs.
   ///
   /// > Note:
   /// > The WHATWG URL Standard is a [living standard][WHATWG-LS], so new failure conditions may be added
@@ -914,13 +999,17 @@ extension WebURL {
 
   /// Replaces this URL's ``query`` or throws an error.
   ///
-  /// This function has the same semantics as the ``query`` property setter. Currently, it has no failure conditions.
+  /// This function has the same behavior as the ``query`` property setter. Currently, it has no failure conditions.
   ///
-  /// When setting this component, the new value is expected to be percent-encoded or form-encoded,
-  /// although additional percent-encoding will be added if necessary. If the value derives from runtime data
-  /// (for example, user input), you must at least encode the percent-sign in order to ensure the value
-  /// is represented accurately in the URL. The ``PercentEncodeSet/urlComponentSet`` includes the percent-sign
-  /// and is suitable for encoding arbitrary strings. See <doc:PercentEncoding> to learn more.
+  /// When modifying this component, percent-encoding in the new value is preserved.
+  /// Additionally, should the value contain any characters that are disallowed in this component,
+  /// they will also be percent-encoded. This offers precise control over whether characters
+  /// are percent-encoded or not, which may be necessary when constructing certain URLs.
+  ///
+  /// If assigning an arbitrary (non-percent-encoded) string to the component,
+  /// you should percent-encode it first to ensure its contents are accurately represented.
+  /// At a minimum you should encode the `"%"` character as `"%25"`, or
+  /// encode the string using the ``PercentEncodeSet/urlComponentSet``.
   ///
   /// > Note:
   /// > The WHATWG URL Standard is a [living standard][WHATWG-LS], so new failure conditions may be added
@@ -942,13 +1031,17 @@ extension WebURL {
 
   /// Replaces this URL's ``fragment`` or throws an error.
   ///
-  /// This function has the same semantics as the ``fragment`` property setter. Currently, it has no failure conditions.
+  /// This function has the same behavior as the ``fragment`` property setter. Currently, it has no failure conditions.
   ///
-  /// When setting this component, the new value is expected to be percent-encoded,
-  /// although additional encoding will be added if necessary. If the value derives from runtime data
-  /// (for example, user input), you must at least encode the percent-sign in order to ensure the value
-  /// is represented accurately in the URL. The ``PercentEncodeSet/urlComponentSet`` includes the percent-sign
-  /// and is suitable for encoding arbitrary strings. See <doc:PercentEncoding> to learn more.
+  /// When modifying this component, percent-encoding in the new value is preserved.
+  /// Additionally, should the value contain any characters that are disallowed in this component,
+  /// they will also be percent-encoded. This offers precise control over whether characters
+  /// are percent-encoded or not, which may be necessary when constructing certain URLs.
+  ///
+  /// If assigning an arbitrary (non-percent-encoded) string to the component,
+  /// you should percent-encode it first to ensure its contents are accurately represented.
+  /// At a minimum you should encode the `"%"` character as `"%25"`, or
+  /// encode the string using the ``PercentEncodeSet/urlComponentSet``.
   ///
   /// > Note:
   /// > The WHATWG URL Standard is a [living standard][WHATWG-LS], so new failure conditions may be added
