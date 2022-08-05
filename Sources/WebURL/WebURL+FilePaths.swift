@@ -325,57 +325,47 @@ public struct FilePathFormat: Equatable, Hashable, CustomStringConvertible {
 
 extension WebURL {
 
-  /// Creates a URL representation of a file path.
+  /// Create a URL representation of a file path string.
   ///
-  /// In order to create a file URL, the file path must satisfy two conditions:
+  /// In order to create a file URL, the file path must satisfy two conditions.
   ///
-  /// - It must be a syntactically valid, non-relative path according to the ``FilePathFormat``.
-  ///
-  ///   ```swift
-  ///   // ℹ️ POSIX-style paths (Apple OSes, Linux, etc)
-  ///   try WebURL(filePath: "/usr/bin/swift", format: .posix)
-  ///     // ✅ "file:///usr/bin/swift"
-  ///   try WebURL(filePath: "/tmp/my file.dat", format: .posix)
-  ///     // ✅ "file:///tmp/my%20file.dat"
-  ///
-  ///   // ℹ️ Windows-style paths
-  ///   try WebURL(filePath: #"C:\Users\Alice\Desktop\family.jpg"#, format: .windows)
-  ///     // ✅ "file:///C:/Users/Alice/Desktop/family.jpg"
-  ///   try WebURL(filePath: #"\\Janes-PC\Music\awesome song.mp3"#, format: .windows)
-  ///     // ✅ "file://janes-pc/Music/awesome%20song.mp3"
-  ///
-  ///   // ℹ️ Use .native for the current machine's format (this is the default).
-  ///   try WebURL(filePath: NSTemporaryDirectory())
-  ///     // ✅ "file:///var/folders/ds/..." on macOS.
-  ///
-  ///   try WebURL(filePath: "file.txt", format: .posix)
-  ///     // ❌ Relative path on POSIX (no leading "/").
-  ///   try WebURL(filePath: "/usr/bin", format: .windows)
-  ///     // ❌ Relative path on Windows (no drive letter).
-  ///   ```
-  ///
-  /// - It must not contain any components which refer to their parent directories ("`..`" components).
+  /// - It must be a valid, absolute file path. Be aware that this depends on the ``FilePathFormat``.
   ///
   ///   ```swift
-  ///   try WebURL(filePath: "/usr/bin/../../etc/passwd", format: .posix)
-  ///   // ❌ Parent traversal.
-  ///   try WebURL(filePath: #"C:\Users\Alice\Desktop\..\Music"#, format: .windows)
-  ///   // ❌ Parent traversal.
+  ///   // 🚩 POSIX-style paths (Apple OSes, Linux, etc)
+  ///   try WebURL(filePath: "/usr/bin/swift")   // ✅ "file:///usr/bin/swift"
+  ///   try WebURL(filePath: "/tmp/my file.dat") // ✅ "file:///tmp/my%20file.dat"
+  ///
+  ///   try WebURL(filePath: "file.txt") // ❌ Relative path
   ///   ```
   ///
-  /// Otherwise, a ``URLFromFilePathError`` error will be thrown which can be used to provide diagnostics.
+  ///   ```swift
+  ///   // 🚩 Windows-style paths
+  ///   try WebURL(filePath: #"C:\Users\Alice\Desktop\family.jpg"#) // ✅ "file:///C:/Users/Alice/Desktop/family.jpg"
+  ///   try WebURL(filePath: #"\\Janes-PC\Music\awesome song.mp3"#) // ✅ "file://janes-pc/Music/awesome%20song.mp3"
   ///
-  /// Some minimal normalization is applied to the path according to the ``FilePathFormat`` (for example,
-  /// collapsing duplicate slashes, such as `/usr//bin` -> `/usr/bin`), and percent-encoding is added where required.
+  ///   try WebURL(filePath: "/usr/bin") // ❌ Relative path on Windows (no drive letter).
+  ///   ```
   ///
-  /// Note that while a `String` may be a valid source of a file path, in general file paths are binary
-  /// rather than textual, and some paths may be corrupted if stored as a `String`.
-  /// For this reason, WebURL only reconstructs file paths from URLs in _binary form_.
+  /// - It must not contain any "`..`" components.
+  ///
+  ///   ```swift
+  ///   try WebURL(filePath: "/usr/local/../../etc/passwd") // ❌ Parent traversal.
+  ///   ```
+  ///
+  /// Some minimal normalization is applied to the path according to the ``FilePathFormat``
+  /// (for example, collapsing duplicate slashes, such as `/usr//bin` -> `/usr/bin`),
+  /// and percent-encoding is added where required.
   ///
   /// > Tip:
-  /// > To work with binary file paths, we recommend developers use a dedicated file path type,
-  /// > such as swift-system's `FilePath`. The `FilePath(url: WebURL)` initializer from `WebURLSystemExtras` is
-  /// > the best way to reconstruct a file path from its URL representation.
+  /// >
+  /// > In general, file paths are binary rather than textual, so it is recommended
+  /// > that developers use a dedicated file path type such as swift-system's `FilePath`.
+  /// > Some paths will become corrupted if stored as a string, so WebURL only reconstructs
+  /// > file paths from URLs as a _binary_ result.
+  /// >
+  /// > The `WebURLSystemExtras` library includes bidirectional `WebURL` <-> `FilePath` conversions,
+  /// > and is the best way to convert between file URLs and file paths.
   /// >
   /// > ```swift
   /// > import WebURL
@@ -409,8 +399,8 @@ extension WebURL {
   ///
   public init<StringType>(
     filePath: StringType, format: FilePathFormat = .native
-  ) throws where StringType: StringProtocol, StringType.UTF8View: BidirectionalCollection {
-    self = try WebURL.fromBinaryFilePath(filePath.utf8, format: format)
+  ) throws where StringType: StringProtocol {
+    self = try filePath._withContiguousUTF8 { utf8 in try WebURL.fromBinaryFilePath(utf8, format: format) }
   }
 }
 
@@ -504,10 +494,11 @@ extension WebURL {
   public static func fromBinaryFilePath<Bytes>(
     _ path: Bytes, format: FilePathFormat = .native
   ) throws -> WebURL where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
-    switch format._fmt {
-    case .posix: return try _urlFromFilePath_posix(path).get()
-    case .windows: return try _urlFromFilePath_windows(path).get()
-    }
+    let result =
+      path.withContiguousStorageIfAvailable {
+        _urlFromBinaryFilePath_impl($0.boundsChecked, format: format)
+      } ?? _urlFromBinaryFilePath_impl(path, format: format)
+    return try result.get()
   }
 }
 
@@ -735,6 +726,16 @@ public struct URLFromFilePathError: Error, Equatable, Hashable, CustomStringConv
     case .unsupportedWin32NamespacedPath: return "Unsupported Win32 namespaced path"
     case .transcodingFailure: return "Transcoding failure"
     }
+  }
+}
+
+@inlinable
+internal func _urlFromBinaryFilePath_impl<Bytes>(
+  _ path: Bytes, format: FilePathFormat
+) -> Result<WebURL, URLFromFilePathError> where Bytes: BidirectionalCollection, Bytes.Element == UInt8 {
+  switch format._fmt {
+  case .posix: return _urlFromFilePath_posix(path)
+  case .windows: return _urlFromFilePath_windows(path)
   }
 }
 
