@@ -148,8 +148,8 @@ extension WebURL: Equatable, Hashable, Comparable {
   public static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.utf8.withUnsafeBufferPointer { lhsBuffer in
       rhs.utf8.withUnsafeBufferPointer { rhsBuffer in
-        (lhsBuffer.baseAddress == rhsBuffer.baseAddress && lhsBuffer.count == rhsBuffer.count)
-          || lhsBuffer.elementsEqual(rhsBuffer)
+        lhsBuffer.count == rhsBuffer.count
+          && (lhsBuffer.baseAddress == rhsBuffer.baseAddress || lhsBuffer.elementsEqual(rhsBuffer))
       }
     }
   }
