@@ -81,9 +81,9 @@ extension String {
       )
     let _ = sixtyFourBytes.63  // Check that there are 64 elements. This wouldn't compile otherwise.
     self = withUnsafeMutableBytes(of: &sixtyFourBytes) { rawBuffer in
-      let buffer = rawBuffer._assumingMemoryBound(to: UInt8.self)
-      let initializedCount = initializer(buffer)
-      return String(decoding: UnsafeBufferPointer(rebasing: buffer.prefix(initializedCount)), as: UTF8.self)
+      let ptr = UnsafeMutableBufferPointer(start: rawBuffer.baseAddress!.assumingMemoryBound(to: UInt8.self), count: 64)
+      let initializedCount = initializer(ptr)
+      return String(decoding: UnsafeBufferPointer(rebasing: ptr.prefix(initializedCount)), as: UTF8.self)
     }
   }
 }
