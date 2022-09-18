@@ -27,9 +27,22 @@ import WebURL
 // --------------------------------
 
 
-// On non-Apple platforms, executing a URLRequest whose url is nil will 'fatalError'.
-// Since that is how we prefer to signal conversion failures, we don't offer extensions to create
-// a URLRequest from a WebURL on those platforms. Fixed by https://github.com/apple/swift-corelibs-foundation/pull/3154
+// For APIs which return a URLSessionDataTask/URLSessionDataTaskPublisher, users idiomatically handle errors
+// via the task's callback, or via the error sent through the Combine stream.
+//
+// Unfortunately, there is no way to create a URLSessionDataTask/URLSessionDataTaskPublisher
+// which throws a particular error, so conversion failures instead make a request to a 'nil' URL.
+// We can reasonably assume that no URLProtocol handlers will process these, and they result in
+// a '.unsupportedURL' error.
+//
+// There are other designs for this: these functions could be throwing, or return a different type.
+// However, that would make them much more difficult to adopt, and WebURL -> Foundation.URL conversion errors
+// are so exceptionally rare that it is considered not worth the churn.
+//
+// However, on non-Apple platforms, executing a URLRequest whose url is nil will actually 'fatalError'.
+// As such, these extensions are currently limited to Apple platforms only.
+// Fixed by https://github.com/apple/swift-corelibs-foundation/pull/3154
+
 #if canImport(Darwin)
 
   extension URLSession {
@@ -83,33 +96,39 @@ import WebURL
     }
   }
 
-  #if canImport(Combine)
-
-    import Combine
-
-    extension URLSession {
-
-      /// Returns a publisher that wraps a URL session data task for a given URL.
-      ///
-      /// The publisher publishes data when the task completes, or terminates if the task fails with an error.
-      ///
-      /// - parameters:
-      ///   - url: The URL for which to create a data task.
-      ///
-      @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
-      public func dataTaskPublisher(
-        for url: WebURL
-      ) -> URLSession.DataTaskPublisher {
-        URL(url).map { dataTaskPublisher(for: $0) }
-          ?? dataTaskPublisher(for: .requestForConversionFailure(url))
-      }
-    }
-
-  #endif  // canImport(Combine)
-
-// swift 5.3 can't deal with an '#if swift' nested inside another conditional compilation clause,
-// so we have to interrupt this conditional around the async functions.
 #endif  // canImport(Darwin)
+
+
+#if canImport(Darwin) && canImport(Combine)
+
+  import Combine
+
+  extension URLSession {
+
+    /// Returns a publisher that wraps a URL session data task for a given URL.
+    ///
+    /// The publisher publishes data when the task completes, or terminates if the task fails with an error.
+    ///
+    /// - parameters:
+    ///   - url: The URL for which to create a data task.
+    ///
+    @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
+    public func dataTaskPublisher(
+      for url: WebURL
+    ) -> URLSession.DataTaskPublisher {
+      URL(url).map { dataTaskPublisher(for: $0) }
+        ?? dataTaskPublisher(for: .requestForConversionFailure(url))
+    }
+  }
+
+#endif  // canImport(Darwin) && canImport(Combine)
+
+
+// URLSession's async APIs are throwing, so we don't need to rely on the "request to nil URL" trick
+// to signal conversion failures, and they are no more difficult to adopt.
+//
+// Unfortunately, as of Swift 5.7, these APIs still only exist on Apple platforms.
+
 
 #if swift(>=5.5) && canImport(_Concurrency) && canImport(Darwin)
 
@@ -132,9 +151,7 @@ import WebURL
     public func data(
       from url: WebURL, delegate: URLSessionTaskDelegate? = nil
     ) async throws -> (Data, URLResponse) {
-      guard let convertedURL = URL(url) else {
-        return try await data(for: .requestForConversionFailure(url), delegate: delegate)
-      }
+      guard let convertedURL = URL(url) else { throw WebURLToFoundationConversionError(url) }
       return try await data(from: convertedURL, delegate: delegate)
     }
 
@@ -158,9 +175,7 @@ import WebURL
     public func bytes(
       from url: WebURL, delegate: URLSessionTaskDelegate? = nil
     ) async throws -> (URLSession.AsyncBytes, URLResponse) {
-      guard let convertedURL = URL(url) else {
-        return try await bytes(for: .requestForConversionFailure(url), delegate: delegate)
-      }
+      guard let convertedURL = URL(url) else { throw WebURLToFoundationConversionError(url) }
       return try await bytes(from: convertedURL, delegate: delegate)
     }
   }
@@ -183,7 +198,6 @@ import WebURL
 // --------------------------------
 
 
-// See above - continues canImport(Darwin) that was interrupted for the async functions.
 #if canImport(Darwin)
 
   extension URLSession {
@@ -262,51 +276,51 @@ import WebURL
     }
   }
 
-
-  // --------------------------------
-  // MARK: - URLSessionWebSocketTask
-  // --------------------------------
+#endif  // canImport(Darwin)
 
 
-  #if canImport(Darwin)  // URLSessionWebSocketTask is not implemented in swift-corelibs-foundation.
+// --------------------------------
+// MARK: - URLSessionWebSocketTask
+// --------------------------------
 
-    extension URLSession {
 
-      /// Creates a WebSocket task for the provided URL.
-      ///
-      /// The provided URL must have a ws or wss scheme.
-      ///
-      /// - parameters:
-      ///   - url:       The WebSocket URL with which to connect.
-      ///
-      @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
-      public func webSocketTask(with url: WebURL) -> URLSessionWebSocketTask {
-        URL(url).map { webSocketTask(with: $0) }
-          ?? webSocketTask(with: .requestForConversionFailure(url))
-      }
+#if canImport(Darwin)  // URLSessionWebSocketTask is not implemented in swift-corelibs-foundation.
 
-      /// Creates a WebSocket task given a URL and an array of protocols.
-      ///
-      /// During the WebSocket handshake, the task uses the provided protocols to negotiate
-      /// a preferred protocol with the server.
-      ///
-      /// > Note:
-      /// > The protocol doesn’t affect the WebSocket framing.
-      /// > More details on the protocol are available in [RFC 6455, The WebSocket Protocol][rfc-6455].
-      ///
-      /// [rfc-6455]: https://datatracker.ietf.org/doc/html/rfc6455
-      ///
-      /// - parameters:
-      ///   - url:       The WebSocket URL with which to connect.
-      ///   - protocols: An array of protocols to negotiate with the server.
-      ///
-      @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
-      public func webSocketTask(with url: WebURL, protocols: [String]) -> URLSessionWebSocketTask {
-        URL(url).map { webSocketTask(with: $0, protocols: protocols) }
-          ?? webSocketTask(with: .requestForConversionFailure(url))
-      }
+  extension URLSession {
+
+    /// Creates a WebSocket task for the provided URL.
+    ///
+    /// The provided URL must have a ws or wss scheme.
+    ///
+    /// - parameters:
+    ///   - url:       The WebSocket URL with which to connect.
+    ///
+    @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
+    public func webSocketTask(with url: WebURL) -> URLSessionWebSocketTask {
+      URL(url).map { webSocketTask(with: $0) }
+        ?? webSocketTask(with: .requestForConversionFailure(url))
     }
 
-  #endif  // canImport(Darwin)
+    /// Creates a WebSocket task given a URL and an array of protocols.
+    ///
+    /// During the WebSocket handshake, the task uses the provided protocols to negotiate
+    /// a preferred protocol with the server.
+    ///
+    /// > Note:
+    /// > The protocol doesn’t affect the WebSocket framing.
+    /// > More details on the protocol are available in [RFC 6455, The WebSocket Protocol][rfc-6455].
+    ///
+    /// [rfc-6455]: https://datatracker.ietf.org/doc/html/rfc6455
+    ///
+    /// - parameters:
+    ///   - url:       The WebSocket URL with which to connect.
+    ///   - protocols: An array of protocols to negotiate with the server.
+    ///
+    @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
+    public func webSocketTask(with url: WebURL, protocols: [String]) -> URLSessionWebSocketTask {
+      URL(url).map { webSocketTask(with: $0, protocols: protocols) }
+        ?? webSocketTask(with: .requestForConversionFailure(url))
+    }
+  }
 
 #endif  // canImport(Darwin)
