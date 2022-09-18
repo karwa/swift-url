@@ -29,6 +29,24 @@ import WebURL
 
 extension Data {
 
+  /// Foundation APIs which can be stubbed for integration tests.
+  ///
+  internal struct _ExtendedFunctions {
+    internal var contentsOfURL: (URL, Data.ReadingOptions) throws -> Data
+    internal var writeToURL: (Data, URL, Data.WritingOptions) throws -> Void
+
+    internal static let `default` = _ExtendedFunctions(
+      contentsOfURL: { try Data(contentsOf: $0, options: $1) },
+      writeToURL: { try $0.write(to: $1, options: $2) }
+    )
+  }
+
+  #if DEBUG
+    internal static var extendedFunctions = _ExtendedFunctions.default
+  #else
+    internal static let extendedFunctions = _ExtendedFunctions.default
+  #endif
+
   /// Produces a `Data` by loading the contents referred to by a URL.
   ///
   /// - parameters:
@@ -36,7 +54,7 @@ extension Data {
   ///   - options: Options for loading the data. Default value is `[]`.
   ///
   public init(contentsOf url: WebURL, options: Data.ReadingOptions = []) throws {
-    try self.init(contentsOf: try URL(convertOrThrow: url), options: options)
+    self = try Data.extendedFunctions.contentsOfURL(try URL(convertOrThrow: url), options)
   }
 
   /// Writes the contents of the data buffer to a location.
@@ -46,7 +64,7 @@ extension Data {
   ///   - options: Options for writing the data. Default value is `[]`.
   ///
   public func write(to url: WebURL, options: Data.WritingOptions = []) throws {
-    try self.write(to: try URL(convertOrThrow: url), options: options)
+    try Data.extendedFunctions.writeToURL(self, try URL(convertOrThrow: url), options)
   }
 }
 
@@ -58,6 +76,28 @@ extension Data {
 
 extension String {
 
+  /// Foundation APIs which can be stubbed for integration tests.
+  ///
+  internal struct _ExtendedFunctions {
+    internal var contentsOfURL: (URL) throws -> String
+    internal var contentsOfURLWithEncoding: (URL, String.Encoding) throws -> String
+    internal var contentsOfURLWithUsedEncoding: (URL, inout String.Encoding) throws -> String
+    internal var writeToURL: (String, URL, Bool, String.Encoding) throws -> Void
+
+    internal static let `default` = _ExtendedFunctions(
+      contentsOfURL: { try String(contentsOf: $0) },
+      contentsOfURLWithEncoding: { try String(contentsOf: $0, encoding: $1) },
+      contentsOfURLWithUsedEncoding: { try String(contentsOf: $0, usedEncoding: &$1) },
+      writeToURL: { try $0.write(to: $1, atomically: $2, encoding: $3) }
+    )
+  }
+
+  #if DEBUG
+    internal static var extendedFunctions = _ExtendedFunctions.default
+  #else
+    internal static let extendedFunctions = _ExtendedFunctions.default
+  #endif
+
   /// Produces a `String` by loading data from a given URL and attempting to infer its encoding.
   ///
   /// - parameters:
@@ -65,7 +105,7 @@ extension String {
   ///   - encoding: The encoding to use to interpret the loaded data as a string.
   ///
   public init(contentsOf url: WebURL) throws {
-    try self.init(contentsOf: try URL(convertOrThrow: url))
+    self = try String.extendedFunctions.contentsOfURL(try URL(convertOrThrow: url))
   }
 
   /// Produces a `String` by loading data from a given URL and interpreting it using a given encoding.
@@ -75,7 +115,7 @@ extension String {
   ///   - encoding: The encoding to use to interpret the loaded data as a string.
   ///
   public init(contentsOf url: WebURL, encoding: String.Encoding) throws {
-    try self.init(contentsOf: try URL(convertOrThrow: url), encoding: encoding)
+    self = try String.extendedFunctions.contentsOfURLWithEncoding(try URL(convertOrThrow: url), encoding)
   }
 
   /// Produces a `String` by loading data from a given URL, inferring its encoding, and returning the encoding
@@ -86,7 +126,7 @@ extension String {
   ///   - usedEncoding: The encoding which was used to interpret the loaded data as a string.
   ///
   public init(contentsOf url: WebURL, usedEncoding: inout String.Encoding) throws {
-    try self.init(contentsOf: try URL(convertOrThrow: url), usedEncoding: &usedEncoding)
+    self = try String.extendedFunctions.contentsOfURLWithUsedEncoding(try URL(convertOrThrow: url), &usedEncoding)
   }
 
   /// Writes the contents of the string to a location, using a specified encoding.
@@ -98,6 +138,6 @@ extension String {
   ///   - encoding:   The encoding to write the string as.
   ///
   public func write(to url: WebURL, atomically useAuxiliaryFile: Bool, encoding: String.Encoding) throws {
-    try self.write(to: try URL(convertOrThrow: url), atomically: useAuxiliaryFile, encoding: encoding)
+    try String.extendedFunctions.writeToURL(self, try URL(convertOrThrow: url), useAuxiliaryFile, encoding)
   }
 }

@@ -49,9 +49,6 @@ var package = Package(
 
     // 🧪 Test-Only Dependencies.
     // ==========================
-    // Swifter - A no-dependency HTTP server for testing Foundation extensions.
-    .package(name: "Swifter", url: "https://github.com/httpswift/swifter.git", .upToNextMajor(from: "1.5.0")),
-
     // Checkit - Exercises for stdlib protocol conformances.
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
 
@@ -124,39 +121,11 @@ var package = Package(
     .testTarget(
       name: "WebURLFoundationExtrasTests",
       dependencies: ["WebURLFoundationExtras", "WebURLTestSupport", "WebURL"],
-      resources: [.copy("Resources")]
+      resources: [.copy("URLConversion/Resources")]
     ),
-
-  ]
-)
-
-// WebURLFoundationExtensionsTests can make use of Swifter (on platforms where it is supported).
-// We can only express the conditional target dependency from SwiftPM 5.4+.
-
-#if swift(>=5.4)
-  package.targets += [
     .testTarget(
-      name: "WebURLFoundationExtensionsTests",
-      dependencies: [
-        "WebURLFoundationExtras", "WebURL",
-        .product(name: "Swifter", package: "Swifter", condition: .when(platforms: [.macOS, .iOS, .watchOS, .tvOS, .linux]))
-      ]
+      name: "WebURLFoundationEndToEndTests",
+      dependencies: ["WebURLFoundationExtras", "WebURL"]
     )
   ]
-#else
-  #if os(macOS) || os(Linux)
-    package.targets += [
-      .testTarget(
-        name: "WebURLFoundationExtensionsTests",
-        dependencies: ["WebURLFoundationExtras", "WebURL", .product(name: "Swifter", package: "Swifter")]
-      )
-    ]
-  #else
-    package.targets += [
-      .testTarget(
-        name: "WebURLFoundationExtensionsTests",
-        dependencies: ["WebURLFoundationExtras", "WebURL"]
-      )
-    ]
-  #endif
-#endif
+)

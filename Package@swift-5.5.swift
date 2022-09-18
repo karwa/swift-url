@@ -49,9 +49,6 @@ let package = Package(
 
     // 🧪 Test-Only Dependencies.
     // ==========================
-    // Swifter - A no-dependency HTTP server for testing Foundation extensions.
-    .package(name: "Swifter", url: "https://github.com/httpswift/swifter.git", .upToNextMajor(from: "1.5.0")),
-
     // Checkit - Exercises for stdlib protocol conformances.
     .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
 
@@ -123,14 +120,11 @@ let package = Package(
     .testTarget(
       name: "WebURLFoundationExtrasTests",
       dependencies: ["WebURLFoundationExtras", "WebURLTestSupport", "WebURL"],
-      resources: [.copy("Resources")]
+      resources: [.copy("URLConversion/Resources")]
     ),
     .testTarget(
-      name: "WebURLFoundationExtensionsTests",
-      dependencies: [
-        "WebURLFoundationExtras", "WebURL",
-        .product(name: "Swifter", package: "Swifter", condition: .when(platforms: [.macOS, .iOS, .watchOS, .tvOS, .linux]))
-      ]
+      name: "WebURLFoundationEndToEndTests",
+      dependencies: ["WebURLFoundationExtras", "WebURL"]
     ),
   ]
 )

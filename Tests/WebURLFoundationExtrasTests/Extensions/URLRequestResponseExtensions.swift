@@ -14,14 +14,15 @@
 
 import Foundation
 import WebURL
-import WebURLFoundationExtras
 import XCTest
+
+@testable import WebURLFoundationExtras
 
 #if canImport(FoundationNetworking)
   import FoundationNetworking
 #endif
 
-final class URLRequestTests: XCTestCase {}
+final class URLRequestResponseExtensions: XCTestCase {}
 
 
 // --------------------------------
@@ -30,11 +31,11 @@ final class URLRequestTests: XCTestCase {}
 
 
 // On non-Apple platforms, executing a URLRequest whose url is nil will 'fatalError'.
-// Since that is how we prefer to signal conversion failures, we don't offer extensions to create
+// Since that is how we prefer to signal conversion failures, we don't even offer the extensions to create
 // a URLRequest from a WebURL on those platforms. Fixed by https://github.com/apple/swift-corelibs-foundation/pull/3154
 #if canImport(Darwin)
 
-  extension URLRequestTests {
+  extension URLRequestResponseExtensions {
 
     func testCreateRequest_simpleConversion() {
       let webURL = WebURL("http://example.com/foo/bar?baz=qux")!
@@ -95,7 +96,7 @@ final class URLRequestTests: XCTestCase {}
 // --------------------------------
 
 
-extension URLRequestTests {
+extension URLRequestResponseExtensions {
 
   func testWebURLProperty_simpleConversion() {
     // Construct a URLRequest with a Foundation.URL.

@@ -22,16 +22,12 @@ internal struct WebURLToFoundationConversionError: Error, CustomStringConvertibl
   /// The `WebURL` which could not be converted.
   internal var url: WebURL
 
-  /// An optional message, providing additional context.
-  internal var message: String?
-
-  internal init(_ url: WebURL, message: String? = nil) {
+  internal init(_ url: WebURL) {
     self.url = url
-    self.message = message
   }
 
   internal var description: String {
-    "Failed to convert WebURL to Foundation.URL: \(url). " + (message ?? "")
+    "Failed to convert WebURL to Foundation.URL: \(url)."
   }
 }
 
