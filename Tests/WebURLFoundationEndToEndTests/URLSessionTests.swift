@@ -716,6 +716,7 @@ final class URLSessionEndToEndTests: XCTestCase {}
 
 #if swift(>=5.5) && canImport(_Concurrency) && canImport(Darwin)
 
+  @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)  // for async functions.
   extension URLSessionEndToEndTests {
 
     func testDataAsync() async throws {
