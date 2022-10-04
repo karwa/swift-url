@@ -16,7 +16,7 @@
 
 import PackageDescription
 
-var package = Package(
+let package = Package(
   name: "swift-url",
   products: [
 
@@ -126,6 +126,6 @@ var package = Package(
     .testTarget(
       name: "WebURLFoundationEndToEndTests",
       dependencies: ["WebURLFoundationExtras", "WebURL"]
-    )
+    ),
   ]
 )
