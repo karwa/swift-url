@@ -39,6 +39,12 @@ internal protocol URLParserCallback {
 @usableFromInline
 internal struct IgnoreValidationErrors: URLParserCallback {
 
+  #if DEBUG
+    // TSan encounters internal errors when passing empty structs around 'inout'.
+    // See: https://github.com/apple/swift/issues/61073 and https://github.com/apple/swift/issues/56405
+    let _tsanBugWorkaround = true
+  #endif
+
   @inlinable @inline(__always)
   internal init() {}
 
