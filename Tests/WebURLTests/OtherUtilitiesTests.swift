@@ -106,9 +106,14 @@ extension OtherUtilitiesTests {
     XCTAssertTrue(hasNonURLCodePoints(utf8: "alpha\u{10FFFF}123".utf8))
 
     // Surrogates.
+    XCTAssertFalse(hasNonURLCodePoints(utf8: [0xED, 0x9F, 0xBF]))  // D7FF
     XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xA0, 0x80]))  // D800
     XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xAA, 0xBC]))  // DABC
+    XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xAF, 0xBF]))  // DBFF
+    XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xB2, 0xBC]))  // DCBC
+    XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xB7, 0x9D]))  // DDDD
     XCTAssertTrue(hasNonURLCodePoints(utf8: [0xED, 0xBF, 0xBF]))  // DFFF
+    XCTAssertFalse(hasNonURLCodePoints(utf8: [0xEE, 0x80, 0x80]))  // E000
   }
 
   func testForbiddenHostAndDomainCodePoints() {
