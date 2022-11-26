@@ -282,7 +282,22 @@ internal struct StructureAndMetricsCollector: URLWriter {
   @inlinable
   internal init() {
     self.requiredCapacity = 0
-    self.structure = .invalidEmptyStructure()
+    self.structure = URLStructure(
+      schemeLength: 0,
+      usernameLength: 0,
+      passwordLength: 0,
+      hostnameLength: 0,
+      portLength: 0,
+      pathLength: 0,
+      queryLength: 0,
+      fragmentLength: 0,
+      firstPathComponentLength: 0,
+      sigil: nil,
+      schemeKind: .other,
+      hostKind: nil,
+      hasOpaquePath: true,
+      queryIsKnownFormEncoded: false
+    )
     self.hints = URLWriterHints()
   }
 

@@ -148,7 +148,7 @@ internal struct ParsedURLString<InputString> where InputString: BidirectionalCol
     guard let storageCapacity = URLStorage.SizeType(exactly: info.requiredCapacity) else {
       return nil
     }
-    let storage = URLStorage(count: storageCapacity, structure: URLStructure(copying: info.structure)) { buffer in
+    let storage = URLStorage(count: storageCapacity, structure: URLStructure(converting: info.structure)!) { buffer in
       var writer = UnsafePresizedBufferWriter(buffer: buffer, hints: info.hints)
       write(to: &writer)
       return writer.bytesWritten
