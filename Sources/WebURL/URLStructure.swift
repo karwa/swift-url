@@ -577,29 +577,44 @@ extension URLStructure {
 
 extension URLStructure {
 
-  /// Creates a new URL structure with the same information as `other`,
-  /// but whose values are stored using this structure's integer type.
+  /// Creates a URL structure with the same information as `other`,
+  /// but whose values are stored using a different integer type.
   ///
-  /// If this structure's integer type is not capable of exactly representing the structure described by `other`,
-  /// a runtime error is triggered.
+  /// If the new integer type is not capable of exactly representing `other`,
+  /// the initializer fails and returns `nil`.
   ///
   @inlinable
-  internal init<OtherSize: FixedWidthInteger>(copying other: URLStructure<OtherSize>) {
+  internal init?<OtherSize>(converting other: URLStructure<OtherSize>) {
 
-    if let sameTypeOtherStructure = other as? Self {
-      self = sameTypeOtherStructure
+    if let sameType = other as? Self {
+      self = sameType
       return
     }
+
+    guard
+      let schemeLength = SizeType(exactly: other.schemeLength),
+      let usernameLength = SizeType(exactly: other.usernameLength),
+      let passwordLength = SizeType(exactly: other.passwordLength),
+      let hostnameLength = SizeType(exactly: other.hostnameLength),
+      let portLength = SizeType(exactly: other.portLength),
+      let pathLength = SizeType(exactly: other.pathLength),
+      let queryLength = SizeType(exactly: other.queryLength),
+      let fragmentLength = SizeType(exactly: other.fragmentLength),
+      let firstPathComponentLength = SizeType(exactly: other.firstPathComponentLength)
+    else {
+      return nil
+    }
+
     self.init(
-      schemeLength: SizeType(other.schemeLength),
-      usernameLength: SizeType(other.usernameLength),
-      passwordLength: SizeType(other.passwordLength),
-      hostnameLength: SizeType(other.hostnameLength),
-      portLength: SizeType(other.portLength),
-      pathLength: SizeType(other.pathLength),
-      queryLength: SizeType(other.queryLength),
-      fragmentLength: SizeType(other.fragmentLength),
-      firstPathComponentLength: SizeType(other.firstPathComponentLength),
+      schemeLength: schemeLength,
+      usernameLength: usernameLength,
+      passwordLength: passwordLength,
+      hostnameLength: hostnameLength,
+      portLength: portLength,
+      pathLength: pathLength,
+      queryLength: queryLength,
+      fragmentLength: fragmentLength,
+      firstPathComponentLength: firstPathComponentLength,
       sigil: other.sigil,
       schemeKind: other.schemeKind,
       hostKind: other.hostKind,
@@ -607,32 +622,6 @@ extension URLStructure {
       queryIsKnownFormEncoded: other.queryIsKnownFormEncoded
     )
     checkInvariants()
-  }
-
-  // FIXME: Move to StructureAndMetricsCollector.
-  /// An `URLStructure` whose component lengths are all 0 and flags are bogus values.
-  /// Since the scheme length is 0, this structure **does not describe a valid URL string**.
-  ///
-  /// This should only be used by the `StructureAndMetricsCollector`.
-  ///
-  @inlinable
-  internal static func invalidEmptyStructure() -> URLStructure {
-    return URLStructure(
-      schemeLength: 0,
-      usernameLength: 0,
-      passwordLength: 0,
-      hostnameLength: 0,
-      portLength: 0,
-      pathLength: 0,
-      queryLength: 0,
-      fragmentLength: 0,
-      firstPathComponentLength: 0,
-      sigil: nil,
-      schemeKind: .other,
-      hostKind: nil,
-      hasOpaquePath: true,
-      queryIsKnownFormEncoded: false
-    )
   }
 }
 
