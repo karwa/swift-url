@@ -800,7 +800,7 @@ extension WebURL {
   ///
   @inlinable
   public var hasOpaquePath: Bool {
-    storage.hasOpaquePath
+    storage.structure.hasOpaquePath
   }
 }
 

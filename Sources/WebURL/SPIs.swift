@@ -77,7 +77,7 @@ extension WebURL._SPIs {
   ///
   @inlinable
   public var _hasPathSigil: Bool {
-    _url.storage.structure.hasPathSigil
+    _url.storage.structure.sigil == .path
   }
 }
 
