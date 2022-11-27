@@ -800,7 +800,7 @@ extension URLStorage {
       return .failure(.exceedsMaximumSize)
     }
 
-    if header._capacity >= newCount, codeUnits._storage.isKnownUniqueReference() {
+    if codeUnits.header._capacity >= newCount, codeUnits._storage.isKnownUniqueReference() {
       // Perform the operations in reverse order to avoid clobbering.
       for operation in operations.reversed() {
         if operation.newElementCount == 0 {
