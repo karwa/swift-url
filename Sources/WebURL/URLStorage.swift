@@ -12,103 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// A `ManagedBufferHeader` containing a complete `URLStructure` and size-appropriate `count` and `capacity` fields.
+/// `URLStorage` pairs the code-units of a normalized URL string with the `URLStructure` which describes them.
 ///
-@usableFromInline
-internal struct URLHeader<SizeType> where SizeType: FixedWidthInteger & UnsignedInteger {
-
-  @usableFromInline
-  internal var _count: SizeType
-
-  @usableFromInline
-  internal var _capacity: SizeType
-
-  @usableFromInline
-  internal var _structure: URLStructure<SizeType>
-
-  @inlinable
-  internal init(_count: SizeType, _capacity: SizeType, _structure: URLStructure<SizeType>) {
-    self._count = _count
-    self._capacity = _capacity
-    self._structure = _structure
-  }
-
-  @inlinable
-  internal init(structure: URLStructure<SizeType>) {
-    self = .init(_count: 0, _capacity: 0, _structure: structure)
-  }
-}
-
-extension URLHeader: ManagedBufferHeader {
-
-  @inlinable
-  internal var count: Int {
-    get { return Int(_count) }
-    set { _count = SizeType(newValue) }
-  }
-
-  @inlinable
-  internal var capacity: Int {
-    return Int(_capacity)
-  }
-
-  @inlinable
-  internal func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self? {
-    let newCapacity = SizeType(clamping: maximumCapacity)
-    guard newCapacity >= minimumCapacity else {
-      return nil
-    }
-    return Self(_count: _count, _capacity: newCapacity, _structure: _structure)
-  }
-}
-
-#if swift(>=5.5) && canImport(_Concurrency)
-  extension URLHeader: Sendable where SizeType: Sendable {}
-#endif
-
-
-// --------------------------------------------
-// MARK: - URLStorage
-// --------------------------------------------
-
-
-/// The primary type responsible for URL storage.
+/// `URLStorage` wraps a `ManagedArrayBuffer` (and so inherits its copy-on-write value semantics),
+/// and serves as a place for extensions which add URL-specific definitions and operations.
 ///
-/// An `URLStorage` object wraps a `ManagedArrayBuffer`, containing the normalized URL string's contiguous code-units, together
-/// with a header describing the structure of the URL components within those code-units. `URLStorage` has value semantics
-/// via `ManagedArrayBuffer`, with modifications to multiply-referenced storage copying on write.
+/// It includes familiar operations, such as `replaceSubrange`, which accept a new `URLStructure`
+/// in addition to their usual parameters. This allows replacing code-units and structure in a single operation,
+/// which can help ensure the two stay in sync.
 ///
 @usableFromInline
 internal struct URLStorage {
+
+  @usableFromInline
+  internal var codeUnits: ManagedArrayBuffer<Header, UInt8>
 
   /// The type used to represent dimensions of the URL string and its components.
   ///
   /// The URL string, and any of its components, may not be larger than `SizeType.max`.
   ///
+  /// A larger size allows storing larger URL strings, but increases the overhead of each URL value.
+  /// Similarly, the size may be adjusted down to reduce overheads, but operations which would cause
+  /// the URL to exceed the maximum size will fail.
+  ///
   @usableFromInline
   internal typealias SizeType = UInt32
 
-  @usableFromInline
-  internal var codeUnits: ManagedArrayBuffer<URLHeader<SizeType>, UInt8>
-
-  @inlinable
-  internal var header: URLHeader<SizeType> {
-    get { return codeUnits.header }
-    _modify { yield &codeUnits.header }
-  }
-
-  /// Allocates new storage with sufficient capacity to store `count` code-units, and a header describing the given `structure`.
-  /// The `initializer` closure is invoked to write the code-units, and must return the number of code-units initialized.
+  /// Allocates storage with capacity to store a normalized URL string of the given size,
+  /// and writes its contents using a closure.
   ///
-  /// If the header cannot exactly reproduce the given `structure`, a runtime error is triggered.
-  /// Use `AnyURLStorage` to allocate storage with the appropriate header for a given structure.
+  /// The size and structure of the URL string must be known in advance.
+  /// You can write a `ParsedURLString` to a `StructureAndMetricsCollector` to obtain this information.
+  ///
+  /// The `initializer` closure must independently count the number of bytes it writes,
+  /// and return this value as its result. This is an important safeguard against exposing uninitialized memory.
+  /// Additionally, the result will be checked against the expected URL string size.
   ///
   /// - parameters:
-  ///   - count:       The number of UTF8 code-units contained in the normalized URL string that `initializer` will write to the new storage.
-  ///   - structure:   The structure of the normalized URL string that `initializer` will write to the new storage.
-  ///   - initializer: A closure which must initialize exactly `count` code-units in the buffer pointer it is given, matching the normalized URL string
-  ///                  described by `structure`. The closure returns the number of bytes actually written to storage, which should be
-  ///                  calculated by the closure independently as it writes the contents, which serves as a safety check to avoid exposing uninitialized storage.
+  ///   - count:       The length of the URL string.
+  ///   - structure:   The pre-calculated structure which describes the URL.
+  ///   - initializer: A closure which writes the content of the URL string.
   ///
   @inlinable
   internal init(
@@ -116,61 +59,37 @@ internal struct URLStorage {
     structure: URLStructure<SizeType>,
     initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
-    self.codeUnits = ManagedArrayBuffer(minimumCapacity: Int(count), initialHeader: URLHeader(structure: structure))
+    self.codeUnits = ManagedArrayBuffer(minimumCapacity: Int(count), initialHeader: Header(emptyStorageFor: structure))
     assert(self.codeUnits.count == 0)
     assert(self.codeUnits.header.capacity >= count)
-    self.codeUnits.unsafeAppend(uninitializedCapacity: Int(count)) { buffer in initializer(&buffer) }
+
+    self.codeUnits.unsafeAppend(uninitializedCapacity: Int(count), initializingWith: initializer)
     assert(self.codeUnits.header.count == count)
   }
 }
 
 #if swift(>=5.5) && canImport(_Concurrency)
   extension URLStorage: Sendable {}
+  extension URLStorage.Header: Sendable {}
 #endif
 
 extension URLStorage {
 
+  /// The structure of this URL.
+  ///
   @inlinable
   internal var structure: URLStructure<URLStorage.SizeType> {
-    get {
-      header._structure
-    }
-    _modify {
-      yield &header._structure
-    }
-    set {
-      header._structure = newValue
-    }
-  }
-
-  @inlinable
-  internal func withUTF8OfAllAuthorityComponents<T>(
-    _ body: (
-      _ authorityString: UnsafeBufferPointer<UInt8>?,
-      _ hostKind: WebURL.HostKind?,
-      _ usernameLength: Int,
-      _ passwordLength: Int,
-      _ hostnameLength: Int,
-      _ portLength: Int
-    ) -> T
-  ) -> T {
-
-    guard structure.hasAuthority else { return body(nil, nil, 0, 0, 0, 0) }
-    let range = Range(uncheckedBounds: (structure.usernameStart, structure.pathStart))
-    return codeUnits.withUnsafeBufferPointer(range: range.toCodeUnitsIndices()) { buffer in
-      body(
-        buffer, structure.hostKind,
-        Int(structure.usernameLength), Int(structure.passwordLength),
-        Int(structure.hostnameLength), Int(structure.portLength)
-      )
-    }
+    get { codeUnits.header.structure }
+    _modify { yield &codeUnits.header.structure }
   }
 }
 
-/// The URL `a:` - essentially the smallest valid URL string. This is a used to temporarily occupy a `URLStorage` variable,
-/// so its previous value can be moved to a uniquely-referenced local variable.
+/// A value which can be used to occupy a `URLStorage` variable,
+/// allowing its previous value to be moved to a uniquely-referenced local variable.
 ///
 /// It should not be possible to observe a URL whose storage is set to this object.
+///
+/// Once Swift gains support for move operations, this value will no longer be required.
 ///
 @usableFromInline
 internal let _tempStorage = URLStorage(
@@ -188,7 +107,67 @@ internal let _tempStorage = URLStorage(
 
 
 // --------------------------------------------
-// MARK: - Index conversion utilities
+// MARK: - Header
+// --------------------------------------------
+
+
+extension URLStorage {
+
+  /// A `ManagedBufferHeader` for storing a `URLStructure`,
+  /// with appropriately-sized `capacity` and `count` fields.
+  ///
+  @usableFromInline
+  internal struct Header {
+
+    @usableFromInline
+    internal let _capacity: SizeType
+
+    @usableFromInline
+    internal var _count: SizeType
+
+    @usableFromInline
+    internal var structure: URLStructure<SizeType>
+
+    @inlinable
+    internal init(_count: SizeType, _capacity: SizeType, structure: URLStructure<SizeType>) {
+      self._count = _count
+      self._capacity = _capacity
+      self.structure = structure
+    }
+
+    @inlinable
+    internal init(emptyStorageFor structure: URLStructure<SizeType>) {
+      self = .init(_count: 0, _capacity: 0, structure: structure)
+    }
+  }
+}
+
+extension URLStorage.Header: ManagedBufferHeader {
+
+  @inlinable
+  internal var capacity: Int {
+    return Int(_capacity)
+  }
+
+  @inlinable
+  internal var count: Int {
+    get { Int(_count) }
+    set { _count = URLStorage.SizeType(truncatingIfNeeded: newValue) }
+  }
+
+  @inlinable
+  internal func withCapacity(minimumCapacity: Int, maximumCapacity: Int) -> Self? {
+    let newCapacity = URLStorage.SizeType(clamping: maximumCapacity)
+    guard newCapacity >= minimumCapacity else {
+      return nil
+    }
+    return Self(_count: _count, _capacity: newCapacity, structure: structure)
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Index conversion
 // --------------------------------------------
 
 
@@ -200,15 +179,23 @@ extension Range where Bound == URLStorage.SizeType {
   }
 }
 
-extension Range where Bound == ManagedArrayBuffer<URLHeader<URLStorage.SizeType>, UInt8>.Index {
+extension Range where Bound == Int {
 
   @inlinable
   internal func toURLStorageIndices() -> Range<URLStorage.SizeType> {
-    Range<URLStorage.SizeType>(uncheckedBounds: (URLStorage.SizeType(lowerBound), URLStorage.SizeType(upperBound)))
+    // This should, in theory, only produce one trap. Actual results may vary.
+    // https://github.com/apple/swift/issues/62262
+    guard
+      let lower = URLStorage.SizeType(exactly: lowerBound),
+      let upper = URLStorage.SizeType(exactly: upperBound)
+    else {
+      preconditionFailure("Indexes cannot be represented by URLStorage.SizeType")
+    }
+    return Range<URLStorage.SizeType>(uncheckedBounds: (lower, upper))
   }
 }
 
-extension ManagedArrayBuffer where Header == URLHeader<URLStorage.SizeType> {
+extension ManagedArrayBuffer where Header == URLStorage.Header {
 
   @inlinable
   internal subscript(position: URLStorage.SizeType) -> Element {

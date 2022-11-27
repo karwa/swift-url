@@ -103,10 +103,10 @@ internal protocol URLWriter: HostnameWriter {
   ///
   /// - important: `passwordLength` and `portLength` include their required leading separators (so a port component of `:8080` has a length of 5).
   ///
-  mutating func writeKnownAuthorityString(
-    _ authority: UnsafeBufferPointer<UInt8>, kind: WebURL.HostKind?,
-    usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
-  )
+  mutating func writeKnownAuthorityString<T>(
+    _ authority: T, kind: WebURL.HostKind?,
+    usernameLength: UInt, passwordLength: UInt, hostnameLength: UInt, portLength: UInt
+  ) where T: Collection, T.Element == UInt8
 
   /// Appends the UTF-8 code-units given by `writer` to the URL string.
   /// The content must already be percent-encoded. No separators are added before or after the content.
@@ -384,19 +384,19 @@ internal struct StructureAndMetricsCollector: URLWriter {
   }
 
   @inlinable
-  internal mutating func writeKnownAuthorityString(
-    _ authority: UnsafeBufferPointer<UInt8>, kind: WebURL.HostKind?,
-    usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
-  ) {
+  internal mutating func writeKnownAuthorityString<T>(
+    _ authority: T, kind: WebURL.HostKind?,
+    usernameLength: UInt, passwordLength: UInt, hostnameLength: UInt, portLength: UInt
+  ) where T: Collection, T.Element == UInt8 {
 
     assert(structure.usernameLength == 0 && structure.passwordLength == 0)
     assert(structure.hostnameLength == 0 && structure.portLength == 0)
     assert(structure.hostKind == nil)
     structure.hostKind = kind
-    structure.usernameLength = UInt(bitPattern: usernameLength)
-    structure.passwordLength = UInt(bitPattern: passwordLength)
-    structure.hostnameLength = UInt(bitPattern: hostnameLength)
-    structure.portLength = UInt(bitPattern: portLength)
+    structure.usernameLength = usernameLength
+    structure.passwordLength = passwordLength
+    structure.hostnameLength = hostnameLength
+    structure.portLength = portLength
     requiredCapacity &+= UInt(bitPattern: authority.count)
   }
 
@@ -586,10 +586,10 @@ internal struct UnsafePresizedBufferWriter: URLWriter {
   }
 
   @inlinable
-  internal mutating func writeKnownAuthorityString(
-    _ authority: UnsafeBufferPointer<UInt8>, kind: WebURL.HostKind?,
-    usernameLength: Int, passwordLength: Int, hostnameLength: Int, portLength: Int
-  ) {
+  internal mutating func writeKnownAuthorityString<T>(
+    _ authority: T, kind: WebURL.HostKind?,
+    usernameLength: UInt, passwordLength: UInt, hostnameLength: UInt, portLength: UInt
+  ) where T: Collection, T.Element == UInt8 {
     _writeBytes(authority)
   }
 

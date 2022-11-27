@@ -362,6 +362,8 @@ extension ParsedURLString.ProcessedMapping {
 
     } else if info.componentsToCopyFromBase.contains(.authority) {
       baseURL.unsafelyUnwrapped.storage.withUTF8OfAllAuthorityComponents {
+        // FIXME: Should this be an assertion failure?
+        //        Under which circumstances can we legit try to copy an authority from base, but find none?
         guard let baseAuthority = $0 else { return }
         hasAuthority = true
         writer.writeAuthoritySigil()
@@ -1576,5 +1578,36 @@ where UTF8Bytes: BidirectionalCollection, UTF8Bytes.Element == UInt8, Callback: 
       return nil
     }
     return mapping.hostnameRange?.upperBound ?? hostname.endIndex
+  }
+}
+
+extension URLStorage {
+
+  /// Invokes the given closure with information about all of the URL's authority components.
+  ///
+  /// > Note:
+  /// > It is perfectly safe for any of the provided values to escape the closure.
+  /// > This function uses the 'with...' closure pattern to avoid ARC overhead
+  /// > by passing the code-units as a borrow (something which a return value cannot do),
+  /// > not because values should not escape.
+  ///
+  @inlinable
+  internal func withUTF8OfAllAuthorityComponents(
+    _ body: (
+      _ authorityString: ManagedArrayBuffer<Header, UInt8>.SubSequence?,
+      _ hostKind: WebURL.HostKind?,
+      _ usernameLength: UInt,
+      _ passwordLength: UInt,
+      _ hostnameLength: UInt,
+      _ portLength: UInt
+    ) -> Void
+  ) {
+    guard structure.hasAuthority else { return body(nil, nil, 0, 0, 0, 0) }
+    let authority = Range(uncheckedBounds: (structure.usernameStart, structure.pathStart))
+    return body(
+      codeUnits[authority], structure.hostKind,
+      UInt(structure.usernameLength), UInt(structure.passwordLength),
+      UInt(structure.hostnameLength), UInt(structure.portLength)
+    )
   }
 }
