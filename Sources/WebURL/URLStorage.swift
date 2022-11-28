@@ -29,14 +29,26 @@ internal struct URLStorage {
 
   /// The type used to represent dimensions of the URL string and its components.
   ///
-  /// The URL string, and any of its components, may not be larger than `SizeType.max`.
-  ///
   /// A larger size allows storing larger URL strings, but increases the overhead of each URL value.
   /// Similarly, the size may be adjusted down to reduce overheads, but operations which would cause
   /// the URL to exceed the maximum size will fail.
   ///
   @usableFromInline
   internal typealias SizeType = UInt32
+
+  /// The maximum length of a URL string.
+  /// If an operation would produce a URL longer than this, it fails instead.
+  ///
+  /// > Note:
+  /// > This value must not exceed `Int.max`.
+  ///
+  @inlinable
+  internal static var MaxSize: SizeType {
+    if MemoryLayout<Int>.size == 4 {
+      return SizeType(Int32.max)
+    }
+    return SizeType.max
+  }
 
   /// Allocates storage with capacity to store a normalized URL string of the given size,
   /// and writes its contents using a closure.
@@ -59,6 +71,8 @@ internal struct URLStorage {
     structure: URLStructure<SizeType>,
     initializingCodeUnitsWith initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
   ) {
+    precondition(count <= URLStorage.MaxSize, "URL exceeds maximum size")
+
     self.codeUnits = ManagedArrayBuffer(minimumCapacity: Int(count), initialHeader: Header(emptyStorageFor: structure))
     assert(self.codeUnits.count == 0)
     assert(self.codeUnits.header.capacity >= count)
@@ -89,7 +103,7 @@ extension URLStorage {
 ///
 /// It should not be possible to observe a URL whose storage is set to this object.
 ///
-/// Once Swift gains support for move operations, this value will no longer be required.
+/// **Once Swift gains support for move operations, this value will no longer be required.**
 ///
 @usableFromInline
 internal let _tempStorage = URLStorage(
@@ -205,5 +219,274 @@ extension ManagedArrayBuffer where Header == URLStorage.Header {
   @inlinable
   internal subscript(bounds: Range<URLStorage.SizeType>) -> Slice<Self> {
     Slice(base: self, bounds: bounds.toCodeUnitsIndices())
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Combined Modifications
+// --------------------------------------------
+
+
+extension URLStorage {
+
+  /// Replaces the given code-units and updates the URL structure.
+  ///
+  /// This function replaces the given subrange with uninitialized space,
+  /// which must then be entirely initialized by the given closure.
+  /// The closure must independently count the number of bytes it writes,
+  /// and return this value as its result.
+  ///
+  /// If the closure fails to initialize all of the space it is given, a runtime error is triggered.
+  /// This is an important safeguard against exposing uninitialized memory.
+  ///
+  /// - parameters:
+  ///   - subrange:        The code-units to replace.
+  ///   - newElementCount: The number of code-units to insert in place of `subrange`.
+  ///   - newStructure:    The pre-calculated structure of the URL string after replacement.
+  ///   - initializer:     A closure which writes the new code-units.
+  ///
+  /// - returns: A `Result` object, indicating whether or not the operation was a success.
+  ///            Since this is a code-unit replacement and does not validate semantics,
+  ///            this operation only fails if the resulting URL would exceed `URLStorage.MaxSize`.
+  ///
+  @inlinable
+  internal mutating func replaceSubrange(
+    _ subrange: Range<SizeType>,
+    withUninitializedSpace newElementCount: SizeType,
+    newStructure: URLStructure<SizeType>,
+    initializer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+  ) -> Result<Void, URLSetterError> {
+
+    newStructure.checkInvariants()
+
+    let newElementCount = Int(newElementCount)
+
+    // Heterogeneous comparison produces suboptimal code unless widened to Int.
+    // https://github.com/apple/swift/issues/62260
+    guard
+      let newTotalCount = codeUnits.count.subtracting(subrange.count, adding: newElementCount),
+      newTotalCount <= Int(URLStorage.MaxSize)
+    else {
+      return .failure(.exceedsMaximumSize)
+    }
+
+    codeUnits.unsafeReplaceSubrange(
+      subrange.toCodeUnitsIndices(),
+      withUninitializedCapacity: newElementCount,
+      initializingWith: initializer
+    )
+    assert(codeUnits.header.count == newTotalCount)
+    structure = newStructure
+
+    return .success
+  }
+
+  /// Removes the given code-units and updates the URL structure.
+  ///
+  /// - parameters:
+  ///   - subrange:     The code-units to remove
+  ///   - newStructure: The pre-calculated structure of the URL string after removing the code-units.
+  ///
+  @inlinable
+  internal mutating func removeSubrange(
+    _ subrange: Range<URLStorage.SizeType>,
+    newStructure: URLStructure<URLStorage.SizeType>
+  ) {
+
+    newStructure.checkInvariants()
+
+    codeUnits.removeSubrange(subrange.toCodeUnitsIndices())
+    structure = newStructure
+  }
+}
+
+extension URLStorage {
+
+  /// A command object for replacing URL code-units.
+  /// For use with `URLStorage.multiReplaceSubrange`.
+  ///
+  @usableFromInline
+  internal struct ReplaceSubrangeOperation {
+
+    @usableFromInline
+    internal var range: Range<Int>
+
+    @usableFromInline
+    internal var replacementCount: Int
+
+    // Unfortunately, because we store these closures, they must be @escaping.
+    // It would be much nicer if we could keep then non-escaping,
+    // and make the enclosing struct (and collection of structs) all be non-escaping too.
+    // Rust can express that kind of lifetime dependency, but Swift cannot (yet?).
+
+    @usableFromInline
+    internal var writer: (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+
+    @inlinable
+    internal init(
+      subrange: Range<SizeType>,
+      replacementCount: SizeType,
+      writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+    ) {
+      self.range = subrange.toCodeUnitsIndices()
+      self.replacementCount = Int(replacementCount)
+      self.writer = writer
+    }
+
+    /// See `URLStorage.replaceSubrange`
+    ///
+    @inlinable
+    internal static func replace(
+      _ subrange: Range<SizeType>,
+      withCount replacementCount: SizeType,
+      writer: @escaping (inout UnsafeMutableBufferPointer<UInt8>) -> Int
+    ) -> Self {
+
+      ReplaceSubrangeOperation(
+        subrange: subrange,
+        replacementCount: replacementCount,
+        writer: writer
+      )
+    }
+
+    /// See `URLStorage.removeSubrange`
+    ///
+    @inlinable
+    internal static func remove(
+      _ subrange: Range<SizeType>
+    ) -> Self {
+
+      ReplaceSubrangeOperation(
+        subrange: subrange,
+        replacementCount: 0,
+        writer: { _ in return 0 }
+      )
+    }
+  }
+
+  /// Performs a series of code-unit replacements for a URL structure replacement.
+  ///
+  /// The list of operations must be sorted by range, and not contain any overlapping ranges,
+  /// otherwise a runtime error will be triggered.
+  ///
+  /// - parameters:
+  ///   - commands:     The list of replacement operations to perform.
+  ///   - newStructure: The pre-calculated structure of the URL string after all replacements have been performed.
+  ///
+  /// - returns: A `Result` object, indicating whether or not the operation was a success.
+  ///            Since this is a code-unit replacement and does not validate semantics,
+  ///            this operation only fails if the resulting URL would exceed `URLStorage.MaxSize`.
+  ///
+  @inlinable
+  internal mutating func multiReplaceSubrange<Operations>(
+    _ operations: Operations,
+    newStructure: URLStructure<SizeType>
+  ) -> Result<Void, URLSetterError>
+  where Operations: BidirectionalCollection, Operations.Element == ReplaceSubrangeOperation {
+
+    newStructure.checkInvariants()
+
+    // Simulate the operations as we would perform them in-place.
+    // That means: in reverse order, to avoid clobbering.
+
+    let currentCapacity = codeUnits.header.capacity
+    var exceedsCapacity = false
+    var cursor = codeUnits.endIndex
+    var newCount = codeUnits.count
+
+    for op in operations.reversed() {
+
+      precondition(op.range.upperBound <= cursor && op.range.upperBound >= op.range.lowerBound, "Invalid range")
+      cursor = op.range.lowerBound
+
+      guard
+        let countAfterReplacement = newCount.subtracting(op.range.count, adding: op.replacementCount),
+        countAfterReplacement <= Int(URLStorage.MaxSize)
+      else {
+        return .failure(.exceedsMaximumSize)
+      }
+      precondition(countAfterReplacement >= 0, "count may never go negative")
+
+      if countAfterReplacement > currentCapacity {
+        exceedsCapacity = true
+      }
+
+      newCount = countAfterReplacement
+    }
+
+    // Perform the operations in-place, if we can do it without copying.
+
+    if !exceedsCapacity, codeUnits._storage.isKnownUniqueReference() {
+
+      for operation in operations.reversed() {
+
+        if operation.replacementCount == 0 {
+          codeUnits.removeSubrange(operation.range)
+        } else {
+          codeUnits.unsafeReplaceSubrange(
+            operation.range,
+            withUninitializedCapacity: operation.replacementCount,
+            initializingWith: operation.writer
+          )
+        }
+      }
+
+      structure = newStructure
+      return .success
+    }
+
+    // Otherwise, write the new string in a fresh allocation.
+
+    self = URLStorage(count: SizeType(newCount), structure: newStructure) { destination in
+
+      let baseAddress = destination.baseAddress!
+      var destination = destination
+      var sourceIndex = codeUnits.startIndex
+
+      for operation in operations {
+
+        // Copy from source until start of operation range.
+
+        var written = destination.fastInitialize(
+          from: codeUnits[Range(uncheckedBounds: (sourceIndex, operation.range.lowerBound))]
+        )
+        destination = UnsafeMutableBufferPointer(
+          start: destination.baseAddress! + written,
+          count: destination.count &- written
+        )
+
+        // Initialize space using operation.
+
+        if operation.replacementCount > 0 {
+          var replacementRegion = UnsafeMutableBufferPointer(
+            start: destination.baseAddress!,
+            count: operation.replacementCount
+          )
+          written = operation.writer(&replacementRegion)
+          precondition(
+            written == operation.replacementCount,
+            "Operation did not initialize the expected number of elements"
+          )
+          destination = UnsafeMutableBufferPointer(
+            start: destination.baseAddress! + written,
+            count: destination.count &- written
+          )
+        }
+
+        // Advance source cursor to operation end.
+
+        sourceIndex = operation.range.upperBound
+      }
+
+      // Copy remaining contents from the source.
+
+      let written = destination.fastInitialize(
+        from: codeUnits[Range(uncheckedBounds: (sourceIndex, codeUnits.endIndex))]
+      )
+      return baseAddress.distance(to: destination.baseAddress!) &+ written
+    }
+
+    return .success
   }
 }
