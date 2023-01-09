@@ -25,7 +25,10 @@
 internal struct URLStorage {
 
   @usableFromInline
-  internal var codeUnits: ManagedArrayBuffer<Header, UInt8>
+  internal typealias CodeUnits = ManagedArrayBuffer<Header, UInt8>
+
+  @usableFromInline
+  internal var codeUnits: CodeUnits
 
   /// The type used to represent dimensions of the URL string and its components.
   ///
@@ -209,6 +212,14 @@ extension Range where Bound == Int {
   }
 }
 
+extension URLStorage.SizeType {
+
+  @inlinable
+  internal init(truncatingBitPatternIfNeeded value: Int) {
+    self = URLStorage.SizeType(bitPattern: .init(truncatingIfNeeded: value))
+  }
+}
+
 extension ManagedArrayBuffer where Header == URLStorage.Header {
 
   @inlinable
@@ -219,6 +230,49 @@ extension ManagedArrayBuffer where Header == URLStorage.Header {
   @inlinable
   internal subscript(bounds: Range<URLStorage.SizeType>) -> Slice<Self> {
     Slice(base: self, bounds: bounds.toCodeUnitsIndices())
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Bounds Checking
+// --------------------------------------------
+
+
+extension URLStorage {
+
+  /// Checks that the given locations represent a well-formed range
+  /// which is entirely contained within a particular region of the URL.
+  ///
+  /// This is only used for diagnostic purposes, to ensure the URL API is being used correctly.
+  /// ManagedArrayBuffer already bounds-checks accesses for memory safety purposes.
+  ///
+  @inlinable @inline(__always)
+  internal static func verifyRange(
+    from lower: URLStorage.SizeType,
+    to upper: URLStorage.SizeType,
+    inBounds bounds: Range<URLStorage.SizeType>
+  ) {
+    precondition(
+      lower <= upper
+        && lower >= bounds.lowerBound && lower <= bounds.upperBound
+        && upper >= bounds.lowerBound && upper <= bounds.upperBound,
+      "Malformed range or out of bounds"
+    )
+  }
+
+  /// Checks that the given range is well-formed,
+  /// and is entirely contained within a particular region of the URL.
+  ///
+  /// This is only used for diagnostic purposes, to ensure the URL API is being used correctly.
+  /// ManagedArrayBuffer already bounds-checks accesses for memory safety purposes.
+  ///
+  @inlinable @inline(__always)
+  internal static func verifyRange(
+    _ range: Range<URLStorage.SizeType>,
+    inBounds bounds: Range<URLStorage.SizeType>
+  ) {
+    verifyRange(from: range.lowerBound, to: range.upperBound, inBounds: bounds)
   }
 }
 

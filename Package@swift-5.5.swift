@@ -82,7 +82,8 @@ let package = Package(
 
     .target(
       name: "WebURL",
-      dependencies: ["IDNA"]
+      dependencies: ["IDNA"],
+      exclude: ["WebURL+KeyValuePairs.swift"]
     ),
     .target(
       name: "WebURLTestSupport",
@@ -91,7 +92,8 @@ let package = Package(
     ),
     .testTarget(
       name: "WebURLTests",
-      dependencies: ["WebURL", "WebURLTestSupport", "Checkit"]
+      dependencies: ["WebURL", "WebURLTestSupport", "Checkit"],
+      exclude: ["KeyValuePairsTests.swift"]
     ),
     .testTarget(
       name: "WebURLDeprecatedAPITests",

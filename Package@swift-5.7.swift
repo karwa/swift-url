@@ -1,4 +1,4 @@
-// swift-tools-version:5.3
+// swift-tools-version:5.7
 
 // Copyright The swift-url Contributors.
 //
@@ -50,7 +50,7 @@ let package = Package(
     // 🧪 Test-Only Dependencies.
     // ==========================
     // Checkit - Exercises for stdlib protocol conformances.
-    .package(name: "Checkit", url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
+    .package(url: "https://github.com/karwa/swift-checkit.git", from: "0.0.2"),
 
   ],
   targets: [
@@ -82,8 +82,7 @@ let package = Package(
 
     .target(
       name: "WebURL",
-      dependencies: ["IDNA"],
-      exclude: ["WebURL.docc", "WebURL+KeyValuePairs.swift"]
+      dependencies: ["IDNA"]
     ),
     .target(
       name: "WebURLTestSupport",
@@ -92,8 +91,7 @@ let package = Package(
     ),
     .testTarget(
       name: "WebURLTests",
-      dependencies: ["WebURL", "WebURLTestSupport", "Checkit"],
-      exclude: ["KeyValuePairsTests.swift"]
+      dependencies: ["WebURL", "WebURLTestSupport", .product(name: "Checkit", package: "swift-checkit")]
     ),
     .testTarget(
       name: "WebURLDeprecatedAPITests",
