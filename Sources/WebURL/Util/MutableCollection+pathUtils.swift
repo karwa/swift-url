@@ -29,8 +29,8 @@ extension Collection {
   internal func firstConsecutiveElements(matching predicate: (Element) -> Bool) -> SubSequence? {
 
     var i = startIndex
-    while let firstMatch = self[i...].fastFirstIndex(where: predicate) {
-      let run = self[index(after: firstMatch)...].prefix(while: predicate)
+    while let firstMatch = fastFirstIndex(from: i, to: endIndex, where: predicate) {
+      let run = self[index(after: firstMatch)...].fastPrefix(where: predicate)
       if !run.isEmpty {
         return self[firstMatch..<run.endIndex]
       }
@@ -42,17 +42,75 @@ extension Collection {
 
 extension MutableCollection {
 
-  /// Copies elements from `source` to `destination` over the range `source..<limit`.
+  /// Copies elements from `source..<limit` to locations starting at `destination`.
   ///
-  /// This is an alternative to writing `self[destination..<(destination + (limit - source))] = self[source..<limit]`,
-  /// which avoids quadratic performance issues for copy-on-write data types like `Array` (at least in release builds; debug builds are still quadratic 😖).
+  /// This function is equivalent to writing:
+  ///
+  /// ```swift
+  /// self[destination..<(destination + (limit - source))] = self[source..<limit]
+  /// ```
+  ///
+  /// The benefits of this implementation are that
+  ///
+  /// 1. It takes advantage of contiguous mutable storage when available
+  ///    (the standard library's default implementation of the above does not), and
+  ///
+  /// 2. The source and destination belong to the same collection,
+  ///    meaning we do not need to form another reference to the storage and cause it to be non-uniquely referenced.
+  ///    When performing the above in a loop, the complexity can be quadratic due to COW.
+  ///    This implementation can keep things linear.
+  ///
+  /// The ranges `source..<limit` and `destination..<destination + (limit - source)` may overlap.
+  ///
+  /// - parameters:
+  ///   - source:      The position of the first element to copy
+  ///   - limit:       The position after the last element to copy
+  ///   - destination: The position of the first element to overwrite.
+  ///                  Upon returning, this value will be set to the position after
+  ///                  the last modified element.
   ///
   @inlinable
-  internal mutating func _copyElements(from source: inout Index, to destination: inout Index, limit: Index) {
+  internal mutating func rebase(from source: Index, until limit: Index, to destination: inout Index) {
 
-    // It's hard to avoid quadratic performance for COW data types like Array.
-    // Setting each index individually helps in release mode, at least.
-    // See: https://forums.swift.org/t/avoiding-cow-in-mutablecollections-slice-setter/49587
+    guard
+      let info = withContiguousStorageIfAvailable({ _ -> (src: Int, dst: Int, len: Int) in
+        // wCSIA almost always means RandomAccessCollection,
+        // so this index->offset translation should be O(1).
+        let src = distance(from: startIndex, to: source)
+        let dst = distance(from: startIndex, to: destination)
+        let len = distance(from: source, to: limit)
+        return (src: src, dst: dst, len: len)
+      }),
+      let _ = withContiguousMutableStorageIfAvailable({ buffer in
+        // swift-format-ignore
+        precondition(
+          info.len >= 0 &&
+          info.src >= buffer.startIndex && info.src &+ info.len <= buffer.endIndex &&
+          info.dst >= buffer.startIndex && info.dst &+ info.len <= buffer.endIndex
+        )
+        guard let baseAddress = buffer.baseAddress else {
+          assert(info.len == 0)
+          return
+        }
+        #if swift(>=5.8)
+          (baseAddress + info.dst).update(from: baseAddress + info.src, count: info.len)
+        #else
+          (baseAddress + info.dst).assign(from: baseAddress + info.src, count: info.len)
+        #endif
+      })
+    else {
+      return _rebase_slow(from: source, until: limit, to: &destination)
+    }
+
+    formIndex(&destination, offsetBy: info.len)
+  }
+
+  @inlinable
+  internal mutating func _rebase_slow(from source: Index, until limit: Index, to destination: inout Index) {
+
+    precondition(limit >= source)
+
+    var source = source
     while source < limit {
       let tmp = self[source]
       self[destination] = tmp
@@ -106,81 +164,118 @@ extension MutableCollection {
     while let dupes = self[readHead...].firstConsecutiveElements(matching: predicate) {
       precondition(writeHead <= readHead, "writeHead has somehow overtaken readHead!")
       let nextReadHead = dupes.endIndex  // Hope the slice gets released before we mutate self 🤞.
-      _copyElements(from: &readHead, to: &writeHead, limit: index(after: dupes.startIndex))  // Keep one duplicate.
+      rebase(from: readHead, until: index(after: dupes.startIndex), to: &writeHead)  // Keep one duplicate.
       readHead = nextReadHead
     }
     precondition(writeHead <= readHead, "writeHead has somehow overtaken readHead!")
-    _copyElements(from: &readHead, to: &writeHead, limit: endIndex)
+    rebase(from: readHead, until: endIndex, to: &writeHead)
     return writeHead
   }
 }
 
 extension MutableCollection {
 
-  /// Splits this collection's elements in to segments, separated by elements matching the given predicate, and trims each segment in-place using
-  /// the given trimming closure. The trimmed segments, including separators, are coalesced and written over the collection's existing contents.
+  // TODO: It would be better if this was altered to work in terms of a leading separator,
+  //       since that's how path components and query parameters are actually modelled by their respective views.
+
+  /// Splits this collection in to segments, separated by elements matching the given predicate,
+  /// and trims each segment using the given closure. The trimmed segments, including their trailing separators,
+  /// are written in-place over the collection's existing contents.
   ///
-  /// Note that this function does not change the length of the collection; instead, it returns the new "end" index of the shortened content.
+  /// This function does not change the length of the collection -
+  /// instead, it returns the new "end" index of the shortened content.
   /// The caller should remove or ignore any content from the returned index.
   ///
-  /// For instance, the following code removes all trailing periods from the segments of a path string, where segments are delimited by forward slashes.
+  /// The following code removes all trailing periods from the segments of a path string.
   /// Note that final string is constructed from a slice up to the index returned by this function.
   ///
   /// ```swift
   /// var utf8 = Array("/abc/def../ghi./.jkl/".utf8)
-  /// let end = utf8.trimSegments(separatedBy: { $0 == Character("/").asciiValue! }) { component, _, _ in
-  ///   let trailingDots = component.suffix(while: { $0 == Character(".").asciiValue! })
-  ///   return component[..<trailingDots.startIndex]
+  ///
+  /// let end = utf8.trimSegments(
+  ///   skipInitialSeparator: true,
+  ///   separatedBy: { $0 == UInt8(ascii: "/") }
+  /// ) { elements, range, _ in
+  ///   let trailingDots = elements[range].suffix(while: { $0 == UInt8(ascii: ".") })
+  ///   return range.lowerBound..<trailingDots.startIndex
   /// }
+  ///
   /// String(decoding: utf8[..<end], as: UTF8.self) // "/abc/def/ghi/.jkl/"
   /// ```
   ///
-  /// - complexity: O(*n*), where *n* is the length of the collection from `beginning`.
-  /// - important: Performance with COW data types like `Array` can be flaky (quadratic) in debug builds, but should be linear in release builds 🤞
+  /// The following example removes all single-character segments from a path string.
+  ///
+  /// ```swift
+  /// var utf8 = Array("/abc/d/ef/./g/hi/jkl/".utf8)
+  ///
+  /// let end = utf8.trimSegments(
+  ///   skipInitialSeparator: true,
+  ///   separatedBy: { $0 == UInt8(ascii: "/") }
+  /// ) { _, range, _ in
+  ///   range.count == 1 ? nil : range
+  /// }
+  ///
+  /// String(decoding: utf8[..<end], as: UTF8.self) // "/abc/ef/hi/jkl/"
+  /// ```
+  ///
+  /// - complexity: O(*n*), where *n* is the length of the collection from `beginning` to `end`.
   ///
   /// - parameters:
-  ///   - beginning:   The index from which segments should be trimmed. If not given, segments are trimmed from the collection's `startIndex`.
-  ///   - isSeparator: A predicate which distinguishes elements that should be considered a separator between segments.
-  ///   - trim:        A closure which trims segments of the collection. It is provided with a slice of the collection, as well as flags informing it whether
-  ///                  this is the first and/or last segment, and returns the portion of the slice which should be kept.
-  /// - returns: The new "endIndex" of the collection. Elements from this position are duplicates which have been copied to earlier positions, and should
-  ///            be discarded.
+  ///   - beginning:             The index at the start of the first segment.
+  ///                            If not specified, segments are trimmed from the collection's `startIndex`.
+  ///   - end:                   The endIndex of the final segment.
+  ///                            If not specified, the final segment ends at the collection's `endIndex`.
+  ///   - skipInitialSeparator:  If `true`, and `beginning` points to a separator,
+  ///                            the first segment will begin after that separator.
+  ///   - isSeparator:           A predicate which decides whether an element is a separator between segments.
+  ///   - trim:                  A closure which is passed the collection and range of a segment,
+  ///                            and returns the range to keep (or `nil` to discard the segment).
+  ///
+  /// - returns: The position after the final retained segment.
+  ///            Elements in positions `(returned index)..<end` may be discarded.
   ///
   @inlinable
   internal mutating func trimSegments(
     from beginning: Index? = nil,
+    to end: Index? = nil,
+    skipInitialSeparator: Bool,
     separatedBy isSeparator: (Element) -> Bool,
-    _ trim: (SubSequence, _ isFirst: Bool, _ isLast: Bool) -> SubSequence
+    _ trim: (inout Self, Range<Index>, _ isLast: Bool) -> Range<Index>?
   ) -> Index {
 
+    // We pass the segment as a (collection, range) pair because creating a slice
+    // introduces ARC overhead. Will hopefully be solved by OSSA modules:
+    // https://forums.swift.org/t/arc-overhead-when-wrapping-a-class-in-a-struct-which-is-only-borrowed/62037/8
+
+    let end = end ?? endIndex
+
     var readHead = beginning ?? startIndex
-    // If the content begins with a separator, advance past it.
-    // The segment's contents extend from after the separator until the next separator.
-    if readHead < endIndex, isSeparator(self[readHead]) {
+    if skipInitialSeparator, readHead < end, isSeparator(self[readHead]) {
       formIndex(after: &readHead)
     }
-
     var writeHead = readHead
-    var isFirst = true
 
-    while let separatorIdx = self[readHead...].fastFirstIndex(where: isSeparator) {
-      let trimmedSegment = trim(self[readHead..<separatorIdx], isFirst, false)
+    precondition(readHead <= end, "beginning is after end")
 
-      readHead = trimmedSegment.startIndex
-      precondition(writeHead <= readHead, "writeHead has somehow overtaken readHead!")
-      _copyElements(from: &readHead, to: &writeHead, limit: trimmedSegment.endIndex)
+    while let separatorIdx = fastFirstIndex(from: readHead, to: end, where: isSeparator) {
+      let startOfNextSegment = index(after: separatorIdx)
+      guard let trimmedSegment = trim(&self, Range(uncheckedBounds: (readHead, separatorIdx)), false) else {
+        readHead = startOfNextSegment
+        continue
+      }
+      assert(writeHead <= trimmedSegment.lowerBound, "writeHead has somehow overtaken readHead!")
+      rebase(from: trimmedSegment.lowerBound, until: trimmedSegment.upperBound, to: &writeHead)
 
       self[writeHead] = self[separatorIdx]
       formIndex(after: &writeHead)
-      readHead = index(after: separatorIdx)
-
-      isFirst = false
+      readHead = startOfNextSegment
     }
 
-    let trimmedTail = trim(self[readHead...], isFirst, true)
-    readHead = trimmedTail.startIndex
-    precondition(writeHead <= readHead, "writeHead has somehow overtaken readHead!")
-    _copyElements(from: &readHead, to: &writeHead, limit: trimmedTail.endIndex)
+    guard let trimmedTail = trim(&self, Range(uncheckedBounds: (readHead, end)), true) else {
+      return writeHead
+    }
+    assert(writeHead <= trimmedTail.lowerBound, "writeHead has somehow overtaken readHead!")
+    rebase(from: trimmedTail.lowerBound, until: trimmedTail.upperBound, to: &writeHead)
     return writeHead
   }
 }
