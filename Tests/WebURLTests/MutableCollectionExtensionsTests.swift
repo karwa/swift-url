@@ -177,588 +177,762 @@ extension MutableCollectionExtensionsTests {
 
   func testTrimSegments() {
 
-    // Empty collection.
-    do {
-      var empty: [Int] = []
-      let end = empty.trimSegments(from: 0, separatedBy: { _ in true }) { s, isFirst, isLast in
-        XCTAssertTrue(isFirst)
-        XCTAssertTrue(isLast)
-        XCTAssertEqual(s.startIndex, 0)
-        XCTAssertEqual(s.endIndex, 0)
-        return s
-      }
-      XCTAssertEqual(end, 0)
-      XCTAssertEqualElements(empty, [])
-    }
-
     func withUTF8Array<T>(_ string: String, _ modify: (inout [UInt8]) -> T) -> (String, T) {
       var utf8 = Array(string.utf8)
       let result = modify(&utf8)
       return (String(decoding: utf8, as: UTF8.self), result)
     }
 
-    // No segments, no trimming.
-    do {
-      let (string, endOffset) = withUTF8Array("abcdefg") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { _ in false }) { s, isFirst, isLast in
-          XCTAssertTrue(isFirst)
-          XCTAssertTrue(isLast)
-          XCTAssertEqual(s.startIndex, 0)
-          XCTAssertEqual(s.endIndex, 7)
-          XCTAssertEqualElements(s, "abcdefg".utf8)
-          return s
+    for skipInitialSeparator in [true, false] {
+
+      func _testTrimSegments(
+        source: String, from: Int? = nil, to: Int? = nil,
+        remove: Set<Int> = [], trim: Set<Int> = [], trimAmount: (front: Int, back: Int) = (1, 3),
+        ranges: [Range<Int>]
+      ) -> String {
+
+        var callbackCount = 0
+
+        let (string, _) = withUTF8Array(source) { utf8 in
+          let newEnd = utf8.trimSegments(
+            from: from,
+            to: to,
+            skipInitialSeparator: skipInitialSeparator,
+            separatedBy: { $0 == ASCII.forwardSlash.codePoint }
+          ) { elements, range, isLast in
+
+            if callbackCount == 0 {
+              XCTAssertEqualElements(elements, source.utf8)
+              XCTAssertEqual(isLast, ranges.count == 1)
+            }
+            XCTAssertEqual(elements[range].contains(ASCII.forwardSlash.codePoint), false)
+            XCTAssertEqual(range, ranges[callbackCount])
+            XCTAssertEqual(isLast, callbackCount == ranges.count - 1)
+            defer { callbackCount += 1 }
+
+            if remove.contains(callbackCount) {
+              return nil
+            } else if trim.contains(callbackCount) {
+              return range.dropFirst(trimAmount.front).dropLast(trimAmount.back)
+            } else {
+              return range
+            }
+          }
+          utf8.removeSubrange(newEnd..<(to ?? utf8.endIndex))
+        }
+
+        XCTAssertEqual(callbackCount, ranges.count)
+        return string
+      }
+
+      func _testMultiTrimSegments(
+        source: String, from: Int? = nil, to: Int? = nil,
+        ranges: [Range<Int>],
+        trimAmount: (front: Int, back: Int) = (1, 3),
+        expected: [String]
+      ) {
+
+        var expectedResults = expected.makeIterator()
+
+        for segmentToRemove in 0..<ranges.count {
+          // (remove: n, trim: none)
+          let str = _testTrimSegments(
+            source: source,
+            from: from,
+            to: to,
+            remove: [segmentToRemove],
+            ranges: ranges
+          )
+          XCTAssertEqual(str, expectedResults.next())
+
+          for segmentToTrim in 0..<ranges.count where segmentToTrim != segmentToRemove {
+            // (remove: n, trim: m)
+            let str = _testTrimSegments(
+              source: source,
+              from: from,
+              to: to,
+              remove: [segmentToRemove],
+              trim: [segmentToTrim],
+              trimAmount: trimAmount,
+              ranges: ranges
+            )
+            XCTAssertEqual(str, expectedResults.next())
+          }
+        }
+
+        XCTAssertEqual(expectedResults.next(), nil)
+      }
+
+      // Empty collection.
+
+      do {
+        var str = _testTrimSegments(source: "", ranges: [0..<0])
+        XCTAssertEqual(str, "")
+
+        str = _testTrimSegments(source: "", remove: [0], ranges: [0..<0])
+        XCTAssertEqual(str, "")
+
+        str = _testTrimSegments(source: "", trim: [0], ranges: [0..<0])
+        XCTAssertEqual(str, "")
+      }
+
+      // Empty range.
+
+      do {
+        let source = "ab/c//de/f"
+        for offset in 0..<source.utf8.count {
+
+          var str = _testTrimSegments(
+            source: source,
+            from: offset,
+            to: offset,
+            ranges: [offset..<offset]
+          )
+          XCTAssertEqual(str, source)
+
+          str = _testTrimSegments(
+            source: source,
+            from: offset,
+            to: offset,
+            remove: [0],
+            ranges: [offset..<offset]
+          )
+          XCTAssertEqual(str, source)
+
+          str = _testTrimSegments(
+            source: source,
+            from: offset,
+            to: offset,
+            trim: [0],
+            ranges: [offset..<offset]
+          )
+          XCTAssertEqual(str, source)
         }
       }
-      XCTAssertEqual(endOffset, 7)
-      XCTAssertEqual(string, "abcdefg")
-    }
 
-    // No segments, trim end.
-    do {
-      let (string, endOffset) = withUTF8Array("abcdefg") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { _ in false }) { s, isFirst, isLast in
-          XCTAssertTrue(isFirst)
-          XCTAssertTrue(isLast)
-          XCTAssertEqual(s.startIndex, 0)
-          XCTAssertEqual(s.endIndex, 7)
-          XCTAssertEqualElements(s, "abcdefg".utf8)
-          return s.prefix(4)
-        }
+      // 1 segment. No separators.
+
+      do {
+        let source = "abcdefg"
+        let ranges = [0..<7]
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove all.
+        str = _testTrimSegments(source: source, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "")
+
+        // Trim start.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), trimAmount: (2, 0), ranges: ranges)
+        XCTAssertEqual(str, "cdefg")
+
+        // Trim end.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), trimAmount: (0, 2), ranges: ranges)
+        XCTAssertEqual(str, "abcde")
+
+        // Trim both ends.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), trimAmount: (2, 2), ranges: ranges)
+        XCTAssertEqual(str, "cde")
       }
-      XCTAssertEqual(endOffset, 4)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "abcd".utf8)
-      XCTAssertEqual(string, "abcdefg")
-    }
 
-    // No segments, trim start.
-    do {
-      let (string, endOffset) = withUTF8Array("abcdefg") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { _ in false }) { s, isFirst, isLast in
-          XCTAssertTrue(isFirst)
-          XCTAssertTrue(isLast)
-          XCTAssertEqual(s.startIndex, 0)
-          XCTAssertEqual(s.endIndex, 7)
-          XCTAssertEqualElements(s, "abcdefg".utf8)
-          return s.suffix(4)
-        }
+      // 1 segment. Collection starts with separator, which is skipped.
+
+      if skipInitialSeparator {
+        let source = "/abcdefg"
+        let ranges = [1..<8]
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove all.
+        str = _testTrimSegments(source: source, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "/")
+
+        // Trim start.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), trimAmount: (2, 0), ranges: ranges)
+        XCTAssertEqual(str, "/cdefg")
+
+        // Trim end.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), trimAmount: (0, 2), ranges: ranges)
+        XCTAssertEqual(str, "/abcde")
+
+        // Trim both ends.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), trimAmount: (2, 2), ranges: ranges)
+        XCTAssertEqual(str, "/cde")
       }
-      XCTAssertEqual(endOffset, 4)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "defg".utf8)
-      XCTAssertEqual(string, "defgefg")
-    }
 
-    // No segments, trim both ends.
-    do {
-      let (string, endOffset) = withUTF8Array("abcdefghijklmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { _ in false }) { s, isFirst, isLast in
-          XCTAssertTrue(isFirst)
-          XCTAssertTrue(isLast)
-          XCTAssertEqual(s.startIndex, 0)
-          XCTAssertEqual(s.endIndex, 16)
-          XCTAssertEqualElements(s, "abcdefghijklmnop".utf8)
-          return s.dropFirst(4).prefix(8)
-        }
+      // 2 segments. One separator in the middle.
+
+      do {
+        let source = "abcdefg/hijklmnop"
+        let ranges = [0..<7, 8..<17]
+
+        // swift-format-ignore
+        _testMultiTrimSegments(
+          source: source,
+          ranges: ranges,
+          expected: [
+            "hijklmnop",  // (remove: 0, trim: none)
+            "ijklm",      // (remove: 0, trim: 1)
+
+            "abcdefg/",   // (remove: 1, trim: none)
+            "bcd/",       // (remove: 1, trim: 0)
+          ]
+        )
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove all.
+        str = _testTrimSegments(source: source, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "")
+
+        // Trim all.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "bcd/ijklm")
       }
-      XCTAssertEqual(endOffset, 8)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "efghijkl".utf8)
-      XCTAssertEqual(string, "efghijklijklmnop")
-    }
 
-    // 2 segments, no trim.
-    do {
-      let (string, endOffset) = withUTF8Array("abcdefg/hijklmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 0)
-            XCTAssertEqual(s.endIndex, 7)
-            XCTAssertEqualElements(s, "abcdefg".utf8)
+      // 2/3 segments. Collection starts with separator.
+
+      do {
+        let source = "/abcdefg/hijklmnop"
+        var ranges: [Range<Int>] {
+          if skipInitialSeparator {
+            return [1..<8, 9..<18]
+          } else {
+            return [0..<0, 1..<8, 9..<18]
           }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 8)
-            XCTAssertEqual(s.endIndex, 17)
-            XCTAssertEqualElements(s, "hijklmnop".utf8)
-          }
-          XCTAssertTrue(isFirst || isLast)
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          return s
         }
-      }
-      XCTAssertEqual(endOffset, 17)
-      XCTAssertEqual(string, "abcdefg/hijklmnop")
-    }
 
-    // 2 segments, trim first from both ends.
-    do {
-      let (string, endOffset) = withUTF8Array("abcdefg/hijklmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 0)
-            XCTAssertEqual(s.endIndex, 7)
-            XCTAssertEqualElements(s, "abcdefg".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 8)
-            XCTAssertEqual(s.endIndex, 17)
-            XCTAssertEqualElements(s, "hijklmnop".utf8)
-          }
-          XCTAssertTrue(isFirst || isLast)
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
+        if skipInitialSeparator {
+          // swift-format-ignore
+          _testMultiTrimSegments(
+            source: source,
+            ranges: ranges,
+            expected: [
+              "/hijklmnop",  // (remove: 0, trim: none)
+              "/ijklm",      // (remove: 0, trim: 1)
 
-          if isFirst {
-            return s.dropFirst().dropLast(3)
-          }
-          return s
+              "/abcdefg/",   // (remove: 1, trim: none)
+              "/bcd/",       // (remove: 1, trim: 0)
+            ]
+          )
+        } else {
+          // swift-format-ignore
+          _testMultiTrimSegments(
+            source: source,
+            ranges: ranges,
+            expected: [
+              "abcdefg/hijklmnop",  // (remove: 0, trim: none)
+              "bcd/hijklmnop",      // (remove: 0, trim: 1)
+              "abcdefg/ijklm",      // (remove: 0, trim: 2)
+
+              "/hijklmnop",         // (remove: 1, trim: none)
+              "/hijklmnop",         // (remove: 1, trim: 0)
+              "/ijklm",             // (remove: 1, trim: 2)
+
+              "/abcdefg/",          // (remove: 2, trim: none)
+              "/abcdefg/",          // (remove: 2, trim: 0)
+              "/bcd/",              // (remove: 2, trim: 1)
+            ]
+          )
         }
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove all.
+        str = _testTrimSegments(source: source, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, skipInitialSeparator ? "/" : "")
+
+        // Trim all.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "/bcd/ijklm")
       }
-      XCTAssertEqual(endOffset, 13)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "bcd/hijklmnop".utf8)
-      XCTAssertEqual(string, "bcd/hijklmnopmnop")
-    }
 
-    // 2 segments, trim last from both ends.
-    do {
-      let (string, endOffset) = withUTF8Array("abcdefg/hijklmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 0)
-            XCTAssertEqual(s.endIndex, 7)
-            XCTAssertEqualElements(s, "abcdefg".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 8)
-            XCTAssertEqual(s.endIndex, 17)
-            XCTAssertEqualElements(s, "hijklmnop".utf8)
-          }
-          XCTAssertTrue(isFirst || isLast)
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
+      // Many segments. Collection starts and ends with a separator.
 
-          if isLast {
-            return s.dropFirst().dropLast(3)
+      do {
+        let source = "/abc/defg/hijk/lmnop/"
+        var ranges: [Range<Int>] {
+          if skipInitialSeparator {
+            return [1..<4, 5..<9, 10..<14, 15..<20, 21..<21]
+          } else {
+            return [0..<0, 1..<4, 5..<9, 10..<14, 15..<20, 21..<21]
           }
-          return s
         }
-      }
-      XCTAssertEqual(endOffset, 13)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "abcdefg/ijklm".utf8)
-      XCTAssertEqual(string, "abcdefg/ijklmmnop")
-    }
 
-    // 2 segments, collection starts with separator, first component is trimmed. Leading separator maintained.
-    do {
-      let (string, endOffset) = withUTF8Array("/abcdefg/hijklmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 1)
-            XCTAssertEqual(s.endIndex, 8)
-            XCTAssertEqualElements(s, "abcdefg".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 9)
-            XCTAssertEqual(s.endIndex, 18)
-            XCTAssertEqualElements(s, "hijklmnop".utf8)
-          }
-          XCTAssertTrue(isFirst || isLast)
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
+        if skipInitialSeparator {
+          // swift-format-ignore
+          _testMultiTrimSegments(
+            source: source,
+            ranges: ranges,
+            trimAmount: (front: 1, back: 1),
+            expected: [
+              "/defg/hijk/lmnop/",  // (remove: 0, trim: none)
+              "/ef/hijk/lmnop/",    // (remove: 0, trim: 1)
+              "/defg/ij/lmnop/",    // (remove: 0, trim: 2)
+              "/defg/hijk/mno/",    // (remove: 0, trim: 3)
+              "/defg/hijk/lmnop/",  // (remove: 0, trim: 4)
 
-          if isFirst {
-            return s.dropFirst().dropLast(3)
-          }
-          return s
+              "/abc/hijk/lmnop/",   // (remove: 1, trim: none)
+              "/b/hijk/lmnop/",     // (remove: 1, trim: 0)
+              "/abc/ij/lmnop/",     // (remove: 1, trim: 2)
+              "/abc/hijk/mno/",     // (remove: 1, trim: 3)
+              "/abc/hijk/lmnop/",   // (remove: 1, trim: 4)
+
+              "/abc/defg/lmnop/",   // (remove: 2, trim: none)
+              "/b/defg/lmnop/",     // (remove: 2, trim: 0)
+              "/abc/ef/lmnop/",     // (remove: 2, trim: 1)
+              "/abc/defg/mno/",     // (remove: 2, trim: 3)
+              "/abc/defg/lmnop/",   // (remove: 2, trim: 4)
+
+              "/abc/defg/hijk/",    // (remove: 3, trim: none)
+              "/b/defg/hijk/",      // (remove: 3, trim: 0)
+              "/abc/ef/hijk/",      // (remove: 3, trim: 1)
+              "/abc/defg/ij/",      // (remove: 3, trim: 2)
+              "/abc/defg/hijk/",    // (remove: 3, trim: 4)
+
+              "/abc/defg/hijk/lmnop/",  // (remove: 4, trim: none)
+              "/b/defg/hijk/lmnop/",    // (remove: 4, trim: 0)
+              "/abc/ef/hijk/lmnop/",    // (remove: 4, trim: 1)
+              "/abc/defg/ij/lmnop/",    // (remove: 4, trim: 2)
+              "/abc/defg/hijk/mno/",    // (remove: 4, trim: 3)
+            ]
+          )
+        } else {
+          // swift-format-ignore
+          _testMultiTrimSegments(
+            source: source,
+            ranges: ranges,
+            trimAmount: (front: 1, back: 1),
+            expected: [
+              "abc/defg/hijk/lmnop/",   // (remove: 0, trim: none)
+              "b/defg/hijk/lmnop/",     // (remove: 0, trim: 1)
+              "abc/ef/hijk/lmnop/",     // (remove: 0, trim: 2)
+              "abc/defg/ij/lmnop/",     // (remove: 0, trim: 3)
+              "abc/defg/hijk/mno/",     // (remove: 0, trim: 4)
+              "abc/defg/hijk/lmnop/",   // (remove: 0, trim: 5)
+
+              "/defg/hijk/lmnop/",      // (remove: 1, trim: none)
+              "/defg/hijk/lmnop/",      // (remove: 1, trim: 0)
+              "/ef/hijk/lmnop/",        // (remove: 1, trim: 2)
+              "/defg/ij/lmnop/",        // (remove: 1, trim: 3)
+              "/defg/hijk/mno/",        // (remove: 1, trim: 4)
+              "/defg/hijk/lmnop/",      // (remove: 1, trim: 5)
+
+              "/abc/hijk/lmnop/",       // (remove: 2, trim: none)
+              "/abc/hijk/lmnop/",       // (remove: 2, trim: 0)
+              "/b/hijk/lmnop/",         // (remove: 2, trim: 1)
+              "/abc/ij/lmnop/",         // (remove: 2, trim: 3)
+              "/abc/hijk/mno/",         // (remove: 2, trim: 4)
+              "/abc/hijk/lmnop/",       // (remove: 2, trim: 5)
+
+              "/abc/defg/lmnop/",       // (remove: 3, trim: none)
+              "/abc/defg/lmnop/",       // (remove: 3, trim: 0)
+              "/b/defg/lmnop/",         // (remove: 3, trim: 1)
+              "/abc/ef/lmnop/",         // (remove: 3, trim: 2)
+              "/abc/defg/mno/",         // (remove: 3, trim: 4)
+              "/abc/defg/lmnop/",       // (remove: 3, trim: 5)
+
+              "/abc/defg/hijk/",        // (remove: 4, trim: none)
+              "/abc/defg/hijk/",        // (remove: 4, trim: 0)
+              "/b/defg/hijk/",          // (remove: 4, trim: 1)
+              "/abc/ef/hijk/",          // (remove: 4, trim: 2)
+              "/abc/defg/ij/",          // (remove: 4, trim: 3)
+              "/abc/defg/hijk/",        // (remove: 4, trim: 5)
+
+              "/abc/defg/hijk/lmnop/",  // (remove: 5, trim: none)
+              "/abc/defg/hijk/lmnop/",  // (remove: 5, trim: 0)
+              "/b/defg/hijk/lmnop/",    // (remove: 5, trim: 1)
+              "/abc/ef/hijk/lmnop/",    // (remove: 5, trim: 2)
+              "/abc/defg/ij/lmnop/",    // (remove: 5, trim: 3)
+              "/abc/defg/hijk/mno/",    // (remove: 5, trim: 4)
+            ]
+          )
         }
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove some.
+        str = _testTrimSegments(
+          source: source,
+          remove: Set((0..<ranges.count).lazy.filter { $0.isMultiple(of: 2) }),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, skipInitialSeparator ? "/defg/lmnop/" : "abc/hijk/")
+
+        // Remove all.
+        str = _testTrimSegments(source: source, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, skipInitialSeparator ? "/" : "")
+
+        // Trim some.
+        str = _testTrimSegments(
+          source: source,
+          trim: Set((0..<ranges.count).lazy.filter { $0.isMultiple(of: 2) }), trimAmount: (1, 1),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, skipInitialSeparator ? "/b/defg/ij/lmnop/" : "/abc/ef/hijk/mno/")
+
+        // Trim all.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), trimAmount: (1, 1), ranges: ranges)
+        XCTAssertEqual(str, "/b/ef/ij/mno/")
+
+        // Trim to empty segments.
+        str = _testTrimSegments(source: source, trim: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "////m/")
       }
-      XCTAssertEqual(endOffset, 14)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/bcd/hijklmnop".utf8)
-      XCTAssertEqual(string, "/bcd/hijklmnopmnop")
-    }
 
-    // 2 segments, collection starts with separator, last component is trimmed. Leading separator maintained.
-    do {
-      let (string, endOffset) = withUTF8Array("/abcdefg/hijklmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 1)
-            XCTAssertEqual(s.endIndex, 8)
-            XCTAssertEqualElements(s, "abcdefg".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 9)
-            XCTAssertEqual(s.endIndex, 18)
-            XCTAssertEqualElements(s, "hijklmnop".utf8)
-          }
-          XCTAssertTrue(isFirst || isLast)
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
+      // Empty segments.
 
-          if isLast {
-            return s.dropFirst().dropLast(3)
+      do {
+        let source = "abc/defg//hijkl///m"
+        let ranges = [0..<3, 4..<8, 9..<9, 10..<15, 16..<16, 17..<17, 18..<19]
+
+        // swift-format-ignore
+        _testMultiTrimSegments(
+          source: source,
+          ranges: ranges,
+          trimAmount: (front: 1, back: 1),
+          expected: [
+            "defg//hijkl///m",     // (remove: 0, trim: none)
+            "ef//hijkl///m",       // (remove: 0, trim: 1)
+            "defg//hijkl///m",     // (remove: 0, trim: 2)
+            "defg//ijk///m",       // (remove: 0, trim: 3)
+            "defg//hijkl///m",     // (remove: 0, trim: 4)
+            "defg//hijkl///m",     // (remove: 0, trim: 5)
+            "defg//hijkl///",      // (remove: 0, trim: 6)
+
+            "abc//hijkl///m",      // (remove: 1, trim: none)
+            "b//hijkl///m",        // (remove: 1, trim: 0)
+            "abc//hijkl///m",      // (remove: 1, trim: 2)
+            "abc//ijk///m",        // (remove: 1, trim: 3)
+            "abc//hijkl///m",      // (remove: 1, trim: 4)
+            "abc//hijkl///m",      // (remove: 1, trim: 5)
+            "abc//hijkl///",       // (remove: 1, trim: 6)
+
+            "abc/defg/hijkl///m",  // (remove: 2, trim: none)
+            "b/defg/hijkl///m",    // (remove: 2, trim: 0)
+            "abc/ef/hijkl///m",    // (remove: 2, trim: 1)
+            "abc/defg/ijk///m",    // (remove: 2, trim: 3)
+            "abc/defg/hijkl///m",  // (remove: 2, trim: 4)
+            "abc/defg/hijkl///m",  // (remove: 2, trim: 5)
+            "abc/defg/hijkl///",   // (remove: 2, trim: 6)
+
+            "abc/defg////m",       // (remove: 3, trim: none)
+            "b/defg////m",         // (remove: 3, trim: 0)
+            "abc/ef////m",         // (remove: 3, trim: 1)
+            "abc/defg////m",       // (remove: 3, trim: 2)
+            "abc/defg////m",       // (remove: 3, trim: 4)
+            "abc/defg////m",       // (remove: 3, trim: 5)
+            "abc/defg////",        // (remove: 3, trim: 6)
+
+            "abc/defg//hijkl//m",  // (remove: 4, trim: none)
+            "b/defg//hijkl//m",    // (remove: 4, trim: 0)
+            "abc/ef//hijkl//m",    // (remove: 4, trim: 1)
+            "abc/defg//hijkl//m",  // (remove: 4, trim: 2)
+            "abc/defg//ijk//m",    // (remove: 4, trim: 3)
+            "abc/defg//hijkl//m",  // (remove: 4, trim: 5)
+            "abc/defg//hijkl//",   // (remove: 4, trim: 6)
+
+            "abc/defg//hijkl//m",  // (remove: 5, trim: none)
+            "b/defg//hijkl//m",    // (remove: 5, trim: 0)
+            "abc/ef//hijkl//m",    // (remove: 5, trim: 1)
+            "abc/defg//hijkl//m",  // (remove: 5, trim: 2)
+            "abc/defg//ijk//m",    // (remove: 5, trim: 3)
+            "abc/defg//hijkl//m",  // (remove: 5, trim: 4)
+            "abc/defg//hijkl//",   // (remove: 5, trim: 6)
+
+            "abc/defg//hijkl///",  // (remove: 6, trim: none)
+            "b/defg//hijkl///",    // (remove: 6, trim: 0)
+            "abc/ef//hijkl///",    // (remove: 6, trim: 1)
+            "abc/defg//hijkl///",  // (remove: 6, trim: 2)
+            "abc/defg//ijk///",    // (remove: 6, trim: 3)
+            "abc/defg//hijkl///",  // (remove: 6, trim: 4)
+            "abc/defg//hijkl///",  // (remove: 6, trim: 5)
+          ]
+        )
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove some.
+        str = _testTrimSegments(
+          source: source,
+          remove: Set((0..<ranges.count).lazy.filter { $0.isMultiple(of: 2) }),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "defg/hijkl//")
+
+        // Remove all.
+        str = _testTrimSegments(source: source, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "")
+
+        // Remove empties.
+        str = _testTrimSegments(source: source, remove: [2, 4, 5], ranges: ranges)
+        XCTAssertEqual(str, "abc/defg/hijkl/m")
+      }
+
+      // One segment. Operate in range.
+
+      do {
+        let source = "/abc/defghijklmnopq/rstu"
+        let from = 7  //     ^      ^
+        let to = 14
+        let ranges = [7..<14]
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, from: from, to: to, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove all.
+        str = _testTrimSegments(source: source, from: from, to: to, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "/abc/demnopq/rstu")
+
+        // Trim start.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set(0..<ranges.count), trimAmount: (3, 0),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/deijklmnopq/rstu")
+
+        // Trim end.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set(0..<ranges.count), trimAmount: (0, 3),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/defghimnopq/rstu")
+
+        // Trim both ends.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set(0..<ranges.count), trimAmount: (2, 2),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/dehijmnopq/rstu")
+
+        // Trim to empty segment.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set(0..<ranges.count), trimAmount: (10, 10),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/demnopq/rstu")
+      }
+
+      // Many segments. Operate in range.
+
+      do {
+        let source = "/abc/defgh/ijkl/mnopq/rstu"
+        let from = 7  //     ^           ^
+        let to = 19
+        let ranges = [7..<10, 11..<15, 16..<19]
+
+        // swift-format-ignore
+        _testMultiTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          ranges: ranges,
+          trimAmount: (front: 1, back: 1),
+          expected: [
+            "/abc/deijkl/mnopq/rstu",  // (remove: 0, trim: none)
+            "/abc/dejk/mnopq/rstu",    // (remove: 0, trim: 1)
+            "/abc/deijkl/npq/rstu",    // (remove: 0, trim: 2)
+
+            "/abc/defgh/mnopq/rstu",   // (remove: 1, trim: none)
+            "/abc/deg/mnopq/rstu",     // (remove: 1, trim: 0)
+            "/abc/defgh/npq/rstu",     // (remove: 1, trim: 2)
+
+            "/abc/defgh/ijkl/pq/rstu", // (remove: 2, trim: none)
+            "/abc/deg/ijkl/pq/rstu",   // (remove: 2, trim: 0)
+            "/abc/defgh/jk/pq/rstu",   // (remove: 2, trim: 1)
+          ]
+        )
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, from: from, to: to, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove some.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          remove: Set((0..<ranges.count).lazy.filter { $0.isMultiple(of: 2) }),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/deijkl/pq/rstu")
+
+        // Remove all.
+        str = _testTrimSegments(source: source, from: from, to: to, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, "/abc/depq/rstu")
+
+        // Trim some.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set((0..<ranges.count).lazy.filter { $0.isMultiple(of: 2) }), trimAmount: (1, 1),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/deg/ijkl/npq/rstu")
+
+        // Trim all.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set(0..<ranges.count), trimAmount: (1, 1),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/deg/jk/npq/rstu")
+
+        // Trim to empty segments.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set(0..<ranges.count), trimAmount: (5, 5),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/de//pq/rstu")
+      }
+
+      // Many segments. Operate in range. Offset is on a separator.
+
+      do {
+        let source = "/abc/defgh/ijkl/mnopq/rstu"
+        let from = 4  //  ^                ^
+        let to = 21
+        var ranges: [Range<Int>] {
+          if skipInitialSeparator {
+            return [5..<10, 11..<15, 16..<21]
+          } else {
+            return [4..<4, 5..<10, 11..<15, 16..<21]
           }
-          return s
         }
-      }
-      XCTAssertEqual(endOffset, 14)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abcdefg/ijklm".utf8)
-      XCTAssertEqual(string, "/abcdefg/ijklmmnop")
-    }
 
-    // Many segments, no trim.
-    do {
-      var expectedSegments = ["abc", "defg", "hijk", "lmnop"]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 1)
-            XCTAssertEqual(s.endIndex, 4)
-            XCTAssertEqualElements(s, "abc".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 15)
-            XCTAssertEqual(s.endIndex, 20)
-            XCTAssertEqualElements(s, "lmnop".utf8)
-          }
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          return s
+        if skipInitialSeparator {
+          // swift-format-ignore
+          _testMultiTrimSegments(
+            source: source,
+            from: from,
+            to: to,
+            ranges: ranges,
+            trimAmount: (front: 1, back: 1),
+            expected: [
+              "/abc/ijkl/mnopq/rstu",   // (remove: 0, trim: none)
+              "/abc/jk/mnopq/rstu",     // (remove: 0, trim: 1)
+              "/abc/ijkl/nop/rstu",     // (remove: 0, trim: 2)
+
+              "/abc/defgh/mnopq/rstu",  // (remove: 1, trim: none)
+              "/abc/efg/mnopq/rstu",    // (remove: 1, trim: 0)
+              "/abc/defgh/nop/rstu",    // (remove: 1, trim: 2)
+
+              "/abc/defgh/ijkl//rstu",  // (remove: 2, trim: none)
+              "/abc/efg/ijkl//rstu",    // (remove: 2, trim: 0)
+              "/abc/defgh/jk//rstu",    // (remove: 2, trim: 1)
+            ]
+          )
+        } else {
+          // swift-format-ignore
+          _testMultiTrimSegments(
+            source: source,
+            from: from,
+            to: to,
+            ranges: ranges,
+            trimAmount: (front: 1, back: 1),
+            expected: [
+              "/abcdefgh/ijkl/mnopq/rstu",  // (remove: 0, trim: none)
+              "/abcefg/ijkl/mnopq/rstu",    // (remove: 0, trim: 1)
+              "/abcdefgh/jk/mnopq/rstu",    // (remove: 0, trim: 2)
+              "/abcdefgh/ijkl/nop/rstu",    // (remove: 0, trim: 3)
+
+              "/abc/ijkl/mnopq/rstu",       // (remove: 1, trim: none)
+              "/abc/ijkl/mnopq/rstu",       // (remove: 1, trim: 0)
+              "/abc/jk/mnopq/rstu",         // (remove: 1, trim: 2)
+              "/abc/ijkl/nop/rstu",         // (remove: 1, trim: 3)
+
+              "/abc/defgh/mnopq/rstu",      // (remove: 2, trim: none)
+              "/abc/defgh/mnopq/rstu",      // (remove: 2, trim: 0)
+              "/abc/efg/mnopq/rstu",        // (remove: 2, trim: 1)
+              "/abc/defgh/nop/rstu",        // (remove: 2, trim: 3)
+
+              "/abc/defgh/ijkl//rstu",      // (remove: 3, trim: none)
+              "/abc/defgh/ijkl//rstu",      // (remove: 3, trim: 0)
+              "/abc/efg/ijkl//rstu",        // (remove: 3, trim: 1)
+              "/abc/defgh/jk//rstu",        // (remove: 3, trim: 2)
+            ]
+          )
         }
+
+        // Remove none.
+        var str = _testTrimSegments(source: source, from: from, to: to, ranges: ranges)
+        XCTAssertEqual(str, source)
+
+        // Remove some.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          remove: Set((0..<ranges.count).lazy.filter { $0.isMultiple(of: 2) }),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, skipInitialSeparator ? "/abc/ijkl//rstu" : "/abcdefgh/mnopq/rstu")
+
+        // Remove all.
+        str = _testTrimSegments(source: source, from: from, to: to, remove: Set(0..<ranges.count), ranges: ranges)
+        XCTAssertEqual(str, skipInitialSeparator ? "/abc//rstu" : "/abc/rstu")
+
+        // Trim some.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set((0..<ranges.count).lazy.filter { $0.isMultiple(of: 2) }), trimAmount: (1, 1),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, skipInitialSeparator ? "/abc/efg/ijkl/nop/rstu" : "/abc/defgh/jk/mnopq/rstu")
+
+        // Trim all.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set(0..<ranges.count), trimAmount: (1, 1),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc/efg/jk/nop/rstu")
+
+        // Trim to empty segments.
+        str = _testTrimSegments(
+          source: source,
+          from: from,
+          to: to,
+          trim: Set(0..<ranges.count), trimAmount: (5, 5),
+          ranges: ranges
+        )
+        XCTAssertEqual(str, "/abc////rstu")
       }
-      XCTAssert(expectedSegments.isEmpty)
-      XCTAssertEqual(endOffset, 20)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg/hijk/lmnop".utf8)
-      XCTAssertEqual(string, "/abc/defg/hijk/lmnop")
-    }
-
-    // Many segments, trim first.
-    do {
-      var expectedSegments = ["abc", "defg", "hijk", "lmnop"]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 1)
-            XCTAssertEqual(s.endIndex, 4)
-            XCTAssertEqualElements(s, "abc".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 15)
-            XCTAssertEqual(s.endIndex, 20)
-            XCTAssertEqualElements(s, "lmnop".utf8)
-          }
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          if isFirst {
-            return s.dropFirst(2)
-          }
-          return s
-        }
-      }
-      XCTAssert(expectedSegments.isEmpty)
-      XCTAssertEqual(endOffset, 18)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/c/defg/hijk/lmnop".utf8)
-      XCTAssertEqual(string, "/c/defg/hijk/lmnopop")
-    }
-
-    // Many segments, trim last.
-    do {
-      var expectedSegments = ["abc", "defg", "hijk", "lmnop"]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 1)
-            XCTAssertEqual(s.endIndex, 4)
-            XCTAssertEqualElements(s, "abc".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 15)
-            XCTAssertEqual(s.endIndex, 20)
-            XCTAssertEqualElements(s, "lmnop".utf8)
-          }
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          if isLast {
-            return s.dropFirst(2)
-          }
-          return s
-        }
-      }
-      XCTAssert(expectedSegments.isEmpty)
-      XCTAssertEqual(endOffset, 18)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg/hijk/nop".utf8)
-      XCTAssertEqual(string, "/abc/defg/hijk/nopop")
-    }
-
-    // Many segments, trim one in the middle.
-    do {
-      var expectedSegments = ["abc", "defg", "hijk", "lmnop"]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmnop") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 1)
-            XCTAssertEqual(s.endIndex, 4)
-            XCTAssertEqualElements(s, "abc".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 15)
-            XCTAssertEqual(s.endIndex, 20)
-            XCTAssertEqualElements(s, "lmnop".utf8)
-          }
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          if s.first == ASCII.d.codePoint {
-            return s.dropFirst().dropLast(2)
-          }
-          return s
-        }
-      }
-      XCTAssert(expectedSegments.isEmpty)
-      XCTAssertEqual(endOffset, 17)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/e/hijk/lmnop".utf8)
-      XCTAssertEqual(string, "/abc/e/hijk/lmnopnop")
-    }
-
-    // Many segments, trim multiple.
-    do {
-      var expectedSegments = ["abc", "defg", "hijk", "lmno", "pqrs"]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmno/pqrs") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 1)
-            XCTAssertEqual(s.endIndex, 4)
-            XCTAssertEqualElements(s, "abc".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 20)
-            XCTAssertEqual(s.endIndex, 24)
-            XCTAssertEqualElements(s, "pqrs".utf8)
-          }
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          if s.first == ASCII.d.codePoint || s.first == ASCII.h.codePoint {
-            return s.dropFirst().dropLast(2)
-          }
-          return s
-        }
-      }
-      XCTAssert(expectedSegments.isEmpty)
-      XCTAssertEqual(endOffset, 18)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/e/i/lmno/pqrs".utf8)
-      XCTAssertEqual(string, "/abc/e/i/lmno/pqrso/pqrs")
-    }
-
-    // Trailing separator (many segments, trim multiple).
-    do {
-      var expectedSegments = ["abc", "defg", "hijk", "lmno", "pqrs", ""]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmno/pqrs/") { utf8 in
-        utf8.trimSegments(from: 0, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 1)
-            XCTAssertEqual(s.endIndex, 4)
-            XCTAssertEqualElements(s, "abc".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 25)
-            XCTAssertEqual(s.endIndex, 25)
-            XCTAssertEqualElements(s, [])
-          }
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          if s.first == ASCII.d.codePoint || s.first == ASCII.h.codePoint {
-            return s.dropFirst().dropLast(2)
-          }
-          return s
-        }
-      }
-      XCTAssert(expectedSegments.isEmpty)
-      XCTAssertEqual(endOffset, 19)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/e/i/lmno/pqrs/".utf8)
-      XCTAssertEqual(string, "/abc/e/i/lmno/pqrs//pqrs/")
-    }
-
-    // No segment breaks after offset.
-    do {
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijklmnopqrs") { utf8 in
-        utf8.trimSegments(from: 10, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-
-          XCTAssertEqual(s.startIndex, 10)
-          XCTAssertEqual(s.endIndex, 22)
-          XCTAssertEqualElements(s, "hijklmnopqrs".utf8)
-
-          XCTAssertTrue(isFirst)
-          XCTAssertTrue(isLast)
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-
-          return s.dropFirst(4)
-        }
-      }
-      XCTAssertEqual(endOffset, 18)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg/lmnopqrs".utf8)
-      XCTAssertEqual(string, "/abc/defg/lmnopqrspqrs")
-    }
-
-    // Many segment breaks after offset
-    do {
-      var expectedSegments = ["hijk", "lmno", "pqrs", ""]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmno/pqrs/") { utf8 in
-        utf8.trimSegments(from: 10, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 10)
-            XCTAssertEqual(s.endIndex, 14)
-            XCTAssertEqualElements(s, "hijk".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 25)
-            XCTAssertEqual(s.endIndex, 25)
-            XCTAssertEqualElements(s, [])
-          }
-
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          return s.dropLast()
-        }
-      }
-      XCTAssert(expectedSegments.isEmpty)
-      XCTAssertEqual(endOffset, 22)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg/hij/lmn/pqr/".utf8)
-      XCTAssertEqual(string, "/abc/defg/hij/lmn/pqr/rs/")
-    }
-
-    // Offset is in the middle of a segment
-    do {
-      var expectedSegments = ["jk", "lmno", "pqrs", ""]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmno/pqrs/") { utf8 in
-        utf8.trimSegments(from: 12, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 12)
-            XCTAssertEqual(s.endIndex, 14)
-            XCTAssertEqualElements(s, "jk".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 25)
-            XCTAssertEqual(s.endIndex, 25)
-            XCTAssertEqualElements(s, [])
-          }
-
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          return s.dropFirst()
-        }
-      }
-      XCTAssert(expectedSegments.isEmpty)
-      XCTAssertEqual(endOffset, 22)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg/hik/mno/qrs/".utf8)
-      XCTAssertEqual(string, "/abc/defg/hik/mno/qrs/rs/")
-    }
-
-    // Offset is on a separator
-    do {
-      var expectedSegments = ["hijk", "lmno", "pqrs", ""]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmno/pqrs/") { utf8 -> Int in
-        XCTAssertEqual(utf8[9], ASCII.forwardSlash.codePoint)
-        return utf8.trimSegments(from: 9, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 10)
-            XCTAssertEqual(s.endIndex, 14)
-            XCTAssertEqualElements(s, "hijk".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 25)
-            XCTAssertEqual(s.endIndex, 25)
-            XCTAssertEqualElements(s, [])
-          }
-
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          return s.dropLast(2)
-        }
-      }
-      XCTAssertEqual(endOffset, 19)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg/hi/lm/pq/".utf8)
-      XCTAssertEqual(string, "/abc/defg/hi/lm/pq//pqrs/")
-    }
-
-    // Trim first segment to empty, from offset.
-    do {
-      var expectedSegments = ["hijk", "lmno", "pqrs"]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmno/pqrs") { utf8 -> Int in
-        XCTAssertEqual(utf8[9], ASCII.forwardSlash.codePoint)
-        return utf8.trimSegments(from: 9, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 10)
-            XCTAssertEqual(s.endIndex, 14)
-            XCTAssertEqualElements(s, "hijk".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 20)
-            XCTAssertEqual(s.endIndex, 24)
-            XCTAssertEqualElements(s, "pqrs".utf8)
-          }
-
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          if isFirst {
-            return s.prefix(0)
-          }
-          return s
-        }
-      }
-      XCTAssertEqual(endOffset, 20)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg//lmno/pqrs".utf8)
-      XCTAssertEqual(string, "/abc/defg//lmno/pqrspqrs")
-    }
-
-    // Trim last segment to empty, from offset.
-    do {
-      var expectedSegments = ["hijk", "lmno", "pqrs"]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmno/pqrs") { utf8 -> Int in
-        XCTAssertEqual(utf8[9], ASCII.forwardSlash.codePoint)
-        return utf8.trimSegments(from: 9, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 10)
-            XCTAssertEqual(s.endIndex, 14)
-            XCTAssertEqualElements(s, "hijk".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 20)
-            XCTAssertEqual(s.endIndex, 24)
-            XCTAssertEqualElements(s, "pqrs".utf8)
-          }
-
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          if isLast {
-            return s.prefix(0)
-          }
-          return s
-        }
-      }
-      XCTAssertEqual(endOffset, 20)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg/hijk/lmno/".utf8)
-      XCTAssertEqual(string, "/abc/defg/hijk/lmno/pqrs")
-    }
-
-    // Trim all segments to empty, from offset.
-    do {
-      var expectedSegments = ["hijk", "lmno", "pqrs"]
-      let (string, endOffset) = withUTF8Array("/abc/defg/hijk/lmno/pqrs") { utf8 -> Int in
-        XCTAssertEqual(utf8[9], ASCII.forwardSlash.codePoint)
-        return utf8.trimSegments(from: 9, separatedBy: { $0 == ASCII.forwardSlash.codePoint }) { s, isFirst, isLast in
-          if isFirst {
-            XCTAssertEqual(s.startIndex, 10)
-            XCTAssertEqual(s.endIndex, 14)
-            XCTAssertEqualElements(s, "hijk".utf8)
-          }
-          if isLast {
-            XCTAssertEqual(s.startIndex, 20)
-            XCTAssertEqual(s.endIndex, 24)
-            XCTAssertEqualElements(s, "pqrs".utf8)
-          }
-
-          XCTAssertFalse(s.contains(ASCII.forwardSlash.codePoint))
-          XCTAssertEqualElements(s, expectedSegments.removeFirst().utf8)
-          return s.prefix(0)
-        }
-      }
-      XCTAssertEqual(endOffset, 12)
-      XCTAssertEqualElements(string.utf8.prefix(endOffset), "/abc/defg///".utf8)
-      XCTAssertEqual(string, "/abc/defg///jk/lmno/pqrs")
     }
   }
 }

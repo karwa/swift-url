@@ -19,8 +19,22 @@ extension Collection {
   ///
   @inlinable
   internal func fastFirstIndex(where predicate: (Element) -> Bool) -> Index? {
-    var idx = startIndex
-    while idx < endIndex {
+    fastFirstIndex(from: startIndex, to: endIndex, where: predicate)
+  }
+
+  /// Returns the index of the first element to match the given predicate within the given indexes,
+  /// or `nil` if no elements in the range match.
+  ///
+  /// This function is equivalent to `self[start..<end].fastFirstIndex(where: predicate)`,
+  /// except that it avoids construction of the slice, which can in turn avoid ARC traffic.
+  ///
+  @inlinable
+  internal func fastFirstIndex(from start: Index, to end: Index, where predicate: (Element) -> Bool) -> Index? {
+    // This function should be re-evaluated once the following compiler/language enhancements ship:
+    // - OSSA modules: https://forums.swift.org/t/arc-overhead-when-wrapping-a-class-in-a-struct-which-is-only-borrowed/62037/8
+    // - borrow 'self' for non-mutating functions: https://forums.swift.org/t/pitch-dont-copy-self-when-calling-non-mutating-methods/61707
+    var idx = start
+    while idx < end {
       if predicate(self[idx]) { return idx }
       formIndex(after: &idx)
     }
@@ -83,7 +97,7 @@ extension BidirectionalCollection {
   ///
   /// The difference between this implementation and the one in the standard library is
   /// that this uses  `>` and `<` rather than `==` and `!=` to compare indexes,
-  /// which allows bounds-checking to be more throughly eliminated.
+  /// which allows bounds-checking to be more thoroughly eliminated.
   ///
   @inlinable
   internal func fastLastIndex(where predicate: (Element) -> Bool) -> Index? {
@@ -106,7 +120,7 @@ extension BidirectionalCollection where Element: Equatable {
   ///
   /// The difference between this implementation and the one in the standard library is
   /// that this uses  `>` and `<` rather than `==` and `!=` to compare indexes,
-  /// which allows bounds-checking to be more throughly eliminated.
+  /// which allows bounds-checking to be more thoroughly eliminated.
   ///
   @inlinable @inline(__always)  // The closure should be inlined.
   internal func fastLastIndex(of element: Element) -> Index? {

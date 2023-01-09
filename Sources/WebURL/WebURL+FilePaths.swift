@@ -1545,26 +1545,43 @@ extension BidirectionalCollection where Self: MutableCollection, Self: RangeRepl
     removeSubrange(end...)
   }
 
-  /// Splits the collection's contents in to segments at Windows path separators, from the given index,
-  /// and trims each segment according to Windows' documented path normalization rules.
+  /// Splits the collection in to segments, from the given index, separated by Windows path separators.
+  /// Segments are trimmed according to Windows' documented path normalization rules.
   ///
-  /// If the path is a UNC path (`isUNC` is `true`), the first component is interpreted as a UNC share name and is not trimmed.
+  /// If the path is a UNC path, the first segment is interpreted as a UNC share name and is not trimmed.
   ///
   @inlinable
   internal mutating func trimPathSegmentsForWindows(from start: Index, isUNC: Bool) {
-    let end = trimSegments(from: start, separatedBy: isWindowsFilePathSeparator) { component, isFirst, isLast in
-      guard !(isUNC && isFirst) else {
-        // The first component is the share name. IE and Windows Explorer appear to have a bug and trim these,
-        // but GetFullPathName, Edge, and Chrome do not.
-        // https://github.com/dotnet/docs/issues/24563
-        return component
+
+    var isFirstSegment = true
+    let newEnd = trimSegments(from: start, skipInitialSeparator: true, separatedBy: isWindowsFilePathSeparator) {
+      codeUnits, range, isLast in
+
+      // The first segment in a UNC path is the share name.
+      // IE and Windows Explorer trim these (probable bug), but GetFullPathName, Edge, and Chrome do not.
+      // https://github.com/dotnet/docs/issues/24563
+
+      if isFirstSegment {
+        isFirstSegment = false
+        if isUNC { return range }
       }
 
-      // Windows path component trimming:
+      let segment = codeUnits[range]
+
+      // Single-dot-components are handled by the URL path parser.
+      // Double-dot-components should have been rejected already.
+
+      if segment.elementsEqual(CollectionOfOne(ASCII.period.codePoint)) {
+        return range
+      }
+      assert(!segment.elementsEqual(repeatElement(ASCII.period.codePoint, count: 2)))
+
+      // Windows path segment trimming:
       //
       // - If a segment ends in a single period, that period is removed.
       //   (A segment of a single or double period is normalized in the previous step.
       //    A segment of three or more periods is not normalized and is actually a valid file/directory name.)
+      //
       // - If the path doesn't end in a separator, all trailing periods and spaces (U+0020) are removed.
       //   If the last segment is simply a single or double period, it falls under the relative components rule above.
       //   This rule means that you can create a directory name with a trailing space by adding
@@ -1572,30 +1589,21 @@ extension BidirectionalCollection where Self: MutableCollection, Self: RangeRepl
       //
       //   Source: https://docs.microsoft.com/en-us/dotnet/standard/io/file-path-formats#trim-characters
 
-      // Single-dot-components will be normalized by the URL path parser.
-      if component.elementsEqual(CollectionOfOne(ASCII.period.codePoint)) {
-        return component
-      }
-      // Double-dot-components should have been rejected already.
-      assert(!component.elementsEqual(repeatElement(ASCII.period.codePoint, count: 2)))
-
       if isLast {
-        // Trim all dots and spaces, even if it leaves the component empty.
-        let charactersToTrim = component.suffix { $0 == ASCII.period.codePoint || $0 == ASCII.space.codePoint }
-        return component[component.startIndex..<charactersToTrim.startIndex]
-      } else {
-        // If the component ends with <non-dot><dot>, trim the trailing dot.
-        if component.last == ASCII.period.codePoint {
-          let trimmedComponent = component.dropLast()
-          assert(!trimmedComponent.isEmpty)
-          if trimmedComponent.last != ASCII.period.codePoint {
-            return trimmedComponent
-          }
-        }
-        // Otherwise, nothing to trim; we're done.
-        return component
+        let trailingPeriodsAndSpaces = segment.suffix { $0 == ASCII.period.codePoint || $0 == ASCII.space.codePoint }
+        return segment.startIndex..<trailingPeriodsAndSpaces.startIndex
       }
+
+      if segment.last == ASCII.period.codePoint {
+        let trimmedSegment = segment.dropLast()
+        if trimmedSegment.last != ASCII.period.codePoint {
+          return trimmedSegment.startIndex..<trimmedSegment.endIndex
+        }
+      }
+
+      return range
     }
-    removeSubrange(end...)
+
+    removeSubrange(newEnd...)
   }
 }
