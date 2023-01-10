@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - SubstitutionMap</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#default implementations">Default Implementations</a><ul><li class="variable"><a href="#substitutionmap.none">none</a></li><li class="variable"><a href="#substitutionmap.formencoding">form​Encoding</a></li></ul></li><li><a href="#requirements">Requirements</a><ul><li class="function"><a href="#substitutionmap.substitute(ascii:)">substitute(ascii:​)</a></li><li class="function"><a href="#substitutionmap.unsubstitute(ascii:)">unsubstitute(ascii:​)</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Protocol</small>
+    <code class="name">Substitution​Map</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">protocol</span> <span class="type">SubstitutionMap</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A bidirectional map of ASCII code-points.</p>
+
+</div>
+<div class="discussion">
+    <p>Some legacy encodings require certain ASCII code-points to be replaced.
+For example, the <code>application/x-www-form-urlencoded</code> encoding does not percent-encode ASCII spaces (0x20) as &quot;%20&quot;,
+and instead replaces them with a &quot;+&quot; (0x2B). The following example shows a potential implementation of this encoding:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">struct</span> <span class="type">FormEncoding</span>: <a href="/swift-url/0.2.0/PercentEncodeSet"><span class="type">PercentEncodeSet</span></a> {
+
+  <span class="keyword">func</span> <span class="function">shouldPercentEncode</span>(<span class="variable">ascii</span> <span class="variable">codePoint</span>: <span class="type">UInt8</span>) -&gt; <span class="type">Bool</span> {
+    <span class="keyword">if</span> <span class="variable">codePoint</span> == <span class="number literal">0x20</span> { <span class="keyword">return</span> <span class="keyword">false</span> } <span class="comment">// do not percent-encode spaces, substitute instead.</span>
+    <span class="keyword">if</span> <span class="variable">codePoint</span> == <span class="number literal">0x2B</span> { <span class="keyword">return</span> <span class="keyword">true</span> }  <span class="comment">// percent-encode actual "+"s in the source.</span>
+    <span class="comment">// other codepoints...</span>
+  }
+
+  <span class="keyword">struct</span> <span class="type">Substitutions</span>: <span class="type">SubstitutionMap</span> {
+    <span class="keyword">func</span> <span class="function">substitute</span>(<span class="variable">ascii</span> <span class="variable">codePoint</span>: <span class="type">UInt8</span>) -&gt; <span class="type">UInt8</span>? {
+      <span class="variable">codePoint</span> == <span class="number literal">0x20</span> ? <span class="number literal">0x2B</span> : <span class="keyword">nil</span> <span class="comment">// Substitute spaces with "+".</span>
+    }
+    <span class="keyword">func</span> <span class="function">unsubstitute</span>(<span class="variable">ascii</span> <span class="variable">codePoint</span>: <span class="type">UInt8</span>) -&gt; <span class="type">UInt8</span>? {
+      <span class="variable">codePoint</span> == <span class="number literal">0x2B</span> ? <span class="number literal">0x20</span> : <span class="keyword">nil</span> <span class="comment">// Unsubstitute "+" to space.</span>
+    }
+  }
+
+  <span class="keyword">var</span> <span class="variable">substitutions</span>: <span class="type">Substitutions</span> { .<span class="variable">init</span>() }
+}
+</code></pre></body></html>
+</div>
+
+    <section id="default implementations">
+        <h2>Default Implementations</h2>
+
+        <div role="article" class="variable" id="substitutionmap.none">
+    <h3>
+        <code>none</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">none</span>: <span class="type">NoSubstitutions</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>No substitutions. This is the substitution map used by all encode-sets specified in the URL standard, except form-encoding.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="substitutionmap.formencoding">
+    <h3>
+        <code>form​Encoding</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">formEncoding</span>: <span class="type">URLEncodeSet</span>.<span class="type">FormEncoding</span>.<span class="type">Substitutions</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Substitutions applicable to the <a href="https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set">application/x-www-form-urlencoded</a> percent-encode set.</p>
+
+</div>
+</div>
+    </section>
+
+
+    <section id="requirements">
+        <h2>Requirements</h2>
+
+        <div role="article" class="function" id="substitutionmap.substitute(ascii:)">
+    <h3>
+        <code>substitute(ascii:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">func</span> <span class="function">substitute</span>(<span class="variable">ascii</span> <span class="variable">codePoint</span>: <span class="type">UInt8</span>) -&gt; <span class="type">UInt8</span>?</code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the substitute to use for the given code-point, or <code>nil</code> if the code-point does not require substitution.</p>
+
+</div>
+<div class="discussion">
+    <p>The ASCII percent sign (<code>0x25</code>) and alpha characters (<code>0x41...0x5A</code> and <code>0x61...0x7A</code>) must not be substituted.</p>
+
+<p>In order to ensure lossless encoding, any code-points returned as substitutes should be percent-encoded by the
+substitution map's parent encoder and restored by the inverse function, <code>unsubstitute(ascii:)</code>.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>code​Point</th>
+    <td><code class="type">UInt8</code></td>
+    <td><p>An ASCII code-point from unencoded data. Always in the range <code>0...127</code>.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>The code-point to emit instead of <code>codePoint</code>, or <code>nil</code> if <code>codePoint</code> should not be substituted. Substitute code-points must always be in the range <code>0...127</code>.</p>
+
+</div>
+<div role="article" class="function" id="substitutionmap.unsubstitute(ascii:)">
+    <h3>
+        <code>unsubstitute(ascii:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">func</span> <span class="function">unsubstitute</span>(<span class="variable">ascii</span> <span class="variable">codePoint</span>: <span class="type">UInt8</span>) -&gt; <span class="type">UInt8</span>?</code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the code-point restored from the given substitute code-point, or <code>nil</code> if the given code-point is not a substitute.</p>
+
+</div>
+<div class="discussion">
+    <p>In order to ensure lossless encoding, this function should restore all code-points substituted by <code>substitute(ascii:)</code>.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>code​Point</th>
+    <td><code class="type">UInt8</code></td>
+    <td><p>An ASCII codepoint from encoded data. Always in the range <code>0...127</code>.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>The code-point to emit instead of <code>codePoint</code>, or <code>nil</code> if <code>codePoint</code> is not a substitute recognized by this substitution map. Restored code-points must always be in the range <code>0...127</code>.</p>
+
+</div>
+    </section>
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - WebURL.UTF8View</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Member Of</a></li><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#nested type aliases">Nested Type Aliases</a><ul><li class="typealias"><a href="#weburl.utf8view.index">Index</a></li><li class="typealias"><a href="#weburl.utf8view.indices">Indices</a></li><li class="typealias"><a href="#weburl.utf8view.element">Element</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#weburl.utf8view.startindex">start​Index</a></li><li class="variable"><a href="#weburl.utf8view.endindex">end​Index</a></li><li class="variable"><a href="#weburl.utf8view.indices">indices</a></li><li class="variable"><a href="#weburl.utf8view.count">count</a></li><li class="variable"><a href="#weburl.utf8view.scheme">scheme</a></li><li class="variable"><a href="#weburl.utf8view.username">username</a></li><li class="variable"><a href="#weburl.utf8view.password">password</a></li><li class="variable"><a href="#weburl.utf8view.hostname">hostname</a></li><li class="variable"><a href="#weburl.utf8view.port">port</a></li><li class="variable"><a href="#weburl.utf8view.path">path</a></li><li class="variable"><a href="#weburl.utf8view.query">query</a></li><li class="variable"><a href="#weburl.utf8view.fragment">fragment</a></li></ul></li><li><a href="#methods">Methods</a><ul><li class="function"><a href="#weburl.utf8view.pathcomponent(_:)">path​Component(_:​)</a></li><li class="function"><a href="#weburl.utf8view.index(after:)">index(after:​)</a></li><li class="function"><a href="#weburl.utf8view.formindex(after:)">form​Index(after:​)</a></li><li class="function"><a href="#weburl.utf8view.index(before:)">index(before:​)</a></li><li class="function"><a href="#weburl.utf8view.formindex(before:)">form​Index(before:​)</a></li><li class="function"><a href="#weburl.utf8view.index(_:offsetby:)">index(_:​offset​By:​)</a></li><li class="function"><a href="#weburl.utf8view.distance(from:to:)">distance(from:​to:​)</a></li><li class="function"><a href="#weburl.utf8view.withcontiguousstorageifavailable(_:)">with​Contiguous​Storage​IfAvailable(_:​)</a></li><li class="function"><a href="#weburl.utf8view.withunsafebufferpointer(_:)">with​Unsafe​Buffer​Pointer(_:​)</a></li><li class="function"><a href="#weburl.utf8view.resolve(_:)">resolve(_:​)</a></li><li class="function"><a href="#weburl.utf8view.setscheme(_:)">set​Scheme(_:​)</a></li><li class="function"><a href="#weburl.utf8view.setusername(_:)">set​Username(_:​)</a></li><li class="function"><a href="#weburl.utf8view.setpassword(_:)">set​Password(_:​)</a></li><li class="function"><a href="#weburl.utf8view.sethostname(_:)">set​Hostname(_:​)</a></li><li class="function"><a href="#weburl.utf8view.setpath(_:)">set​Path(_:​)</a></li><li class="function"><a href="#weburl.utf8view.setquery(_:)">set​Query(_:​)</a></li><li class="function"><a href="#weburl.utf8view.setfragment(_:)">set​Fragment(_:​)</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">Web​URL.​UTF8View</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">UTF8View</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A view of the UTF-8 code-units in a serialized URL.</p>
+
+</div>
+<div class="discussion">
+    <p>This view provides efficient random-access as well as read-write access to the code-units of a serialized URL string,
+including information about where each URL component is situated. The code-units are guaranteed to only contain ASCII code-points.</p>
+
+<p>Component properties (such as <code>scheme</code>, <code>path</code>, and <code>query</code>) and setter methods (such as <code>setQuery</code>), have the same semantics and
+behaviour as the corresponding methods on <code>WebURL</code>.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Member Of</h3>
+<dl>
+    <dt class="structure"><code><a href="/swift-url/0.2.0/WebURL">WebURL</a></code></dt>
+<dd><p>A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.</p>
+</dd>
+</dl>
+<h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>RandomAccessCollection</code></dt>
+</dl>
+</section>
+    <section id="nested type aliases">
+        <h2>Nested Type Aliases</h2>
+
+        <div role="article" class="typealias" id="weburl.utf8view.index">
+    <h3>
+        <code>Index</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">typealias</span> <span class="variable">Index</span> = <span class="type">Int</span></code></pre>
+</div>
+</div>
+<div role="article" class="typealias" id="weburl.utf8view.indices">
+    <h3>
+        <code>Indices</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">typealias</span> <span class="variable">Indices</span> = <span class="type">Range</span>&lt;<span class="type">Index</span>&gt;</code></pre>
+</div>
+</div>
+<div role="article" class="typealias" id="weburl.utf8view.element">
+    <h3>
+        <code>Element</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">typealias</span> <span class="variable">Element</span> = <span class="type">UInt8</span></code></pre>
+</div>
+</div>
+    </section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="weburl.utf8view.startindex">
+    <h3>
+        <code>start​Index</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">startIndex</span>: <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.endindex">
+    <h3>
+        <code>end​Index</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">endIndex</span>: <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.indices">
+    <h3>
+        <code>indices</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">indices</span>: <span class="type">Range</span>&lt;<span class="type">Index</span>&gt; </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.count">
+    <h3>
+        <code>count</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">count</span>: <span class="type">Int</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.scheme">
+    <h3>
+        <code>scheme</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">scheme</span>: <span class="type">SubSequence</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing this URL's <code>scheme</code>.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>WebURL.scheme</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.username">
+    <h3>
+        <code>username</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">username</span>: <span class="type">SubSequence</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing this URL's <code>username</code>, if present.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>WebURL.username</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.password">
+    <h3>
+        <code>password</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">password</span>: <span class="type">SubSequence</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing this URL's <code>password</code>, if present.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>WebURL.password</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.hostname">
+    <h3>
+        <code>hostname</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">hostname</span>: <span class="type">SubSequence</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing this URL's <code>hostname</code>, if present.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>WebURL.hostname</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.port">
+    <h3>
+        <code>port</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">port</span>: <span class="type">SubSequence</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing this URL's <code>port</code>, if present.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>WebURL.port</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.path">
+    <h3>
+        <code>path</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">path</span>: <span class="type">SubSequence</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing this URL's <code>path</code>.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>WebURL.path</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.query">
+    <h3>
+        <code>query</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">query</span>: <span class="type">SubSequence</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing this URL's <code>query</code>, if present.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>WebURL.query</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8view.fragment">
+    <h3>
+        <code>fragment</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">fragment</span>: <span class="type">SubSequence</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing this URL's <code>fragment</code>, if present.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>WebURL.fragment</code></p>
+
+</aside>
+</div>
+</div>
+    </section>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="weburl.utf8view.pathcomponent(_:)">
+    <h3>
+        <code>path​Component(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">pathComponent</span>(<span class="keyword">_</span> <span class="variable">component</span>: <span class="type">WebURL</span>.<span class="type">PathComponents</span>.<span class="type">Index</span>) -&gt; <span class="type">SubSequence</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The UTF-8 code-units containing the given path component.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.index(after:)">
+    <h3>
+        <code>index(after:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">index</span>(<span class="variable">after</span> <span class="variable">i</span>: <span class="type">Index</span>) -&gt; <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.formindex(after:)">
+    <h3>
+        <code>form​Index(after:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">formIndex</span>(<span class="variable">after</span> <span class="variable">i</span>: <span class="keyword">inout</span> <span class="type">Index</span>) </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.index(before:)">
+    <h3>
+        <code>index(before:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">index</span>(<span class="variable">before</span> <span class="variable">i</span>: <span class="type">Index</span>) -&gt; <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.formindex(before:)">
+    <h3>
+        <code>form​Index(before:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">formIndex</span>(<span class="variable">before</span> <span class="variable">i</span>: <span class="keyword">inout</span> <span class="type">Index</span>) </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.index(_:offsetby:)">
+    <h3>
+        <code>index(_:​offset​By:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">index</span>(<span class="keyword">_</span> <span class="variable">i</span>: <span class="type">Index</span>, <span class="variable">offsetBy</span> <span class="variable">distance</span>: <span class="type">Int</span>) -&gt; <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.distance(from:to:)">
+    <h3>
+        <code>distance(from:​to:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">distance</span>(<span class="variable">from</span> <span class="variable">start</span>: <span class="type">Index</span>, <span class="variable">to</span> <span class="variable">end</span>: <span class="type">Index</span>) -&gt; <span class="type">Int</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.withcontiguousstorageifavailable(_:)">
+    <h3>
+        <code>with​Contiguous​Storage​IfAvailable(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">withContiguousStorageIfAvailable</span>&lt;<span class="variable">R</span>&gt;(<span class="keyword">_</span> <span class="variable">body</span>: (<span class="type">UnsafeBufferPointer</span>&lt;<span class="type">UInt8</span>&gt;) <span class="keyword">throws</span> -&gt; <span class="type">R</span>) <span class="keyword">rethrows</span> -&gt; <span class="type">R</span>? </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.withunsafebufferpointer(_:)">
+    <h3>
+        <code>with​Unsafe​Buffer​Pointer(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">withUnsafeBufferPointer</span>&lt;<span class="variable">R</span>&gt;(<span class="keyword">_</span> <span class="variable">body</span>: (<span class="type">UnsafeBufferPointer</span>&lt;<span class="type">UInt8</span>&gt;) <span class="keyword">throws</span> -&gt; <span class="type">R</span>) <span class="keyword">rethrows</span> -&gt; <span class="type">R</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Invokes <code>body</code> with a pointer to the contiguous UTF-8 code-units of the serialized URL string.</p>
+
+</div>
+<div class="discussion">
+    <aside class="Important">
+    <p>The provided pointer is valid only for the duration of <code>body</code>. Do not store or return the pointer for later use.</p>
+
+</aside>
+<aside class="Complexity">
+    <p>O(<em>1</em>)</p>
+
+</aside>
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>body</th>
+    <td><code class="type">(Unsafe​Buffer​Pointer&lt;UInt8&gt;) throws -&gt; R</code></td>
+    <td><p>A closure which processes the content of the serialized URL.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="function" id="weburl.utf8view.resolve(_:)">
+    <h3>
+        <code>resolve(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">resolve</span>&lt;<span class="variable">UTF8Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">utf8</span>: <span class="type">UTF8Bytes</span>
+) -&gt; <span class="type">WebURL</span>? <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">BidirectionalCollection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Parses the given string, which is provided as a collection of UTF-8 code-units, with this URL as its base.</p>
+
+</div>
+<div class="discussion">
+    <p>This function supports a wide range of relative URL strings, producing the same result as an HTML <code>&lt;a&gt;</code> tag on the page given by this URL.</p>
+
+<p>It should be noted that this method accepts protocol-relative URLs, which are able to direct to a different hostname, as well as absolute URL strings,
+which do not copy any information from their base URLs.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.setscheme(_:)">
+    <h3>
+        <code>set​Scheme(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setScheme</span>&lt;<span class="variable">UTF8Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newScheme</span>: <span class="type">UTF8Bytes</span>
+) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">Collection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>scheme</code> with the given UTF-8 code-units.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.setusername(_:)">
+    <h3>
+        <code>set​Username(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setUsername</span>&lt;<span class="variable">UTF8Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newUsername</span>: <span class="type">UTF8Bytes</span>?
+) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">Collection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>username</code> with the given UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Any code-points which are not valid for use in the URL's user-info section will be percent-encoded.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.setpassword(_:)">
+    <h3>
+        <code>set​Password(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setPassword</span>&lt;<span class="variable">UTF8Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newPassword</span>: <span class="type">UTF8Bytes</span>?
+) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">Collection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>password</code> with the given UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Any code-points which are not valid for use in the URL's user-info section will be percent-encoded.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.sethostname(_:)">
+    <h3>
+        <code>set​Hostname(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setHostname</span>&lt;<span class="variable">UTF8Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newHostname</span>: <span class="type">UTF8Bytes</span>?
+) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">BidirectionalCollection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>hostname</code> with the given UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Unlike other setters, not all code-points which are invalid for use in hostnames will be percent-encoded.
+If the new content contains a <a href="https://url.spec.whatwg.org/#forbidden-host-code-point">forbidden host code-point</a>, the operation will fail.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.setpath(_:)">
+    <h3>
+        <code>set​Path(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setPath</span>&lt;<span class="variable">UTF8Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newPath</span>: <span class="type">UTF8Bytes</span>
+) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">BidirectionalCollection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>path</code> with the given UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>The given path string will be lexically simplified, and any code-points in the path's components that are not valid for use will be percent-encoded.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.setquery(_:)">
+    <h3>
+        <code>set​Query(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setQuery</span>&lt;<span class="variable">UTF8Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newQuery</span>: <span class="type">UTF8Bytes</span>?
+) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">Collection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>query</code> with the given UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Any code-points which are not valid for use in the URL's query will be percent-encoded.
+Note that the set of code-points which are valid depends on the URL's <code>scheme</code>.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.utf8view.setfragment(_:)">
+    <h3>
+        <code>set​Fragment(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setFragment</span>&lt;<span class="variable">UTF8Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newFragment</span>: <span class="type">UTF8Bytes</span>?
+) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">Collection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>fragment</code> with the given UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Any code-points which are not valid for use in the URL's fragment will be percent-encoded.</p>
+
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

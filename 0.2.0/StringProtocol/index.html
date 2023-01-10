@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - StringProtocol</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#methods">Methods</a><ul><li class="function"><a href="#stringprotocol.percentencoded(using:)">percent​Encoded(using:​)</a></li><li class="function"><a href="#stringprotocol.percentencoded(using:)">percent​Encoded(using:​)</a></li><li class="function"><a href="#stringprotocol.percentdecodedbytesarray(substitutions:)">percent​Decoded​Bytes​Array(substitutions:​)</a></li><li class="function"><a href="#stringprotocol.percentdecodedbytesarray(substitutions:)">percent​Decoded​Bytes​Array(substitutions:​)</a></li><li class="function"><a href="#stringprotocol.percentdecodedbytesarray()">percent​Decoded​Bytes​Array()</a></li><li class="function"><a href="#stringprotocol.percentdecoded(substitutions:)">percent​Decoded(substitutions:​)</a></li><li class="function"><a href="#stringprotocol.percentdecoded(substitutions:)">percent​Decoded(substitutions:​)</a></li><li class="function"><a href="#stringprotocol.percentdecoded()">percent​Decoded()</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Extensions on</small>
+    <code class="name">StringProtocol</code>
+</h1>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="stringprotocol.percentencoded(using:)">
+    <h3>
+        <code>percent​Encoded(using:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentEncoded</span>&lt;<span class="variable">EncodeSet</span>: <span class="type">PercentEncodeSet</span>&gt;(<span class="variable">using</span> <span class="variable">encodeSet</span>: <span class="type">EncodeSet</span>) -&gt; <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns an ASCII string formed by percent-encoding this string's UTF-8 representation.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string &quot;%C8&quot;),
+with bytes within the ASCII range being restricted by <code>encodeSet</code>.</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+provide the appropriate <code>SubstitutionMap</code> when decoding form-encoded data to accurately recover the source contents.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Percent-encoding can be used to escapes special characters, e.g. spaces.</span>
+<span class="string literal">"</span><span class="string literal">hello, world!</span><span class="string literal">"</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">userInfoSet</span>) <span class="comment">// "hello,%20world!"</span>
+
+<span class="comment">// Encode-sets determine which characters are encoded, and some perform substitutions.</span>
+<span class="string literal">"</span><span class="string literal">/usr/bin/swift</span><span class="string literal">"</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>) <span class="comment">// "%2Fusr%2Fbin%2Fswift"</span>
+<span class="string literal">"</span><span class="string literal">king of the 🦆s</span><span class="string literal">"</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">formEncoding</span>) <span class="comment">// "king+of+the+%F0%9F%A6%86s"</span>
+</code></pre></body></html>
+</div>
+</div>
+<div role="article" class="function" id="stringprotocol.percentencoded(using:)">
+    <h3>
+        <code>percent​Encoded(using:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">_disfavoredOverload</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentEncoded</span>&lt;<span class="variable">EncodeSet</span>: <span class="type">PercentEncodeSet</span>&gt;(<span class="variable">using</span> <span class="variable">encodeSet</span>: <span class="type">EncodeSet</span>.<span class="type">_Member</span>) -&gt; <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns an ASCII string formed by percent-encoding this string's UTF-8 representation.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string &quot;%C8&quot;),
+with bytes within the ASCII range being restricted by <code>encodeSet</code>.</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+provide the appropriate <code>SubstitutionMap</code> when decoding form-encoded data to accurately recover the source contents.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Percent-encoding can be used to escapes special characters, e.g. spaces.</span>
+<span class="string literal">"</span><span class="string literal">hello, world!</span><span class="string literal">"</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">userInfoSet</span>) <span class="comment">// "hello,%20world!"</span>
+
+<span class="comment">// Encode-sets determine which characters are encoded, and some perform substitutions.</span>
+<span class="string literal">"</span><span class="string literal">/usr/bin/swift</span><span class="string literal">"</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>) <span class="comment">// "%2Fusr%2Fbin%2Fswift"</span>
+<span class="string literal">"</span><span class="string literal">king of the 🦆s</span><span class="string literal">"</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">formEncoding</span>) <span class="comment">// "king+of+the+%F0%9F%A6%86s"</span>
+</code></pre></body></html>
+</div>
+</div>
+<div role="article" class="function" id="stringprotocol.percentdecodedbytesarray(substitutions:)">
+    <h3>
+        <code>percent​Decoded​Bytes​Array(substitutions:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecodedBytesArray</span>&lt;<span class="variable">Substitutions</span>: <span class="type">SubstitutionMap</span>&gt;(<span class="variable">substitutions</span>: <span class="type">Substitutions</span>) -&gt; [<span class="type">UInt8</span>] </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the percent-decoding of this string as binary data.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">let</span> <span class="variable">originalImage</span>: <span class="type">Data</span> = ...
+
+<span class="comment">// Encode the data, e.g. using form-encoding.</span>
+<span class="keyword">let</span> <span class="variable">encodedImage</span> = <span class="variable">originalImage</span>.<span class="variable">percentEncodedString</span>(<span class="variable">using</span>: .<span class="variable">formEncoding</span>) <span class="comment">// "%BAt_%E0%11%22%EB%10%2C%7F..."</span>
+
+<span class="comment">// Decode the data, giving the appropriate substitution map.</span>
+<span class="keyword">let</span> <span class="variable">decodedImage</span> = <span class="variable">encodedImage</span>.<span class="variable">percentDecodedBytesArray</span>(<span class="variable">substitutions</span>: .<span class="variable">formEncoding</span>)
+<span class="variable">assert</span>(<span class="variable">decodedImage</span>.<span class="variable">elementsEqual</span>(<span class="variable">originalImage</span>)) <span class="comment">// ✅</span>
+</code></pre></body></html>
+<p>The returned data contains raw bytes, potenially including NULL bytes or invalid UTF-8.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="stringprotocol.percentdecodedbytesarray(substitutions:)">
+    <h3>
+        <code>percent​Decoded​Bytes​Array(substitutions:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecodedBytesArray</span>&lt;<span class="variable">Substitutions</span>: <span class="type">SubstitutionMap</span>&gt;(
+  <span class="variable">substitutions</span>: <span class="type">Substitutions</span>.<span class="type">_Member</span>
+) -&gt; [<span class="type">UInt8</span>] </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the percent-decoding of this string as binary data.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">let</span> <span class="variable">originalImage</span>: <span class="type">Data</span> = ...
+
+<span class="comment">// Encode the data, e.g. using form-encoding.</span>
+<span class="keyword">let</span> <span class="variable">encodedImage</span> = <span class="variable">originalImage</span>.<span class="variable">percentEncodedString</span>(<span class="variable">using</span>: .<span class="variable">formEncoding</span>) <span class="comment">// "%BAt_%E0%11%22%EB%10%2C%7F..."</span>
+
+<span class="comment">// Decode the data, giving the appropriate substitution map.</span>
+<span class="keyword">let</span> <span class="variable">decodedImage</span> = <span class="variable">encodedImage</span>.<span class="variable">percentDecodedBytesArray</span>(<span class="variable">substitutions</span>: .<span class="variable">formEncoding</span>)
+<span class="variable">assert</span>(<span class="variable">decodedImage</span>.<span class="variable">elementsEqual</span>(<span class="variable">originalImage</span>)) <span class="comment">// ✅</span>
+</code></pre></body></html>
+<p>The returned data contains raw bytes, potenially including NULL bytes or invalid UTF-8.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="stringprotocol.percentdecodedbytesarray()">
+    <h3>
+        <code>percent​Decoded​Bytes​Array()</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecodedBytesArray</span>() -&gt; [<span class="type">UInt8</span>] </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the percent-decoding of this string as binary data.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<p>This function is equivalent to calling <code>percentDecodedBytesArray(substitutions: .none)</code>.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">let</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">data:application/octet-stream,%BC%A8%CD</span><span class="string literal">"</span>)!
+
+<span class="comment">// Check the data URL's payload.</span>
+<span class="keyword">let</span> <span class="variable">payloadOptions</span> = <span class="variable">url</span>.<span class="variable">path</span>.<span class="variable">prefix</span>(<span class="variable">while</span>: { <span class="variable">$0</span> != <span class="string literal">"</span><span class="string literal">,</span><span class="string literal">"</span> })
+<span class="keyword">if</span> <span class="variable">payloadOptions</span>.<span class="variable">hasSuffix</span>(<span class="string literal">"</span><span class="string literal">;base64</span><span class="string literal">"</span>) {
+  <span class="comment">// ... decode as base-64</span>
+} <span class="keyword">else</span> {
+  <span class="keyword">let</span> <span class="variable">encodedPayload</span> = <span class="variable">url</span>.<span class="variable">path</span>[<span class="variable">payloadOptions</span>.<span class="variable">endIndex</span>...].<span class="variable">dropFirst</span>()
+  <span class="keyword">let</span> <span class="variable">decodedPayload</span> = <span class="variable">encodedPayload</span>.<span class="variable">percentDecodedBytesArray</span>()
+  <span class="variable">assert</span>(<span class="variable">decodedPayload</span> == [<span class="number literal">0xBC</span>, <span class="number literal">0xA8</span>, <span class="number literal">0xCD</span>]) <span class="comment">// ✅</span>
+}
+</code></pre></body></html>
+<p>The returned data contains raw bytes, potenially including NULL bytes or invalid UTF-8.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="stringprotocol.percentdecoded(substitutions:)">
+    <h3>
+        <code>percent​Decoded(substitutions:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecoded</span>&lt;<span class="variable">Substitutions</span>: <span class="type">SubstitutionMap</span>&gt;(<span class="variable">substitutions</span>: <span class="type">Substitutions</span>) -&gt; <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the percent-decoding of this string, interpreted as UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<p>If the bytes obtained by percent-decoding this string represent anything other than UTF-8 text,
+use the <code>percentDecodedByteArray</code> function to decode the string as binary data.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Decode percent-encoded UTF-8 as a string.</span>
+<span class="string literal">"</span><span class="string literal">hello,%20world!</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">none</span>) <span class="comment">// "hello, world!"</span>
+<span class="string literal">"</span><span class="string literal">%2Fusr%2Fbin%2Fswift</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">none</span>) <span class="comment">// "/usr/bin/swift"</span>
+
+<span class="comment">// Form-encoded content requires a substitution map to accurately decode.</span>
+<span class="string literal">"</span><span class="string literal">king+of+the+%F0%9F%A6%86s</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">formEncoding</span>) <span class="comment">// "king of the 🦆s"</span>
+</code></pre></body></html>
+<aside class="Important">
+    <p>The returned string may include NULL bytes or other values which your program might not expect. Percent-encoding has frequently been used to perform path traversal attacks, SQL injection, and exploit similar vulnerabilities stemming from unvalidated input (somtimes under multiple levels of encoding). Ensure you do not over-decode your data, and every time you <em>do</em> decode some data, you must consider the result to be <strong>entirely unvalidated</strong>, even if the source contents were previously validated.</p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="stringprotocol.percentdecoded(substitutions:)">
+    <h3>
+        <code>percent​Decoded(substitutions:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>) <span class="attribute">@</span><span class="attribute">_disfavoredOverload</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecoded</span>&lt;<span class="variable">Substitutions</span>: <span class="type">SubstitutionMap</span>&gt;(<span class="variable">substitutions</span>: <span class="type">Substitutions</span>.<span class="type">_Member</span>) -&gt; <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the percent-decoding of this string, interpreted as UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<p>If the bytes obtained by percent-decoding this string represent anything other than UTF-8 text,
+use the <code>percentDecodedByteArray</code> function to decode the string as binary data.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Decode percent-encoded UTF-8 as a string.</span>
+<span class="string literal">"</span><span class="string literal">hello,%20world!</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">none</span>) <span class="comment">// "hello, world!"</span>
+<span class="string literal">"</span><span class="string literal">%2Fusr%2Fbin%2Fswift</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">none</span>) <span class="comment">// "/usr/bin/swift"</span>
+
+<span class="comment">// Form-encoded content requires a substitution map to accurately decode.</span>
+<span class="string literal">"</span><span class="string literal">king+of+the+%F0%9F%A6%86s</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">formEncoding</span>) <span class="comment">// "king of the 🦆s"</span>
+</code></pre></body></html>
+<aside class="Important">
+    <p>The returned string may include NULL bytes or other values which your program might not expect. Percent-encoding has frequently been used to perform path traversal attacks, SQL injection, and exploit similar vulnerabilities stemming from unvalidated input (somtimes under multiple levels of encoding). Ensure you do not over-decode your data, and every time you <em>do</em> decode some data, you must consider the result to be <strong>entirely unvalidated</strong>, even if the source contents were previously validated.</p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="stringprotocol.percentdecoded()">
+    <h3>
+        <code>percent​Decoded()</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecoded</span>() -&gt; <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the percent-decoding of this string, interpreted as UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<p>If the bytes obtained by percent-decoding this string represent anything other than UTF-8 text,
+use the <code>percentDecodedByteArray</code> function to decode the string as binary data.</p>
+
+<p>This function is equivalent to calling <code>percentDecoded(substitutions: .none)</code>.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Decode percent-encoded UTF-8 as a string.</span>
+<span class="string literal">"</span><span class="string literal">hello%2C%20world!</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>() <span class="comment">// "hello, world!"</span>
+<span class="string literal">"</span><span class="string literal">%2Fusr%2Fbin%2Fswift</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>() <span class="comment">// "/usr/bin/swift"</span>
+<span class="string literal">"</span><span class="string literal">%F0%9F%98%8E</span><span class="string literal">"</span>.<span class="variable">percentDecoded</span>() <span class="comment">// "😎"</span>
+</code></pre></body></html>
+<aside class="Important">
+    <p>The returned string may include NULL bytes or other values which your program might not expect. Percent-encoding has frequently been used to perform path traversal attacks, SQL injection, and exploit similar vulnerabilities stemming from unvalidated input (somtimes under multiple levels of encoding). Ensure you do not over-decode your data, and every time you <em>do</em> decode some data, you must consider the result to be <strong>entirely unvalidated</strong>, even if the source contents were previously validated.</p>
+
+</aside>
+</div>
+</div>
+    </section>
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

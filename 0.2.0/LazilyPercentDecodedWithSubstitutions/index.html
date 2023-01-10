@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - LazilyPercentDecodedWithSubstitutions</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#nested type aliases">Nested Type Aliases</a><ul><li class="typealias"><a href="#lazilypercentdecodedwithsubstitutions.element">Element</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#lazilypercentdecodedwithsubstitutions.startindex">start​Index</a></li><li class="variable"><a href="#lazilypercentdecodedwithsubstitutions.endindex">end​Index</a></li><li class="variable"><a href="#lazilypercentdecodedwithsubstitutions.isempty">is​Empty</a></li></ul></li><li><a href="#methods">Methods</a><ul><li class="function"><a href="#lazilypercentdecodedwithsubstitutions.index(after:)">index(after:​)</a></li><li class="function"><a href="#lazilypercentdecodedwithsubstitutions.formindex(after:)">form​Index(after:​)</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">Lazily​Percent​Decoded​With​Substitutions</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">LazilyPercentDecodedWithSubstitutions</span>&lt;<span class="variable">Source</span>, <span class="variable">Substitutions</span>&gt;: <span class="type">Collection</span>, <span class="type">LazyCollectionProtocol</span>
+<span class="keyword">where</span> <span class="type">Source</span>: <span class="type">Collection</span>, <span class="type">Source</span>.<span class="type">Element</span> == <span class="type">UInt8</span>, <span class="type">Substitutions</span>: <span class="type">SubstitutionMap</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A <code>Collection</code> which percent-decodes elements from its <code>Source</code> on-demand, and reverses substitutions made by a <code>SubstitutionMap</code>.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content.</p>
+
+<p>To decode a source collection containing a percent-encoded or form-encoded string, use the extension methods provided on <code>LazyCollectionProtocol</code>:</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// The bytes, containing a string with UTF-8 form-encoding.</span>
+<span class="keyword">let</span> <span class="variable">source</span>: [<span class="type">UInt8</span>] = [
+  <span class="number literal">0x68</span>, <span class="number literal">0x25</span>, <span class="number literal">0x43</span>, <span class="number literal">0x32</span>, <span class="number literal">0x25</span>, <span class="number literal">0x41</span>, <span class="number literal">0x33</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x6F</span>, <span class="number literal">0x2B</span>, <span class="number literal">0x77</span>, <span class="number literal">0x6F</span>, <span class="number literal">0x72</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x64</span>
+]
+<span class="variable">String</span>(<span class="variable">decoding</span>: <span class="type">source</span>, <span class="variable">as</span>: <span class="type">UTF8</span>.<span class="keyword">self</span>) <span class="comment">// "h%C2%A3llo+world"</span>
+
+<span class="comment">// Specify the `.formEncoding` substitution map to decode the contents.</span>
+<span class="variable">source</span>.<span class="variable">lazy</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">formEncoding</span>)
+  .<span class="variable">elementsEqual</span>(<span class="string literal">"</span><span class="string literal">h£llo world</span><span class="string literal">"</span>.<span class="variable">utf8</span>) <span class="comment">// ✅</span>
+</code></pre></body></html>
+<p>The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>BidirectionalCollection</code></dt>
+<dt class="unknown"><code>Collection</code></dt>
+<dt class="unknown"><code>LazyCollectionProtocol</code></dt>
+</dl>
+</section>
+    <section id="nested type aliases">
+        <h2>Nested Type Aliases</h2>
+
+        <div role="article" class="typealias" id="lazilypercentdecodedwithsubstitutions.element">
+    <h3>
+        <code>Element</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">typealias</span> <span class="variable">Element</span> = <span class="type">UInt8</span></code></pre>
+</div>
+</div>
+    </section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="lazilypercentdecodedwithsubstitutions.startindex">
+    <h3>
+        <code>start​Index</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">let</span> <span class="variable">startIndex</span>: <span class="type">Index</span></code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="lazilypercentdecodedwithsubstitutions.endindex">
+    <h3>
+        <code>end​Index</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">endIndex</span>: <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="lazilypercentdecodedwithsubstitutions.isempty">
+    <h3>
+        <code>is​Empty</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">isEmpty</span>: <span class="type">Bool</span> </code></pre>
+</div>
+</div>
+    </section>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="lazilypercentdecodedwithsubstitutions.index(after:)">
+    <h3>
+        <code>index(after:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">index</span>(<span class="variable">after</span> <span class="variable">i</span>: <span class="type">Index</span>) -&gt; <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="lazilypercentdecodedwithsubstitutions.formindex(after:)">
+    <h3>
+        <code>form​Index(after:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">formIndex</span>(<span class="variable">after</span> <span class="variable">i</span>: <span class="keyword">inout</span> <span class="type">Index</span>) </code></pre>
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - WebURL</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Nested Types</a></li><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#initializers">Initializers</a><ul><li class="initializer"><a href="#weburl.init(filepath:format:)">init(file​Path:​format:​)</a></li><li class="initializer"><a href="#weburl.init?(_:)">init?(_:​)</a></li><li class="initializer"><a href="#weburl.init?(utf8:)">init?(utf8:​)</a></li><li class="initializer"><a href="#weburl.init(from:)">init(from:​)</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#weburl.formparams">form​Params</a></li><li class="variable"><a href="#weburl.host">host</a></li><li class="variable"><a href="#weburl.jsmodel">js​Model</a></li><li class="variable"><a href="#weburl.origin">origin</a></li><li class="variable"><a href="#weburl.pathcomponents">path​Components</a></li><li class="variable"><a href="#weburl.utf8">utf8</a></li><li class="variable"><a href="#weburl.description">description</a></li><li class="variable"><a href="#weburl.scheme">scheme</a></li><li class="variable"><a href="#weburl.username">username</a></li><li class="variable"><a href="#weburl.password">password</a></li><li class="variable"><a href="#weburl.hostname">hostname</a></li><li class="variable"><a href="#weburl.port">port</a></li><li class="variable"><a href="#weburl.portorknowndefault">port​OrKnown​Default</a></li><li class="variable"><a href="#weburl.path">path</a></li><li class="variable"><a href="#weburl.query">query</a></li><li class="variable"><a href="#weburl.fragment">fragment</a></li><li class="variable"><a href="#weburl.hasopaquepath">has​Opaque​Path</a></li></ul></li><li><a href="#methods">Methods</a><ul><li class="function"><a href="#weburl.fromfilepathbytes(_:format:)">from​File​Path​Bytes(_:​format:​)</a></li><li class="function"><a href="#weburl.filepathbytes(from:format:nullterminated:)">file​Path​Bytes(from:​format:​null​Terminated:​)</a></li><li class="function"><a href="#weburl.frombinaryfilepath(_:format:)">from​Binary​File​Path(_:​format:​)</a></li><li class="function"><a href="#weburl.binaryfilepath(from:format:nullterminated:)">binary​File​Path(from:​format:​null​Terminated:​)</a></li><li class="function"><a href="#weburl.resolve(_:)">resolve(_:​)</a></li><li class="function"><a href="#weburl.hash(into:)">hash(into:​)</a></li><li class="function"><a href="#weburl.encode(to:)">encode(to:​)</a></li><li class="function"><a href="#weburl.serialized(excludingfragment:)">serialized(excluding​Fragment:​)</a></li><li class="function"><a href="#weburl.setscheme(_:)">set​Scheme(_:​)</a></li><li class="function"><a href="#weburl.setusername(_:)">set​Username(_:​)</a></li><li class="function"><a href="#weburl.setpassword(_:)">set​Password(_:​)</a></li><li class="function"><a href="#weburl.sethostname(_:)">set​Hostname(_:​)</a></li><li class="function"><a href="#weburl.setport(_:)">set​Port(_:​)</a></li><li class="function"><a href="#weburl.setpath(_:)">set​Path(_:​)</a></li><li class="function"><a href="#weburl.setquery(_:)">set​Query(_:​)</a></li><li class="function"><a href="#weburl.setfragment(_:)">set​Fragment(_:​)</a></li></ul></li><li><a href="#operators">Operators</a><ul><li class="function"><a href="#weburl.==">==</a></li><li class="function"><a href="#weburl.&lt;">&lt;</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">Web​URL</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">WebURL</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.</p>
+
+</div>
+<div class="discussion">
+    <p>URL parsing and serialization is compatible with the <a href="https://url.spec.whatwg.org/">WHATWG URL Standard</a>.</p>
+
+<p>The <code>WebURL</code> API is designed to meet the needs and expectations of Swift developers, expanding on the JavaScript API described in the standard
+to add path-component manipulation, host objects, and more. Some of the component values have been tweaked to not include their leading or
+trailing delimiters, and component setters are little stricter and more predictable, but in all other respects they should have the same behaviour.</p>
+
+<p>For more information on the differences between this API and the JavaScript <code>URL</code> class, see the <code>WebURL.JSModel</code> type.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Nested Types</h3>
+<dl>
+    <dt class="structure"><code><a href="/swift-url/0.2.0/WebURL_FormEncodedQueryParameters">WebURL.FormEncodedQueryParameters</a></code></dt>
+<dd><p>A view of the <code>application/x-www-form-urlencoded</code> key-value pairs in a URL's <code>query</code>.</p>
+</dd>
+<dt class="enumeration"><code><a href="/swift-url/0.2.0/WebURL_Host">WebURL.Host</a></code></dt>
+<dd><p>A host is a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.</p>
+</dd>
+<dt class="structure"><code><a href="/swift-url/0.2.0/WebURL_JSModel">WebURL.JSModel</a></code></dt>
+<dd><p>An interface to this URL whose properties have the same behaviour as the JavaScript <code>URL</code> class described in the <a href="https://url.spec.whatwg.org/#url-class">URL Standard</a>.</p>
+</dd>
+<dt class="structure"><code><a href="/swift-url/0.2.0/WebURL_Origin">WebURL.Origin</a></code></dt>
+<dd><p>Origins are the fundamental currency of the Web's security model.</p>
+</dd>
+<dt class="structure"><code><a href="/swift-url/0.2.0/WebURL_PathComponents">WebURL.PathComponents</a></code></dt>
+<dd><p>A view of the components in a URL's path.</p>
+</dd>
+<dt class="structure"><code><a href="/swift-url/0.2.0/WebURL_UTF8View">WebURL.UTF8View</a></code></dt>
+<dd><p>A view of the UTF-8 code-units in a serialized URL.</p>
+</dd>
+</dl>
+<h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>Codable</code></dt>
+<dt class="unknown"><code>Comparable</code></dt>
+<dt class="unknown"><code>CustomStringConvertible</code></dt>
+<dt class="unknown"><code>Equatable</code></dt>
+<dt class="unknown"><code>Hashable</code></dt>
+<dt class="unknown"><code>LosslessStringConvertible</code></dt>
+</dl>
+</section>
+    <section id="initializers">
+        <h2>Initializers</h2>
+
+        <div role="article" class="initializer" id="weburl.init(filepath:format:)">
+    <h3>
+        <code>init(file​Path:​format:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">init</span>&lt;<span class="variable">S</span>&gt;(
+  <span class="variable">filePath</span>: <span class="type">S</span>, <span class="variable">format</span>: <span class="type">FilePathFormat</span> = .<span class="variable">native</span>
+) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span>, <span class="type">S</span>.<span class="type">UTF8View</span>: <span class="type">BidirectionalCollection</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Creates a <code>file:</code> URL representation of a file path.</p>
+
+</div>
+<div class="discussion">
+    <p>The given path must be absolute according to the given <code>FilePathFormat</code>, and not contain any components
+which traverse to their parent directories (<code>..</code> components). Some minimal normalization is applied, according to the path format.</p>
+
+<p>Note that even though a <code>String</code> may be a valid <em>source</em> of a file path, some paths may be corrupted when storing or manipulating them as a <code>String</code>.
+Therefore, this library does not offer a corresponding API to reconstruct a file path as a <code>String</code>.</p>
+
+<p>Instead, developers are encouraged to use the <code>FilePath</code> type from the <code>swift-system</code> package.
+The <code>FilePath(url: WebURL)</code> initializer available in the <code>WebURLSystemExtras</code> module is the best way to reconstruct a file path
+from its URL representation.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>file​Path</th>
+    <td><code class="type">S</code></td>
+    <td><p>The file path from which to create the file URL.</p>
+</td>
+</tr>
+<tr>
+    <th>format</th>
+    <td><code class="type">File​Path​Format</code></td>
+    <td><p>The way in which <code>filePath</code> should be interpreted; either <code>.posix</code>, <code>.windows</code>, or <code>.native</code> (default).</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Throws</h4>
+  <p><code>URLFromFilePathError</code></p>
+
+</div>
+<div role="article" class="initializer" id="weburl.init?(_:)">
+    <h3>
+        <code>init?(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">init</span>?&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">string</span>: <span class="type">S</span>) <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span>, <span class="type">S</span>.<span class="type">UTF8View</span>: <span class="type">BidirectionalCollection</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Constructs a URL by parsing the given string.</p>
+
+</div>
+<div class="discussion">
+    <p>This parser is compatible with the <a href="https://url.spec.whatwg.org/">WHATWG URL Standard</a>; this means that whitespace characters may be removed from the given string,
+other characters may be percent-encoded based on which component they belong to, IP addresses rewritten in canonical notation,
+and paths lexically simplified, among other transformations defined by the standard.</p>
+
+</div>
+</div>
+<div role="article" class="initializer" id="weburl.init?(utf8:)">
+    <h3>
+        <code>init?(utf8:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">init</span>?&lt;<span class="variable">UTF8Bytes</span>&gt;(<span class="variable">utf8</span>: <span class="type">UTF8Bytes</span>) <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">BidirectionalCollection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Constructs a URL by parsing the given string, which is provided as a collection of UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>This parser is compatible with the <a href="https://url.spec.whatwg.org/">WHATWG URL Standard</a>; this means that whitespace characters may be removed from the given string,
+other characters may be percent-encoded based on which component they belong to, IP addresses rewritten in canonical notation,
+and paths lexically simplified, among other transformations defined by the standard.</p>
+
+</div>
+</div>
+<div role="article" class="initializer" id="weburl.init(from:)">
+    <h3>
+        <code>init(from:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">init</span>(<span class="variable">from</span> <span class="variable">decoder</span>: <span class="type">Decoder</span>) <span class="keyword">throws</span> </code></pre>
+</div>
+</div>
+    </section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="weburl.formparams">
+    <h3>
+        <code>form​Params</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">formParams</span>: <span class="type">FormEncodedQueryParameters</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A mutable view of the <code>application/x-www-form-urlencoded</code> key-value pairs in this URL's <code>query</code>.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.host">
+    <h3>
+        <code>host</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">host</span>: <span class="type">Host</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The host of this URL, if present.</p>
+
+</div>
+<div class="discussion">
+    <p>A host is a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.jsmodel">
+    <h3>
+        <code>js​Model</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">jsModel</span>: <span class="type">JSModel</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>An interface to this URL whose properties have the same behaviour as the JavaScript <code>URL</code> class described in the <a href="https://url.spec.whatwg.org/#url-class">URL Standard</a>.</p>
+
+</div>
+<div class="discussion">
+    <p>See the documentation for the <code>WebURL.JSModel</code> type for more information.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.origin">
+    <h3>
+        <code>origin</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">origin</span>: <span class="type">Origin</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The origin of this URL.</p>
+
+</div>
+<div class="discussion">
+    <p>Origins are the fundamental currency of the Web's security model.
+Two actors in the Web platform that share an origin are assumed to trust each other and to have the same authority.
+Actors with differing origins are considered potentially hostile versus each other, and are isolated from each other to varying degrees.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.pathcomponents">
+    <h3>
+        <code>path​Components</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">pathComponents</span>: <span class="type">PathComponents</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A mutable view of this URL's path components.</p>
+
+</div>
+<div class="discussion">
+    <p>Accessing this property is invalid and will trigger a runtime error if the URL has an opaque path (see <code>WebURL.hasOpaquePath</code>).</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.utf8">
+    <h3>
+        <code>utf8</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">utf8</span>: <span class="type">UTF8View</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A mutable view of the UTF-8 code-units of this URL's serialization.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.description">
+    <h3>
+        <code>description</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">description</span>: <span class="type">String</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.scheme">
+    <h3>
+        <code>scheme</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">scheme</span>: <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The scheme of this URL, for example <code>https</code> or <code>file</code>.</p>
+
+</div>
+<div class="discussion">
+    <p>A URL’s <code>scheme</code> is a non-empty ASCII string that identifies the type of URL and can be used to dispatch a URL for further processing.
+For example, a URL with the &quot;http&quot; scheme should be processed by software that understands the HTTP protocol. Every URL must have a scheme.</p>
+
+<p>Some schemes (http, https, ws, wss, ftp, and file) are referred to as being &quot;special&quot;; the components of URLs with these schemes may have unique
+encoding requirements, or the components may carry additional meaning.
+Scheme usage is co-ordinated by the <a href="https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml">Internet Assigned Numbers Authority</a>.</p>
+
+<p>Setting this property may fail if the new scheme is invalid, or if the URL cannot be adjusted to the new scheme.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.username">
+    <h3>
+        <code>username</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">username</span>: <span class="type">String</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The username of this URL, if present, as a non-empty, percent-encoded ASCII string.</p>
+
+</div>
+<div class="discussion">
+    <p>When setting this property, any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
+Setting this property may fail if the URL does not allow credentials.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.password">
+    <h3>
+        <code>password</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">password</span>: <span class="type">String</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The password of this URL, if present, as a non-empty, percent-encoded string.</p>
+
+</div>
+<div class="discussion">
+    <p>When setting this property, any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
+Setting this property may fail if the URL does not allow credentials.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.hostname">
+    <h3>
+        <code>hostname</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">hostname</span>: <span class="type">String</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The string representation of this URL's host, if present.</p>
+
+</div>
+<div class="discussion">
+    <p>A URL's host can be a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+Typically a host serves as a network address, but is sometimes used as an opaque identifier in URLs where a network address is not necessary.</p>
+
+<p>When setting this property, the new contents will be parsed and normalized (e.g. domains will be percent-decoded and lowercased, and IP addresses
+will be rewritten in their canonical form). Unlike setting other components, not all code-points which are invalid for use in hostnames will be percent-encoded.
+If the new content contains a <a href="https://url.spec.whatwg.org/#forbidden-host-code-point">forbidden host code-point</a>, the operation will fail.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.port">
+    <h3>
+        <code>port</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">port</span>: <span class="type">Int</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The port of this URL, if present. Valid port numbers are in the range <code>0 ..&lt; 65536</code>.</p>
+
+</div>
+<div class="discussion">
+    <p>Setting this property may fail if the new value is out of range, or if the URL does not support port numbers.
+If the URL has a &quot;special&quot; scheme, setting the port to its known default value will remove the port.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.portorknowndefault">
+    <h3>
+        <code>port​OrKnown​Default</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">portOrKnownDefault</span>: <span class="type">Int</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The port of this URL, if present, or the default port of its scheme, if it has one.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.path">
+    <h3>
+        <code>path</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">path</span>: <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The string representation of this URL's path.</p>
+
+</div>
+<div class="discussion">
+    <p>A URL’s path is either an opaque ASCII string or a list of zero or more ASCII strings, usually identifying a location.
+Paths which are lists begin with a forward-slash, and their components delimited by forward-slashes (&quot;/&quot;).
+Empty paths are lists if the URL has a <code>hostname</code>.</p>
+
+<p>When setting this property, the given path will be lexically simplified, and any code-points in the path's components that are not valid
+for use will be percent-encoded. Setting this property will fail if the URL's path is opaque (see <code>WebURL.hasOpaquePath</code>).</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.query">
+    <h3>
+        <code>query</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">query</span>: <span class="type">String</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The string representation of this URL's query, if present.</p>
+
+</div>
+<div class="discussion">
+    <p>A URL's <code>query</code> contains non-hierarchical data that, along with the <code>path</code>, serves to identify a resource. The precise structure of the query string is not
+standardized, but is often used to store a list of key-value pairs (&quot;parameters&quot;).</p>
+
+<p>This string representation does not include the leading <code>?</code> delimiter.
+When setting this property, any code-points which are not valid for use in the URL's query will be percent-encoded.
+Note that the set of code-points which are valid depends on the URL's <code>scheme</code>.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.fragment">
+    <h3>
+        <code>fragment</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">fragment</span>: <span class="type">String</span>? </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The fragment of this URL, if present, as a percent-encoded string.</p>
+
+</div>
+<div class="discussion">
+    <p>A URL's <code>fragment</code> is an optional string which may be used for further processing on the resource identified by the other components.</p>
+
+<p>This string representation does not include the leading <code>#</code> delimiter.
+When setting this property, any code-points which are not valid for use in the URL's fragment will be percent-encoded.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="weburl.hasopaquepath">
+    <h3>
+        <code>has​Opaque​Path</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">hasOpaquePath</span>: <span class="type">Bool</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Whether this URL has an opaque path.</p>
+
+</div>
+<div class="discussion">
+    <p>URLs with opaque paths are non-hierarchical: they do not have a hostname, and their paths are opaque strings which cannot be split in to components.
+They can be recognized by the lack of slashes immediately following the scheme delimiter, for example:</p>
+
+<ul>
+<li>
+<p><code>mailto:bob@example.com</code></p>
+</li>
+<li>
+<p><code>javascript:alert(&quot;hello&quot;);</code></p>
+</li>
+<li>
+<p><code>data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==</code></p>
+</li>
+</ul>
+
+<p>It is invalid to set any authority components, such as <code>username</code>, <code>password</code>, <code>hostname</code> or <code>port</code>, on these URLs.
+Modifying the <code>path</code> or accessing the URL's <code>pathComponents</code> is also invalid, and they only support limited forms of relative references.</p>
+
+<p>URLs with special schemes (such as http/s and file) never have opaque paths.</p>
+
+</div>
+</div>
+    </section>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="weburl.fromfilepathbytes(_:format:)">
+    <h3>
+        <code>from​File​Path​Bytes(_:​format:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">available</span>(*, <span class="variable">deprecated</span>, <span class="variable">renamed</span>: <span class="string literal">&quot;fromBinaryFilePath&quot;</span>)
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> <span class="function">fromFilePathBytes</span>&lt;<span class="variable">Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">path</span>: <span class="type">Bytes</span>, <span class="variable">format</span>: <span class="type">FilePathFormat</span> = .<span class="variable">native</span>
+) <span class="keyword">throws</span> -&gt; <span class="type">WebURL</span> <span class="keyword">where</span> <span class="type">Bytes</span>: <span class="type">BidirectionalCollection</span>, <span class="type">Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.filepathbytes(from:format:nullterminated:)">
+    <h3>
+        <code>file​Path​Bytes(from:​format:​null​Terminated:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">available</span>(*, <span class="variable">deprecated</span>, <span class="variable">renamed</span>: <span class="string literal">&quot;binaryFilePath&quot;</span>)
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> <span class="function">filePathBytes</span>(
+  <span class="variable">from</span> <span class="variable">url</span>: <span class="type">WebURL</span>, <span class="variable">format</span>: <span class="type">FilePathFormat</span> = .<span class="variable">native</span>, <span class="variable">nullTerminated</span>: <span class="type">Bool</span>
+) <span class="keyword">throws</span> -&gt; <span class="type">ContiguousArray</span>&lt;<span class="type">UInt8</span>&gt; </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.frombinaryfilepath(_:format:)">
+    <h3>
+        <code>from​Binary​File​Path(_:​format:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> <span class="function">fromBinaryFilePath</span>&lt;<span class="variable">Bytes</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">path</span>: <span class="type">Bytes</span>, <span class="variable">format</span>: <span class="type">FilePathFormat</span> = .<span class="variable">native</span>
+) <span class="keyword">throws</span> -&gt; <span class="type">WebURL</span> <span class="keyword">where</span> <span class="type">Bytes</span>: <span class="type">BidirectionalCollection</span>, <span class="type">Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Creates a <code>file:</code> URL representation of the given file path.</p>
+
+</div>
+<div class="discussion">
+    <p>This is a low-level API, which accepts a file path as a collection of 8-bit code-units and paths to be represented which
+are not valid UTF-8 text. Generally, users should prefer <code>swift-system</code>'s <code>FilePath</code> type to store file paths rather than storing
+them as collections of code-units, and the <code>WebURL(filePath: FilePath)</code> initializer in the <code>WebURLSystemExtras</code> module
+is the preferred interface to this function.</p>
+
+<h2>Supported paths</h2>
+
+<p>The given path must be absolute (fully-qualified) according to the given <code>FilePathFormat</code>, and not contain any components
+which traverse to their parent directories (<code>..</code> components). It also may not include <code>NULL</code> bytes, so the terminator of null-terminated
+string should not be included in the given collection of code-units.</p>
+
+<p>These restrictions are considered a feature. URLs have no way of expressing relative paths, so such paths would first have to be resolved against
+a base path or working directory. Components which traverse upwards in the filesystem and unexpected NULL bytes are common sources of
+<a href="https://owasp.org/www-community/attacks/Path_Traversal">security vulnerabilities</a>. Best practice is to first resolve and normalize such paths before turning them in to URLs,
+so you have an opportunity to check where the path actually points to.</p>
+
+<h2>Windows long paths</h2>
+
+<p>This function supports Win32 file namespace paths (a.k.a. &quot;long&quot; paths) which start with a drive letter or point to a UNC location.
+These paths are identified by the prefix <code>\\?\</code>. Note that this prefix is not preserved in the resulting URL or any paths created from that URL.</p>
+
+<p>In a deliberate departure from Microsoft's documentation, empty and <code>.</code> components will be resolved in these paths.
+Other path components will not be trimmed or otherwise altered. This library considers this minimal structural normalization to be safe,
+given that support is restricted to paths with drive letters or UNC locations. Empty components have no meaning on any filesystem,
+and all commonly-used filesystems on Windows (including FAT, exFAT, NTFS, and ReFS) forbid files and directories named <code>.</code>.
+SMB/CIFS and NFS (the most common protocols used with UNC) likewise define that <code>.</code> components refer to the current directory.</p>
+
+<p>Additionally, <code>..</code> components and forward slashes are forbidden, as they represent components literally named <code>..</code> or with forward slashes in
+their name. However, Windows APIs are not consistent, and will sometimes interpret these as traversal instructions or path separators regardless.
+This ambiguity means that accepting such components could lead to hidden directory traversal and other security vulnerabilities.
+Again, no commonly-used filesystem on Windows supports these file or directory names anyway, and the network protocols listed above also forbid them.</p>
+
+<h2>Encoding</h2>
+
+<p>While we may usually think of file and directory names strings of text, some operating systems do not treat them that way.
+Behaviours vary greatly between operating systems, from fully-defined code-units which are normalized by the system (Apple OSes),
+to fully-defined code-units which are not normalized (Windows), to opaque, numeric code-units with no defined interpretation (Linux, general POSIX).</p>
+
+<p>In order to process a path, we need to at least understand its structure. The provided <code>FilePathFormat</code> determines how the code-units will be interpreted -
+e.g. which values are reserved as path separators, which normalization rules apply, and whether or not the code-units can be interpreted as textual code-points.</p>
+
+<p>POSIX paths generally cannot be transcoded and should be provided to the function in their native 8-bit encoding.
+Windows paths should be transcoded from their native UTF-16 to UTF-8.
+Windows paths may also be provided in the system-specific ANSI encoding, but this is discouraged as the resulting URL will contain
+percent-encoded ANSI code-points which are not portable. This should only be done when legacy considerations demand it.</p>
+
+<h2>Normalization</h2>
+
+<p>Some basic lexical normalization is applied to the path, according to the given <code>FilePathFormat</code>.</p>
+
+<p>For example, empty path components may be collapsed and some file or directory names trimmed.
+Refer to the documentation for <code>FilePathFormat</code> for information about the kinds of normalization which each format defines.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>path</th>
+    <td><code class="type">Bytes</code></td>
+    <td><p>The file path, as a <code>Collection</code> of 8-bit code-units.</p>
+</td>
+</tr>
+<tr>
+    <th>format</th>
+    <td><code class="type">File​Path​Format</code></td>
+    <td><p>The way in which <code>path</code> should be interpreted; either <code>.posix</code>, <code>.windows</code>, or <code>.native</code> (default).</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Throws</h4>
+  <p><code>URLFromFilePathError</code></p>
+
+  <h4>Returns</h4>
+  <p>A URL with the <code>file</code> scheme which can be used to reconstruct the given path.</p>
+
+</div>
+<div role="article" class="function" id="weburl.binaryfilepath(from:format:nullterminated:)">
+    <h3>
+        <code>binary​File​Path(from:​format:​null​Terminated:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> <span class="function">binaryFilePath</span>(
+  <span class="variable">from</span> <span class="variable">url</span>: <span class="type">WebURL</span>, <span class="variable">format</span>: <span class="type">FilePathFormat</span> = .<span class="variable">native</span>, <span class="variable">nullTerminated</span>: <span class="type">Bool</span>
+) <span class="keyword">throws</span> -&gt; [<span class="type">UInt8</span>] </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Reconstructs a file path from its URL representation.</p>
+
+</div>
+<div class="discussion">
+    <p>This is a low-level function, which returns a file path as an array of 8-bit code-units. Correct usage requires detailed knowledge
+of character sets and text encodings, and users should generally prefer higher-level APIs, such as <code>FilePath(url: WebURL)</code>
+from the <code>WebURLSystemExtras</code> module.</p>
+
+<h2>Accepted URLs</h2>
+
+<p>This function only accepts URLs with a <code>file</code> scheme, whose paths do not contain percent-encoded path separators or <code>NULL</code> bytes.
+For the <code>windows</code> format, the reconstructed path must be fully-qualified - meaning that it is either a UNC path, or begins with a drive-letter.
+Note that not all URLs are compatible with all path formats. For example, there is no obvious way to construct a <code>posix</code> path to a remote host.</p>
+
+<h2>Encoding</h2>
+
+<p>This function returns an array of 8-bit code-units, formed by percent-decoding the URL's contents.</p>
+
+<ul>
+<li>
+<p>To use the returned path on a POSIX system, request null-terminated code-units and map/reinterpret them to the platform's <code>CChar</code> type.
+POSIX requires that the C <code>char</code> type be 8 bits, so this is safe. As paths on POSIX systems are opaque octets, the path should be used as-is.</p>
+</li>
+<li>
+<p>To use the returned path on a Windows system, some transcoding may be necessary as the system natively uses 16-bit code-units.
+This can be difficult, as in general there is no way to know how the file path was encoded, or how to interpret the bytes as textual code-points.
+A good strategy is to first interpret the bytes as UTF-8 and transcode to UTF-16. Should that fail, assume that code-units are from the
+system's active code-page and use the <code>MultiByteToWideChar</code> function to produce a UTF-16 file path.</p>
+</li>
+</ul>
+
+<h2>Normalization</h2>
+
+<p>Some minimal normalization is applied to the path, such as removing empty path components.
+Unlike the <code>WebURL.fromBinaryFilePath</code> function, Windows path components are never trimmed.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>url</th>
+    <td><code class="type">Web​URL</code></td>
+    <td><p>The file URL.</p>
+</td>
+</tr>
+<tr>
+    <th>format</th>
+    <td><code class="type">File​Path​Format</code></td>
+    <td><p>The path format which should be constructed; either <code>.posix</code>, <code>.windows</code>, or <code>.native</code> (default).</p>
+</td>
+</tr>
+<tr>
+    <th>null​Terminated</th>
+    <td><code class="type">Bool</code></td>
+    <td><p>Whether the reconstructed file path bytes should include a null-terminator.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Throws</h4>
+  <p><code>FilePathFromURLError</code></p>
+
+  <h4>Returns</h4>
+  <p>The reconstructed file path bytes from <code>url</code>.</p>
+
+</div>
+<div role="article" class="function" id="weburl.resolve(_:)">
+    <h3>
+        <code>resolve(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">resolve</span>&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">string</span>: <span class="type">S</span>) -&gt; <span class="type">WebURL</span>? <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span>, <span class="type">S</span>.<span class="type">UTF8View</span>: <span class="type">BidirectionalCollection</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Parses the given string with this URL as its base.</p>
+
+</div>
+<div class="discussion">
+    <p>This function supports a wide range of relative URL strings, producing the same result as an HTML <code>&lt;a&gt;</code> tag on the page given by this URL.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">let</span> <span class="variable">base</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/karl/index.html</span><span class="string literal">"</span>)!
+
+<span class="variable">base</span>.<span class="variable">resolve</span>(<span class="string literal">"</span><span class="string literal">photos/img.jpg?size=200x200</span><span class="string literal">"</span>)! <span class="comment">// "http://example.com/karl/photos/img.jpg?size=200x200"</span>
+<span class="variable">base</span>.<span class="variable">resolve</span>(<span class="string literal">"</span><span class="string literal">/mary/lambs/1/fleece.txt</span><span class="string literal">"</span>)! <span class="comment">// "http://example.com/mary/lambs/1/fleece.txt"</span>
+</code></pre></body></html>
+<p>It should be noted that this method accepts protocol-relative URLs, which are able to direct to a different hostname, as well as absolute URL strings,
+which do not copy any information from their base URLs.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.hash(into:)">
+    <h3>
+        <code>hash(into:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">hash</span>(<span class="variable">into</span> <span class="variable">hasher</span>: <span class="keyword">inout</span> <span class="type">Hasher</span>) </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.encode(to:)">
+    <h3>
+        <code>encode(to:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">encode</span>(<span class="variable">to</span> <span class="variable">encoder</span>: <span class="type">Encoder</span>) <span class="keyword">throws</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.serialized(excludingfragment:)">
+    <h3>
+        <code>serialized(excluding​Fragment:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">serialized</span>(<span class="variable">excludingFragment</span>: <span class="type">Bool</span> = <span class="keyword">false</span>) -&gt; <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the string representation of this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>excluding​Fragment</th>
+    <td><code class="type">Bool</code></td>
+    <td><p>Whether the fragment should be omitted from the result. The default is <code>false</code>.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="function" id="weburl.setscheme(_:)">
+    <h3>
+        <code>set​Scheme(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setScheme</span>&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">newScheme</span>: <span class="type">S</span>) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>scheme</code> with the given string.</p>
+
+</div>
+<div class="discussion">
+    <p>Setting this component may fail if the new scheme is invalid, or if the URL cannot be adjusted to the new scheme.</p>
+
+<aside class="See Also">
+    <p><code>scheme</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="weburl.setusername(_:)">
+    <h3>
+        <code>set​Username(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setUsername</span>&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">newUsername</span>: <span class="type">S</span>?) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>username</code> with the given string.</p>
+
+</div>
+<div class="discussion">
+    <p>Any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
+Setting this component may fail if the URL does not allow credentials.</p>
+
+<aside class="See Also">
+    <p><code>username</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="weburl.setpassword(_:)">
+    <h3>
+        <code>set​Password(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setPassword</span>&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">newPassword</span>: <span class="type">S</span>?) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>password</code> with the given string.</p>
+
+</div>
+<div class="discussion">
+    <p>Any code-points which are not valid for use in the URL's user-info section will be percent-encoded.
+Setting this component may fail if the URL does not allow credentials.</p>
+
+<aside class="See Also">
+    <p><code>password</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="weburl.sethostname(_:)">
+    <h3>
+        <code>set​Hostname(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setHostname</span>&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">newHostname</span>: <span class="type">S</span>?) <span class="keyword">throws</span>
+<span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span>, <span class="type">S</span>.<span class="type">UTF8View</span>: <span class="type">BidirectionalCollection</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>hostname</code> with the given string.</p>
+
+</div>
+<div class="discussion">
+    <p>When setting this component, the new contents will be parsed and normalized (e.g. domains will be percent-decoded and lowercased, and IP addresses
+will be rewritten in their canonical form). Unlike setting other components, not all code-points which are invalid for use in hostnames will be percent-encoded.
+If the new content contains a <a href="https://url.spec.whatwg.org/#forbidden-host-code-point">forbidden host code-point</a>, the operation will fail.</p>
+
+<aside class="See Also">
+    <p><code>hostname</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="weburl.setport(_:)">
+    <h3>
+        <code>set​Port(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setPort</span>(<span class="keyword">_</span> <span class="variable">newPort</span>: <span class="type">Int</span>?) <span class="keyword">throws</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>port</code>.</p>
+
+</div>
+<div class="discussion">
+    <p>Setting this component may fail if the new value is out of range, or if the URL does not support port numbers.
+If the URL has a &quot;special&quot; scheme, setting the port to its known default value will remove the port.</p>
+
+<aside class="See Also">
+    <p><code>port</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="weburl.setpath(_:)">
+    <h3>
+        <code>set​Path(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setPath</span>&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">newPath</span>: <span class="type">S</span>) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span>, <span class="type">S</span>.<span class="type">UTF8View</span>: <span class="type">BidirectionalCollection</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>path</code> with the given string.</p>
+
+</div>
+<div class="discussion">
+    <p>When setting this component, the given path string will be lexically simplified, and any code-points in the path's components that are not valid
+for use will be percent-encoded. Setting this component will fail if the URL's path is opaque (see <code>WebURL.hasOpaquePath</code>).</p>
+
+<aside class="See Also">
+    <p><code>path</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="weburl.setquery(_:)">
+    <h3>
+        <code>set​Query(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setQuery</span>&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">newQuery</span>: <span class="type">S</span>?) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>query</code> with the given string.</p>
+
+</div>
+<div class="discussion">
+    <p>When setting this property, any code-points which are not valid for use in the URL's query will be percent-encoded.
+Note that the set of code-points which are valid depends on the URL's <code>scheme</code>.</p>
+
+<aside class="See Also">
+    <p><code>query</code></p>
+
+</aside>
+</div>
+</div>
+<div role="article" class="function" id="weburl.setfragment(_:)">
+    <h3>
+        <code>set​Fragment(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">setFragment</span>&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">newFragment</span>: <span class="type">S</span>?) <span class="keyword">throws</span> <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces this URL's <code>fragment</code> with the given string.</p>
+
+</div>
+<div class="discussion">
+    <p>When setting this property, any code-points which are not valid for use in the URL's fragment will be percent-encoded.</p>
+
+<aside class="See Also">
+    <p><code>fragment</code></p>
+
+</aside>
+</div>
+</div>
+    </section>
+    <section id="operators">
+        <h2>Operators</h2>
+
+        <div role="article" class="function" id="weburl.==">
+    <h3>
+        <code>==</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> == (<span class="variable">lhs</span>: <span class="keyword">Self</span>, <span class="variable">rhs</span>: <span class="keyword">Self</span>) -&gt; <span class="type">Bool</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.<">
+    <h3>
+        <code>&lt;</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> &lt; (<span class="variable">lhs</span>: <span class="keyword">Self</span>, <span class="variable">rhs</span>: <span class="keyword">Self</span>) -&gt; <span class="type">Bool</span> </code></pre>
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

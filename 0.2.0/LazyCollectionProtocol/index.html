@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - LazyCollectionProtocol</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#methods">Methods</a><ul><li class="function"><a href="#lazycollectionprotocol.percentencoded(using:)">percent​Encoded(using:​)</a></li><li class="function"><a href="#lazycollectionprotocol.percentencoded(using:)">percent​Encoded(using:​)</a></li><li class="function"><a href="#lazycollectionprotocol.percentdecoded(substitutions:)">percent​Decoded(substitutions:​)</a></li><li class="function"><a href="#lazycollectionprotocol.percentdecoded(substitutions:)">percent​Decoded(substitutions:​)</a></li><li class="function"><a href="#lazycollectionprotocol.percentdecoded()">percent​Decoded()</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Extensions on</small>
+    <code class="name">LazyCollectionProtocol</code>
+</h1>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="lazycollectionprotocol.percentencoded(using:)">
+    <h3>
+        <code>percent​Encoded(using:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentEncoded</span>&lt;<span class="variable">EncodeSet</span>&gt;(<span class="variable">using</span> <span class="variable">encodeSet</span>: <span class="type">EncodeSet</span>) -&gt; <span class="type">LazilyPercentEncoded</span>&lt;<span class="type">Elements</span>, <span class="type">EncodeSet</span>&gt; </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns a <code>Collection</code> whose elements are computed lazily by percent-encoding this collection's elements.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string &quot;%C8&quot;),
+with bytes within the ASCII range being restricted by <code>encodeSet</code>.</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+provide the appropriate <code>SubstitutionMap</code> when decoding form-encoded data to accurately recover the source contents.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Encode arbitrary data as an ASCII string.</span>
+<span class="keyword">let</span> <span class="variable">image</span>: <span class="type">Data</span> = ...
+<span class="variable">image</span>.<span class="variable">lazy</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>) <span class="comment">// ASCII bytes, decoding to "%BAt_%E0%11%22%EB%10%2C%7F..."</span>
+
+<span class="comment">// Encode-sets determine which characters are encoded, and some perform substitutions.</span>
+<span class="keyword">let</span> <span class="variable">bytes</span> = <span class="string literal">"</span><span class="string literal">hello, world!</span><span class="string literal">"</span>.<span class="variable">utf8</span>
+<span class="variable">bytes</span>.<span class="variable">lazy</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>)
+  .<span class="variable">elementsEqual</span>(<span class="string literal">"</span><span class="string literal">hello%2C%20world!</span><span class="string literal">"</span>.<span class="variable">utf8</span>) <span class="comment">// ✅</span>
+<span class="variable">bytes</span>.<span class="variable">lazy</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">formEncoding</span>)
+  .<span class="variable">elementsEqual</span>(<span class="string literal">"</span><span class="string literal">hello%2C+world%21</span><span class="string literal">"</span>.<span class="variable">utf8</span>) <span class="comment">// ✅</span>
+</code></pre></body></html>
+</div>
+</div>
+<div role="article" class="function" id="lazycollectionprotocol.percentencoded(using:)">
+    <h3>
+        <code>percent​Encoded(using:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>) <span class="attribute">@</span><span class="attribute">_disfavoredOverload</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentEncoded</span>&lt;<span class="variable">EncodeSet</span>&gt;(
+  <span class="variable">using</span> <span class="variable">encodeSet</span>: <span class="type">EncodeSet</span>.<span class="type">_Member</span>
+) -&gt; <span class="type">LazilyPercentEncoded</span>&lt;<span class="type">Elements</span>, <span class="type">EncodeSet</span>&gt; </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns a <code>Collection</code> whose elements are computed lazily by percent-encoding this collection's elements.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string &quot;%C8&quot;),
+with bytes within the ASCII range being restricted by <code>encodeSet</code>.</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+provide the appropriate <code>SubstitutionMap</code> when decoding form-encoded data to accurately recover the source contents.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Encode arbitrary data as an ASCII string.</span>
+<span class="keyword">let</span> <span class="variable">image</span>: <span class="type">Data</span> = ...
+<span class="variable">image</span>.<span class="variable">lazy</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>) <span class="comment">// ASCII bytes, decoding to "%BAt_%E0%11%22%EB%10%2C%7F..."</span>
+
+<span class="comment">// Encode-sets determine which characters are encoded, and some perform substitutions.</span>
+<span class="keyword">let</span> <span class="variable">bytes</span> = <span class="string literal">"</span><span class="string literal">hello, world!</span><span class="string literal">"</span>.<span class="variable">utf8</span>
+<span class="variable">bytes</span>.<span class="variable">lazy</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>)
+  .<span class="variable">elementsEqual</span>(<span class="string literal">"</span><span class="string literal">hello%2C%20world!</span><span class="string literal">"</span>.<span class="variable">utf8</span>) <span class="comment">// ✅</span>
+<span class="variable">bytes</span>.<span class="variable">lazy</span>.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: .<span class="variable">formEncoding</span>)
+  .<span class="variable">elementsEqual</span>(<span class="string literal">"</span><span class="string literal">hello%2C+world%21</span><span class="string literal">"</span>.<span class="variable">utf8</span>) <span class="comment">// ✅</span>
+</code></pre></body></html>
+</div>
+</div>
+<div role="article" class="function" id="lazycollectionprotocol.percentdecoded(substitutions:)">
+    <h3>
+        <code>percent​Decoded(substitutions:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecoded</span>&lt;<span class="variable">Substitutions</span>&gt;(
+  <span class="variable">substitutions</span>: <span class="type">Substitutions</span>
+) -&gt; <span class="type">LazilyPercentDecodedWithSubstitutions</span>&lt;<span class="type">Elements</span>, <span class="type">Substitutions</span>&gt; </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns a <code>Collection</code> whose elements are computed lazily by percent-decoding the elements of this collection.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// The bytes, containing a string with UTF-8 form-encoding.</span>
+<span class="keyword">let</span> <span class="variable">source</span>: [<span class="type">UInt8</span>] = [
+  <span class="number literal">0x68</span>, <span class="number literal">0x25</span>, <span class="number literal">0x43</span>, <span class="number literal">0x32</span>, <span class="number literal">0x25</span>, <span class="number literal">0x41</span>, <span class="number literal">0x33</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x6F</span>, <span class="number literal">0x2B</span>, <span class="number literal">0x77</span>, <span class="number literal">0x6F</span>, <span class="number literal">0x72</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x64</span>
+]
+<span class="variable">String</span>(<span class="variable">decoding</span>: <span class="type">source</span>, <span class="variable">as</span>: <span class="type">UTF8</span>.<span class="keyword">self</span>) <span class="comment">// "h%C2%A3llo+world"</span>
+
+<span class="comment">// Specify the `.formEncoding` substitution map to decode the contents.</span>
+<span class="variable">source</span>.<span class="variable">lazy</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">formEncoding</span>)
+  .<span class="variable">elementsEqual</span>(<span class="string literal">"</span><span class="string literal">h£llo world</span><span class="string literal">"</span>.<span class="variable">utf8</span>) <span class="comment">// ✅</span>
+</code></pre></body></html>
+<p>The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="lazycollectionprotocol.percentdecoded(substitutions:)">
+    <h3>
+        <code>percent​Decoded(substitutions:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>) <span class="attribute">@</span><span class="attribute">_disfavoredOverload</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecoded</span>&lt;<span class="variable">Substitutions</span>&gt;(
+  <span class="variable">substitutions</span>: <span class="type">Substitutions</span>.<span class="type">_Member</span>
+) -&gt; <span class="type">LazilyPercentDecodedWithSubstitutions</span>&lt;<span class="type">Elements</span>, <span class="type">Substitutions</span>&gt; </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns a <code>Collection</code> whose elements are computed lazily by percent-decoding the elements of this collection.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// The bytes, containing a string with UTF-8 form-encoding.</span>
+<span class="keyword">let</span> <span class="variable">source</span>: [<span class="type">UInt8</span>] = [
+  <span class="number literal">0x68</span>, <span class="number literal">0x25</span>, <span class="number literal">0x43</span>, <span class="number literal">0x32</span>, <span class="number literal">0x25</span>, <span class="number literal">0x41</span>, <span class="number literal">0x33</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x6F</span>, <span class="number literal">0x2B</span>, <span class="number literal">0x77</span>, <span class="number literal">0x6F</span>, <span class="number literal">0x72</span>, <span class="number literal">0x6C</span>, <span class="number literal">0x64</span>
+]
+<span class="variable">String</span>(<span class="variable">decoding</span>: <span class="type">source</span>, <span class="variable">as</span>: <span class="type">UTF8</span>.<span class="keyword">self</span>) <span class="comment">// "h%C2%A3llo+world"</span>
+
+<span class="comment">// Specify the `.formEncoding` substitution map to decode the contents.</span>
+<span class="variable">source</span>.<span class="variable">lazy</span>.<span class="variable">percentDecoded</span>(<span class="variable">substitutions</span>: .<span class="variable">formEncoding</span>)
+  .<span class="variable">elementsEqual</span>(<span class="string literal">"</span><span class="string literal">h£llo world</span><span class="string literal">"</span>.<span class="variable">utf8</span>) <span class="comment">// ✅</span>
+</code></pre></body></html>
+<p>The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="lazycollectionprotocol.percentdecoded()">
+    <h3>
+        <code>percent​Decoded()</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentDecoded</span>() -&gt; <span class="type">LazilyPercentDecoded</span>&lt;<span class="type">Elements</span>&gt; </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns a <code>Collection</code> whose elements are computed lazily by percent-decoding the elements of this collection.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-decoding transforms certain ASCII sequences to bytes (&quot;%AB&quot; to the byte value 171, or 0xAB).</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions; provide the appropriate
+<code>SubstitutionMap</code> to accurately decode form-encoded content, or <code>.none</code> for modern percent-encoded content.</p>
+
+<p>This function is equivalent to calling <code>percentDecoded(substitutions: .none)</code>.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// The bytes, containing a string with percent-encoding.</span>
+<span class="keyword">let</span> <span class="variable">source</span>: [<span class="type">UInt8</span>] = [<span class="number literal">0x25</span>, <span class="number literal">0x36</span>, <span class="number literal">0x31</span>, <span class="number literal">0x25</span>, <span class="number literal">0x36</span>, <span class="number literal">0x32</span>, <span class="number literal">0x25</span>, <span class="number literal">0x36</span>, <span class="number literal">0x33</span>]
+<span class="variable">String</span>(<span class="variable">decoding</span>: <span class="type">source</span>, <span class="variable">as</span>: <span class="type">UTF8</span>.<span class="keyword">self</span>) <span class="comment">// "%61%62%63"</span>
+
+<span class="comment">// In this case, the decoded bytes contain the ASCII string "abc".</span>
+<span class="variable">source</span>.<span class="variable">lazy</span>.<span class="variable">percentDecoded</span>().<span class="variable">elementsEqual</span>(<span class="string literal">"</span><span class="string literal">abc</span><span class="string literal">"</span>.<span class="variable">utf8</span>) <span class="comment">// ✅</span>
+</code></pre></body></html>
+<p>The elements of this collection are raw bytes, potenially including NULL bytes or invalid UTF-8.</p>
+
+</div>
+</div>
+    </section>
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

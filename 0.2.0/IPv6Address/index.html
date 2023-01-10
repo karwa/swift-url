@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - IPv6Address</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#nested type aliases">Nested Type Aliases</a><ul><li class="typealias"><a href="#ipv6address.octets">Octets</a></li><li class="typealias"><a href="#ipv6address.pieces">Pieces</a></li></ul></li><li><a href="#initializers">Initializers</a><ul><li class="initializer"><a href="#ipv6address.init(octets:)">init(octets:​)</a></li><li class="initializer"><a href="#ipv6address.init(pieces:_:)">init(pieces:​_:​)</a></li><li class="initializer"><a href="#ipv6address.init(from:)">init(from:​)</a></li><li class="initializer"><a href="#ipv6address.init?(_:)">init?(_:​)</a></li><li class="initializer"><a href="#ipv6address.init?(utf8:)">init?(utf8:​)</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#ipv6address.octets">octets</a></li><li class="variable"><a href="#ipv6address.description">description</a></li><li class="variable"><a href="#ipv6address.serialized">serialized</a></li></ul></li><li><a href="#methods">Methods</a><ul><li class="function"><a href="#ipv6address.hash(into:)">hash(into:​)</a></li><li class="function"><a href="#ipv6address.encode(to:)">encode(to:​)</a></li></ul></li><li><a href="#operators">Operators</a><ul><li class="function"><a href="#ipv6address.==">==</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">IPv6Address</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">IPv6Address</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A 128-bit numerical identifier assigned to a device on an
+<a href="https://tools.ietf.org/html/rfc2460">Internet Protocol, version 6</a> network.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>Codable</code></dt>
+<dt class="unknown"><code>Equatable</code></dt>
+<dt class="unknown"><code>Hashable</code></dt>
+<dt class="unknown"><code>LosslessStringConvertible</code></dt>
+</dl>
+</section>
+    <section id="nested type aliases">
+        <h2>Nested Type Aliases</h2>
+
+        <div role="article" class="typealias" id="ipv6address.octets">
+    <h3>
+        <code>Octets</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">typealias</span> <span class="variable">Octets</span> = (
+  <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>,
+  <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>
+)</code></pre>
+</div>
+</div>
+<div role="article" class="typealias" id="ipv6address.pieces">
+    <h3>
+        <code>Pieces</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">typealias</span> <span class="variable">Pieces</span> = (<span class="type">UInt16</span>, <span class="type">UInt16</span>, <span class="type">UInt16</span>, <span class="type">UInt16</span>, <span class="type">UInt16</span>, <span class="type">UInt16</span>, <span class="type">UInt16</span>, <span class="type">UInt16</span>)</code></pre>
+</div>
+</div>
+    </section>
+    <section id="initializers">
+        <h2>Initializers</h2>
+
+        <div role="article" class="initializer" id="ipv6address.init(octets:)">
+    <h3>
+        <code>init(octets:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">init</span>(<span class="variable">octets</span>: <span class="type">Octets</span> = (<span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>)) </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Creates an address with the given octets.</p>
+
+</div>
+</div>
+<div role="article" class="initializer" id="ipv6address.init(pieces:_:)">
+    <h3>
+        <code>init(pieces:​_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">init</span>(<span class="variable">pieces</span>: <span class="type">Pieces</span>, <span class="keyword">_</span> <span class="variable">octetArrangement</span>: <span class="type">OctetArrangement</span>) </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Creates an address from the given 16-bit integer pieces.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>OctetArrangement</code></p>
+
+</aside>
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>pieces</th>
+    <td><code class="type">Pieces</code></td>
+    <td><p>The integer pieces of the address.</p>
+</td>
+</tr>
+<tr>
+    <th>octet​Arrangement</th>
+    <td><code class="type">Octet​Arrangement</code></td>
+    <td><p>How the octets in each integer of <code>pieces</code> are arranged: <ul> <li>If <code>numeric</code>, the integers are assumed to be in &quot;host byte order&quot;, and their octets will be rearranged if necessary.</li> <li>If <code>binary</code>, the integers are assumed to be in &quot;network byte order&quot;, and their octets will be stored in the order they are in.</li> </ul></p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="initializer" id="ipv6address.init(from:)">
+    <h3>
+        <code>init(from:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">init</span>(<span class="variable">from</span> <span class="variable">decoder</span>: <span class="type">Decoder</span>) <span class="keyword">throws</span> </code></pre>
+</div>
+</div>
+<div role="article" class="initializer" id="ipv6address.init?(_:)">
+    <h3>
+        <code>init?(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">init</span>?&lt;<span class="variable">S</span>&gt;(<span class="keyword">_</span> <span class="variable">description</span>: <span class="type">S</span>) <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Parses an IPv6 address from a String.</p>
+
+</div>
+<div class="discussion">
+    <p>Accepted formats are documented in <a href="https://tools.ietf.org/html/rfc4291#section-2.2">Section 2.2</a> (&quot;Text Representation of Addresses&quot;) of
+IP Version 6 Addressing Architecture (RFC 4291).</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>description</th>
+    <td><code class="type">S</code></td>
+    <td><p>The string to parse.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="initializer" id="ipv6address.init?(utf8:)">
+    <h3>
+        <code>init?(utf8:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">init</span>?&lt;<span class="variable">UTF8Bytes</span>&gt;(<span class="variable">utf8</span>: <span class="type">UTF8Bytes</span>) <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">Collection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Parses an IPv6 address from a collection of UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>Accepted formats are documented in <a href="https://tools.ietf.org/html/rfc4291#section-2.2">Section 2.2</a> (&quot;Text Representation of Addresses&quot;) of
+IP Version 6 Addressing Architecture (RFC 4291).</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>utf8</th>
+    <td><code class="type">UTF8Bytes</code></td>
+    <td><p>The string to parse, as a collection of UTF-8 code-units.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+    </section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="ipv6address.octets">
+    <h3>
+        <code>octets</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">octets</span>: <span class="type">Octets</span></code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The octets of this address.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="ipv6address.description">
+    <h3>
+        <code>description</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">description</span>: <span class="type">String</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="ipv6address.serialized">
+    <h3>
+        <code>serialized</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">serialized</span>: <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The canonical textual representation of this address, as defined by <a href="https://tools.ietf.org/html/rfc5952">RFC 5952</a>.</p>
+
+</div>
+</div>
+    </section>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="ipv6address.hash(into:)">
+    <h3>
+        <code>hash(into:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">hash</span>(<span class="variable">into</span> <span class="variable">hasher</span>: <span class="keyword">inout</span> <span class="type">Hasher</span>) </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="ipv6address.encode(to:)">
+    <h3>
+        <code>encode(to:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">encode</span>(<span class="variable">to</span> <span class="variable">encoder</span>: <span class="type">Encoder</span>) <span class="keyword">throws</span> </code></pre>
+</div>
+</div>
+    </section>
+    <section id="operators">
+        <h2>Operators</h2>
+
+        <div role="article" class="function" id="ipv6address.==">
+    <h3>
+        <code>==</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> == (<span class="variable">lhs</span>: <span class="keyword">Self</span>, <span class="variable">rhs</span>: <span class="keyword">Self</span>) -&gt; <span class="type">Bool</span> </code></pre>
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

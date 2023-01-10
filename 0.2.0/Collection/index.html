@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - Collection</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#methods">Methods</a><ul><li class="function"><a href="#collection.percentencodedstring(using:)">percent​Encoded​String(using:​)</a></li><li class="function"><a href="#collection.percentencodedstring(using:)">percent​Encoded​String(using:​)</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Extensions on</small>
+    <code class="name">Collection</code>
+</h1>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="collection.percentencodedstring(using:)">
+    <h3>
+        <code>percent​Encoded​String(using:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentEncodedString</span>&lt;<span class="variable">EncodeSet</span>: <span class="type">PercentEncodeSet</span>&gt;(<span class="variable">using</span> <span class="variable">encodeSet</span>: <span class="type">EncodeSet</span>) -&gt; <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns an ASCII string formed by percent-encoding this collection's elements.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string &quot;%C8&quot;),
+with bytes within the ASCII range being restricted by <code>encodeSet</code>.</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+provide the appropriate <code>SubstitutionMap</code> when decoding form-encoded data to accurately recover the source contents.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Encode arbitrary data as an ASCII string.</span>
+<span class="keyword">let</span> <span class="variable">image</span>: <span class="type">Data</span> = ...
+<span class="variable">image</span>.<span class="variable">percentEncodedString</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>) <span class="comment">// "%BAt_%E0%11%22%EB%10%2C%7F..."</span>
+
+<span class="comment">// Encode-sets determine which characters are encoded, and some perform substitutions.</span>
+<span class="keyword">let</span> <span class="variable">bytes</span> = <span class="string literal">"</span><span class="string literal">hello, world!</span><span class="string literal">"</span>.<span class="variable">utf8</span>
+<span class="variable">bytes</span>.<span class="variable">percentEncodedString</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>) == <span class="string literal">"</span><span class="string literal">hello%2C%20world!</span><span class="string literal">"</span> <span class="comment">// ✅</span>
+<span class="variable">bytes</span>.<span class="variable">percentEncodedString</span>(<span class="variable">using</span>: .<span class="variable">formEncoding</span>) == <span class="string literal">"</span><span class="string literal">hello%2C+world%21</span><span class="string literal">"</span> <span class="comment">// ✅</span>
+</code></pre></body></html>
+</div>
+</div>
+<div role="article" class="function" id="collection.percentencodedstring(using:)">
+    <h3>
+        <code>percent​Encoded​String(using:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">_disfavoredOverload</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">percentEncodedString</span>&lt;<span class="variable">EncodeSet</span>: <span class="type">PercentEncodeSet</span>&gt;(<span class="variable">using</span> <span class="variable">encodeSet</span>: <span class="type">EncodeSet</span>.<span class="type">_Member</span>) -&gt; <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns an ASCII string formed by percent-encoding this collection's elements.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string &quot;%C8&quot;),
+with bytes within the ASCII range being restricted by <code>encodeSet</code>.</p>
+
+<p>Form-encoding (as used by HTML forms) is a legacy variant of percent-encoding which includes substitutions;
+provide the appropriate <code>SubstitutionMap</code> when decoding form-encoded data to accurately recover the source contents.</p>
+
+<html><body><pre class="highlight"><code><span class="comment">// Encode arbitrary data as an ASCII string.</span>
+<span class="keyword">let</span> <span class="variable">image</span>: <span class="type">Data</span> = ...
+<span class="variable">image</span>.<span class="variable">percentEncodedString</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>) <span class="comment">// "%BAt_%E0%11%22%EB%10%2C%7F..."</span>
+
+<span class="comment">// Encode-sets determine which characters are encoded, and some perform substitutions.</span>
+<span class="keyword">let</span> <span class="variable">bytes</span> = <span class="string literal">"</span><span class="string literal">hello, world!</span><span class="string literal">"</span>.<span class="variable">utf8</span>
+<span class="variable">bytes</span>.<span class="variable">percentEncodedString</span>(<span class="variable">using</span>: .<span class="variable">urlComponentSet</span>) == <span class="string literal">"</span><span class="string literal">hello%2C%20world!</span><span class="string literal">"</span> <span class="comment">// ✅</span>
+<span class="variable">bytes</span>.<span class="variable">percentEncodedString</span>(<span class="variable">using</span>: .<span class="variable">formEncoding</span>) == <span class="string literal">"</span><span class="string literal">hello%2C+world%21</span><span class="string literal">"</span> <span class="comment">// ✅</span>
+</code></pre></body></html>
+</div>
+</div>
+    </section>
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

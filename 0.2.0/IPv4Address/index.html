@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - IPv4Address</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#nested type aliases">Nested Type Aliases</a><ul><li class="typealias"><a href="#ipv4address.octets">Octets</a></li></ul></li><li><a href="#initializers">Initializers</a><ul><li class="initializer"><a href="#ipv4address.init(octets:)">init(octets:​)</a></li><li class="initializer"><a href="#ipv4address.init(value:_:)">init(value:​_:​)</a></li><li class="initializer"><a href="#ipv4address.init(from:)">init(from:​)</a></li><li class="initializer"><a href="#ipv4address.init?(_:)">init?(_:​)</a></li><li class="initializer"><a href="#ipv4address.init?(utf8:)">init?(utf8:​)</a></li><li class="initializer"><a href="#ipv4address.init?(dotteddecimal:)">init?(dotted​Decimal:​)</a></li><li class="initializer"><a href="#ipv4address.init?(dotteddecimalutf8:)">init?(dotted​Decimal​UTF8:​)</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#ipv4address.octets">octets</a></li><li class="variable"><a href="#ipv4address.description">description</a></li><li class="variable"><a href="#ipv4address.serialized">serialized</a></li></ul></li><li><a href="#methods">Methods</a><ul><li class="function"><a href="#ipv4address.hash(into:)">hash(into:​)</a></li><li class="function"><a href="#ipv4address.encode(to:)">encode(to:​)</a></li></ul></li><li><a href="#operators">Operators</a><ul><li class="function"><a href="#ipv4address.==">==</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">IPv4Address</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">IPv4Address</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A 32-bit numerical identifier assigned to a device on an
+<a href="https://tools.ietf.org/html/rfc791">Internet Protocol, version 4</a> network.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>Codable</code></dt>
+<dt class="unknown"><code>Equatable</code></dt>
+<dt class="unknown"><code>Hashable</code></dt>
+<dt class="unknown"><code>LosslessStringConvertible</code></dt>
+</dl>
+</section>
+    <section id="nested type aliases">
+        <h2>Nested Type Aliases</h2>
+
+        <div role="article" class="typealias" id="ipv4address.octets">
+    <h3>
+        <code>Octets</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">typealias</span> <span class="variable">Octets</span> = (<span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>, <span class="type">UInt8</span>)</code></pre>
+</div>
+</div>
+    </section>
+    <section id="initializers">
+        <h2>Initializers</h2>
+
+        <div role="article" class="initializer" id="ipv4address.init(octets:)">
+    <h3>
+        <code>init(octets:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">init</span>(<span class="variable">octets</span>: <span class="type">Octets</span> = (<span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>, <span class="number literal">0</span>)) </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Creates an address with the given octets.</p>
+
+</div>
+</div>
+<div role="article" class="initializer" id="ipv4address.init(value:_:)">
+    <h3>
+        <code>init(value:​_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">init</span>(<span class="variable">value</span>: <span class="type">UInt32</span>, <span class="keyword">_</span> <span class="variable">octetArrangement</span>: <span class="type">OctetArrangement</span>) </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Creates an address with the given 32-bit integer value.</p>
+
+</div>
+<div class="discussion">
+    <aside class="See Also">
+    <p><code>OctetArrangement</code></p>
+
+</aside>
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>value</th>
+    <td><code class="type">UInt32</code></td>
+    <td><p>The integer value of the address.</p>
+</td>
+</tr>
+<tr>
+    <th>octet​Arrangement</th>
+    <td><code class="type">Octet​Arrangement</code></td>
+    <td><p>How the octets of <code>value</code> are arranged: <ul> <li>If <code>numeric</code>, the integer is assumed to be in &quot;host byte order&quot;, and its octets will be rearranged if necessary.</li> <li>If <code>binary</code>, the integer is assumed to be in &quot;network byte order&quot;, and its octets will be stored in the order they are in.</li> </ul></p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="initializer" id="ipv4address.init(from:)">
+    <h3>
+        <code>init(from:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">init</span>(<span class="variable">from</span> <span class="variable">decoder</span>: <span class="type">Decoder</span>) <span class="keyword">throws</span> </code></pre>
+</div>
+</div>
+<div role="article" class="initializer" id="ipv4address.init?(_:)">
+    <h3>
+        <code>init?(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">init</span>?&lt;<span class="variable">Source</span>&gt;(<span class="keyword">_</span> <span class="variable">description</span>: <span class="type">Source</span>) <span class="keyword">where</span> <span class="type">Source</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Parses an IPv4 address from a String.</p>
+
+</div>
+<div class="discussion">
+    <p>The following formats are recognized:</p>
+
+<ul>
+<li>
+<p><em>a.b.c.d</em>, where each numeric part defines the value of the address' octet at that position.</p>
+</li>
+<li>
+<p><em>a.b.c</em>, where <em>a</em> and <em>b</em> define the address' first 2 octets, and <em>c</em> is interpreted as a 16-bit integer whose most and least significant bytes define
+the address' 3rd and 4th octets respectively.</p>
+</li>
+<li>
+<p><em>a.b</em>, where <em>a</em> defines the address' first octet, and <em>b</em> is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
+significant.</p>
+</li>
+<li>
+<p><em>a</em>, where <em>a</em> is interpreted as a 32-bit integer whose bytes define the octets of the address in order from most to least significant.</p>
+</li>
+</ul>
+
+<p>The numeric parts may be written in decimal, octal (prefixed with a <code>0</code>), or hexadecimal (prefixed with <code>0x</code>, case-insensitive).
+Additionally, a single trailing '.' is permitted (e.g. <code>a.b.c.d.</code>).</p>
+
+<p>Examples:</p>
+
+<html><body><pre class="highlight"><code><span class="variable">IPv4Address</span>(<span class="string literal">"</span><span class="string literal">0x7f.0.0.1</span><span class="string literal">"</span>)!.<span class="variable">octets</span> == (<span class="number literal">0x7f</span>, <span class="number literal">0x00</span>, <span class="number literal">0x00</span>, <span class="number literal">0x01</span>) == <span class="string literal">"</span><span class="string literal">127.0.0.1</span><span class="string literal">"</span>
+<span class="variable">IPv4Address</span>(<span class="string literal">"</span><span class="string literal">10.1.0x12.</span><span class="string literal">"</span>)!.<span class="variable">octets</span> == (<span class="number literal">0x0a</span>, <span class="number literal">0x01</span>, <span class="number literal">0x00</span>, <span class="number literal">0x12</span>) == <span class="string literal">"</span><span class="string literal">10.1.0.18</span><span class="string literal">"</span>
+<span class="variable">IPv4Address</span>(<span class="string literal">"</span><span class="string literal">0300.0xa80032</span><span class="string literal">"</span>)!.<span class="variable">octets</span> == (<span class="number literal">0xc0</span>, <span class="number literal">0xa8</span>, <span class="number literal">0x00</span>, <span class="number literal">0x32</span>) == <span class="string literal">"</span><span class="string literal">192.168.0.50</span><span class="string literal">"</span>
+<span class="variable">IPv4Address</span>(<span class="string literal">"</span><span class="string literal">0x8Badf00d</span><span class="string literal">"</span>)!.<span class="variable">octets</span> == (<span class="number literal">0x8b</span>, <span class="number literal">0xad</span>, <span class="number literal">0xf0</span>, <span class="number literal">0x0d</span>) == <span class="string literal">"</span><span class="string literal">139.173.240.13</span><span class="string literal">"</span>
+</code></pre></body></html>
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>description</th>
+    <td><code class="type">Source</code></td>
+    <td><p>The string to parse.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="initializer" id="ipv4address.init?(utf8:)">
+    <h3>
+        <code>init?(utf8:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">init</span>?&lt;<span class="variable">UTF8Bytes</span>&gt;(<span class="variable">utf8</span>: <span class="type">UTF8Bytes</span>) <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">Collection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Parses an IPv4 address from the given collection of UTF-8 code-units.</p>
+
+</div>
+<div class="discussion">
+    <p>The following formats are recognized:</p>
+
+<ul>
+<li>
+<p><em>a.b.c.d</em>, where each numeric part defines the value of the address' octet at that position.</p>
+</li>
+<li>
+<p><em>a.b.c</em>, where <em>a</em> and <em>b</em> define the address' first 2 octets, and <em>c</em> is interpreted as a 16-bit integer whose most and least significant bytes define
+the address' 3rd and 4th octets respectively.</p>
+</li>
+<li>
+<p><em>a.b</em>, where <em>a</em> defines the address' first octet, and <em>b</em> is interpreted as a 24-bit integer whose bytes define the remaining octets from most to least
+significant.</p>
+</li>
+<li>
+<p><em>a</em>, where <em>a</em> is interpreted as a 32-bit integer whose bytes define the octets of the address in order from most to least significant.</p>
+</li>
+</ul>
+
+<p>The numeric parts may be written in decimal, octal (prefixed with a <code>0</code>), or hexadecimal (prefixed with <code>0x</code>, case-insensitive).
+Additionally, a single trailing '.' is permitted (e.g. <code>a.b.c.d.</code>).</p>
+
+<p>Examples:</p>
+
+<html><body><pre class="highlight"><code><span class="variable">IPv4Address</span>(<span class="string literal">"</span><span class="string literal">0x7f.0.0.1</span><span class="string literal">"</span>.<span class="variable">utf8</span>)!.<span class="variable">octets</span> == (<span class="number literal">0x7f</span>, <span class="number literal">0x00</span>, <span class="number literal">0x00</span>, <span class="number literal">0x01</span>) == <span class="string literal">"</span><span class="string literal">127.0.0.1</span><span class="string literal">"</span>
+<span class="variable">IPv4Address</span>(<span class="string literal">"</span><span class="string literal">10.1.0x12.</span><span class="string literal">"</span>.<span class="variable">utf8</span>)!.<span class="variable">octets</span> == (<span class="number literal">0x0a</span>, <span class="number literal">0x01</span>, <span class="number literal">0x00</span>, <span class="number literal">0x12</span>) == <span class="string literal">"</span><span class="string literal">10.1.0.18</span><span class="string literal">"</span>
+<span class="variable">IPv4Address</span>(<span class="string literal">"</span><span class="string literal">0300.0xa80032</span><span class="string literal">"</span>.<span class="variable">utf8</span>)!.<span class="variable">octets</span> == (<span class="number literal">0xc0</span>, <span class="number literal">0xa8</span>, <span class="number literal">0x00</span>, <span class="number literal">0x32</span>) == <span class="string literal">"</span><span class="string literal">192.168.0.50</span><span class="string literal">"</span>
+<span class="variable">IPv4Address</span>(<span class="string literal">"</span><span class="string literal">0x8Badf00d</span><span class="string literal">"</span>.<span class="variable">utf8</span>)!.<span class="variable">octets</span> == (<span class="number literal">0x8b</span>, <span class="number literal">0xad</span>, <span class="number literal">0xf0</span>, <span class="number literal">0x0d</span>) == <span class="string literal">"</span><span class="string literal">139.173.240.13</span><span class="string literal">"</span>
+</code></pre></body></html>
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>utf8</th>
+    <td><code class="type">UTF8Bytes</code></td>
+    <td><p>The string to parse, as a collection of UTF-8 code-units.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="initializer" id="ipv4address.init?(dotteddecimal:)">
+    <h3>
+        <code>init?(dotted​Decimal:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">init</span>?&lt;<span class="variable">S</span>&gt;(<span class="variable">dottedDecimal</span> <span class="variable">string</span>: <span class="type">S</span>) <span class="keyword">where</span> <span class="type">S</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Parses an IPv4 address from a String.</p>
+
+</div>
+<div class="discussion">
+    <p>This simplified parser only recognises the 4-piece decimal notation (&quot;a.b.c.d&quot;), also known as dotted-decimal notation.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>string</th>
+    <td><code class="type">S</code></td>
+    <td><p>The string to parse.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="initializer" id="ipv4address.init?(dotteddecimalutf8:)">
+    <h3>
+        <code>init?(dotted​Decimal​UTF8:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">init</span>?&lt;<span class="variable">UTF8Bytes</span>&gt;(<span class="variable">dottedDecimalUTF8</span> <span class="variable">utf8</span>: <span class="type">UTF8Bytes</span>) <span class="keyword">where</span> <span class="type">UTF8Bytes</span>: <span class="type">Collection</span>, <span class="type">UTF8Bytes</span>.<span class="type">Element</span> == <span class="type">UInt8</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Parses an IPv4 address from a buffer of UTF-8 codeunits.</p>
+
+</div>
+<div class="discussion">
+    <p>This simplified parser only recognises the 4-piece decimal notation (&quot;a.b.c.d&quot;), also known as dotted-decimal notation.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>utf8</th>
+    <td><code class="type">UTF8Bytes</code></td>
+    <td><p>The string to parse, as a collection of UTF-8 code-units.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+    </section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="ipv4address.octets">
+    <h3>
+        <code>octets</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">octets</span>: <span class="type">Octets</span></code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The octets of this address.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="ipv4address.description">
+    <h3>
+        <code>description</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">description</span>: <span class="type">String</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="ipv4address.serialized">
+    <h3>
+        <code>serialized</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">serialized</span>: <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The textual representation of this address, in dotted decimal notation, as defined by <a href="https://tools.ietf.org/html/rfc4001#page-7">RFC 4001</a>.</p>
+
+</div>
+</div>
+    </section>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="ipv4address.hash(into:)">
+    <h3>
+        <code>hash(into:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">hash</span>(<span class="variable">into</span> <span class="variable">hasher</span>: <span class="keyword">inout</span> <span class="type">Hasher</span>) </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="ipv4address.encode(to:)">
+    <h3>
+        <code>encode(to:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">encode</span>(<span class="variable">to</span> <span class="variable">encoder</span>: <span class="type">Encoder</span>) <span class="keyword">throws</span> </code></pre>
+</div>
+</div>
+    </section>
+    <section id="operators">
+        <h2>Operators</h2>
+
+        <div role="article" class="function" id="ipv4address.==">
+    <h3>
+        <code>==</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> == (<span class="variable">lhs</span>: <span class="keyword">Self</span>, <span class="variable">rhs</span>: <span class="keyword">Self</span>) -&gt; <span class="type">Bool</span> </code></pre>
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

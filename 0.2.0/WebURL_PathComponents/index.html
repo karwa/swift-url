@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - WebURL.PathComponents</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Member Of</a></li><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#weburl.pathcomponents.startindex">start​Index</a></li><li class="variable"><a href="#weburl.pathcomponents.endindex">end​Index</a></li></ul></li><li><a href="#methods">Methods</a><ul><li class="function"><a href="#weburl.pathcomponents.distance(from:to:)">distance(from:​to:​)</a></li><li class="function"><a href="#weburl.pathcomponents.index(after:)">index(after:​)</a></li><li class="function"><a href="#weburl.pathcomponents.formindex(after:)">form​Index(after:​)</a></li><li class="function"><a href="#weburl.pathcomponents.index(before:)">index(before:​)</a></li><li class="function"><a href="#weburl.pathcomponents.formindex(before:)">form​Index(before:​)</a></li><li class="function"><a href="#weburl.pathcomponents.replacesubrange(_:with:)">replace​Subrange(_:​with:​)</a></li><li class="function"><a href="#weburl.pathcomponents.replacesubrange(_:withpercentencodedcomponents:)">replace​Subrange(_:​with​Percent​Encoded​Components:​)</a></li><li class="function"><a href="#weburl.pathcomponents.insert(contentsof:at:)">insert(contents​Of:​at:​)</a></li><li class="function"><a href="#weburl.pathcomponents.append(contentsof:)">append(contents​Of:​)</a></li><li class="function"><a href="#weburl.pathcomponents.removesubrange(_:)">remove​Subrange(_:​)</a></li><li class="function"><a href="#weburl.pathcomponents.replacecomponent(at:with:)">replace​Component(at:​with:​)</a></li><li class="function"><a href="#weburl.pathcomponents.insert(_:at:)">insert(_:​at:​)</a></li><li class="function"><a href="#weburl.pathcomponents.append(_:)">append(_:​)</a></li><li class="function"><a href="#weburl.pathcomponents.remove(at:)">remove(at:​)</a></li><li class="function"><a href="#weburl.pathcomponents.removelast(_:)">remove​Last(_:​)</a></li><li class="function"><a href="#weburl.pathcomponents.ensuredirectorypath()">ensure​Directory​Path()</a></li></ul></li><li><a href="#operators">Operators</a><ul><li class="function"><a href="#weburl.pathcomponents.+=">+=</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">Web​URL.​Path​Components</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">PathComponents</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A view of the components in a URL's path.</p>
+
+</div>
+<div class="discussion">
+    <p>This collection provides efficient, bidirectional, read-write access to the URL's path components.
+Components are percent-decoded when they are returned and percent-encoded when they are replaced.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/swift/packages/%F0%9F%A6%86%20tracker</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">first</span>! <span class="comment">// "swift"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "🦆 tracker"</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">removeLast</span>()
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">append</span>(<span class="string literal">"</span><span class="string literal">swift-url</span><span class="string literal">"</span>)
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "http://example.com/swift/packages/swift-url"</span>
+</code></pre></body></html>
+<p>Path components extend from their leading slash until the leading slash of the next component (or the end of the path). That means that a URL whose
+path is &quot;/&quot; contains a single, empty path component, and paths which end with a &quot;/&quot; (also referred to as directory paths) end with an empty component.
+When appending to a directory path (through <code>append</code> or any other function which replaces path components), this empty component is dropped
+so that the result does not contain excessive empties. To create a directory path, append an empty component or call <code>ensureDirectoryPath</code>.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// ""</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">append</span>(<span class="string literal">"</span><span class="string literal">usr</span><span class="string literal">"</span>) <span class="comment">// file:///usr</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1, because the trailing empty component was dropped.</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span> += [<span class="string literal">"</span><span class="string literal">bin</span><span class="string literal">"</span>, <span class="string literal">"</span><span class="string literal">swift</span><span class="string literal">"</span>] <span class="comment">// file:///usr/bin/swift</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "swift"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 3</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">ensureDirectoryPath</span>() <span class="comment">// file:///usr/bin/swift/</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// ""</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 4</span>
+</code></pre></body></html>
+<p>Modifying the URL, such as by setting its <code>path</code> or any other properties, invalidates all previously obtained path component indices.
+Functions which modify the path components return new indices which may be used to maintain position across modifications.</p>
+
+<p>It is best to avoid making assumptions about how this collection's <code>count</code> is affected by a modification. In addition to the dropping of trailing empty
+components described above, URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's <code>path</code> property.</p>
+
+<p>Accessing this view is invalid and triggers a runtime error if the URL has an opaque path.
+Almost all URLs have non-opaque paths (in particular, URLs with special schemes, such as http/s and file, always have non-opaque paths).
+A URL with an opaque path can be recognized by the lack of slashes immediately following its scheme, for example:</p>
+
+<ul>
+<li>
+<p><code>mailto:bob@example.com</code></p>
+</li>
+<li>
+<p><code>javascript:alert(&quot;hello&quot;);</code></p>
+</li>
+<li>
+<p><code>data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==</code></p>
+</li>
+</ul>
+
+<p>See the <code>WebURL.hasOpaquePath</code> property for more information.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Member Of</h3>
+<dl>
+    <dt class="structure"><code><a href="/swift-url/0.2.0/WebURL">WebURL</a></code></dt>
+<dd><p>A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.</p>
+</dd>
+</dl>
+<h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>BidirectionalCollection</code></dt>
+</dl>
+</section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="weburl.pathcomponents.startindex">
+    <h3>
+        <code>start​Index</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">startIndex</span>: <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.pathcomponents.endindex">
+    <h3>
+        <code>end​Index</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">endIndex</span>: <span class="type">Index</span> </code></pre>
+</div>
+</div>
+    </section>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="weburl.pathcomponents.distance(from:to:)">
+    <h3>
+        <code>distance(from:​to:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">distance</span>(<span class="variable">from</span> <span class="variable">start</span>: <span class="type">Index</span>, <span class="variable">to</span> <span class="variable">end</span>: <span class="type">Index</span>) -&gt; <span class="type">Int</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.index(after:)">
+    <h3>
+        <code>index(after:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">index</span>(<span class="variable">after</span> <span class="variable">i</span>: <span class="type">Index</span>) -&gt; <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.formindex(after:)">
+    <h3>
+        <code>form​Index(after:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">formIndex</span>(<span class="variable">after</span> <span class="variable">i</span>: <span class="keyword">inout</span> <span class="type">Index</span>) </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.index(before:)">
+    <h3>
+        <code>index(before:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">index</span>(<span class="variable">before</span> <span class="variable">i</span>: <span class="type">Index</span>) -&gt; <span class="type">Index</span> </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.formindex(before:)">
+    <h3>
+        <code>form​Index(before:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">formIndex</span>(<span class="variable">before</span> <span class="variable">i</span>: <span class="keyword">inout</span> <span class="type">Index</span>) </code></pre>
+</div>
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.replacesubrange(_:with:)">
+    <h3>
+        <code>replace​Subrange(_:​with:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">replaceSubrange</span>&lt;<span class="variable">Components</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">bounds</span>: <span class="type">Range</span>&lt;<span class="type">Index</span>&gt;, <span class="variable">with</span> <span class="variable">newComponents</span>: <span class="type">Components</span>
+) -&gt; <span class="type">Range</span>&lt;<span class="type">Index</span>&gt; <span class="keyword">where</span> <span class="type">Components</span>: <span class="type">Collection</span>, <span class="type">Components</span>.<span class="type">Element</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces the specified subrange of path components with the contents of the given collection.</p>
+
+</div>
+<div class="discussion">
+    <p>This method has the effect of removing the specified range of components from the path, percent-encoding the new components, and inserting the
+encoded components at the same location. The number of new components need not match the number of elements being removed.
+If any of the new components in <code>newComponents</code> are &quot;.&quot; or &quot;..&quot; (or their percent-encoded versions, &quot;%2E&quot; or &quot;%2E%2E&quot;, case-insensitive),
+those components are ignored.</p>
+
+<p>The following example shows replacing the last 2 components of a <code>file:</code> URL with an array of 4 strings.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///usr/bin/swift</span><span class="string literal">"</span>)!
+
+<span class="keyword">let</span> <span class="variable">lastTwo</span> = <span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">index</span>(<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>, <span class="variable">offsetBy</span>: -<span class="number literal">2</span>)..&lt;<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">replaceSubrange</span>(<span class="variable">lastTwo</span>, <span class="variable">with</span>: [
+  <span class="string literal">"</span><span class="string literal">lib</span><span class="string literal">"</span>,
+  <span class="string literal">"</span><span class="string literal">swift</span><span class="string literal">"</span>,
+  <span class="string literal">"</span><span class="string literal">linux</span><span class="string literal">"</span>,
+  <span class="string literal">"</span><span class="string literal">libswiftCore.so</span><span class="string literal">"</span>
+])
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "file:///usr/lib/swift/linux/libswiftCore.so"</span>
+</code></pre></body></html>
+<p>If you pass a zero-length range as the <code>bounds</code> parameter, this method inserts the elements of <code>newComponents</code> at <code>bounds.lowerBound</code>.
+Calling the <code>insert(contentsOf:at:)</code> method instead is preferred. If inserting at the end of a path whose last component is empty (i.e. a directory path),
+the empty component at the end of the path will be dropped before inserting the new components.</p>
+
+<p>Note how the following example inserts 2 components at the end of a path which already contains 2 components (the last of which is empty),
+resulting in a path with only 3 components:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///usr/</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// ""</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 2</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">replaceSubrange</span>(
+  <span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>..&lt;<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>, <span class="variable">with</span>: [<span class="string literal">"</span><span class="string literal">bin</span><span class="string literal">"</span>, <span class="string literal">"</span><span class="string literal">swift</span><span class="string literal">"</span>]
+)
+
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "file:///usr/bin/swift"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "swift"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 3</span>
+</code></pre></body></html>
+<p>If <code>newComponents</code> does not contain any insertable components (i.e. it has a <code>count</code> of 0, or contains only &quot;.&quot; or &quot;..&quot; components),
+this method removes the components in the given subrange without replacement. Calling the <code>removeSubrange(_:)</code> method instead is preferred.
+URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's <code>path</code> property.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/awesome_product/index.html</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">first</span>! <span class="comment">// "awesome_product"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 2</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">replaceSubrange</span>(
+  <span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">startIndex</span>..&lt;<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>, <span class="variable">with</span>: [] <span class="keyword">as</span> [<span class="type">String</span>]
+)
+
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "http://example.com/"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">first</span>! <span class="comment">// ""</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1</span>
+</code></pre></body></html>
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>bounds</th>
+    <td><code class="type">Range&lt;Index&gt;</code></td>
+    <td><p>The subrange of the path to replace. The bounds of the range must be valid path-component indices.</p>
+</td>
+</tr>
+<tr>
+    <th>new​Components</th>
+    <td><code class="type">Components</code></td>
+    <td><p>The new components to add to the path.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>A new range of indices corresponding to the location of the new components in the path.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.replacesubrange(_:withpercentencodedcomponents:)">
+    <h3>
+        <code>replace​Subrange(_:​with​Percent​Encoded​Components:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">replaceSubrange</span>&lt;<span class="variable">Components</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">range</span>: <span class="type">Range</span>&lt;<span class="type">Index</span>&gt;, <span class="variable">withPercentEncodedComponents</span> <span class="variable">newComponents</span>: <span class="type">Components</span>
+) -&gt; <span class="type">Range</span>&lt;<span class="type">Index</span>&gt; <span class="keyword">where</span> <span class="type">Components</span>: <span class="type">Collection</span>, <span class="type">Components</span>.<span class="type">Element</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces the specified subrange of path components with the contents of the given collection.</p>
+
+</div>
+<div class="discussion">
+    <p>This method has the effect of removing the specified range of components from the path, percent-encoding the new components, and inserting the
+encoded components at the same location. The number of new components need not match the number of elements being removed.
+If any of the new components in <code>newComponents</code> are &quot;.&quot; or &quot;..&quot; (or their percent-encoded versions, &quot;%2E&quot; or &quot;%2E%2E&quot;, case-insensitive),
+those components are ignored.</p>
+
+<p>This method behaves identically to <code>replaceSubrange(_:with:)</code>, except that the contents of <code>newComponents</code> are assumed to be
+percent-encoded already. Additional percent-encoding will be added as necessary, but existing &quot;%XX&quot; elements will not be double-encoded.
+The following example demonstrates this difference.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">let</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/music/bands</span><span class="string literal">"</span>)!
+
+<span class="comment">// replaceSubrange(_:with:) preserves the given components exactly,</span>
+<span class="comment">// which can double-encode components that are already percent-encoded.</span>
+<span class="comment">// "%20" is a percent-encoded space.</span>
+
+<span class="keyword">var</span> <span class="variable">urlA</span> = <span class="variable">url</span>
+<span class="variable">urlA</span>.<span class="variable">pathComponents</span>.<span class="variable">replaceSubrange</span>(
+  <span class="variable">urlA</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>..&lt;<span class="variable">urlA</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>,
+  <span class="variable">with</span>: [<span class="string literal">"</span><span class="string literal">The%20Beatles</span><span class="string literal">"</span>]
+)
+<span class="variable">urlA</span> <span class="comment">// "http://example.com/music/bands/The%2520Beatles"</span>
+
+<span class="comment">// Use replaceSubrange(_:withPercentEncodedComponents:) if the component</span>
+<span class="comment">// is already percent-encoded, to avoid double-encoding.</span>
+
+<span class="keyword">var</span> <span class="variable">urlB</span> = <span class="variable">url</span>
+<span class="variable">urlB</span>.<span class="variable">pathComponents</span>.<span class="variable">replaceSubrange</span>(
+  <span class="variable">urlB</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>..&lt;<span class="variable">urlB</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>,
+  <span class="variable">withPercentEncodedComponents</span>: [<span class="string literal">"</span><span class="string literal">The%20Beatles</span><span class="string literal">"</span>]
+)
+<span class="variable">urlB</span> <span class="comment">// "http://example.com/music/bands/The%20Beatles"</span>
+</code></pre></body></html>
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>bounds</th>
+    <td></td>
+    <td><p>The subrange of the path to replace. The bounds of the range must be valid path-component indices.</p>
+</td>
+</tr>
+<tr>
+    <th>new​Components</th>
+    <td><code class="type">Components</code></td>
+    <td><p>The new components to add to the path.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>A new range of indices corresponding to the location of the new components in the path.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.insert(contentsof:at:)">
+    <h3>
+        <code>insert(contents​Of:​at:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">insert</span>&lt;<span class="variable">Components</span>&gt;(
+  <span class="variable">contentsOf</span> <span class="variable">newComponents</span>: <span class="type">Components</span>, <span class="variable">at</span> <span class="variable">position</span>: <span class="type">Index</span>
+) -&gt; <span class="type">Range</span>&lt;<span class="type">Index</span>&gt; <span class="keyword">where</span> <span class="type">Components</span>: <span class="type">Collection</span>, <span class="type">Components</span>.<span class="type">Element</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Inserts the elements of a collection into the path at the specified position.</p>
+
+</div>
+<div class="discussion">
+    <p>The new components are inserted before the component currently at the specified index, and their contents will be percent-encoded, if necessary.
+If any of the new components are &quot;.&quot; or &quot;..&quot; (or their percent-encoded versions, &quot;%2E&quot; or &quot;%2E%2E&quot;, case-insensitive), those components are ignored.</p>
+
+<p>The following example inserts an array of path components in the middle of a path:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///usr/swift</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">insert</span>(
+  <span class="variable">contentsOf</span>: [<span class="string literal">"</span><span class="string literal">local</span><span class="string literal">"</span>, <span class="string literal">"</span><span class="string literal">bin</span><span class="string literal">"</span>], <span class="variable">at</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">index</span>(<span class="variable">after</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">startIndex</span>)
+)
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "file:///usr/local/bin/swift"</span>
+</code></pre></body></html>
+<p>If you pass the path's <code>endIndex</code> property as the <code>position</code> parameter, the new elements are appended to the path.
+Calling the <code>append(contentsOf:)</code> method instead is preferred. If inserting at the end of a path whose last component is empty (i.e. a directory path),
+the trailing empty component will be dropped and replaced by the first inserted component.</p>
+
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>new​Components</th>
+    <td><code class="type">Components</code></td>
+    <td><p>The new components to insert into the path.</p>
+</td>
+</tr>
+<tr>
+    <th>position</th>
+    <td><code class="type">Index</code></td>
+    <td><p>The position at which to insert the new components. <code>position</code> must be a valid path component index.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>A new range of indices corresponding to the location of the new components in the path.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.append(contentsof:)">
+    <h3>
+        <code>append(contents​Of:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">append</span>&lt;<span class="variable">Components</span>&gt;(
+  <span class="variable">contentsOf</span> <span class="variable">newComponents</span>: <span class="type">Components</span>
+) -&gt; <span class="type">Range</span>&lt;<span class="type">Index</span>&gt; <span class="keyword">where</span> <span class="type">Components</span>: <span class="type">Collection</span>, <span class="type">Components</span>.<span class="type">Element</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Adds the elements of a collection to the end of this path.</p>
+
+</div>
+<div class="discussion">
+    <p>The contents of the appended components will be percent-encoded, if necessary.
+If any of the new components are &quot;.&quot; or &quot;..&quot; (or their percent-encoded versions, &quot;%2E&quot; or &quot;%2E%2E&quot;, case-insensitive), those components are ignored.</p>
+
+<p>If appending to a path whose last component is empty (i.e. a directory path),
+the trailing empty component will be dropped and replaced by the first inserted component.</p>
+
+<p>The following example builds a path by appending path components. Note that the first <code>append</code> does not change the <code>count</code>, as the URL initially
+has a directory path.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// ""</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">append</span>(<span class="variable">contentsOf</span>: [<span class="string literal">"</span><span class="string literal">tmp</span><span class="string literal">"</span>])
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "tmp"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">append</span>(<span class="variable">contentsOf</span>: [<span class="string literal">"</span><span class="string literal">my_app</span><span class="string literal">"</span>, <span class="string literal">"</span><span class="string literal">data.json</span><span class="string literal">"</span>])
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "data.json"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 3</span>
+
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "file:///tmp/my_app/data.json"</span>
+</code></pre></body></html>
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>new​Components</th>
+    <td><code class="type">Components</code></td>
+    <td><p>The new components to add to end of the path.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>A new range of indices corresponding to the location of the new components in the path.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.removesubrange(_:)">
+    <h3>
+        <code>remove​Subrange(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">removeSubrange</span>(<span class="keyword">_</span> <span class="variable">bounds</span>: <span class="type">Range</span>&lt;<span class="type">Index</span>&gt;) -&gt; <span class="type">Index</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Removes the specified subrange of components from the path.</p>
+
+</div>
+<div class="discussion">
+    <html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/projects/swift/swift-url/0.2.0/</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">removeSubrange</span>(
+  <span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">index</span>(<span class="variable">after</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">startIndex</span>)..&lt;<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>
+)
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "http://example.com/projects"</span>
+</code></pre></body></html>
+<p>URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's <code>path</code> property.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/awesome_product/index.html</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">removeSubrange</span>(
+  <span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">startIndex</span>..&lt;<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">endIndex</span>
+)
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "http://example.com/"</span>
+</code></pre></body></html>
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>bounds</th>
+    <td><code class="type">Range&lt;Index&gt;</code></td>
+    <td><p>The subrange of the path to remove. The bounds of the range must be valid path component indices.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>The index corresponding to the subrange's <code>upperBound</code> after modification.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.replacecomponent(at:with:)">
+    <h3>
+        <code>replace​Component(at:​with:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">replaceComponent</span>&lt;<span class="variable">Component</span>&gt;(
+  <span class="variable">at</span> <span class="variable">position</span>: <span class="type">Index</span>, <span class="variable">with</span> <span class="variable">newComponent</span>: <span class="type">Component</span>
+) -&gt; <span class="type">Range</span>&lt;<span class="type">Index</span>&gt; <span class="keyword">where</span> <span class="type">Component</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Replaces the path component at the specified position.</p>
+
+</div>
+<div class="discussion">
+    <p>The contents of the new component will be percent-encoded, if necessary.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///usr/bin/swift</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">replaceComponent</span>(
+  <span class="variable">at</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">index</span>(<span class="variable">after</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">startIndex</span>),
+  <span class="variable">with</span>: <span class="string literal">"</span><span class="string literal">lib</span><span class="string literal">"</span>
+)
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "file:///usr/lib/swift"</span>
+</code></pre></body></html>
+<p>If the new component is &quot;.&quot; or &quot;..&quot; (or their percent-encoded versions, &quot;%2E&quot; or &quot;%2E%2E&quot;, case-insensitive), the component at <code>position</code> is removed -
+as if calling <code>replaceSubrange</code> with an empty collection.</p>
+
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>position</th>
+    <td><code class="type">Index</code></td>
+    <td><p>The position of the component to replace. <code>position</code> must be a valid path component index.</p>
+</td>
+</tr>
+<tr>
+    <th>new​Component</th>
+    <td><code class="type">Component</code></td>
+    <td><p>The value to set the component to.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>A new range of indices encompassing the replaced component.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.insert(_:at:)">
+    <h3>
+        <code>insert(_:​at:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">insert</span>&lt;<span class="variable">Component</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newComponent</span>: <span class="type">Component</span>, <span class="variable">at</span> <span class="variable">position</span>: <span class="type">Index</span>
+) -&gt; <span class="type">Range</span>&lt;<span class="type">Index</span>&gt; <span class="keyword">where</span> <span class="type">Component</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Inserts a component into the path at the specified position.</p>
+
+</div>
+<div class="discussion">
+    <p>The new component is inserted before the component currently at the specified index, and its contents will be percent-encoded, if necessary.
+If the new component is &quot;.&quot; or &quot;..&quot; (or their percent-encoded versions, &quot;%2E&quot; or &quot;%2E%2E&quot;, case-insensitive), it is ignored.</p>
+
+<p>The following example inserts a component in the middle of a path:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///usr/swift</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">insert</span>(
+  <span class="string literal">"</span><span class="string literal">bin</span><span class="string literal">"</span>,
+  <span class="variable">at</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">index</span>(<span class="variable">after</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">startIndex</span>)
+)
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "file:///usr/bin/swift"</span>
+</code></pre></body></html>
+<p>If you pass the path's <code>endIndex</code> property as the <code>position</code> parameter, the new component is appended to the path.
+Calling the <code>append(_:)</code> method instead is preferred. If inserting at the end of a path whose last component is empty (i.e. a directory path),
+the trailing empty component will be dropped and replaced by the new component.</p>
+
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>new​Component</th>
+    <td><code class="type">Component</code></td>
+    <td><p>The new component to insert into the path.</p>
+</td>
+</tr>
+<tr>
+    <th>position</th>
+    <td><code class="type">Index</code></td>
+    <td><p>The position at which to insert the new component. <code>position</code> must be a valid path component index.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>A new range of indices corresponding to the location of the new component in the path.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.append(_:)">
+    <h3>
+        <code>append(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">append</span>&lt;<span class="variable">Component</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">newComponent</span>: <span class="type">Component</span>
+) -&gt; <span class="type">Index</span> <span class="keyword">where</span> <span class="type">Component</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Adds a component to the end of this path.</p>
+
+</div>
+<div class="discussion">
+    <p>The contents of the appended component will be percent-encoded, if necessary.
+If the new component is &quot;.&quot; or &quot;..&quot; (or their percent-encoded versions, &quot;%2E&quot; or &quot;%2E%2E&quot;, case-insensitive), it will be ignored.</p>
+
+<p>If appending to a path whose last component is empty (i.e. a directory path),
+the trailing empty component will be dropped and replaced by the new component.</p>
+
+<p>The following example builds a path by appending components. Note that the first <code>append</code> does not change the <code>count</code>, as the URL initially
+has a directory path.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// ""</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">append</span>(<span class="string literal">"</span><span class="string literal">tmp</span><span class="string literal">"</span>)
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "tmp"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">append</span>(<span class="string literal">"</span><span class="string literal">data.json</span><span class="string literal">"</span>)
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "data.json"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 2</span>
+
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "file:///tmp/data.json"</span>
+</code></pre></body></html>
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>new​Component</th>
+    <td><code class="type">Component</code></td>
+    <td><p>The new component to add to end of the path.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>The location of the new component in the path.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.remove(at:)">
+    <h3>
+        <code>remove(at:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">discardableResult</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">remove</span>(<span class="variable">at</span> <span class="variable">position</span>: <span class="type">Index</span>) -&gt; <span class="type">Index</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Removes the component at the given index from the path.</p>
+
+</div>
+<div class="discussion">
+    <html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/projects/swift/swift-url/0.2.0/Sources/</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">remove</span>(
+  <span class="variable">at</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">index</span>(<span class="variable">after</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">startIndex</span>)
+)
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "http://example.com/projects/swift-url/0.2.0/Sources/"</span>
+</code></pre></body></html>
+<p>URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's <code>path</code> property.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/foo</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">remove</span>(<span class="variable">at</span>: <span class="type">url</span>.<span class="variable">pathComponents</span>.<span class="variable">startIndex</span>)
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "http://example.com/"</span>
+</code></pre></body></html>
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>position</th>
+    <td><code class="type">Index</code></td>
+    <td><p>The index of the component to remove. <code>position</code> must be a valid path component index.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>The index corresponding to the component following <code>position</code>, after modification.</p>
+
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.removelast(_:)">
+    <h3>
+        <code>remove​Last(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">removeLast</span>(<span class="keyword">_</span> <span class="variable">k</span>: <span class="type">Int</span> = <span class="number literal">1</span>) </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Removes the specified number of components from the end of the path.</p>
+
+</div>
+<div class="discussion">
+    <p>Attempting to remove more components than exist in the path triggers a runtime error.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/foo/bar</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">removeLast</span>()
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "http://example.com/foo"</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">removeLast</span>()
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "http://example.com/"</span>
+</code></pre></body></html>
+<p>URLs with particular schemes are forbidden from ever having empty paths; attempting to remove all of the path components
+from such a URL will result in a path with a single, empty component, just like setting the empty string to the URL's <code>path</code> property.</p>
+
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>k</th>
+    <td><code class="type">Int</code></td>
+    <td><p>The number of elements to remove from the path. <code>k</code> must be greater than or equal to zero and must not exceed the number of components in the path.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+</div>
+<div role="article" class="function" id="weburl.pathcomponents.ensuredirectorypath()">
+    <h3>
+        <code>ensure​Directory​Path()</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">ensureDirectoryPath</span>() </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Appends an empty component to the path, if it does not already end with an empty component.
+This has the effect of ensuring the path ends with a trailing slash.</p>
+
+</div>
+<div class="discussion">
+    <p>The following example demonstrates building a file path by appending components,
+and finishes by using <code>ensureDirectoryPath</code> to ensure the path ends in a trailing slash:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span> += [<span class="string literal">"</span><span class="string literal">Users</span><span class="string literal">"</span>, <span class="string literal">"</span><span class="string literal">karl</span><span class="string literal">"</span>, <span class="string literal">"</span><span class="string literal">Desktop</span><span class="string literal">"</span>] <span class="comment">// "file:///Users/karl/Desktop"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">ensureDirectoryPath</span>() <span class="comment">// "file:///Users/karl/Desktop/"</span>
+</code></pre></body></html>
+<p>If the path is already a directory path, this method has no effect.</p>
+
+</div>
+</div>
+    </section>
+    <section id="operators">
+        <h2>Operators</h2>
+
+        <div role="article" class="function" id="weburl.pathcomponents.+=">
+    <h3>
+        <code>+=</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> += &lt;<span class="variable">Components</span>&gt;(
+  <span class="variable">lhs</span>: <span class="keyword">inout</span> <span class="type">WebURL</span>.<span class="type">PathComponents</span>, <span class="variable">rhs</span>: <span class="type">Components</span>
+) <span class="keyword">where</span> <span class="type">Components</span>: <span class="type">Collection</span>, <span class="type">Components</span>.<span class="type">Element</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Adds the elements of a collection to the end of this path.</p>
+
+</div>
+<div class="discussion">
+    <p>The contents of the appended components will be percent-encoded, if necessary.
+If any of the new components are &quot;.&quot; or &quot;..&quot; (or their percent-encoded versions, &quot;%2E&quot; or &quot;%2E%2E&quot;, case-insensitive), those components are ignored.</p>
+
+<p>If appending to a path whose last component is empty (i.e. a directory path),
+the trailing empty component will be dropped and replaced by the first inserted component.</p>
+
+<p>The following example builds a path by appending path components. Note that the first <code>+=</code> does not change the <code>count</code>, as the URL initially
+has a directory path.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">file:///</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// ""</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span> += [<span class="string literal">"</span><span class="string literal">tmp</span><span class="string literal">"</span>]
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "tmp"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 1</span>
+
+<span class="variable">url</span>.<span class="variable">pathComponents</span> += [<span class="string literal">"</span><span class="string literal">my_app</span><span class="string literal">"</span>, <span class="string literal">"</span><span class="string literal">data.json</span><span class="string literal">"</span>]
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">last</span>! <span class="comment">// "data.json"</span>
+<span class="variable">url</span>.<span class="variable">pathComponents</span>.<span class="variable">count</span> <span class="comment">// 3</span>
+
+<span class="variable">print</span>(<span class="variable">url</span>) <span class="comment">// Prints "file:///tmp/my_app/data.json"</span>
+</code></pre></body></html>
+<p>Calling this method invalidates any existing indices for this URL.</p>
+
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

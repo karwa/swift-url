@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - FilePathFromURLError</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#filepathfromurlerror.notafileurl">not​AFile​URL</a></li><li class="variable"><a href="#filepathfromurlerror.encodedpathseparator">encoded​Path​Separator</a></li><li class="variable"><a href="#filepathfromurlerror.encodednullbytes">encoded​Null​Bytes</a></li><li class="variable"><a href="#filepathfromurlerror.unsupportednonlocalfile">unsupported​Non​Local​File</a></li><li class="variable"><a href="#filepathfromurlerror.unsupportedhostname">unsupported​Hostname</a></li><li class="variable"><a href="#filepathfromurlerror.windowspathisnotfullyqualified">windows​Path​IsNot​Fully​Qualified</a></li><li class="variable"><a href="#filepathfromurlerror.transcodingfailure">transcoding​Failure</a></li><li class="variable"><a href="#filepathfromurlerror.description">description</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">File​Path​From​URLError</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">FilePathFromURLError</span>: <span class="type">Error</span>, <span class="type">Equatable</span>, <span class="type">Hashable</span>, <span class="type">CustomStringConvertible</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The reason why a file path could not be created from a given URL.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>CustomStringConvertible</code></dt>
+<dt class="unknown"><code>Equatable</code></dt>
+<dt class="unknown"><code>Error</code></dt>
+<dt class="unknown"><code>Hashable</code></dt>
+</dl>
+</section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="filepathfromurlerror.notafileurl">
+    <h3>
+        <code>not​AFile​URL</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">notAFileURL</span>: <span class="type">FilePathFromURLError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given URL is not a <code>file:</code> URL.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathfromurlerror.encodedpathseparator">
+    <h3>
+        <code>encoded​Path​Separator</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">encodedPathSeparator</span>: <span class="type">FilePathFromURLError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given URL contains a percent-encoded path separator.</p>
+
+</div>
+<div class="discussion">
+    <p>Typically, percent-encoded bytes in a URL are decoded when generating a file path, as percent-encoding is a URL feature that has no meaning to
+a filesystem. However, if the decoded byte would be interpreted as a path separator in the given <code>FilePathFormat</code>,
+decoding it would pose a security risk as it could be used to smuggle extra path components, including &quot;..&quot; components.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathfromurlerror.encodednullbytes">
+    <h3>
+        <code>encoded​Null​Bytes</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">encodedNullBytes</span>: <span class="type">FilePathFromURLError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given URL contains a percent-encoded <code>NULL</code> byte.</p>
+
+</div>
+<div class="discussion">
+    <p>Typically, percent-encoded bytes in a URL are decoded when generating a file path, as percent-encoding is a URL feature that has no meaning to
+a filesystem. However, if the decoded byte is a <code>NULL</code> byte, many systems would interpret that as the end of the path, which poses a security risk
+as parts of the path could unexpectedly be discarded.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathfromurlerror.unsupportednonlocalfile">
+    <h3>
+        <code>unsupported​Non​Local​File</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">unsupportedNonLocalFile</span>: <span class="type">FilePathFromURLError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given URL refers to a file on a remote host, but they are not supported by the given <code>FilePathFormat</code>.</p>
+
+</div>
+<div class="discussion">
+    <p>For example, on POSIX systems, remote filesystems tend to be mounted at locations in the local filesystem, rather than using a special path format.
+This means it is not obvious how to express a path to a remote filesystem using the <code>posix</code> path format.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathfromurlerror.unsupportedhostname">
+    <h3>
+        <code>unsupported​Hostname</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">unsupportedHostname</span>: <span class="type">FilePathFromURLError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Creating a path with the given URL's hostname is not supported.</p>
+
+</div>
+<div class="discussion">
+    <p><code>FilePathFormat</code>s which support remote hosts sometimes reserve particular hostnames.
+For instance, Windows UNC paths with the hostname <code>.</code> are interpreted as referring to local devices (e.g. <code>\\.\COM1</code>).
+For security reasons, URLs representing such paths are not decoded.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathfromurlerror.windowspathisnotfullyqualified">
+    <h3>
+        <code>windows​Path​IsNot​Fully​Qualified</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">windowsPathIsNotFullyQualified</span>: <span class="type">FilePathFromURLError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given URL does not represent a fully-qualified Windows path.</p>
+
+</div>
+<div class="discussion">
+    <p>file URLs should always represent absolute locations on the filesystem.
+For Windows platforms, this means it would be incorrect for a file URL to result in anything other than a fully-qualified path.
+Windows paths are fully-qualified if they are UNC paths (i.e. have hostnames), or if their first component is a drive letter with a trailing separator.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathfromurlerror.transcodingfailure">
+    <h3>
+        <code>transcoding​Failure</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">transcodingFailure</span>: <span class="type">FilePathFromURLError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The path created from the URL could not be transcoded to the system's encoding.</p>
+
+</div>
+<div class="discussion">
+    <p>File URLs can preserve the precise bytes of their path components by means of percent-encoding.
+However, when the platform's native path representation uses non-8-bit code-units, those elements must be transcoded
+from the percent-encoded 8-bit values to the system's native encoding.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathfromurlerror.description">
+    <h3>
+        <code>description</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">description</span>: <span class="type">String</span> </code></pre>
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

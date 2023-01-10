@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - FilePathFormat</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#filepathformat.posix">posix</a></li><li class="variable"><a href="#filepathformat.windows">windows</a></li><li class="variable"><a href="#filepathformat.native">native</a></li><li class="variable"><a href="#filepathformat.description">description</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">File​Path​Format</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">FilePathFormat</span>: <span class="type">Equatable</span>, <span class="type">Hashable</span>, <span class="type">CustomStringConvertible</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A description of a file path's structure.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>CustomStringConvertible</code></dt>
+<dt class="unknown"><code>Equatable</code></dt>
+<dt class="unknown"><code>Hashable</code></dt>
+</dl>
+</section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="filepathformat.posix">
+    <h3>
+        <code>posix</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">posix</span>: <span class="type">FilePathFormat</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A path which is compatible with the POSIX standard.</p>
+
+</div>
+<div class="discussion">
+    <h2>Format</h2>
+
+<p>The format and interpretation of POSIX-style paths is documented by <a href="https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html#tag_04_13">IEEE Std 1003.1</a>.</p>
+
+<h2>Code Units</h2>
+
+<p>The path separator is <code>/</code> (code-unit value <code>0x2F</code>),
+and the current/parent directory is represented by <code>.</code>/<code>..</code> respectively (where <code>.</code> is the code-unit with value <code>0x2E</code>).
+All other code-units are not defined and must be preserved exactly.</p>
+
+<h2>Normalization</h2>
+
+<p>Consecutive separators have the same meaning as a single separator, except if the path starts with exactly 2 separators.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathformat.windows">
+    <h3>
+        <code>windows</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">windows</span>: <span class="type">FilePathFormat</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A path which is compatible with those used by Microsoft Windows.</p>
+
+</div>
+<div class="discussion">
+    <h2>Format</h2>
+
+<p>There are many, many Windows path formats. This object represents the most common ones:</p>
+
+<ul>
+<li>
+<p>DOS paths: <code>C:\Users\Alice\Desktop\family.jpg</code></p>
+</li>
+<li>
+<p>UNC paths: <code>\\us-west.example.com\files\meeting-notes-june.docx</code></p>
+</li>
+<li>
+<p>DOS long paths: <code>\\?\C:\Users\Bob\Documents\...</code></p>
+</li>
+<li>
+<p>UNC long paths: <code>\\?\UNC\europe.example.com\jim\...</code></p>
+</li>
+</ul>
+
+<p>The precise format and interpretation of these paths is documented by Microsoft:</p>
+
+<ul>
+<li>
+<p><a href="https://web.archive.org/web/20210714174116/https://docs.microsoft.com/en-us/dotnet/standard/io/file-path-formats">File path formats on Windows systems</a></p>
+</li>
+<li>
+<p><a href="https://web.archive.org/web/20210716121600/https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file">Naming Files, Paths, and Namespaces</a></p>
+</li>
+<li>
+<p><a href="https://web.archive.org/web/20210708165404/https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/62e862f4-2a51-452e-8eeb-dc4ff5ee33cc">UNC Path specification</a></p>
+</li>
+</ul>
+
+<h2>Code Units</h2>
+
+<p>The code-units of Windows file paths natively represent Unicode code-points. Windows provides APIs which encode these paths using
+either UTF-16 code-units, or ANSI code-units in the system's active code-page (a form of extended ASCII). In either case, the numeric
+values of code-units in the ASCII range may be interpreted as ASCII characters.
+File and directory names are not normalized, so the sequence of Unicode code-points must be preserved exactly.</p>
+
+<p>The preferred path separator is <code>\</code> (code-unit value <code>0x5C</code>), although some formats also accept <code>/</code> (<code>0x2F</code>).
+The current/parent directory is represented by <code>.</code>/<code>..</code> respectively (where <code>.</code> is the code-unit with value <code>0x2E</code>).</p>
+
+<p>Non-ASCII code-units in path components are treated as opaque. An exception is UNC paths, where the hostname component must be UTF-8.</p>
+
+<h2>Normalization</h2>
+
+<p>Consecutive separators have the same meaning as a single separator, except if the path starts with exactly 2 separators.
+Trailing ASCII periods and spaces may be trimmed from path components - a file named <code>foo.</code> cannot be expressed using regular DOS paths.
+Long paths are not normalized, so they can express the file name <code>foo.</code>. However, many Windows APIs will normalize them regardless.</p>
+
+<p>See <a href="https://web.archive.org/web/20210714174116/https://docs.microsoft.com/en-us/dotnet/standard/io/file-path-formats">File path formats on Windows systems</a> for a description of Windows' path normalization procedure.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathformat.native">
+    <h3>
+        <code>native</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">native</span>: <span class="type">FilePathFormat</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The native path style used by the current operating system.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="filepathformat.description">
+    <h3>
+        <code>description</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">description</span>: <span class="type">String</span> </code></pre>
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

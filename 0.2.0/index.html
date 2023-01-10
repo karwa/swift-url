@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - WebURL</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#structures">Structures</a></li><li><a href="#enumerations">Enumerations</a></li><li><a href="#protocols">Protocols</a></li><li><a href="#typealiases">Typealiases</a></li><li><a href="#extensions">Extensions</a></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+                <section id="structures">
+        <h2>Structures</h2>
+        <dl>
+            <dt class="structure">
+    <a href="/swift-url/0.2.0/IPv6Address" title="structure - IPv6Address">
+        IPv6Address
+    </a>
+</dt>
+<dd>
+    <p>A 128-bit numerical identifier assigned to a device on an
+<a href="https://tools.ietf.org/html/rfc2460">Internet Protocol, version 6</a> network.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/IPv4Address" title="structure - IPv4Address">
+        IPv4Address
+    </a>
+</dt>
+<dd>
+    <p>A 32-bit numerical identifier assigned to a device on an
+<a href="https://tools.ietf.org/html/rfc791">Internet Protocol, version 4</a> network.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/LazilyPercentEncoded" title="structure - LazilyPercentEncoded">
+        Lazily​Percent​Encoded
+    </a>
+</dt>
+<dd>
+    <p>A <code>Collection</code> which percent-encodes elements from its <code>Source</code> on-demand using a given <code>EncodeSet</code>.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/LazilyPercentDecodedWithSubstitutions" title="structure - LazilyPercentDecodedWithSubstitutions">
+        Lazily​Percent​Decoded​With​Substitutions
+    </a>
+</dt>
+<dd>
+    <p>A <code>Collection</code> which percent-decodes elements from its <code>Source</code> on-demand, and reverses substitutions made by a <code>SubstitutionMap</code>.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/FilePathFormat" title="structure - FilePathFormat">
+        File​Path​Format
+    </a>
+</dt>
+<dd>
+    <p>A description of a file path's structure.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/URLFromFilePathError" title="structure - URLFromFilePathError">
+        URLFrom​File​Path​Error
+    </a>
+</dt>
+<dd>
+    <p>The reason why a file URL could not be created from a given file path.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/FilePathFromURLError" title="structure - FilePathFromURLError">
+        File​Path​From​URLError
+    </a>
+</dt>
+<dd>
+    <p>The reason why a file path could not be created from a given URL.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/WebURL_FormEncodedQueryParameters" title="structure - WebURL.FormEncodedQueryParameters">
+        Web​URL.​Form​Encoded​Query​Parameters
+    </a>
+</dt>
+<dd>
+    <p>A view of the <code>application/x-www-form-urlencoded</code> key-value pairs in a URL's <code>query</code>.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/WebURL_FormEncodedQueryParameters_KeyValuePairs" title="structure - WebURL.FormEncodedQueryParameters.KeyValuePairs">
+        Web​URL.​Form​Encoded​Query​Parameters.​Key​Value​Pairs
+    </a>
+</dt>
+<dd>
+    <p>A <code>Sequence</code> allowing iteration over all form-encoded key-value pairs contained in a URL's query.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/WebURL_JSModel" title="structure - WebURL.JSModel">
+        Web​URL.​JSModel
+    </a>
+</dt>
+<dd>
+    <p>An interface to this URL whose properties have the same behaviour as the JavaScript <code>URL</code> class described in the <a href="https://url.spec.whatwg.org/#url-class">URL Standard</a>.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/WebURL_Origin" title="structure - WebURL.Origin">
+        Web​URL.​Origin
+    </a>
+</dt>
+<dd>
+    <p>Origins are the fundamental currency of the Web's security model.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/WebURL_PathComponents" title="structure - WebURL.PathComponents">
+        Web​URL.​Path​Components
+    </a>
+</dt>
+<dd>
+    <p>A view of the components in a URL's path.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/WebURL_UTF8View" title="structure - WebURL.UTF8View">
+        Web​URL.​UTF8View
+    </a>
+</dt>
+<dd>
+    <p>A view of the UTF-8 code-units in a serialized URL.</p>
+
+</dd>
+<dt class="structure">
+    <a href="/swift-url/0.2.0/WebURL" title="structure - WebURL">
+        Web​URL
+    </a>
+</dt>
+<dd>
+    <p>A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.</p>
+
+</dd>
+        </dl>
+    </section>
+    <section id="enumerations">
+        <h2>Enumerations</h2>
+        <dl>
+            <dt class="enumeration">
+    <a href="/swift-url/0.2.0/OctetArrangement" title="enumeration - OctetArrangement">
+        Octet​Arrangement
+    </a>
+</dt>
+<dd>
+    <p>The way in which octets are arranged to form a multi-byte integer.</p>
+
+</dd>
+<dt class="enumeration">
+    <a href="/swift-url/0.2.0/WebURL_Host" title="enumeration - WebURL.Host">
+        Web​URL.​Host
+    </a>
+</dt>
+<dd>
+    <p>A host is a domain, an IPv4 address, an IPv6 address, an opaque host, or an empty host.
+Typically a host serves as a network address, but it is sometimes used as opaque identifier in URLs where a network address is not necessary.</p>
+
+</dd>
+        </dl>
+    </section>
+    <section id="protocols">
+        <h2>Protocols</h2>
+        <dl>
+            <dt class="protocol">
+    <a href="/swift-url/0.2.0/PercentEncodeSet" title="protocol - PercentEncodeSet">
+        Percent​Encode​Set
+    </a>
+</dt>
+<dd>
+    <p>A set of ASCII code-points which should be percent-encoded.</p>
+
+</dd>
+<dt class="protocol">
+    <a href="/swift-url/0.2.0/SubstitutionMap" title="protocol - SubstitutionMap">
+        Substitution​Map
+    </a>
+</dt>
+<dd>
+    <p>A bidirectional map of ASCII code-points.</p>
+
+</dd>
+        </dl>
+    </section>
+    <section id="typealiases">
+        <h2>Typealiases</h2>
+        <dl>
+            <dt class="typealias">
+    <a href="/swift-url/0.2.0/LazilyPercentDecodedUTF8WithoutSubstitutions" title="typealias - LazilyPercentDecodedUTF8WithoutSubstitutions">
+        Lazily​Percent​Decoded​UTF8Without​Substitutions
+    </a>
+</dt>
+<dd>
+    <p>A <code>Collection</code> which percent-decodes elements from its <code>Source</code> on-demand.</p>
+
+</dd>
+<dt class="typealias">
+    <a href="/swift-url/0.2.0/LazilyPercentDecodedUTF8" title="typealias - LazilyPercentDecodedUTF8">
+        Lazily​Percent​Decoded​UTF8
+    </a>
+</dt>
+<dd>
+    <p>A <code>Collection</code> which percent-decodes elements from its <code>Source</code> on-demand, and reverses substitutions made by a <code>SubstitutionMap</code>.</p>
+
+</dd>
+<dt class="typealias">
+    <a href="/swift-url/0.2.0/LazilyPercentDecoded" title="typealias - LazilyPercentDecoded">
+        Lazily​Percent​Decoded
+    </a>
+</dt>
+<dd>
+    <p>A <code>Collection</code> which percent-decodes elements from its <code>Source</code> on-demand.</p>
+
+</dd>
+        </dl>
+    </section>
+<section id="extensions">
+    <h2>Extensions</h2>
+    <dl>
+    <dt class="extension">
+    <a href="/swift-url/0.2.0/Collection">Collection</a>
+</dt>
+<dd></dd>
+<dt class="extension">
+    <a href="/swift-url/0.2.0/LazyCollectionProtocol">LazyCollectionProtocol</a>
+</dt>
+<dd></dd>
+<dt class="extension">
+    <a href="/swift-url/0.2.0/Slice">Slice</a>
+</dt>
+<dd></dd>
+<dt class="extension">
+    <a href="/swift-url/0.2.0/StringProtocol">StringProtocol</a>
+</dt>
+<dd></dd>
+<dt class="extension">
+    <a href="/swift-url/0.2.0/WebURL__SPIs">WebURL._SPIs</a>
+</dt>
+<dd></dd>
+    </dl>
+<section>
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

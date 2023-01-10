@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - WebURL.FormEncodedQueryParameters</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Member Of</a></li><li><a href="#relationships">Nested Types</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#weburl.formencodedqueryparameters.allkeyvaluepairs">all​Key​Value​Pairs</a></li></ul></li><li><a href="#methods">Methods</a><ul><li class="function"><a href="#weburl.formencodedqueryparameters.contains(_:)">contains(_:​)</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.get(_:)">get(_:​)</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.getall(_:)">get​All(_:​)</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.append(_:value:)">append(_:​value:​)</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.remove(_:)">remove(_:​)</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.removeall()">remove​All()</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.set(_:to:)">set(_:​to:​)</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.append(contentsof:)">append(contents​Of:​)</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.append(contentsof:)">append(contents​Of:​)</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.append(contentsof:)">append(contents​Of:​)</a></li></ul></li><li><a href="#operators">Operators</a><ul><li class="function"><a href="#weburl.formencodedqueryparameters.+=">+=</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.+=">+=</a></li><li class="function"><a href="#weburl.formencodedqueryparameters.+=">+=</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">Web​URL.​Form​Encoded​Query​Parameters</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">dynamicMemberLookup</span>
+<span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">FormEncodedQueryParameters</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A view of the <code>application/x-www-form-urlencoded</code> key-value pairs in a URL's <code>query</code>.</p>
+
+</div>
+<div class="discussion">
+    <p>The <code>formParams</code> view allows you to conveniently get and set the values for particular keys by accessing them as members.
+For keys which cannot be written as members, the <code>get</code> and <code>set</code> functions provide equivalent functionality.
+The keys and values will be automatically encoded and decoded.</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">var</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com/currency/convert?from=EUR&amp;to=USD</span><span class="string literal">"</span>)!
+<span class="variable">assert</span>(<span class="variable">url</span>.<span class="variable">formParams</span>.<span class="variable">from</span> == <span class="string literal">"</span><span class="string literal">EUR</span><span class="string literal">"</span>)
+
+<span class="variable">url</span>.<span class="variable">formParams</span>.<span class="variable">from</span> = <span class="string literal">"</span><span class="string literal">GBP</span><span class="string literal">"</span>
+<span class="variable">assert</span>(<span class="variable">url</span>.<span class="variable">serialized</span>() == <span class="string literal">"</span><span class="string literal">http://example.com/currency/convert?from=GBP&amp;to=USD</span><span class="string literal">"</span>)
+
+<span class="variable">url</span>.<span class="variable">formParams</span>.<span class="variable">amount</span> = <span class="string literal">"</span><span class="string literal">20</span><span class="string literal">"</span>
+<span class="variable">assert</span>(<span class="variable">url</span>.<span class="variable">serialized</span>() == <span class="string literal">"</span><span class="string literal">http://example.com/currency/convert?from=GBP&amp;to=USD&amp;amount=20</span><span class="string literal">"</span>)
+
+<span class="variable">url</span>.<span class="variable">formParams</span>.<span class="variable">to</span> = <span class="string literal">"</span><span class="string literal">💵</span><span class="string literal">"</span>
+<span class="variable">assert</span>(<span class="variable">url</span>.<span class="variable">serialized</span>() == <span class="string literal">"</span><span class="string literal">http://example.com/currency/convert?from=GBP&amp;to=%F0%9F%92%B5&amp;amount=20</span><span class="string literal">"</span>)
+</code></pre></body></html>
+<p>Additionally, you can iterate over all of the key-value pairs using the <code>.allKeyValuePairs</code> property:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">for</span> (<span class="variable">key</span>, <span class="variable">value</span>) <span class="keyword">in</span> <span class="variable">url</span>.<span class="variable">formParams</span>.<span class="variable">allKeyValuePairs</span> {
+  <span class="comment">// ("from", "GBP")</span>
+  <span class="comment">// ("to", "💵")</span>
+  <span class="comment">// ("amount", "20")</span>
+}
+</code></pre></body></html>
+<p>Key lookup (via <code>.contains</code>, <code>.get</code>, <code>.set</code>, etc) is not Unicode-aware. This means that the Unicode codepoints in the provided key must match
+exactly with those in the query string after percent-decoding. This matches the behaviour of the <code>URLSearchParams</code> class defined in the URL standard.</p>
+
+<p>In the following example, the character &quot;ñ&quot; is not found when searching using a canonically-equivalent set of codepoints.
+However, the <code>allKeyValuePairs</code> property provides the key using Swift's built-in <code>String</code> type, which does have Unicode-aware comparison:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">let</span> <span class="variable">url</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">http://example.com?jalape\u{006E}\u{0303}os=2</span><span class="string literal">"</span>)!
+<span class="variable">url</span>.<span class="variable">serialized</span>() <span class="comment">// "http://example.com/?jalapen%CC%83os=2"</span>
+<span class="variable">url</span>.<span class="variable">formParams</span>.<span class="variable">get</span>(<span class="string literal">"</span><span class="string literal">jalape\u{006E}\u{0303}os</span><span class="string literal">"</span>) <span class="comment">// "2"</span>
+<span class="variable">url</span>.<span class="variable">formParams</span>.<span class="variable">get</span>(<span class="string literal">"</span><span class="string literal">jalape\u{00F1}os</span><span class="string literal">"</span>) <span class="comment">// nil</span>
+<span class="variable">url</span>.<span class="variable">formParams</span>.<span class="variable">allKeyValuePairs</span>.<span class="variable">first</span>(<span class="variable">where</span>: { <span class="variable">$0</span>.<span class="number literal">0</span> == <span class="string literal">"</span><span class="string literal">jalape\u{00F1}os</span><span class="string literal">"</span> }) <span class="comment">// ("jalapeños", "2")</span>
+</code></pre></body></html>
+<p>Also note that modifying any part of the query through this view will re-encode the <em>entire</em> query as <code>application/x-www-form-urlencoded</code>.
+Again, this matches the behaviour of <code>URLSearchParams</code> in the URL standard.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Member Of</h3>
+<dl>
+    <dt class="structure"><code><a href="/swift-url/0.2.0/WebURL">WebURL</a></code></dt>
+<dd><p>A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.</p>
+</dd>
+</dl>
+<h3>Nested Types</h3>
+<dl>
+    <dt class="structure"><code><a href="/swift-url/0.2.0/WebURL_FormEncodedQueryParameters_KeyValuePairs">WebURL.FormEncodedQueryParameters.KeyValuePairs</a></code></dt>
+<dd><p>A <code>Sequence</code> allowing iteration over all form-encoded key-value pairs contained in a URL's query.</p>
+</dd>
+</dl>
+</section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="weburl.formencodedqueryparameters.allkeyvaluepairs">
+    <h3>
+        <code>all​Key​Value​Pairs</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">allKeyValuePairs</span>: <span class="type">KeyValuePairs</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A <code>Sequence</code> allowing iteration over all form-encoded key-value pairs contained in this URL's query.</p>
+
+</div>
+</div>
+    </section>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="weburl.formencodedqueryparameters.contains(_:)">
+    <h3>
+        <code>contains(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">contains</span>&lt;<span class="variable">StringType</span>&gt;(<span class="keyword">_</span> <span class="variable">key</span>: <span class="type">StringType</span>) -&gt; <span class="type">Bool</span> <span class="keyword">where</span> <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Whether or not the query parameters contain a key-value pair whose key matches the given key.</p>
+
+</div>
+<div class="discussion">
+    <p>Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
+in order to be considered a match.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.get(_:)">
+    <h3>
+        <code>get(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">get</span>&lt;<span class="variable">StringType</span>&gt;(<span class="keyword">_</span> <span class="variable">key</span>: <span class="type">StringType</span>) -&gt; <span class="type">String</span>? <span class="keyword">where</span> <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the value from the first key-value pair whose key matches the given key. The returned value is form-decoded.</p>
+
+</div>
+<div class="discussion">
+    <p>Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
+in order to be considered a match.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.getall(_:)">
+    <h3>
+        <code>get​All(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">func</span> <span class="function">getAll</span>&lt;<span class="variable">StringType</span>&gt;(<span class="keyword">_</span> <span class="variable">key</span>: <span class="type">StringType</span>) -&gt; [<span class="type">String</span>] <span class="keyword">where</span> <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Returns the values of all key-value pairs whose key matches the given key. The values are form-decoded.</p>
+
+</div>
+<div class="discussion">
+    <p>Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
+in order to be considered a match.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.append(_:value:)">
+    <h3>
+        <code>append(_:​value:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">append</span>&lt;<span class="variable">StringType</span>&gt;(<span class="keyword">_</span> <span class="variable">key</span>: <span class="type">StringType</span>, <span class="variable">value</span>: <span class="type">StringType</span>) <span class="keyword">where</span> <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Appends the given key-value pair.</p>
+
+</div>
+<div class="discussion">
+    <p>The key and value will be form-encoded before they are added to the query.
+Even if the key is already present, no existing key-value pairs will be removed.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.remove(_:)">
+    <h3>
+        <code>remove(_:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">remove</span>&lt;<span class="variable">StringType</span>&gt;(<span class="keyword">_</span> <span class="variable">key</span>: <span class="type">StringType</span>) <span class="keyword">where</span> <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Removes all key-value pairs whose key matches the given key.</p>
+
+</div>
+<div class="discussion">
+    <p>Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
+in order to be considered a match.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.removeall()">
+    <h3>
+        <code>remove​All()</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">removeAll</span>() </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Removes all key-value pairs. This is equivalent to setting the URL's <code>query</code> to <code>nil</code>.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.set(_:to:)">
+    <h3>
+        <code>set(_:​to:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">set</span>&lt;<span class="variable">StringType</span>&gt;(
+  <span class="keyword">_</span> <span class="variable">key</span>: <span class="type">StringType</span>, <span class="variable">to</span> <span class="variable">newValue</span>: <span class="type">StringType</span>?
+) <span class="keyword">where</span> <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>If <code>key</code> is already present, sets the value of the first key-value pair whose key matches <code>key</code> to <code>newValue</code>.
+Otherwise, appends <code>key</code> and <code>newValue</code> as a new key-value pair. If <code>newValue</code> is <code>nil</code>, all pairs whose key matches the given key are removed.</p>
+
+</div>
+<div class="discussion">
+    <p>The new value (and key, if it is appended) will be form-encoded before it is added to the query.
+If multiple key-value pairs in the query match <code>key</code>, all other pairs besides the first one will be removed.</p>
+
+<p>Note that this lookup is not Unicode-aware: the Unicode codepoints in the given key must match exactly with those in the decoded key-value pair
+in order to be considered a match.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.append(contentsof:)">
+    <h3>
+        <code>append(contents​Of:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">append</span>&lt;<span class="variable">CollectionType</span>, <span class="variable">StringType</span>&gt;(
+  <span class="variable">contentsOf</span> <span class="variable">keyValuePairs</span>: <span class="type">CollectionType</span>
+) <span class="keyword">where</span> <span class="type">CollectionType</span>: <span class="type">Collection</span>, <span class="type">CollectionType</span>.<span class="type">Element</span> == (<span class="type">StringType</span>, <span class="type">StringType</span>), <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Appends the given collection of key-value pairs.</p>
+
+</div>
+<div class="discussion">
+    <p>The keys and values will be form-encoded before they are added to the query.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.append(contentsof:)">
+    <h3>
+        <code>append(contents​Of:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">append</span>&lt;<span class="variable">CollectionType</span>, <span class="variable">StringType</span>&gt;(
+  <span class="variable">contentsOf</span> <span class="variable">keyValuePairs</span>: <span class="type">CollectionType</span>
+)
+<span class="keyword">where</span>
+<span class="type">CollectionType</span>: <span class="type">Collection</span>, <span class="type">CollectionType</span>.<span class="type">Element</span> == (<span class="variable">key</span>: <span class="type">StringType</span>, <span class="variable">value</span>: <span class="type">StringType</span>),
+<span class="type">StringType</span>: <span class="type">StringProtocol</span></code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Appends the given collection of key-value pairs.</p>
+
+</div>
+<div class="discussion">
+    <p>The keys and values will be form-encoded before they are added to the query.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.append(contentsof:)">
+    <h3>
+        <code>append(contents​Of:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="attribute">mutating</span> <span class="keyword">func</span> <span class="function">append</span>&lt;<span class="variable">StringType</span>&gt;(
+  <span class="variable">contentsOf</span> <span class="variable">keyValuePairs</span>: [<span class="type">StringType</span>: <span class="type">StringType</span>]
+) <span class="keyword">where</span> <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Appends the key-value pairs of the given <code>Dictionary</code>.</p>
+
+</div>
+<div class="discussion">
+    <p>The keys and values will be form-encoded before they are added to the query.</p>
+
+<aside class="Note">
+    <p>Since <code>Dictionary</code>'s contents are not ordered, this method will first sort the key-value pairs by name before they are appended (using the standard library's Unicode-aware comparison function), in order to produce a predictable, repeatable result. If this order is not desired, sort the key-value pairs before appending them.</p>
+
+</aside>
+</div>
+</div>
+    </section>
+    <section id="operators">
+        <h2>Operators</h2>
+
+        <div role="article" class="function" id="weburl.formencodedqueryparameters.+=">
+    <h3>
+        <code>+=</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> += &lt;<span class="variable">CollectionType</span>, <span class="variable">StringType</span>&gt;(
+  <span class="variable">lhs</span>: <span class="keyword">inout</span> <span class="type">WebURL</span>.<span class="type">FormEncodedQueryParameters</span>, <span class="variable">rhs</span>: <span class="type">CollectionType</span>
+) <span class="keyword">where</span> <span class="type">CollectionType</span>: <span class="type">Collection</span>, <span class="type">CollectionType</span>.<span class="type">Element</span> == (<span class="type">StringType</span>, <span class="type">StringType</span>), <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Appends the given collection of key-value pairs.</p>
+
+</div>
+<div class="discussion">
+    <p>The keys and values will be form-encoded before they are added to the query.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.+=">
+    <h3>
+        <code>+=</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> += &lt;<span class="variable">CollectionType</span>, <span class="variable">StringType</span>&gt;(
+  <span class="variable">lhs</span>: <span class="keyword">inout</span> <span class="type">WebURL</span>.<span class="type">FormEncodedQueryParameters</span>, <span class="variable">rhs</span>: <span class="type">CollectionType</span>
+)
+<span class="keyword">where</span>
+<span class="type">CollectionType</span>: <span class="type">Collection</span>, <span class="type">CollectionType</span>.<span class="type">Element</span> == (<span class="variable">key</span>: <span class="type">StringType</span>, <span class="variable">value</span>: <span class="type">StringType</span>),
+<span class="type">StringType</span>: <span class="type">StringProtocol</span></code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Appends the given collection of key-value pairs.</p>
+
+</div>
+<div class="discussion">
+    <p>The keys and values will be form-encoded before they are added to the query.</p>
+
+</div>
+</div>
+<div role="article" class="function" id="weburl.formencodedqueryparameters.+=">
+    <h3>
+        <code>+=</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> += &lt;<span class="variable">StringType</span>&gt;(
+  <span class="variable">lhs</span>: <span class="keyword">inout</span> <span class="type">WebURL</span>.<span class="type">FormEncodedQueryParameters</span>, <span class="variable">rhs</span>: [<span class="type">StringType</span>: <span class="type">StringType</span>]
+) <span class="keyword">where</span> <span class="type">StringType</span>: <span class="type">StringProtocol</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Appends the key-value pairs of the given <code>Dictionary</code>.</p>
+
+</div>
+<div class="discussion">
+    <p>The keys and values will be form-encoded before they are added to the query.</p>
+
+<aside class="Note">
+    <p>Since <code>Dictionary</code>'s contents are not ordered, this method will first sort the key-value pairs by name before they are appended (using the standard library's Unicode-aware comparison function), in order to produce a predictable, repeatable result. If this order is not desired, sort the key-value pairs before appending them.</p>
+
+</aside>
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

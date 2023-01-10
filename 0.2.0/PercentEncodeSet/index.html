@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - PercentEncodeSet</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#default implementations">Default Implementations</a><ul><li class="variable"><a href="#percentencodeset.substitutions">substitutions</a></li><li class="variable"><a href="#percentencodeset.c0controlset">c0Control​Set</a></li><li class="variable"><a href="#percentencodeset.fragmentset">fragment​Set</a></li><li class="variable"><a href="#percentencodeset.queryset">query​Set</a></li><li class="variable"><a href="#percentencodeset.specialqueryset">special​Query​Set</a></li><li class="variable"><a href="#percentencodeset.pathset">path​Set</a></li><li class="variable"><a href="#percentencodeset.userinfoset">user​Info​Set</a></li><li class="variable"><a href="#percentencodeset.urlcomponentset">url​Component​Set</a></li><li class="variable"><a href="#percentencodeset.formencoding">form​Encoding</a></li></ul></li><li><a href="#requirements">Requirements</a><ul><li class="function"><a href="#percentencodeset.shouldpercentencode(ascii:)">should​Percent​Encode(ascii:​)</a></li><li class="associatedtype"><a href="#percentencodeset.substitutions">Substitutions</a></li><li class="variable"><a href="#percentencodeset.substitutions">substitutions</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Protocol</small>
+    <code class="name">Percent​Encode​Set</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">protocol</span> <span class="type">PercentEncodeSet</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A set of ASCII code-points which should be percent-encoded.</p>
+
+</div>
+<div class="discussion">
+    <p>Percent-encoding transforms arbitrary bytes to ASCII strings (e.g. the byte value 200, or 0xC8, to the string &quot;%C8&quot;),
+and is most commonly used to escape special characters in URLs. Bytes within the ASCII range are encoded according
+to the encode-set's <code>shouldPercentEncode(ascii:)</code> method, and bytes which are not ASCII code-points are always
+percent-encoded.</p>
+
+<p>The following example demonstrates an encode-set which encodes ASCII single and double quotation marks:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">struct</span> <span class="type">NoQuotes</span>: <span class="type">PercentEncodeSet</span> {
+  <span class="keyword">func</span> <span class="function">shouldPercentEncode</span>(<span class="variable">ascii</span> <span class="variable">codePoint</span>: <span class="type">UInt8</span>) -&gt; <span class="type">Bool</span> {
+    <span class="variable">codePoint</span> == <span class="variable">Character</span>(<span class="string literal">"</span><span class="string literal">\"</span><span class="string literal">"</span>).<span class="variable">asciiValue</span>! ||
+    <span class="variable">codePoint</span> == <span class="variable">Character</span>(<span class="string literal">"</span><span class="string literal">'</span><span class="string literal">"</span>).<span class="variable">asciiValue</span>!
+  }
+}
+
+#<span class="string literal">"</span><span class="string literal">Quoth the Raven "Nevermore."</span><span class="string literal">"</span>#.<span class="variable">percentEncoded</span>(<span class="variable">using</span>: <span class="type">NoQuotes</span>()) <span class="comment">// "Quoth the Raven %22Nevermore.%22"</span>
+</code></pre></body></html>
+<p>Form-encoding is a legacy variant of percent-encoding, including a <code>SubstitutionMap</code> which replaces spaces with the &quot;+&quot; character.
+Whilst you may define your own encode-sets with custom substitution maps, doing so is often unwise.</p>
+
+</div>
+
+    <section id="default implementations">
+        <h2>Default Implementations</h2>
+
+        <div role="article" class="variable" id="percentencodeset.substitutions">
+    <h3>
+        <code>substitutions</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="attribute">@</span><span class="attribute">inline</span>(<span class="variable">__always</span>)
+<span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">substitutions</span>: <span class="type">NoSubstitutions</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.c0controlset">
+    <h3>
+        <code>c0Control​Set</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">c0ControlSet</span>: <span class="type">URLEncodeSet</span>.<span class="type">C0Control</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The <a href="https://url.spec.whatwg.org/#c0-control-percent-encode-set">C0 control</a> percent-encode set.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.fragmentset">
+    <h3>
+        <code>fragment​Set</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">fragmentSet</span>: <span class="type">URLEncodeSet</span>.<span class="type">Fragment</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The <a href="https://url.spec.whatwg.org/#fragment-percent-encode-set">fragment</a> percent-encode set.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.queryset">
+    <h3>
+        <code>query​Set</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">querySet</span>: <span class="type">URLEncodeSet</span>.<span class="type">Query</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The <a href="https://url.spec.whatwg.org/#query-percent-encode-set">query</a> percent-encode set.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.specialqueryset">
+    <h3>
+        <code>special​Query​Set</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">specialQuerySet</span>: <span class="type">URLEncodeSet</span>.<span class="type">SpecialQuery</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The <a href="https://url.spec.whatwg.org/#special-query-percent-encode-set">special query</a> percent-encode set.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.pathset">
+    <h3>
+        <code>path​Set</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">pathSet</span>: <span class="type">URLEncodeSet</span>.<span class="type">Path</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The <a href="https://url.spec.whatwg.org/#path-percent-encode-set">path</a> percent-encode set.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.userinfoset">
+    <h3>
+        <code>user​Info​Set</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">userInfoSet</span>: <span class="type">URLEncodeSet</span>.<span class="type">UserInfo</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The <a href="https://url.spec.whatwg.org/#userinfo-percent-encode-set">userinfo</a> percent-encode set.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.urlcomponentset">
+    <h3>
+        <code>url​Component​Set</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">urlComponentSet</span>: <span class="type">URLEncodeSet</span>.<span class="type">Component</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The <a href="https://url.spec.whatwg.org/#component-percent-encode-set">component</a> percent-encode set.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.formencoding">
+    <h3>
+        <code>form​Encoding</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">formEncoding</span>: <span class="type">URLEncodeSet</span>.<span class="type">FormEncoding</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The <a href="https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set">application/x-www-form-urlencoded</a>
+percent-encode set.</p>
+
+</div>
+</div>
+    </section>
+
+
+    <section id="requirements">
+        <h2>Requirements</h2>
+
+        <div role="article" class="function" id="percentencodeset.shouldpercentencode(ascii:)">
+    <h3>
+        <code>should​Percent​Encode(ascii:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">func</span> <span class="function">shouldPercentEncode</span>(<span class="variable">ascii</span> <span class="variable">codePoint</span>: <span class="type">UInt8</span>) -&gt; <span class="type">Bool</span></code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Whether or not the given ASCII <code>codePoint</code> should be percent-encoded.</p>
+
+</div>
+<h4>Parameters</h4>
+
+<table class="parameters">
+  <thead hidden>
+  <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <th>code​Point</th>
+    <td><code class="type">UInt8</code></td>
+    <td><p>An ASCII code-point. Always in the range <code>0...127</code>.</p>
+</td>
+</tr>
+  </tbody>
+</table>
+  <h4>Returns</h4>
+  <p>Whether or not <code>codePoint</code> should be percent-encoded.</p>
+
+</div>
+<div role="article" class="associatedtype" id="percentencodeset.substitutions">
+    <h3>
+        <code>Substitutions</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">associatedtype</span> <span class="variable">Substitutions</span>: <span class="type">SubstitutionMap</span> = <span class="type">NoSubstitutions</span></code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A <code>SubstitutionMap</code> which may replace ASCII code-points that are not percent-encoded.</p>
+
+</div>
+<div class="discussion">
+    <p>This is a legacy feature to support form-encoding; modern percent-encoding does not use substitutions.
+Should you have reason to create a custom substitution map, please observe the following guidelines:</p>
+
+<ol>
+<li>
+<p>The set of code-points to percent-encode and substitute must not overlap.
+There must be no code-point <code>x</code> for which <code>substitutions.substitute(ascii: x) != nil</code> and
+<code>shouldPercentEncode(ascii: x) == true</code>.</p>
+</li>
+<li>
+<p>Substitute code-points <em>returned</em> by <code>substitute(ascii:)</code> should be percent-encoded.
+In other words, if <code>y = substitutions.substitute(ascii: x)</code>, <code>shouldPercentEncode(ascii: y)</code> should be <code>true</code>.</p>
+</li>
+</ol>
+
+<p>For example, form-encoding substitutes spaces with the &quot;+&quot; character.
+It would be incorrect for that encode-set to say that the space character should be both substituted <em>and</em> percent-encoded (#1 above),
+and it must ensure that actual &quot;+&quot; characters in the source data are percent-encoded, so all &quot;+&quot; characters in the result can be interpreted as encoded spaces
+(#2 above).</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="percentencodeset.substitutions">
+    <h3>
+        <code>substitutions</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">var</span> <span class="variable">substitutions</span>: <span class="type">Substitutions</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The substitution map which applies to ASCII code-points that are not percent-encoded.</p>
+
+</div>
+</div>
+    </section>
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

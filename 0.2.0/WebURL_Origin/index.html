@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - WebURL.Origin</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Member Of</a></li><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#weburl.origin.description">description</a></li><li class="variable"><a href="#weburl.origin.isopaque">is​Opaque</a></li><li class="variable"><a href="#weburl.origin.serialized">serialized</a></li></ul></li><li><a href="#methods">Methods</a><ul><li class="function"><a href="#weburl.origin.hash(into:)">hash(into:​)</a></li></ul></li><li><a href="#operators">Operators</a><ul><li class="function"><a href="#weburl.origin.==">==</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">Web​URL.​Origin</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">Origin</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Origins are the fundamental currency of the Web's security model.</p>
+
+</div>
+<div class="discussion">
+    <p>Two actors in the Web platform that share an origin are assumed to trust each other and to have the same authority.
+Actors with differing origins are considered potentially hostile versus each other, and are isolated from each other to varying degrees.</p>
+
+<p>The origin is not an attribute or component of a URL; it is a value which may be computed from a URL.</p>
+
+<p>The only URLs for which meaningful origins may be computed are:</p>
+
+<ul>
+<li>
+<p>Those with the http, https, ftp, ws, or wss schemes (i.e. the &quot;special&quot; schemes, excluding file), and</p>
+</li>
+<li>
+<p>Those with the &quot;blob&quot; scheme, which have an opaque path containing another URL.</p>
+</li>
+</ul>
+
+<p>Computing an origin using any other URL results in an <em>opaque origin</em>, which is defined to be an &quot;internal value, with no serialization it can be recreated from,
+[...] and for which the only meaningful operation is testing for equality.&quot; (<a href="https://html.spec.whatwg.org/multipage/origin.html#concept-origin-opaque">HTML Standard</a>).</p>
+
+<p>The URL standard requires every computation of an opaque origin to result in a <em>new</em> value; and the HTML standard builds on that by computing
+new opaque origins at specific times for specific elements or browsing context, when it desires more specific behaviour for trust/security domains.</p>
+
+<p>This type deviates slightly from the URL standard in that it separates computing an origin using a URL from establishing a new trust/security domain.
+Opaque origins are instead considered to be <em>undefined</em> security domains - it does not matter if you call <code>url.origin</code> again or store
+a previously-computed origin in your application state; an opaque origin will never compare as being &quot;same origin&quot; with anything, even itself.
+This behaviour is in some respects analogous to a floating-point NaN value.</p>
+
+<p>Instead, if an application wishes to establish a trust/security domain, it should do so explicitly by using an augmented origin type, for instance:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">enum</span> <span class="type">ApplicationSpecificOrigin</span> {
+  <span class="keyword">case</span> <span class="variable">derivedFromURL</span>(<a href="/swift-url/0.2.0/WebURL"><span class="type">WebURL</span></a>.<span class="type">Origin</span>) <span class="comment">// security domain is 'obvious' due to URL scheme known by the standard.</span>
+  <span class="keyword">case</span> <span class="variable">applicationDefined</span>(<span class="type">T</span>) <span class="comment">// A security domain which has been established by application-specific logic.</span>
+  <span class="keyword">case</span> <span class="variable">undefinedOpaque</span> <span class="comment">// opaque origin, application unable to determine a security domain.</span>
+}
+</code></pre></body></html>
+<p>This can also be useful to define application-specific origins for &quot;file&quot; URLs, which the <a href="https://url.spec.whatwg.org/#origin">URL standard</a> leaves as &quot;an exercise for the reader&quot;.</p>
+
+<p>It is also recommended to read <a href="https://tools.ietf.org/html/rfc6454">RFC-6456 (&quot;The Web Origin Concept&quot;)</a> for a holistic understanding of the origin-based security model.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Member Of</h3>
+<dl>
+    <dt class="structure"><code><a href="/swift-url/0.2.0/WebURL">WebURL</a></code></dt>
+<dd><p>A Uniform Resource Locator (URL) is a universal identifier, which often describes the location of a resource.</p>
+</dd>
+</dl>
+<h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>CustomStringConvertible</code></dt>
+<dt class="unknown"><code>Equatable</code></dt>
+<dt class="unknown"><code>Hashable</code></dt>
+</dl>
+</section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="weburl.origin.description">
+    <h3>
+        <code>description</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">description</span>: <span class="type">String</span> </code></pre>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.origin.isopaque">
+    <h3>
+        <code>is​Opaque</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">isOpaque</span>: <span class="type">Bool</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>If <code>true</code>, this is an opaque origin with no meaningful value for use as a trust or security domain.</p>
+
+</div>
+<div class="discussion">
+    <p>Note that, analogous to floating-point NaN values, opaque origins are <strong>not considered same-origin with themselves</strong>.
+This also means that opaque origins compare as <em>not equal</em> using the <code>==</code> operator, and should not be stored in hash-tables
+such as <code>Set</code> or <code>Dictionary</code>, as they will <em>always</em> insert in to the table and degrade its performance:</p>
+
+<html><body><pre class="highlight"><code><span class="keyword">let</span> <span class="variable">myURL</span> = <span class="variable">WebURL</span>(<span class="string literal">"</span><span class="string literal">foo://exampleHost:4567/</span><span class="string literal">"</span>)!
+<span class="variable">myURL</span>.<span class="variable">origin</span>.<span class="variable">isOpaque</span> <span class="comment">// true. WebURL is unable to define a security domain for "foo" URLs.</span>
+
+<span class="variable">myURL</span>.<span class="variable">origin</span> == <span class="variable">myURL</span>.<span class="variable">origin</span> <span class="comment">// false!</span>
+
+<span class="keyword">var</span> <span class="variable">seenOrigins</span>: <span class="type">Set</span> = [<span class="variable">myURL</span>.<span class="variable">origin</span>]
+<span class="variable">seenOrigins</span>.<span class="variable">contains</span>(<span class="variable">myURL</span>.<span class="variable">origin</span>) <span class="comment">// false!</span>
+<span class="variable">seenOrigins</span>.<span class="variable">insert</span>(<span class="variable">myURL</span>.<span class="variable">origin</span>) <span class="comment">// always inserts! lots of hash collisions!</span>
+</code></pre></body></html>
+</div>
+</div>
+<div role="article" class="variable" id="weburl.origin.serialized">
+    <h3>
+        <code>serialized</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">serialized</span>: <span class="type">String</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The string representation of this origin.</p>
+
+</div>
+<div class="discussion">
+    <p>The serialization of an origin is defined in the <a href="https://html.spec.whatwg.org/multipage/origin.html#ascii-serialisation-of-an-origin">HTTP specification</a>.</p>
+
+</div>
+</div>
+    </section>
+    <section id="methods">
+        <h2>Methods</h2>
+
+        <div role="article" class="function" id="weburl.origin.hash(into:)">
+    <h3>
+        <code>hash(into:​)</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">func</span> <span class="function">hash</span>(<span class="variable">into</span> <span class="variable">hasher</span>: <span class="keyword">inout</span> <span class="type">Hasher</span>) </code></pre>
+</div>
+</div>
+    </section>
+    <section id="operators">
+        <h2>Operators</h2>
+
+        <div role="article" class="function" id="weburl.origin.==">
+    <h3>
+        <code>==</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">func</span> == (<span class="variable">lhs</span>: <span class="type">WebURL</span>.<span class="type">Origin</span>, <span class="variable">rhs</span>: <span class="type">WebURL</span>.<span class="type">Origin</span>) -&gt; <span class="type">Bool</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Whether this origin is considered &quot;same origin&quot; with respect to another origin.</p>
+
+</div>
+<div class="discussion">
+    <p>Note that this always returns <code>false</code> for opaque origins.</p>
+
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

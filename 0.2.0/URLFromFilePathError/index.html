@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - URLFromFilePathError</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#relationships">Relationships</a><ul><li><a href="#relationships">Conforms To</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#urlfromfilepatherror.emptyinput">empty​Input</a></li><li class="variable"><a href="#urlfromfilepatherror.nullbytes">null​Bytes</a></li><li class="variable"><a href="#urlfromfilepatherror.relativepath">relative​Path</a></li><li class="variable"><a href="#urlfromfilepatherror.upwardstraversal">upwards​Traversal</a></li><li class="variable"><a href="#urlfromfilepatherror.invalidhostname">invalid​Hostname</a></li><li class="variable"><a href="#urlfromfilepatherror.invalidpath">invalid​Path</a></li><li class="variable"><a href="#urlfromfilepatherror.unsupportedwin32namespacedpath">unsupported​Win32Namespaced​Path</a></li><li class="variable"><a href="#urlfromfilepatherror.transcodingfailure">transcoding​Failure</a></li><li class="variable"><a href="#urlfromfilepatherror.description">description</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Structure</small>
+    <code class="name">URLFrom​File​Path​Error</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">struct</span> <span class="type">URLFromFilePathError</span>: <span class="type">Error</span>, <span class="type">Equatable</span>, <span class="type">Hashable</span>, <span class="type">CustomStringConvertible</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The reason why a file URL could not be created from a given file path.</p>
+
+</div>
+<section id="relationships">
+    <h2 hidden>Relationships</h2>
+        
+        <h3>Conforms To</h3>
+<dl>
+    <dt class="unknown"><code>CustomStringConvertible</code></dt>
+<dt class="unknown"><code>Equatable</code></dt>
+<dt class="unknown"><code>Error</code></dt>
+<dt class="unknown"><code>Hashable</code></dt>
+</dl>
+</section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="urlfromfilepatherror.emptyinput">
+    <h3>
+        <code>empty​Input</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">emptyInput</span>: <span class="type">URLFromFilePathError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given path is empty.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="urlfromfilepatherror.nullbytes">
+    <h3>
+        <code>null​Bytes</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">nullBytes</span>: <span class="type">URLFromFilePathError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given path contains ASCII <code>NULL</code> bytes.</p>
+
+</div>
+<div class="discussion">
+    <p><code>NULL</code> bytes are forbidden, to protect against injected truncation.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="urlfromfilepatherror.relativepath">
+    <h3>
+        <code>relative​Path</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">relativePath</span>: <span class="type">URLFromFilePathError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given path is not absolute/fully-qualified.</p>
+
+</div>
+<div class="discussion">
+    <p>Each path format has different kinds of relative paths. Use APIs provided by the platform, or the <code>swift-system</code> library, to resolve the input
+as an absolute path. Be advised that some kinds of relative path resolution may not be thread-safe; consult your chosen path API for details.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="urlfromfilepatherror.upwardstraversal">
+    <h3>
+        <code>upwards​Traversal</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">upwardsTraversal</span>: <span class="type">URLFromFilePathError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given path contains one or more <code>..</code> components.</p>
+
+</div>
+<div class="discussion">
+    <p>These components are forbidden, to protect against directory traversal attacks. Use APIs provided by the platform, or the <code>swift-system</code> library,
+to resolve the path. Users are advised to check that the path has not escaped the expected area of the filesystem after it has been resolved.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="urlfromfilepatherror.invalidhostname">
+    <h3>
+        <code>invalid​Hostname</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">invalidHostname</span>: <span class="type">URLFromFilePathError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given path refers to a file on a remote host, but the hostname is not valid or cannot be represented in a URL.</p>
+
+</div>
+<div class="discussion">
+    <p>Note that currently, only ASCII domains, IPv4, and IPv6 addresses are supported. Domains may not include <a href="https://url.spec.whatwg.org/#forbidden-host-code-point">forbidden host code-points</a>.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="urlfromfilepatherror.invalidpath">
+    <h3>
+        <code>invalid​Path</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">invalidPath</span>: <span class="type">URLFromFilePathError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given path is ill-formed, prohibiting a URL representation from being formed.</p>
+
+</div>
+<div class="discussion">
+    <p>Some <code>FilePathFormat</code>s have sub-formats with particular requirements, which may be necessary in order to decide which kind of URL to form.
+For instance, Win32 file namespace paths (a.k.a. &quot;long&quot; paths) require a device component following the <code>\\?\</code> prefix.</p>
+
+<p>Examples of invalid Win32 file namespace paths:</p>
+
+<ul>
+<li>
+<p><code>\\?\</code> (no path following prefix)</p>
+</li>
+<li>
+<p><code>\\?\\</code> (device name is empty)</p>
+</li>
+<li>
+<p><code>\\?\C:</code> (no trailing slash after device name)</p>
+</li>
+<li>
+<p><code>\\?\UNC</code> (no trailing slash after device name)</p>
+</li>
+</ul>
+
+</div>
+</div>
+<div role="article" class="variable" id="urlfromfilepatherror.unsupportedwin32namespacedpath">
+    <h3>
+        <code>unsupported​Win32Namespaced​Path</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">unsupportedWin32NamespacedPath</span>: <span class="type">URLFromFilePathError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The given path is a Win32 file namespace path (a.k.a. &quot;long&quot; path), but references an object for which a URL representation cannot be formed.</p>
+
+</div>
+<div class="discussion">
+    <p>Win32 file namespace paths have a variety of ways to reference files - for instance, both <code>\\?\BootPartition\Users\</code>
+and <code>\\?\HarddiskVolume2\Users\</code> might resolve to <code>\\?\C:\Users\</code>. These more exotic paths are currently not supported.</p>
+
+<p>Win32 file namespace paths are documented as opting-out from typical path normalization, meaning that characters such as forward slashes
+represent literal slashes in a file or directory name. Some Windows APIs respect this, while others do not, meaning that these characters are ambiguous
+and can potentially lead to security vulnerabilities via smuggled path components. For this reason, they are not supported.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="urlfromfilepatherror.transcodingfailure">
+    <h3>
+        <code>transcoding​Failure</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span>
+<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">transcodingFailure</span>: <span class="type">URLFromFilePathError</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Transcoding the given path for inclusion in a URL failed.</p>
+
+</div>
+<div class="discussion">
+    <p>File URLs can preserve the precise bytes of their path components by means of percent-encoding.
+However, when the platform's native path representation uses non-8-bit code-units, those elements must be transcoded
+to an 8-bit encoding suitable for percent-encoding.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="urlfromfilepatherror.description">
+    <h3>
+        <code>description</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">var</span> <span class="variable">description</span>: <span class="type">String</span> </code></pre>
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>

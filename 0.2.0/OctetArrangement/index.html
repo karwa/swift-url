@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebURL - OctetArrangement</title>
+    <link rel="stylesheet" type="text/css" href="/swift-url/0.2.0/all.css" media="all" />
+</head>
+<body>
+    <header>
+        <a href="/swift-url/0.2.0/">
+            <strong>
+                WebURL
+            </strong>
+            <span>Documentation</span>
+        </a>
+        <sup>Beta</sup>
+    </header>
+
+    <!--
+    <form class="search">
+        <input type="search" placeholder="Search" />
+    </form>
+    -->
+
+    <nav>
+        <div class="wrapper">
+            <h2>On This Page</h2>
+            <ol><li><a href="#enumeration cases">Enumeration Cases</a><ul><li class="case"><a href="#octetarrangement.numeric">numeric</a></li><li class="case"><a href="#octetarrangement.binary">binary</a></li></ul></li><li><a href="#properties">Properties</a><ul><li class="variable"><a href="#octetarrangement.hostorder">host​Order</a></li><li class="variable"><a href="#octetarrangement.networkorder">network​Order</a></li></ul></li></ol>
+        </div>
+    </nav>
+
+    <main>
+        <article>
+            <h1>
+    <small>Enumeration</small>
+    <code class="name">Octet​Arrangement</code>
+</h1>
+
+<div class="declaration">
+<pre class="highlight"><code><span class="keyword">public</span> <span class="keyword">enum</span> <span class="type">OctetArrangement</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>The way in which octets are arranged to form a multi-byte integer.</p>
+
+</div>
+<div class="discussion">
+    <p>Applications should prefer to work with individual octets wherever possible, as octets have a consistent numeric interpretation and binary representation
+across machines of different endianness.</p>
+
+<p>When combining octets in to larger (e.g. 16- or 32-bit) integers, we have to consider that machines have a choice in how their octets are arranged in memory.
+For instance, the first piece of the IPv6 address <code>2608::3:5</code> consists of 2 octets, <code>0x26</code> and <code>0x08</code>; if we created a 16-bit integer with those same octets
+arranged in that order, a big-endian machine would read this as having numeric value 9736 (for the purposes of integer-level operations, such as addition),
+whereas a little-endian machine would consider the same octets to contain the numeric value 2086.</p>
+
+<p>Hence there are 2 ways to combine octets in to larger integers:</p>
+
+<ol>
+<li>
+<p>With the same octets in the same order in memory. We call this the <code>binary</code> interpretation, although it is more-commonly known as
+&quot;network&quot; byte order, or big-endian. As noted above, integers derived from the same address using the <code>binary</code> interpretation
+may have different numeric values on different machines.</p>
+</li>
+<li>
+<p>By rearranging octets to give a consistent numeric value. We call this the <code>numeric</code> interpretation, although it is more-comonly known as
+&quot;host&quot; byte-order. For instance, when reading the first 16-bit piece of the above address on a little-endian machine,
+the octets <code>0x26 0x08</code> will be reordered to <code>0x08 0x26</code>, so that the numeric value (9736) is the same as the hexadecimal number <code>0x2608</code>.
+Assigning a group of octets using the <code>numeric</code> integer 9736 will similarly reorder the octets, so that they appear as the octet sequence <code>0x26 0x08</code>
+in the address.</p>
+</li>
+</ol>
+
+</div>
+
+    <section id="enumeration cases">
+        <h2>Enumeration Cases</h2>
+
+        <div role="article" class="case" id="octetarrangement.numeric">
+    <h3>
+        <code>numeric</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">case</span> <span class="variable">numeric</span></code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Offers consistent numeric values across machines of different endianness, by adjusting the binary representation when reading or writing multi-byte integers.
+Also known as host byte order (i.e. the integers that you read and write are expected to be in host byte order).</p>
+
+</div>
+</div>
+<div role="article" class="case" id="octetarrangement.binary">
+    <h3>
+        <code>binary</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="keyword">case</span> <span class="variable">binary</span></code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>Offers consistent binary representations across machines of different endianness, although each machine may interpret those bits as a different numeric value.
+Also known as network byte order (i.e. the integers that you read and write are expected to be in network byte order).</p>
+
+</div>
+</div>
+    </section>
+    <section id="properties">
+        <h2>Properties</h2>
+
+        <div role="article" class="variable" id="octetarrangement.hostorder">
+    <h3>
+        <code>host​Order</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">hostOrder</span>: <span class="keyword">Self</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A synonym for <code>.numeric</code>.</p>
+
+</div>
+</div>
+<div role="article" class="variable" id="octetarrangement.networkorder">
+    <h3>
+        <code>network​Order</code>
+    </h3>
+    <div class="declaration">
+<pre class="highlight"><code><span class="attribute">@</span><span class="attribute">inlinable</span> <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">var</span> <span class="variable">networkOrder</span>: <span class="keyword">Self</span> </code></pre>
+</div>
+<div class="summary" role="doc-abstract">
+    <p>A synonym for <code>.binary</code>.</p>
+
+</div>
+</div>
+    </section>
+
+
+
+        </article>
+    </main>
+
+    <footer>
+        <p>
+    Generated on <time datetime="2021-12-15T15:45:42+0000">December 15, 2021</time> using a fork of <a href="https://github.com/SwiftDocOrg/swift-doc">swift-doc</a> <span class="version">1.0.0-beta.6</span>.
+</p>
+    </footer>
+</body>
+</html>
