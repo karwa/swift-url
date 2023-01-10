@@ -1,0 +1,81 @@
+name: Swift package tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        swift-version: [5.3.3, 5.4.3, 5.5.3, 5.6.3, 5.7.2]
+        host-os: [ubuntu-20.04, windows-latest]
+        exclude:
+          - host-os: windows-latest
+            swift-version: 5.3.3
+          - host-os: windows-latest
+            swift-version: 5.4.3
+          - host-os: windows-latest
+            swift-version: 5.5.3
+    continue-on-error: ${{ matrix.host-os == 'Windows' }}
+    runs-on: ${{ matrix.host-os }}
+    steps:
+    - uses: actions/checkout@v3
+    # 1. Install Swift.
+    - name: (Windows) Install Swift ${{ matrix.swift-version }}
+      if: ${{ runner.os == 'Windows' }}
+      uses: compnerd/gha-setup-swift@main
+      with:
+        branch: swift-${{ matrix.swift-version }}-release
+        tag: ${{ matrix.swift-version }}-RELEASE
+    - name: (Windows) Set Swift command
+      if: ${{ runner.os == 'Windows' }}
+      run: echo "swift_cmd=swift" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+    - name: (Linux) Install Swift ${{ matrix.swift-version }}
+      if: ${{ runner.os == 'Linux' }}
+      run: |
+        wget -q https://download.swift.org/swift-${{ matrix.swift-version }}-release/ubuntu2004/swift-${{ matrix.swift-version }}-RELEASE/swift-${{ matrix.swift-version }}-RELEASE-ubuntu20.04.tar.gz
+        tar xzf swift-${{ matrix.swift-version }}-RELEASE-ubuntu20.04.tar.gz
+        rm swift-${{ matrix.swift-version }}-RELEASE-ubuntu20.04.tar.gz
+        echo "$GITHUB_WORKSPACE/swift-${{ matrix.swift-version }}-RELEASE-ubuntu20.04/usr/bin" >> $GITHUB_PATH
+        echo "swift_cmd=swift" >> $GITHUB_ENV
+    # macOS builds are tested using a different matrix,
+    # consisting of Xcode versions rather than swift toolchain versions.
+    # This step exists as a fallback, in case that other matrix ends up not being reliable enough.
+    - name: (Mac) Install Swift ${{ matrix.swift-version }}
+      if: ${{ runner.os == 'macOS' }}
+      run: |
+        wget -q https://download.swift.org/swift-${{ matrix.swift-version }}-release/xcode/swift-${{ matrix.swift-version }}-RELEASE/swift-${{ matrix.swift-version }}-RELEASE-osx.pkg
+        sudo installer -pkg swift-${{ matrix.swift-version }}-RELEASE-osx.pkg -target LocalSystem
+        rm swift-${{ matrix.swift-version }}-RELEASE-osx.pkg
+        echo "swift_cmd=xcrun -toolchain swift swift" >> $GITHUB_ENV
+    - name: Check installation
+      run: ${{ env.swift_cmd }} --version
+    # 2. Build the package.
+    - name: Build
+      run: ${{ env.swift_cmd }} build -v
+    # 3. Run the tests.
+    - name: (Windows) Set test reports directory
+      if: ${{ runner.os == 'Windows' }}
+      run: echo "SWIFT_URL_REPORT_PATH=C:\tmp\swift-url-report" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+    - name: (Linux, Mac) Set test reports directory
+      if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
+      run: echo "SWIFT_URL_REPORT_PATH=/tmp/swift-url-report/" >> $GITHUB_ENV
+    - name: Run tests
+      run: ${{ env.swift_cmd }} test --enable-test-discovery -v
+    # 4. Check that the Benchmarks sub-package builds.
+    - name: Build benchmarks
+      if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
+      run: |
+        cd Benchmarks
+        ${{ env.swift_cmd }} build -v
+    # 5. Done. Report results.
+    - name: Upload report files
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-reports-${{ matrix.host-os }}-${{ matrix.swift-version }}
+        path: ${{ env.SWIFT_URL_REPORT_PATH }}/*
+        if-no-files-found: warn
