@@ -93,7 +93,7 @@ let package = Package(
     .testTarget(
       name: "WebURLTests",
       dependencies: ["WebURL", "WebURLTestSupport", "Checkit"],
-      exclude: ["KeyValuePairsTests.swift"]
+      exclude: ["KeyValuePairs"]
     ),
     .testTarget(
       name: "WebURLDeprecatedAPITests",

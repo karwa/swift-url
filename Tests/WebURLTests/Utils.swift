@@ -21,7 +21,49 @@ import XCTest
 func XCTAssertEqualElements<Left: Sequence, Right: Sequence>(
   _ left: Left, _ right: Right, file: StaticString = #file, line: UInt = #line
 ) where Left.Element == Right.Element, Left.Element: Equatable {
-  XCTAssertTrue(left.elementsEqual(right), file: file, line: line)
+
+  var message = "Sequences are not equal:\n"
+
+  var mismatch = false
+  var position = 0
+  var leftIter = left.makeIterator()
+  var rightIter = right.makeIterator()
+
+  while let leftElement = leftIter.next() {
+    guard let rightElement = rightIter.next() else {
+      mismatch = true
+      message +=
+        """
+        [\(position)...]
+          L: \(leftElement)
+          R: <<Sequence is exhausted>>\n
+        """
+      break
+    }
+    if leftElement != rightElement {
+      mismatch = true
+      message +=
+        """
+        [\(position)]
+          L: \(leftElement)
+          R: \(rightElement)\n
+        """
+    }
+    position += 1
+  }
+  if let rightElement = rightIter.next() {
+    mismatch = true
+    message +=
+      """
+      [\(position)...]
+        L: <<Sequence is exhausted>>
+        R: \(rightElement)\n
+      """
+  }
+
+  if mismatch {
+    XCTFail(message, file: file, line: line)
+  }
 }
 
 /// Asserts that a closure throws a particular error.

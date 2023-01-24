@@ -627,6 +627,36 @@ extension KeyValueStringSchema {
   }
 }
 
+internal enum KeyValueStringSchemaVerificationFailure: Error, CustomStringConvertible {
+
+  case preferredKeyValueDelimiterIsInvalid
+  case preferredKeyValueDelimiterNotRecognized
+  case preferredPairDelimiterIsInvalid
+  case preferredPairDelimiterNotRecognized
+  case invalidKeyValueDelimiterIsRecognized
+  case invalidPairDelimiterIsRecognized
+  case inconsistentSpaceEncoding
+
+  public var description: String {
+    switch self {
+    case .preferredKeyValueDelimiterIsInvalid:
+      return "Schema's preferred key-value delimiter is invalid"
+    case .preferredKeyValueDelimiterNotRecognized:
+      return "Schema does not recognize its preferred key-value delimiter as a key-value delimiter"
+    case .preferredPairDelimiterIsInvalid:
+      return "Schema's preferred pair delimiter is invalid"
+    case .preferredPairDelimiterNotRecognized:
+      return "Schema does not recognize its preferred pair delimiter as a pair delimiter"
+    case .invalidKeyValueDelimiterIsRecognized:
+      return "isKeyValueDelimiter recognizes an invalid delimiter"
+    case .invalidPairDelimiterIsRecognized:
+      return "isPairDelimiter recognizes an invalid delimiter"
+    case .inconsistentSpaceEncoding:
+      return "encodeSpaceAsPlus is true, so decodePlusAsSpace must also be true"
+    }
+  }
+}
+
 extension KeyValueStringSchema {
 
   /// Checks this schema for consistency.
@@ -658,19 +688,47 @@ extension KeyValueStringSchema {
   /// > For those that do, it is recommended to run this verification
   /// > as part of your regular unit tests.
   ///
-  public func verify(for component: KeyValuePairsSupportedComponent) {
+  public func verify(for component: KeyValuePairsSupportedComponent) throws {
 
-    let delimiters = verifyDelimitersDoNotNeedEscaping(in: component)
+    // Preferred delimiters must not require escaping.
 
-    if !isKeyValueDelimiter(delimiters.keyValue) {
-      fatalError("Inconsistent schema: preferred key-value delimiter is not recognized as a key-value delimiter")
+    let preferredDelimiters = verifyDelimitersDoNotNeedEscaping(in: component)
+
+    if preferredDelimiters.keyValue == .max {
+      throw KeyValueStringSchemaVerificationFailure.preferredKeyValueDelimiterIsInvalid
     }
-    if !isPairDelimiter(delimiters.pair) {
-      fatalError("Inconsistent schema: preferred pair delimiter is not recognized as a pair delimiter")
+    if preferredDelimiters.pair == .max {
+      throw KeyValueStringSchemaVerificationFailure.preferredPairDelimiterIsInvalid
     }
+
+    // isKeyValueDelimiter/isPairDelimiter must recognize preferred delimiters,
+    // and must not recognize other reserved characters (e.g. %, ASCII hex digits, +).
+
+    if !isKeyValueDelimiter(preferredDelimiters.keyValue) {
+      throw KeyValueStringSchemaVerificationFailure.preferredKeyValueDelimiterNotRecognized
+    }
+    if !isPairDelimiter(preferredDelimiters.pair) {
+      throw KeyValueStringSchemaVerificationFailure.preferredPairDelimiterNotRecognized
+    }
+
+    func delimiterPredicateIsInvalid(_ isDelimiter: (UInt8) -> Bool) -> Bool {
+      "0123456789abcdefABCDEF%+".utf8.contains(where: isDelimiter)
+    }
+
+    if delimiterPredicateIsInvalid(isKeyValueDelimiter) {
+      throw KeyValueStringSchemaVerificationFailure.invalidKeyValueDelimiterIsRecognized
+    }
+    if delimiterPredicateIsInvalid(isPairDelimiter) {
+      throw KeyValueStringSchemaVerificationFailure.invalidPairDelimiterIsRecognized
+    }
+
+    // Space encoding must be consistent.
+
     if encodeSpaceAsPlus, !decodePlusAsSpace {
-      fatalError("Inconsistent schema: encodeSpaceAsPlus is true, so decodePlusAsSpace must also be true")
+      throw KeyValueStringSchemaVerificationFailure.inconsistentSpaceEncoding
     }
+
+    // All checks passed.
   }
 }
 
@@ -1064,7 +1122,7 @@ extension WebURL.KeyValuePairs: CustomStringConvertible {
 
 
 // --------------------------------------------
-// MARK: - Reading: Collection
+// MARK: - Reading: By Location.
 // --------------------------------------------
 
 
@@ -1218,7 +1276,7 @@ extension WebURL.KeyValuePairs: Collection {
 }
 
 
-// MARK: - TODO: BidirectionalCollection.
+// MARK: TODO: BidirectionalCollection.
 
 
 extension WebURL.KeyValuePairs {
@@ -2522,41 +2580,40 @@ extension KeyValueStringSchema {
     // - Must not be the percent sign (`%`), plus sign (`+`), space, or a hex digit, and
     // - Must not require escaping in the URL component(s) used with this schema.
 
-    precondition(
-      ASCII(keyValueDelimiter)?.isHexDigit == false
-        && keyValueDelimiter != ASCII.percentSign.codePoint
-        && keyValueDelimiter != ASCII.plus.codePoint,
-      "Schema's preferred key-value delimiter is invalid"
-    )
-    precondition(
-      ASCII(pairDelimiter)?.isHexDigit == false
-        && pairDelimiter != ASCII.percentSign.codePoint
-        && pairDelimiter != ASCII.plus.codePoint,
-      "Schema's preferred pair delimiter is invalid"
-    )
+    guard
+      ASCII(keyValueDelimiter)?.isHexDigit == false,
+      keyValueDelimiter != ASCII.percentSign.codePoint,
+      keyValueDelimiter != ASCII.plus.codePoint
+    else {
+      return (.max, 0)
+    }
+    guard
+      ASCII(pairDelimiter)?.isHexDigit == false,
+      pairDelimiter != ASCII.percentSign.codePoint,
+      pairDelimiter != ASCII.plus.codePoint
+    else {
+      return (0, .max)
+    }
 
     switch component.value {
     case .query:
       let encodeSet = URLEncodeSet.SpecialQuery()
-      precondition(
-        !encodeSet.shouldPercentEncode(ascii: keyValueDelimiter),
-        "Schema's preferred key-value delimiter may not be used in the query"
-      )
-      precondition(
-        !encodeSet.shouldPercentEncode(ascii: pairDelimiter),
-        "Schema's preferred pair delimiter may not be used in the query"
-      )
+      guard !encodeSet.shouldPercentEncode(ascii: keyValueDelimiter) else {
+        return (.max, 0)
+      }
+      guard !encodeSet.shouldPercentEncode(ascii: pairDelimiter) else {
+        return (0, .max)
+      }
     case .fragment:
       let encodeSet = URLEncodeSet.Fragment()
-      precondition(
-        !encodeSet.shouldPercentEncode(ascii: keyValueDelimiter),
-        "Schema's preferred key-value delimiter may not be used in the fragment"
-      )
-      precondition(
-        !encodeSet.shouldPercentEncode(ascii: pairDelimiter),
-        "Schema's preferred pair delimiter may not be used in the fragment"
-      )
+      guard !encodeSet.shouldPercentEncode(ascii: keyValueDelimiter) else {
+        return (.max, 0)
+      }
+      guard !encodeSet.shouldPercentEncode(ascii: pairDelimiter) else {
+        return (0, .max)
+      }
     }
+
     return (keyValueDelimiter, pairDelimiter)
   }
 
@@ -2585,6 +2642,17 @@ extension KeyValuePairsSupportedComponent {
       return .numberSign
     }
   }
+}
+
+@inlinable
+internal func _trapOnInvalidDelimiters(
+  _ delimiters: (keyValue: UInt8, pair: UInt8)
+) -> (keyValue: UInt8, pair: UInt8) {
+  precondition(
+    delimiters.keyValue != .max && delimiters.pair != .max,
+    "Schema has invalid delimiters"
+  )
+  return delimiters
 }
 
 extension URLStorage {
@@ -2642,7 +2710,9 @@ extension URLStorage {
       return .success(newUpper..<newUpper)
     }
 
-    let (keyValueDelimiter, pairDelimiter) = schema.verifyDelimitersDoNotNeedEscaping(in: component)
+    let (keyValueDelimiter, pairDelimiter) = _trapOnInvalidDelimiters(
+      schema.verifyDelimitersDoNotNeedEscaping(in: component)
+    )
 
     // Measure the replacement string.
 
@@ -2971,7 +3041,7 @@ extension URLStorage {
 
       if insertDelimiter {
         precondition(!buffer.isEmpty)
-        buffer[0] = schema.verifyDelimitersDoNotNeedEscaping(in: component).keyValue
+        buffer[0] = _trapOnInvalidDelimiters(schema.verifyDelimitersDoNotNeedEscaping(in: component)).keyValue
         buffer = UnsafeMutableBufferPointer(
           start: buffer.baseAddress! + 1,
           count: buffer.count &- 1
