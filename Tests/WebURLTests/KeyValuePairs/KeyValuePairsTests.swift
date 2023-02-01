@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Checkit
+import XCTest
+
+@testable import WebURL
+
 #if swift(<5.7)
   #error("WebURL.KeyValuePairs requires Swift 5.7 or newer")
 #endif
 
-import XCTest
-import Checkit
-@testable import WebURL
 
 final class KeyValuePairsTests: XCTestCase {}
 
+// swift-format-ignore
 extension KeyValuePairsTests {
 
   static let SpecialCharacters = "\u{0000}\u{0001}\u{0009}\u{000A}\u{000D} !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
@@ -61,8 +64,16 @@ extension KeyValuePairsTests {
   ///
   func testCollectionConformance() {
 
-    func _testCollectionConformance(_ kvps: WebURL.KeyValuePairs<some KeyValueStringSchema>) {
-      let expected = [
+    func _testCollectionConformance(
+      url urlString: String, component: KeyValuePairsSupportedComponent, schema: some KeyValueStringSchema
+    ) {
+
+      let url = WebURL(urlString)!
+      XCTAssertEqual(url.serialized(), urlString)
+
+      let kvps = url.keyValuePairs(in: component, schema: schema)
+
+      let expectedList = [
         (key: "a", value: "b"),
         (key: "sp ac & es", value: "d"),
         (key: "dup", value: "e"),
@@ -75,9 +86,10 @@ extension KeyValuePairsTests {
         (key: "jalape\u{00F1}os", value: "nfc"),
         (key: "1+1", value: "2"),
       ]
-      XCTAssertEqualKeyValuePairs(kvps, expected)
+
+      XCTAssertEqualKeyValuePairs(kvps, expectedList)
       CollectionChecker.check(kvps)
-      XCTAssertEqualKeyValuePairs(kvps, expected)
+      XCTAssertEqualKeyValuePairs(kvps, expectedList)
     }
 
     // Empty key-value pairs should be skipped. There is no Index which covers that range of the string,
@@ -91,12 +103,14 @@ extension KeyValuePairsTests {
         (start: "&&&", middle: "", end: ""),
         (start: "", middle: "&&&", end: ""),
         (start: "", middle: "", end: "&&&"),
-        (start: "&&&&", middle: "&&&&", end: "&&&&")
+        (start: "&&&&", middle: "&&&&", end: "&&&&"),
       ]
       for (start, middle, end) in injections {
-        let url = WebURL("http://example/?\(start)a=b&sp%20ac+%26+es=d&dup=e\(middle)&=foo&noval&emoji=👀&jalapen\u{0303}os=nfd&specials=\(Self.SpecialCharacters_Escaped_Form)&dup=f&jalape\u{00F1}os=nfc&1%2B1=2\(end)#a=z")!
-        XCTAssertEqual(url.query, "\(start)a=b&sp%20ac+%26+es=d&dup=e\(middle)&=foo&noval&emoji=%F0%9F%91%80&jalapen%CC%83os=nfd&specials=\(Self.SpecialCharacters_Escaped_Form)&dup=f&jalape%C3%B1os=nfc&1%2B1=2\(end)")
-        _testCollectionConformance(url.queryParams)
+        // swift-format-ignore
+        _testCollectionConformance(
+          url: "http://example/?\(start)a=b&sp%20ac+%26+es=d&dup=e\(middle)&=foo&noval&emoji=%F0%9F%91%80&jalapen%CC%83os=nfd&specials=\(Self.SpecialCharacters_Escaped_Form)&dup=f&jalape%C3%B1os=nfc&1%2B1=2\(end)#a=z",
+          component: .query, schema: .formEncoded
+        )
       }
     }
 
@@ -109,12 +123,14 @@ extension KeyValuePairsTests {
         (start: "&;&", middle: "", end: ""),
         (start: "", middle: "&&;", end: ""),
         (start: "", middle: "", end: ";&&"),
-        (start: "&&;&", middle: "&;&&", end: "&&;;")
+        (start: "&&;&", middle: "&;&&", end: "&&;;"),
       ]
       for (start, middle, end) in injections {
-        let url = WebURL("http://example/?\(start)a=b&sp%20ac+%26+es=d;dup=e\(middle)&=foo&noval&emoji=👀;jalapen\u{0303}os=nfd;specials=\(Self.SpecialCharacters_Escaped_Form)&dup=f&jalape\u{00F1}os=nfc&1%2B1=2\(end)#a=z")!
-        XCTAssertEqual(url.query, "\(start)a=b&sp%20ac+%26+es=d;dup=e\(middle)&=foo&noval&emoji=%F0%9F%91%80;jalapen%CC%83os=nfd;specials=\(Self.SpecialCharacters_Escaped_Form)&dup=f&jalape%C3%B1os=nfc&1%2B1=2\(end)")
-        _testCollectionConformance(url.keyValuePairs(in: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true)))
+        // swift-format-ignore
+        _testCollectionConformance(
+          url: "http://example/?\(start)a=b&sp%20ac+%26+es=d;dup=e\(middle)&=foo&noval&emoji=%F0%9F%91%80;jalapen%CC%83os=nfd;specials=\(Self.SpecialCharacters_Escaped_Form)&dup=f&jalape%C3%B1os=nfc&1%2B1=2\(end)#a=z",
+          component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true)
+        )
       }
     }
 
@@ -127,12 +143,14 @@ extension KeyValuePairsTests {
         (start: ",,,", middle: "", end: ""),
         (start: "", middle: ",,,", end: ""),
         (start: "", middle: "", end: ",,,"),
-        (start: ",,,,", middle: ",,,,", end: ",,,,")
+        (start: ",,,,", middle: ",,,,", end: ",,,,"),
       ]
       for (start, middle, end) in injections {
-        let url = WebURL("http://example/?a:z#\(start)a:b,sp%20ac%20&%20es:d,dup:e\(middle),:foo,noval,emoji:👀,jalapen\u{0303}os:nfd,specials:\(Self.SpecialCharacters_Escaped_CommaSep_Frag),dup:f,jalape\u{00F1}os:nfc,1+1:2\(end)")!
-        XCTAssertEqual(url.fragment, "\(start)a:b,sp%20ac%20&%20es:d,dup:e\(middle),:foo,noval,emoji:%F0%9F%91%80,jalapen%CC%83os:nfd,specials:\(Self.SpecialCharacters_Escaped_CommaSep_Frag),dup:f,jalape%C3%B1os:nfc,1+1:2\(end)")
-        _testCollectionConformance(url.keyValuePairs(in: .fragment, schema: CommaSeparated()))
+        // swift-format-ignore
+        _testCollectionConformance(
+          url: "http://example/?a:z#\(start)a:b,sp%20ac%20&%20es:d,dup:e\(middle),:foo,noval,emoji:%F0%9F%91%80,jalapen%CC%83os:nfd,specials:\(Self.SpecialCharacters_Escaped_CommaSep_Frag),dup:f,jalape%C3%B1os:nfc,1+1:2\(end)",
+          component: .fragment, schema: CommaSeparated()
+        )
       }
     }
   }
@@ -217,57 +235,60 @@ extension KeyValuePairsTests {
     // Form encoding in the query.
 
     _testEmptyCollection(
-      component: .query, schema: .formEncoded, checkpoints: [
-      "http://example/",
-      "http://example/?",
+      component: .query, schema: .formEncoded,
+      checkpoints: [
+        "http://example/",
+        "http://example/?",
 
-      "http://example/?&",
-      "http://example/?&&",
-      "http://example/?&&&",
-      "http://example/?&&&&",
+        "http://example/?&",
+        "http://example/?&&",
+        "http://example/?&&&",
+        "http://example/?&&&&",
 
-      "http://example/?=",
-      "http://example/?=&=",
-      "http://example/?=&=&=",
-      "http://example/?=&=&=&=",
-    ])
+        "http://example/?=",
+        "http://example/?=&=",
+        "http://example/?=&=&=",
+        "http://example/?=&=&=&=",
+      ])
 
     // Form encoding in the query (2).
     // Semicolons are also allowed as pair delimiters.
 
     _testEmptyCollection(
-      component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true), checkpoints: [
-      "http://example/",
-      "http://example/?",
+      component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true),
+      checkpoints: [
+        "http://example/",
+        "http://example/?",
 
-      "http://example/?;",
-      "http://example/?&;",
-      "http://example/?&;&",
-      "http://example/?;&;&",
+        "http://example/?;",
+        "http://example/?&;",
+        "http://example/?&;&",
+        "http://example/?;&;&",
 
-      "http://example/?=",
-      "http://example/?=;=",
-      "http://example/?=&=;=",
-      "http://example/?=;=;=;=",
-    ])
+        "http://example/?=",
+        "http://example/?=;=",
+        "http://example/?=&=;=",
+        "http://example/?=;=;=;=",
+      ])
 
     // Custom schema in the fragment.
 
     _testEmptyCollection(
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
-      "http://example/",
-      "http://example/#",
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
+        "http://example/",
+        "http://example/#",
 
-      "http://example/#,",
-      "http://example/#,,",
-      "http://example/#,,,",
-      "http://example/#,,,,",
+        "http://example/#,",
+        "http://example/#,,",
+        "http://example/#,,,",
+        "http://example/#,,,,",
 
-      "http://example/#:",
-      "http://example/#:,:",
-      "http://example/#:,:,:",
-      "http://example/#:,:,:,:",
-    ])
+        "http://example/#:",
+        "http://example/#:,:",
+        "http://example/#:,:,:",
+        "http://example/#:,:,:,:",
+      ])
   }
 }
 
@@ -428,7 +449,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/?first=0&second=1&third=2&fourth=3#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?first=0&second=1&third=2&fourth=3#frag",
         "http://example/?first=0&second=1&third=2&fourth=3#frag",
         "http://example/?first=0&second=1&third=2&fourth=3#frag",
@@ -456,7 +478,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/?first=0&second=1&third=2&fourth=3#frag",
-      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true), checkpoints: [
+      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true),
+      checkpoints: [
         "http://example/?first=0&second=1&third=2&fourth=3#frag",
         "http://example/?first=0&second=1&third=2&fourth=3#frag",
         "http://example/?first=0&second=1&third=2&fourth=3#frag",
@@ -483,7 +506,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/?srch#first:0,second:1,third:2,fourth:3",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#first:0,second:1,third:2,fourth:3",
         "http://example/?srch#first:0,second:1,third:2,fourth:3",
         "http://example/?srch#first:0,second:1,third:2,fourth:3",
@@ -562,7 +586,8 @@ extension KeyValuePairsTests {
     let s = "[+^x%`/?]~"
     _testReplaceSubrange(
       url: "http://example/?&&&first\(s)=0&&&second\(s)=1&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         //             [3]
         "http://example/?first\(s)=0&&&second\(s)=1&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
         "http://example/?&&&first\(s)=0&&&second\(s)=1&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
@@ -691,7 +716,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/#frag",
         "http://example/?hello=world#frag",
         "http://example/?hello=world&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&the%20key=sp%20ace#frag",
@@ -703,7 +729,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/?#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/#frag",
         "http://example/?hello=world#frag",
         "http://example/?hello=world&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&the%20key=sp%20ace#frag",
@@ -715,7 +742,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/?&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/#frag",
         "http://example/?hello=world#frag",
         "http://example/?hello=world&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&the%20key=sp%20ace#frag",
@@ -727,7 +755,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/?foo=bar&baz=qux#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/#frag",
         "http://example/?hello=world#frag",
         "http://example/?hello=world&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&the%20key=sp%20ace#frag",
@@ -740,7 +769,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/?;;;foo=bar&;&baz=qux&;&#frag",
-      component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true), checkpoints: [
+      component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true),
+      checkpoints: [
         "http://example/#frag",
         "http://example/?hello=world#frag",
         "http://example/?hello=world&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&the%20key=sp%20ace#frag",
@@ -751,7 +781,8 @@ extension KeyValuePairsTests {
 
     _testReplaceSubrange(
       url: "http://example/?srch#,,frag:ment,stuff",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch",
         "http://example/?srch#hello:world",
         "http://example/?srch#hello:world,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):\(Self.SpecialCharacters_Escaped_CommaSep_Frag),the%20key:sp%20ace",
@@ -835,7 +866,7 @@ extension KeyValuePairsTests {
         ("inserted", "some value"),
         (Self.SpecialCharacters, Self.SpecialCharacters),
         ("", ""),
-        ("cafe\u{0301}", "caf\u{00E9}")
+        ("cafe\u{0301}", "caf\u{00E9}"),
       ]
 
       // Insert multiple elements at the front.
@@ -880,7 +911,8 @@ extension KeyValuePairsTests {
 
     _testInsertCollection(
       url: "http://example/#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
@@ -900,7 +932,8 @@ extension KeyValuePairsTests {
 
     _testInsertCollection(
       url: "http://example/?#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
@@ -920,7 +953,8 @@ extension KeyValuePairsTests {
 
     _testInsertCollection(
       url: "http://example/?&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
@@ -940,7 +974,8 @@ extension KeyValuePairsTests {
 
     _testInsertCollection(
       url: "http://example/?foo=bar&baz=qux#frag",
-      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true), checkpoints: [
+      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true),
+      checkpoints: [
         "http://example/?inserted=some+value&\(Self.SpecialCharacters_Escaped_Form_Plus)=\(Self.SpecialCharacters_Escaped_Form_Plus)&=&cafe%CC%81=caf%C3%A9&foo=bar&baz=qux#frag",
         "http://example/?foo=bar&inserted=some+value&\(Self.SpecialCharacters_Escaped_Form_Plus)=\(Self.SpecialCharacters_Escaped_Form_Plus)&=&cafe%CC%81=caf%C3%A9&baz=qux#frag",
         "http://example/?foo=bar&baz=qux&inserted=some+value&\(Self.SpecialCharacters_Escaped_Form_Plus)=\(Self.SpecialCharacters_Escaped_Form_Plus)&=&cafe%CC%81=caf%C3%A9#frag",
@@ -960,7 +995,8 @@ extension KeyValuePairsTests {
 
     _testInsertCollection(
       url: "http://example/?&&&foo=bar&&&baz=qux&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9&foo=bar&&&baz=qux&&&#frag",
         "http://example/?&&&foo=bar&&&inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9&baz=qux&&&#frag",
         "http://example/?&&&foo=bar&&&baz=qux&&&inserted=some%20value&\(Self.SpecialCharacters_Escaped_Form)=\(Self.SpecialCharacters_Escaped_Form)&=&cafe%CC%81=caf%C3%A9#frag",
@@ -979,7 +1015,8 @@ extension KeyValuePairsTests {
 
     _testInsertCollection(
       url: "http://example/?srch#frag:ment,stuff",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#inserted:some%20value,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):\(Self.SpecialCharacters_Escaped_CommaSep_Frag),:,cafe%CC%81:caf%C3%A9,frag:ment,stuff",
         "http://example/?srch#frag:ment,inserted:some%20value,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):\(Self.SpecialCharacters_Escaped_CommaSep_Frag),:,cafe%CC%81:caf%C3%A9,stuff",
         "http://example/?srch#frag:ment,stuff,inserted:some%20value,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):\(Self.SpecialCharacters_Escaped_CommaSep_Frag),:,cafe%CC%81:caf%C3%A9",
@@ -1087,7 +1124,8 @@ extension KeyValuePairsTests {
 
     _testInsertOne(
       url: "http://example/#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?inserted=some%20value#frag",
         "http://example/?inserted=some%20value#frag",
         "http://example/?inserted=some%20value#frag",
@@ -1115,7 +1153,8 @@ extension KeyValuePairsTests {
 
     _testInsertOne(
       url: "http://example/?#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?inserted=some%20value#frag",
         "http://example/?inserted=some%20value#frag",
         "http://example/?inserted=some%20value#frag",
@@ -1143,7 +1182,8 @@ extension KeyValuePairsTests {
 
     _testInsertOne(
       url: "http://example/?&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?inserted=some%20value#frag",
         "http://example/?inserted=some%20value#frag",
         "http://example/?inserted=some%20value#frag",
@@ -1171,7 +1211,8 @@ extension KeyValuePairsTests {
 
     _testInsertOne(
       url: "http://example/?foo=bar&baz=qux#frag",
-      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true), checkpoints: [
+      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true),
+      checkpoints: [
         "http://example/?inserted=some+value&foo=bar&baz=qux#frag",
         "http://example/?foo=bar&inserted=some+value&baz=qux#frag",
         "http://example/?foo=bar&baz=qux&inserted=some+value#frag",
@@ -1199,7 +1240,8 @@ extension KeyValuePairsTests {
 
     _testInsertOne(
       url: "http://example/?&&&foo=bar&&&baz=qux&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?inserted=some%20value&foo=bar&&&baz=qux&&&#frag",
         "http://example/?&&&foo=bar&&&inserted=some%20value&baz=qux&&&#frag",
         "http://example/?&&&foo=bar&&&baz=qux&&&inserted=some%20value#frag",
@@ -1226,7 +1268,8 @@ extension KeyValuePairsTests {
 
     _testInsertOne(
       url: "http://example/?srch#frag:ment,stuff",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#inserted:some%20value,frag:ment,stuff",
         "http://example/?srch#frag:ment,inserted:some%20value,stuff",
         "http://example/?srch#frag:ment,stuff,inserted:some%20value",
@@ -1385,7 +1428,8 @@ extension KeyValuePairsTests {
 
     _testRemoveSubrange(
       url: "http://example/?first=0&second=1&third=2&fourth=3#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?third=2&fourth=3#frag",
         "http://example/?first=0&second=1&fourth=3#frag",
         "http://example/?first=0&second=1#frag",
@@ -1403,7 +1447,8 @@ extension KeyValuePairsTests {
 
     _testRemoveSubrange(
       url: "http://example/?&&&first=0&&&second=1&&&third=2&&&fourth=3&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?third=2&&&fourth=3&&&#frag",
         "http://example/?&&&first=0&&&second=1&&&fourth=3&&&#frag",
         "http://example/?&&&first=0&&&second=1&&#frag",
@@ -1421,7 +1466,8 @@ extension KeyValuePairsTests {
 
     _testRemoveSubrange(
       url: "http://example/?srch#first:0,second:1,third:2,fourth:3",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#third:2,fourth:3",
         "http://example/?srch#first:0,second:1,fourth:3",
         "http://example/?srch#first:0,second:1",
@@ -1508,7 +1554,8 @@ extension KeyValuePairsTests {
 
     _testRemoveOne(
       url: "http://example/?first=0&second=1&third=2&fourth=3#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?second=1&third=2&fourth=3#frag",
         "http://example/?first=0&third=2&fourth=3#frag",
         "http://example/?first=0&second=1&third=2#frag",
@@ -1520,7 +1567,8 @@ extension KeyValuePairsTests {
 
     _testRemoveOne(
       url: "http://example/?&&&first=0&&&second=1&&&third=2&&&fourth=3&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?second=1&&&third=2&&&fourth=3&&&#frag",
         "http://example/?&&&first=0&&&third=2&&&fourth=3&&&#frag",
         "http://example/?&&&first=0&&&second=1&&&third=2&&#frag",
@@ -1531,7 +1579,8 @@ extension KeyValuePairsTests {
 
     _testRemoveOne(
       url: "http://example/?srch#first:0,second:1,third:2,fourth:3",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#second:1,third:2,fourth:3",
         "http://example/?srch#first:0,third:2,fourth:3",
         "http://example/?srch#first:0,second:1,third:2",
@@ -1594,17 +1643,26 @@ extension KeyValuePairsTests {
 
       do {
         // At startIndex.
-        result = remove(in: 0..<0, where: { _ in XCTFail(); return true })
+        result = remove(in: 0..<0) { _ in
+          XCTFail()
+          return true
+        }
         XCTAssertEqualKeyValuePairs(result.keyValuePairs(in: component, schema: schema), initialPairs)
         XCTAssertEqual(result.serialized(), checkpoints[0])
 
         // In the middle.
-        result = remove(in: 1..<1, where: { _ in XCTFail(); return true })
+        result = remove(in: 1..<1) { _ in
+          XCTFail()
+          return true
+        }
         XCTAssertEqualKeyValuePairs(result.keyValuePairs(in: component, schema: schema), initialPairs)
         XCTAssertEqual(result.serialized(), checkpoints[1])
 
         // At endIndex.
-        result = remove(in: initialCount..<initialCount, where: { _ in XCTFail(); return true })
+        result = remove(in: initialCount..<initialCount) { _ in
+          XCTFail()
+          return true
+        }
         XCTAssertEqualKeyValuePairs(result.keyValuePairs(in: component, schema: schema), initialPairs)
         XCTAssertEqual(result.serialized(), checkpoints[2])
       }
@@ -1625,7 +1683,7 @@ extension KeyValuePairsTests {
         result = remove(in: 0..<3, where: { _ in false })
         XCTAssertEqualKeyValuePairs(result.keyValuePairs(in: component, schema: schema), initialPairs)
         XCTAssertEqual(result.serialized(), checkpoints[5])
-        
+
         result = remove(in: 0..<initialCount, where: { _ in false })
         XCTAssertEqualKeyValuePairs(result.keyValuePairs(in: component, schema: schema), initialPairs)
         XCTAssertEqual(result.serialized(), checkpoints[6])
@@ -1720,10 +1778,10 @@ extension KeyValuePairsTests {
         copy.withMutableKeyValuePairs(in: component, schema: schema) { kvps in
           let lower = kvps.index(kvps.startIndex, offsetBy: offsets.lowerBound)
           let upper = kvps.index(kvps.startIndex, offsetBy: offsets.upperBound)
-          kvps.removeAll(in: lower..<upper, where: {
+          kvps.removeAll(in: lower..<upper) {
             seen.append(KeyValuePair($0))
             return false
-          })
+          }
         }
         let expected = Array(initialPairs.dropFirst(offsets.lowerBound).prefix(offsets.count))
         XCTAssertEqual(expected, seen)
@@ -1742,7 +1800,8 @@ extension KeyValuePairsTests {
 
     _testRemoveWhereElement(
       url: "http://example/p?foo=bar&baz=qux&qax=qaz&sp+ace#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         // Empty range.
         "http://example/p?foo=bar&baz=qux&qax=qaz&sp+ace#frag",
         "http://example/p?foo=bar&baz=qux&qax=qaz&sp+ace#frag",
@@ -1783,7 +1842,8 @@ extension KeyValuePairsTests {
 
     _testRemoveWhereElement(
       url: "http://example/p?%66%6f%6F=%62%61%72&%62%61%7A=%71%75%78&%71%61%78=%71%61%7A&%73%70%20%61%63%65#frag",
-      component: .query, schema: .percentEncoded, checkpoints: [
+      component: .query, schema: .percentEncoded,
+      checkpoints: [
         // Empty range.
         "http://example/p?%66%6f%6F=%62%61%72&%62%61%7A=%71%75%78&%71%61%78=%71%61%7A&%73%70%20%61%63%65#frag",
         "http://example/p?%66%6f%6F=%62%61%72&%62%61%7A=%71%75%78&%71%61%78=%71%61%7A&%73%70%20%61%63%65#frag",
@@ -1824,7 +1884,8 @@ extension KeyValuePairsTests {
 
     _testRemoveWhereElement(
       url: "http://example/p?&&&foo=bar&&&baz=qux&&&qax=qaz&&&sp%20ace&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         // Empty range.
         // `startIndex..<startIndex` trims empty pairs in order to be consistent with removeSubrange.
         "http://example/p?foo=bar&&&baz=qux&&&qax=qaz&&&sp%20ace&&&#frag",
@@ -1866,7 +1927,8 @@ extension KeyValuePairsTests {
 
     _testRemoveWhereElement(
       url: "http://example/p?q#foo:bar,baz:qux,qax:qaz,sp%20ace",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         // Empty range.
         "http://example/p?q#foo:bar,baz:qux,qax:qaz,sp%20ace",
         "http://example/p?q#foo:bar,baz:qux,qax:qaz,sp%20ace",
@@ -1983,7 +2045,8 @@ extension KeyValuePairsTests {
 
     _testRemoveCompatibility(
       url: "http://example/p?foo=bar&baz=qux&qax=qaz&sp+ace#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/p?foo=bar&baz=qux&qax=qaz&sp+ace#frag",
         "http://example/p?baz=qux&qax=qaz&sp+ace#frag",
         "http://example/p?qax=qaz&sp+ace#frag",
@@ -2009,7 +2072,8 @@ extension KeyValuePairsTests {
 
     _testRemoveCompatibility(
       url: "http://example/p?&&&foo=bar&&&baz=qux&&&qax=qaz&&&sp%20ace&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/p?foo=bar&&&baz=qux&&&qax=qaz&&&sp%20ace&&&#frag",
         "http://example/p?baz=qux&&&qax=qaz&&&sp%20ace&&&#frag",
         "http://example/p?qax=qaz&&&sp%20ace&&&#frag",
@@ -2034,7 +2098,8 @@ extension KeyValuePairsTests {
 
     _testRemoveCompatibility(
       url: "http://example/p?srch#foo:bar,baz:qux,qax:qaz,sp+ace",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/p?srch#foo:bar,baz:qux,qax:qaz,sp+ace",
         "http://example/p?srch#baz:qux,qax:qaz,sp+ace",
         "http://example/p?srch#qax:qaz,sp+ace",
@@ -2229,7 +2294,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/#frag",
         "http://example/#frag",
 
@@ -2243,7 +2309,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/?#frag",
-      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true), checkpoints: [
+      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true),
+      checkpoints: [
         "http://example/#frag",
         "http://example/#frag",
 
@@ -2257,7 +2324,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/?&test[+x%?]~=val^_`&&&x:y#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?&test[+x%?]~=val^_`&&&x:y#frag",
         "http://example/?&test[+x%?]~=val^_`&&&x:y#frag",
 
@@ -2271,7 +2339,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/?&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/#frag",
         "http://example/#frag",
 
@@ -2286,7 +2355,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/?test=ok&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?test=ok&#frag",
         "http://example/?test=ok&#frag",
 
@@ -2301,7 +2371,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/?test=#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?test=#frag",
         "http://example/?test=#frag",
 
@@ -2316,7 +2387,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/?test=ok&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?test=ok&&&#frag",
         "http://example/?test=ok&&&#frag",
 
@@ -2330,7 +2402,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/#frag",
-      component: .query, schema: .percentEncoded, checkpoints: [
+      component: .query, schema: .percentEncoded,
+      checkpoints: [
         "http://example/#frag",
         "http://example/#frag",
 
@@ -2343,7 +2416,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/?srch",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch",
         "http://example/?srch",
 
@@ -2357,7 +2431,8 @@ extension KeyValuePairsTests {
 
     _testAppendCollection(
       url: "http://example/?srch#test:ok,",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#test:ok,",
         "http://example/?srch#test:ok,",
 
@@ -2450,7 +2525,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?foo=bar#frag",
         "http://example/?the%20key=sp%20ace#frag",
         "http://example/?=emptykey#frag",
@@ -2466,7 +2542,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/?#frag",
-      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true), checkpoints: [
+      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true),
+      checkpoints: [
         "http://example/?foo=bar#frag",
         "http://example/?the+key=sp+ace#frag",
         "http://example/?=emptykey#frag",
@@ -2482,7 +2559,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/?&test[+x%?]~=val^_`&&&x:y#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?&test[+x%?]~=val^_`&&&x:y&foo=bar#frag",
         "http://example/?&test[+x%?]~=val^_`&&&x:y&the%20key=sp%20ace#frag",
         "http://example/?&test[+x%?]~=val^_`&&&x:y&=emptykey#frag",
@@ -2498,7 +2576,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/?&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?foo=bar#frag",
         "http://example/?the%20key=sp%20ace#frag",
         "http://example/?=emptykey#frag",
@@ -2515,7 +2594,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/?test=ok&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?test=ok&foo=bar#frag",
         "http://example/?test=ok&the%20key=sp%20ace#frag",
         "http://example/?test=ok&=emptykey#frag",
@@ -2532,7 +2612,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/?test=#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?test=&foo=bar#frag",
         "http://example/?test=&the%20key=sp%20ace#frag",
         "http://example/?test=&=emptykey#frag",
@@ -2549,7 +2630,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/?test=ok&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?test=ok&&&foo=bar#frag",
         "http://example/?test=ok&&&the%20key=sp%20ace#frag",
         "http://example/?test=ok&&&=emptykey#frag",
@@ -2565,7 +2647,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/#frag",
-      component: .query, schema: .percentEncoded, checkpoints: [
+      component: .query, schema: .percentEncoded,
+      checkpoints: [
         "http://example/?foo=bar#frag",
         "http://example/?the%20key=sp%20ace#frag",
         "http://example/?=emptykey#frag",
@@ -2580,7 +2663,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/?srch",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#foo:bar",
         "http://example/?srch#the%20key:sp%20ace",
         "http://example/?srch#:emptykey",
@@ -2596,7 +2680,8 @@ extension KeyValuePairsTests {
 
     _testAppendOne(
       url: "http://example/?srch#test:ok,",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#test:ok,foo:bar",
         "http://example/?srch#test:ok,the%20key:sp%20ace",
         "http://example/?srch#test:ok,:emptykey",
@@ -2701,7 +2786,8 @@ extension KeyValuePairsTests {
 
     _testReplaceKeyAt(
       url: "http://example/?foo=bar&baz=qux&another=value#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?some%20replacement=bar&baz=qux&another=value#frag",
         "http://example/?foo=bar&\(Self.SpecialCharacters_Escaped_Form)=qux&another=value#frag",
         "http://example/?foo=bar&baz=qux&end%20key=value#frag",
@@ -2717,7 +2803,8 @@ extension KeyValuePairsTests {
 
     _testReplaceKeyAt(
       url: "http://example/?foo=bar&baz=qux&another=value#frag",
-      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true), checkpoints: [
+      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true),
+      checkpoints: [
         "http://example/?some+replacement=bar&baz=qux&another=value#frag",
         "http://example/?foo=bar&\(Self.SpecialCharacters_Escaped_Form_Plus)=qux&another=value#frag",
         "http://example/?foo=bar&baz=qux&end+key=value#frag",
@@ -2734,7 +2821,8 @@ extension KeyValuePairsTests {
     let s = "[+^x%`/?]~"
     _testReplaceKeyAt(
       url: "http://example/?&&&first\(s)=0&&&second\(s)=1&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?&&&some%20replacement=0&&&second\(s)=1&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
         "http://example/?&&&first\(s)=0&&&\(Self.SpecialCharacters_Escaped_Form)=1&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
         "http://example/?&&&first\(s)=0&&&second\(s)=1&&&third\(s)=2&&&end%20key=3&&&#frag",
@@ -2750,7 +2838,8 @@ extension KeyValuePairsTests {
 
     _testReplaceKeyAt(
       url: "http://example/?=&=&=#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?some%20replacement=&=&=#frag",
         "http://example/?=&\(Self.SpecialCharacters_Escaped_Form)=&=#frag",
         "http://example/?=&=&end%20key=#frag",
@@ -2767,7 +2856,8 @@ extension KeyValuePairsTests {
 
     _testReplaceKeyAt(
       url: "http://example/?foo&baz&another#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?some%20replacement&baz&another#frag",
         "http://example/?foo&\(Self.SpecialCharacters_Escaped_Form)&another#frag",
         "http://example/?foo&baz&end%20key#frag",
@@ -2782,7 +2872,8 @@ extension KeyValuePairsTests {
 
     _testReplaceKeyAt(
       url: "http://example/?srch#foo:bar,baz:qux,another:value",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#some%20replacement:bar,baz:qux,another:value",
         "http://example/?srch#foo:bar,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):qux,another:value",
         "http://example/?srch#foo:bar,baz:qux,end%20key:value",
@@ -2882,7 +2973,8 @@ extension KeyValuePairsTests {
 
     _testReplaceValueAt(
       url: "http://example/?foo=bar&baz=qux&another=value#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?foo=some%20replacement&baz=qux&another=value#frag",
         "http://example/?foo=bar&baz=\(Self.SpecialCharacters_Escaped_Form)&another=value#frag",
         "http://example/?foo=bar&baz=qux&another=end%20value#frag",
@@ -2898,7 +2990,8 @@ extension KeyValuePairsTests {
 
     _testReplaceValueAt(
       url: "http://example/?foo=bar&baz=qux&another=value#frag",
-      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true), checkpoints: [
+      component: .query, schema: ExtendedForm(encodeSpaceAsPlus: true),
+      checkpoints: [
         "http://example/?foo=some+replacement&baz=qux&another=value#frag",
         "http://example/?foo=bar&baz=\(Self.SpecialCharacters_Escaped_Form_Plus)&another=value#frag",
         "http://example/?foo=bar&baz=qux&another=end+value#frag",
@@ -2915,7 +3008,8 @@ extension KeyValuePairsTests {
     let s = "[+^x%`/?]~"
     _testReplaceValueAt(
       url: "http://example/?&&&first\(s)=0&&&second\(s)=1&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?&&&first\(s)=some%20replacement&&&second\(s)=1&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
         "http://example/?&&&first\(s)=0&&&second\(s)=\(Self.SpecialCharacters_Escaped_Form)&&&third\(s)=2&&&fourth\(s)=3&&&#frag",
         "http://example/?&&&first\(s)=0&&&second\(s)=1&&&third\(s)=2&&&fourth\(s)=end%20value&&&#frag",
@@ -2931,7 +3025,8 @@ extension KeyValuePairsTests {
 
     _testReplaceValueAt(
       url: "http://example/?=&=&=#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?=some%20replacement&=&=#frag",
         "http://example/?=&=\(Self.SpecialCharacters_Escaped_Form)&=#frag",
         "http://example/?=&=&=end%20value#frag",
@@ -2947,7 +3042,8 @@ extension KeyValuePairsTests {
 
     _testReplaceValueAt(
       url: "http://example/?foo&baz&another#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/?foo=some%20replacement&baz&another#frag",
         "http://example/?foo&baz=\(Self.SpecialCharacters_Escaped_Form)&another#frag",
         "http://example/?foo&baz&another=end%20value#frag",
@@ -2962,7 +3058,8 @@ extension KeyValuePairsTests {
 
     _testReplaceValueAt(
       url: "http://example/?srch#foo:bar,baz:qux,another:value",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/?srch#foo:some%20replacement,baz:qux,another:value",
         "http://example/?srch#foo:bar,baz:\(Self.SpecialCharacters_Escaped_CommaSep_Frag),another:value",
         "http://example/?srch#foo:bar,baz:qux,another:end%20value",
@@ -3003,7 +3100,15 @@ extension KeyValuePairsTests {
   ///
   func testKeyLookupSubscript() {
 
-    func _testKeyLookupSubscript(_ kvps: WebURL.KeyValuePairs<some KeyValueStringSchema>) {
+    func _testKeyLookupSubscript(
+      url urlString: String,
+      component: KeyValuePairsSupportedComponent, schema: some KeyValueStringSchema
+    ) {
+
+      let url = WebURL(urlString)!
+      XCTAssertEqual(url.serialized(), urlString)
+
+      let kvps = url.keyValuePairs(in: component, schema: schema)
 
       // Check the overall list of pairs is what we expect.
 
@@ -3064,25 +3169,28 @@ extension KeyValuePairsTests {
 
     // Form encoding in the query.
 
-    do {
-      let url = WebURL("http://example/?a=b&sp%20ac+%26+es=d&dup=e&=foo&noval&emoji=👀&jalapen\u{0303}os=nfd&\(Self.SpecialCharacters_Escaped_Form)=specials&dup=f&jalape\u{00F1}os=nfc&1%2B1=2#frag")!
-      _testKeyLookupSubscript(url.queryParams)
-    }
+    // swift-format-ignore
+    _testKeyLookupSubscript(
+      url: "http://example/?a=b&sp%20ac+%26+es=d&dup=e&=foo&noval&emoji=%F0%9F%91%80&jalapen%CC%83os=nfd&\(Self.SpecialCharacters_Escaped_Form)=specials&dup=f&jalape%C3%B1os=nfc&1%2B1=2#frag",
+      component: .query, schema: .formEncoded
+    )
 
     // Form encoding in the query (2).
     // Semicolons are also allowed as pair delimiters.
 
-    do {
-      let url = WebURL("http://example/?a=b&sp%20ac+%26+es=d;dup=e&=foo&noval&emoji=👀;jalapen\u{0303}os=nfd;\(Self.SpecialCharacters_Escaped_Form)=specials&dup=f&jalape\u{00F1}os=nfc&1%2B1=2#frag")!
-      _testKeyLookupSubscript(url.keyValuePairs(in: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true)))
-    }
+    // swift-format-ignore
+    _testKeyLookupSubscript(
+      url: "http://example/?a=b&sp%20ac+%26+es=d;dup=e&=foo&noval&emoji=%F0%9F%91%80;jalapen%CC%83os=nfd;\(Self.SpecialCharacters_Escaped_Form)=specials&dup=f&jalape%C3%B1os=nfc&1%2B1=2#frag",
+      component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true)
+    )
 
     // Custom schema in the fragment.
 
-    do {
-      let url = WebURL("http://example/?srch#a:b,sp%20ac%20&%20es:d,dup:e,:foo,noval,emoji:👀,jalapen\u{0303}os:nfd,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):specials,dup:f,jalape\u{00F1}os:nfc,1+1:2")!
-      _testKeyLookupSubscript(url.keyValuePairs(in: .fragment, schema: CommaSeparated()))
-    }
+    // swift-format-ignore
+    _testKeyLookupSubscript(
+      url: "http://example/?srch#a:b,sp%20ac%20&%20es:d,dup:e,:foo,noval,emoji:%F0%9F%91%80,jalapen%CC%83os:nfd,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):specials,dup:f,jalape%C3%B1os:nfc,1+1:2",
+      component: .fragment, schema: CommaSeparated()
+    )
   }
 
   /// Tests using `allValues(forKey:)` to find all values associated with a given key.
@@ -3103,7 +3211,15 @@ extension KeyValuePairsTests {
   ///
   func testAllValuesForKey() {
 
-    func _testAllValuesForKey(_ kvps: WebURL.KeyValuePairs<some KeyValueStringSchema>) {
+    func _testAllValuesForKey(
+      url urlString: String,
+      component: KeyValuePairsSupportedComponent, schema: some KeyValueStringSchema
+    ) {
+
+      let url = WebURL(urlString)!
+      XCTAssertEqual(url.serialized(), urlString)
+
+      let kvps = url.keyValuePairs(in: component, schema: schema)
 
       // Check the overall list of pairs is what we expect.
 
@@ -3148,25 +3264,28 @@ extension KeyValuePairsTests {
 
     // Form encoding in the query.
 
-    do {
-      let url = WebURL("http://example/?a=b&sp%20ac+%26+es=d&dup=e&=foo&noval&emoji=👀&jalapen\u{0303}os=nfd&\(Self.SpecialCharacters_Escaped_Form)=specials&dup=f&jalape\u{00F1}os=nfc&1%2B1=2&DUP=no#frag")!
-      _testAllValuesForKey(url.queryParams)
-    }
+    // swift-format-ignore
+    _testAllValuesForKey(
+      url: "http://example/?a=b&sp%20ac+%26+es=d&dup=e&=foo&noval&emoji=%F0%9F%91%80&jalapen%CC%83os=nfd&\(Self.SpecialCharacters_Escaped_Form)=specials&dup=f&jalape%C3%B1os=nfc&1%2B1=2&DUP=no#frag",
+      component: .query, schema: .formEncoded
+    )
 
     // Form encoding in the query (2).
     // Semi-colons allowed as pair delimiters.
 
-    do {
-      let url = WebURL("http://example/?a=b&sp%20ac+%26+es=d;dup=e&=foo&noval&emoji=👀;jalapen\u{0303}os=nfd;\(Self.SpecialCharacters_Escaped_Form)=specials&dup=f&jalape\u{00F1}os=nfc&1%2B1=2&DUP=no#frag")!
-      _testAllValuesForKey(url.keyValuePairs(in: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true)))
-    }
+    // swift-format-ignore
+    _testAllValuesForKey(
+      url: "http://example/?a=b&sp%20ac+%26+es=d;dup=e&=foo&noval&emoji=%F0%9F%91%80;jalapen%CC%83os=nfd;\(Self.SpecialCharacters_Escaped_Form)=specials&dup=f&jalape%C3%B1os=nfc&1%2B1=2&DUP=no#frag",
+      component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true)
+    )
 
     // Custom schema in the fragment.
 
-    do {
-      let url = WebURL("http://example/?srch#a:b,sp%20ac%20&%20es:d,dup:e,:foo,noval,emoji:👀,jalapen\u{0303}os:nfd,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):specials,dup:f,jalape\u{00F1}os:nfc,1+1:2,DUP:no")!
-      _testAllValuesForKey(url.keyValuePairs(in: .fragment, schema: CommaSeparated()))
-    }
+    // swift-format-ignore
+    _testAllValuesForKey(
+      url: "http://example/?srch#a:b,sp%20ac%20&%20es:d,dup:e,:foo,noval,emoji:%F0%9F%91%80,jalapen%CC%83os:nfd,\(Self.SpecialCharacters_Escaped_CommaSep_Frag):specials,dup:f,jalape%C3%B1os:nfc,1+1:2,DUP:no",
+      component: .fragment, schema: CommaSeparated()
+    )
   }
 }
 
@@ -3377,9 +3496,11 @@ extension KeyValuePairsTests {
     // Form-encoded in the query.
     // Unicode key uses the "cafe\u{0301}" formulation.
 
+    // swift-format-ignore
     _testSet(
       url: "http://example/p?foo=bar&dup&=x&dup&\(Self.SpecialCharacters_Escaped_Form_Plus)=test&cafe%CC%81=cheese&dup#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         "http://example/p?foo=bar&dup&=x&dup&\(Self.SpecialCharacters_Escaped_Form_Plus)=found&cafe%CC%81=cheese&dup#frag",
         "http://example/p?foo=bar&dup&=x&dup&cafe%CC%81=cheese&dup#frag",
 
@@ -3410,7 +3531,8 @@ extension KeyValuePairsTests {
 
     _testSet(
       url: "http://example/p?foo=bar&dup&=x&dup&\(Self.SpecialCharacters_Escaped_Form)&caf%C3%A9=cheese&dup#frag",
-      component: .query, schema: .percentEncoded, checkpoints: [
+      component: .query, schema: .percentEncoded,
+      checkpoints: [
         "http://example/p?foo=bar&dup&=x&dup&\(Self.SpecialCharacters_Escaped_Form)=found&caf%C3%A9=cheese&dup#frag",
         "http://example/p?foo=bar&dup&=x&dup&caf%C3%A9=cheese&dup#frag",
 
@@ -3442,9 +3564,11 @@ extension KeyValuePairsTests {
     // Some empty pairs are removed, while others are not.
     // Unfortunately, this exposes some implementation details.
 
+    // swift-format-ignore
     _testSet(
       url: "http://example/p?&&&foo=bar&&&dup&&&=x&&&dup&&&\(Self.SpecialCharacters_Escaped_Form_Plus)=test&&&cafe%CC%81=cheese&&&dup&&&#frag",
-      component: .query, schema: .formEncoded, checkpoints: [
+      component: .query, schema: .formEncoded,
+      checkpoints: [
         // Unique key.
         // - Non-nil: Behaves like 'replaceValue(at:)' - replaces value component, without removing any empty pairs.
         // - Nil:     Behaves like 'remove(at:) - removes empty pairs only until next index.
@@ -3489,7 +3613,8 @@ extension KeyValuePairsTests {
 
     _testSet(
       url: "http://example/p?q#foo:bar,dup,:x,dup,\(Self.SpecialCharacters_Escaped_Form):test,caf%C3%A9:cheese,dup",
-      component: .fragment, schema: CommaSeparated(), checkpoints: [
+      component: .fragment, schema: CommaSeparated(),
+      checkpoints: [
         "http://example/p?q#foo:bar,dup,:x,dup,\(Self.SpecialCharacters_Escaped_Form):found,caf%C3%A9:cheese,dup",
         "http://example/p?q#foo:bar,dup,:x,dup,caf%C3%A9:cheese,dup",
 
@@ -3590,7 +3715,8 @@ extension KeyValuePairsTests {
 
     _testUTF8Slice(
       url: "http://example/?sp%20ac+%26+es=foo-bar&nodelim&emptyval=&=emptykey&jalapen%CC%83os=nfd#frag",
-      component: .query, schema: .formEncoded, ranges: [
+      component: .query, schema: .formEncoded,
+      ranges: [
         (16..<30, 31..<38),
         (39..<46, 46..<46),  // No key-value delimiter.
         (47..<55, 56..<56),  // Empty value.
@@ -3604,7 +3730,8 @@ extension KeyValuePairsTests {
 
     _testUTF8Slice(
       url: "http://example/?&;&sp%20ac+%26+es=foo-bar&&;nodelim;;;emptyval=;&;=emptykey&&&jalapen%CC%83os=nfd&&&#frag",
-      component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true), ranges: [
+      component: .query, schema: ExtendedForm(semicolonIsPairDelimiter: true),
+      ranges: [
         (19..<33, 34..<41),
         (44..<51, 51..<51),  // No key-value delimiter.
         (54..<62, 63..<63),  // Empty value.
@@ -3617,7 +3744,8 @@ extension KeyValuePairsTests {
 
     _testUTF8Slice(
       url: "http://example/?srch#sp%20ac%20%26%20es:foo-bar,nodelim,emptyval:,:emptykey,jalapen%CC%83os:nfd",
-      component: .fragment, schema: CommaSeparated(), ranges: [
+      component: .fragment, schema: CommaSeparated(),
+      ranges: [
         (21..<39, 40..<47),
         (48..<55, 55..<55),  // No key-value delimiter.
         (56..<64, 65..<65),  // Empty value.
@@ -3706,6 +3834,7 @@ extension KeyValuePairsTests {
 
     // Form encoding in the query.
 
+    // swift-format-ignore
     _testEncodedKeyValue(
       url: "http://example/?a=b&sp%20ac+%26+es=d&dup=e&=foo&noval&emoji=%F0%9F%91%80&jalapen%CC%83os=nfd&specials=\(Self.SpecialCharacters_Escaped_Form)&dup=f&jalape%C3%B1os=nfc&1%2B1=2#a=z",
       component: .query,
@@ -3728,6 +3857,7 @@ extension KeyValuePairsTests {
     // Form encoding in the query (2).
     // Semicolons are also allowed as pair delimiters. Component contains empty pairs.
 
+    // swift-format-ignore
     _testEncodedKeyValue(
       url: "http://example/?;;;a=b&;&sp%20ac+%26+es=d&;&&dup=e;=foo&&noval;&;emoji=%F0%9F%91%80;&;&jalapen%CC%83os=nfd&&&specials=\(Self.SpecialCharacters_Escaped_PrctEnc_Query_NoSemiColon);;dup=f&;&jalape%C3%B1os=nfc&1%2B1=2&&;#a=z",
       component: .query,
@@ -3750,6 +3880,7 @@ extension KeyValuePairsTests {
     // Custom schema in the fragment.
     // Note the use of unescaped '&' and '+' characters.
 
+    // swift-format-ignore
     _testEncodedKeyValue(
       url: "http://example/?srch#a:b,sp%20ac%20&%20es:d,dup:e,:foo,noval,emoji:%F0%9F%91%80,jalapen%CC%83os:nfd,specials:\(Self.SpecialCharacters_Escaped_CommaSep_Frag),dup:f,jalape%C3%B1os:nfc,1+1:2",
       component: .fragment,
@@ -3794,7 +3925,10 @@ extension KeyValuePairsTests {
     ]
     var url = WebURL("p://x/")!
     url.withMutableKeyValuePairs(in: .query, schema: AlphaDelimiters()) { $0 += pairsToAdd }
-    XCTAssertEqual(url.serialized(), "p://x/?Tes%74t123xAno%74her%20%74es%74t456xresul%74ste%78cellen%74x%74%CD%82es%742t%78%CC%93%CC%AB-23")
+    XCTAssertEqual(
+      url.serialized(),
+      "p://x/?Tes%74t123xAno%74her%20%74es%74t456xresul%74ste%78cellen%74x%74%CD%82es%742t%78%CC%93%CC%AB-23"
+    )
 
     let kvps = url.keyValuePairs(in: .query, schema: AlphaDelimiters())
     XCTAssertEqualKeyValuePairs(kvps, pairsToAdd)
