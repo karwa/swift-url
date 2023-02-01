@@ -259,7 +259,7 @@ extension WebURL {
   /// //                                              ^^^^^^
   /// ```
   ///
-  /// Do not reassign the given `KeyValuePairs` to a value taken from another URL.
+  /// Do not reassign the given `KeyValuePairs` to a view from another URL or component.
   ///
   /// > Tip:
   /// >
@@ -277,16 +277,29 @@ extension WebURL {
     schema: Schema,
     _ body: (inout KeyValuePairs<Schema>) throws -> Result
   ) rethrows -> Result {
-    // TODO: How can we protect against reassignment?
-    // ```
-    // let kvps = urlA.keyValuePairs(...)
-    // urlB.withMutableKeyValuePairs(...) { $0 = kvps }
-    // print(urlB) // !!! - reassigns the entire URL.
-    // ```
-    // Maybe stash a unique token in the KeyValuePairs view.
-    var view = KeyValuePairs(storage: storage, component: component, schema: schema)
+
+    // Since the entire URL storage is being moved in to the view, we cannot allow reassignment,
+    // otherwise when we pick up the storage at the end of the scope, we would adopt the storage
+    // of an entirely different URL, and other components such as the scheme/hostname/etc could change.
+    // To protect against this, each time a mutating view is offered in a scope, it is assigned a unique token,
+    // which is checked again when the scope ends.
+    //
+    // Unfortunately, producing fully unique tokens would require syscalls (expensive, non-portable),
+    // or atomics (not built-in to Swift). A cheaper alternative is to use the storage address at view creation.
+    // This can alias with other views created from the same URL, so reassignment is still possible,
+    // but it at least allows us to guarantee that other components (e.g. scheme/hostname)
+    // cannot change if reassignment is successful.
+
+    let token = storage.codeUnits.withUnsafeBufferPointer { UInt(bitPattern: $0.baseAddress) }
+    var view = KeyValuePairs(storage: storage, component: component, schema: schema, mutatingScopeID: token)
     storage = _tempStorage
-    defer { storage = view.storage }
+    defer {
+      precondition(
+        view.mutatingScopeID == token && view.component.value == component.value,
+        "KeyValuePairs was reassigned from another URL or component"
+      )
+      storage = view.storage
+    }
     return try body(&view)
   }
 }
@@ -345,9 +358,16 @@ extension WebURL {
       KeyValuePairs(storage: storage, component: .query, schema: .formEncoded)
     }
     _modify {
-      var view = KeyValuePairs(storage: storage, component: .query, schema: .formEncoded)
+      let token = storage.codeUnits.withUnsafeBufferPointer { UInt(bitPattern: $0.baseAddress) }
+      var view = KeyValuePairs(storage: storage, component: .query, schema: .formEncoded, mutatingScopeID: token)
       storage = _tempStorage
-      defer { storage = view.storage }
+      defer {
+        precondition(
+          view.mutatingScopeID == token && view.component.value == .query,
+          "KeyValuePairs view was reassigned from another URL or component"
+        )
+        storage = view.storage
+      }
       yield &view
     }
     set {
@@ -955,6 +975,14 @@ extension WebURL {
     @usableFromInline
     internal var schema: Schema
 
+    /// A token for mutable views in to which storage has been temporarily moved.
+    ///
+    /// See ``WebURL/WebURL/withMutableKeyValuePairs(in:schema:_:)`` for usage.
+    /// Views which do not contain moved storage should set this to 0.
+    ///
+    @usableFromInline
+    internal let mutatingScopeID: UInt
+
     /// Data about the key-value string which is derived from the other properties,
     /// stored to accelerate certain operations which may access it frequently.
     ///
@@ -965,10 +993,16 @@ extension WebURL {
     internal var cache: Cache
 
     @inlinable
-    internal init(storage: URLStorage, component: KeyValuePairsSupportedComponent, schema: Schema) {
+    internal init(
+      storage: URLStorage,
+      component: KeyValuePairsSupportedComponent,
+      schema: Schema,
+      mutatingScopeID: UInt = 0
+    ) {
       self.storage = storage
       self.component = component
       self.schema = schema
+      self.mutatingScopeID = mutatingScopeID
       self.cache = .calculate(storage: storage, component: component, schema: schema)
     }
   }

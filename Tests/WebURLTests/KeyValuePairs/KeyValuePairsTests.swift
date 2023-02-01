@@ -3770,14 +3770,6 @@ extension KeyValuePairsTests {
     )
   }
 
-  func testAssignment() {
-    // FIXME: Test assigning a KeyValuePairs instance from another URL.
-  }
-}
-
-
-extension KeyValuePairsTests {
-
   /// Tests using a key-value string schema with ASCII alpha delimiters.
   ///
   /// While not recommended, in theory it should work.
@@ -3812,75 +3804,117 @@ extension KeyValuePairsTests {
   }
 }
 
+extension KeyValuePairsTests {
 
+  /// Tests assigning a KeyValuePairs view from one URL to another.
+  ///
+  /// This is not generally allowed, but there are a handful of situations where it works.
+  /// Unfortunately we can't test the situations where it doesn't work, because they trigger a fatal error
+  /// and XCTest doesn't support testing such things.
+  ///
+  func testAssignment() {
 
+    // Straightforward 'queryParams' assignment.
+    // This works because 'queryParams' includes a 'set' accessor, in addition to 'modify'.
 
+    do {
+      let srcQuery = "test=src&foo=bar&specials=\(Self.SpecialCharacters_Escaped_PrctEnc_Query)"
 
+      let src = WebURL("http://src/?\(srcQuery)")!
+      var dst = WebURL("file://dst/")!
+      XCTAssertEqual(src.queryParams.count, 3)
+      XCTAssertEqual(dst.queryParams.count, 0)
 
+      dst.queryParams = src.queryParams
 
+      XCTAssertEqual(src.serialized(), "http://src/?\(srcQuery)")
+      XCTAssertEqual(dst.serialized(), "file://dst/?\(srcQuery)")
+      XCTAssertEqual(src.queryParams.count, 3)
+      XCTAssertEqual(dst.queryParams.count, 3)
+    }
 
+    // Assigning different views originating from the same storage.
+    // This works basically as a side-effect of how the mutating scope ID is calculated 😕,
+    // but it's also not _really_ a problem because data outside the viewed component cannot be changed.
 
+    do {
+      var url1 = WebURL("file://xyz/")!
+      var url2 = url1
 
+      url2.withMutableKeyValuePairs(in: .query, schema: .formEncoded) { kvps2 in
+        url1.withMutableKeyValuePairs(in: .query, schema: .formEncoded) { kvps1 in
+          kvps2 += [("hello", "world")]
+          kvps1 = kvps2
+          kvps2 += [("after", "wards")]
+        }
+      }
 
+      XCTAssertEqual(url1.serialized(), "file://xyz/?hello=world")
+      XCTAssertEqual(url2.serialized(), "file://xyz/?hello=world&after=wards")
+    }
 
-  //  func testAssignment() {
-  //
-  //    do {
-  //      var url0 = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f")!
-  //      XCTAssertEqual(url0.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
-  //      XCTAssertEqual(url0.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
-  //      XCTAssertFalse(url0.storage.structure.queryIsKnownFormEncoded)
-  //
-  //      var url1 = WebURL("foo://bar")!
-  //      XCTAssertEqual(url1.serialized(), "foo://bar")
-  //      XCTAssertNil(url1.query)
-  //      XCTAssertTrue(url1.storage.structure.queryIsKnownFormEncoded)
-  //
-  //      // Set url1's formParams from empty to url0's non-empty formParams.
-  //      // url1's query string should be the form-encoded version version of url0's query, which itself remains unchanged.
-  //      url1.queryParams = url0.queryParams
-  //      XCTAssertEqual(url1.serialized(), "foo://bar?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
-  //      XCTAssertEqual(url1.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
-  //      XCTAssertEqual(url0.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
-  //      XCTAssertEqual(url0.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f")
-  //      XCTAssertFalse(url0.storage.structure.queryIsKnownFormEncoded)
-  //      XCTAssertFalse(url1.storage.structure.queryIsKnownFormEncoded)
-  //      XCTAssertURLIsIdempotent(url1)
-  //
-  //      // Reset url1 to a nil query. Set url0's non-empty params to url1's empty params.
-  //      // url0 should now have a nil query, and url1 remains unchanged.
-  //      url1 = WebURL("foo://bar")!
-  //      XCTAssertEqual(url1.serialized(), "foo://bar")
-  //      XCTAssertNil(url1.query)
-  //      XCTAssertTrue(url1.storage.structure.queryIsKnownFormEncoded)
-  //
-  //      url0.queryParams = url1.queryParams
-  //      XCTAssertEqual(url0.serialized(), "http://example.com/")
-  //      XCTAssertNil(url0.query)
-  //      XCTAssertTrue(url0.storage.structure.queryIsKnownFormEncoded)
-  //      XCTAssertEqual(url1.serialized(), "foo://bar")
-  //      XCTAssertNil(url1.query)
-  //      XCTAssertTrue(url1.storage.structure.queryIsKnownFormEncoded)
-  //      XCTAssertURLIsIdempotent(url0)
-  //    }
-  //
-  //    // Assigning a URL's query parameters to itself has no effect.
-  //    do {
-  //      var url = WebURL("http://example.com?a=b&c+is the key=d&&e=&=foo&e=g&e&h=👀&e=f&&&")!
-  //      XCTAssertEqual(
-  //        url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&"
-  //      )
-  //      XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&")
-  //      XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
-  //
-  //      url.queryParams = url.queryParams
-  //      XCTAssertEqual(
-  //        url.serialized(), "http://example.com/?a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&"
-  //      )
-  //      XCTAssertEqual(url.query, "a=b&c+is%20the%20key=d&&e=&=foo&e=g&e&h=%F0%9F%91%80&e=f&&&")
-  //      XCTAssertFalse(url.storage.structure.queryIsKnownFormEncoded)
-  //      XCTAssertURLIsIdempotent(url)
-  //    }
-  //  }
-  //
-//}
+    // These should all cause runtime traps.
+    // Unfortunately we can't test that with XCTest :(
+
+    #if false
+
+      let check = 0
+
+      // Reassignment via modify accessor. Different source URLs.
+
+      if check == 0 {
+        let src = WebURL("http://src/")!
+        var dst = WebURL("file://dst/")!
+
+        @inline(never)
+        func assign<T>(_ x: inout T, to y: T) {
+          x = y
+        }
+
+        assign(&dst.queryParams, to: src.queryParams)
+        XCTFail("Should have trapped")
+      }
+
+      // Reassignment via modify accessor. Same source URLs, different components.
+
+      if check == 1 {
+        let url1 = WebURL("http://xyz/")!
+        var url2 = url1
+
+        @inline(never)
+        func assign<T>(_ x: inout T, to y: T) {
+          x = y
+        }
+
+        assign(&url2.queryParams, to: url1.keyValuePairs(in: .fragment, schema: .formEncoded))
+        XCTFail("Should have trapped")
+      }
+
+      // Reassignment via scoped method. Different source URLs.
+
+      if check == 2 {
+        let src = WebURL("http://src/")!
+        var dst = WebURL("file://dst/")!
+
+        dst.withMutableKeyValuePairs(in: .query, schema: .formEncoded) { $0 = src.queryParams }
+        XCTFail("Should have trapped")
+      }
+
+      // Reassignment via scoped method. Same source URLs, different components.
+
+      if check == 3 {
+        var url1 = WebURL("file://xyz/")!
+        var url2 = url1
+
+        url1.withMutableKeyValuePairs(in: .query, schema: .formEncoded) { kvps1 in
+          url2.withMutableKeyValuePairs(in: .fragment, schema: .formEncoded) { kvps2 in
+            kvps2 += [("hello", "world")]
+            kvps1 = kvps2
+          }
+        }
+        XCTFail("Should have trapped")
+      }
+
+    #endif
+  }
+}
