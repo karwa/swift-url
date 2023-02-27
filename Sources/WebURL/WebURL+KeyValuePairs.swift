@@ -991,6 +991,13 @@ extension WebURL {
     @usableFromInline
     internal var cache: Cache
 
+    /// Options which allow overriding the way we typically write keys and values.
+    ///
+    /// Deviations from the default should only occur within a limited scope.
+    ///
+    @usableFromInline
+    internal var writingOptions: KeyValuePairsWritingOptions
+
     @inlinable
     internal init(
       storage: URLStorage,
@@ -1003,6 +1010,7 @@ extension WebURL {
       self.schema = schema
       self.mutatingScopeID = mutatingScopeID
       self.cache = .calculate(storage: storage, component: component, schema: schema)
+      self.writingOptions = .default
     }
   }
 }
@@ -1133,6 +1141,53 @@ extension WebURL.KeyValuePairs {
   }
 }
 
+@usableFromInline
+internal struct KeyValuePairsWritingOptions {
+
+  @usableFromInline
+  internal var _storage: UInt8
+
+  @inlinable
+  internal init(keysAreUnescaped: Bool, valuesAreUnescaped: Bool) {
+    self._storage = 0
+    self.keysAreUnescaped = keysAreUnescaped
+    self.valuesAreUnescaped = valuesAreUnescaped
+  }
+
+  @inlinable
+  internal static var `default`: KeyValuePairsWritingOptions {
+    KeyValuePairsWritingOptions(keysAreUnescaped: true, valuesAreUnescaped: true)
+  }
+
+  @inlinable
+  internal var keysAreUnescaped: Bool {
+    get {
+      (_storage & 0b0000_0001) != 0
+    }
+    set {
+      if newValue {
+        _storage |= 0b0000_0001
+      } else {
+        _storage &= ~0b0000_0001
+      }
+    }
+  }
+
+  @inlinable
+  internal var valuesAreUnescaped: Bool {
+    get {
+      (_storage & 0b0000_0010) != 0
+    }
+    set {
+      if newValue {
+        _storage |= 0b0000_0010
+      } else {
+        _storage &= ~0b0000_0010
+      }
+    }
+  }
+}
+
 
 // --------------------------------------------
 // MARK: - Standard Protocols
@@ -1141,9 +1196,11 @@ extension WebURL.KeyValuePairs {
 
 extension KeyValuePairsSupportedComponent: Sendable {}
 extension KeyValuePairsSupportedComponent._Value: Sendable {}
+
 extension WebURL.KeyValuePairs: Sendable where Schema: Sendable {}
-extension WebURL.KeyValuePairs.Index: Sendable where Schema: Sendable {}
-extension WebURL.KeyValuePairs.Cache: Sendable where Schema: Sendable {}
+extension WebURL.KeyValuePairs.Cache: Sendable {}
+extension KeyValuePairsWritingOptions: Sendable {}
+extension WebURL.KeyValuePairs.Index: Sendable {}
 extension WebURL.KeyValuePairs.Element: Sendable where Schema: Sendable {}
 
 extension WebURL.KeyValuePairs: CustomStringConvertible {
@@ -1409,6 +1466,7 @@ extension WebURL.KeyValuePairs {
       bounds,
       in: component,
       schema: schema,
+      writingOptions: writingOptions,
       startOfFirstPair: startIndex.keyValuePair.lowerBound,
       with: newPairs
     ).get()
@@ -1583,6 +1641,7 @@ extension WebURL.KeyValuePairs {
       Range(uncheckedBounds: (endIndex, endIndex)),
       in: component,
       schema: schema,
+      writingOptions: writingOptions,
       startOfFirstPair: startIndex.keyValuePair.lowerBound,
       with: newPairs.lazy.map { ($0.0.utf8, $0.1.utf8) }
     ).get()
@@ -1651,6 +1710,7 @@ extension WebURL.KeyValuePairs {
       Range(uncheckedBounds: (endIndex, endIndex)),
       in: component,
       schema: schema,
+      writingOptions: writingOptions,
       startOfFirstPair: startIndex.keyValuePair.lowerBound,
       with: newPairs.lazy.map { ($0.key.utf8, $0.value.utf8) }
     ).get()
@@ -1759,6 +1819,7 @@ extension WebURL.KeyValuePairs {
           Range(uncheckedBounds: (endIndex, endIndex)),
           in: component,
           schema: schema,
+          writingOptions: writingOptions,
           startOfFirstPair: startIndex.keyValuePair.lowerBound,
           with: CollectionOfOne((unsafeKey.boundsChecked, unsafeValue.boundsChecked))
         ).get()
@@ -1816,6 +1877,7 @@ extension WebURL.KeyValuePairs {
           Range(uncheckedBounds: (location, location)),
           in: component,
           schema: schema,
+          writingOptions: writingOptions,
           startOfFirstPair: startIndex.keyValuePair.lowerBound,
           with: CollectionOfOne((unsafeKey.boundsChecked, unsafeValue.boundsChecked))
         ).get()
@@ -1907,6 +1969,7 @@ extension WebURL.KeyValuePairs {
         bounds: cache.componentContents,
         schema: schema,
         insertDelimiter: insertDelimiter,
+        isUnescaped: writingOptions.keysAreUnescaped,
         newContent: unsafeNewKey.boundsChecked
       ).get()
     }
@@ -1989,6 +2052,7 @@ extension WebURL.KeyValuePairs {
         bounds: cache.componentContents,
         schema: schema,
         insertDelimiter: insertDelimiter,
+        isUnescaped: writingOptions.valuesAreUnescaped,
         newContent: unsafeNewValue.boundsChecked
       ).get()
     }
@@ -2506,10 +2570,14 @@ internal struct KeyValuePairComponentEncodeSet<Schema>: PercentEncodeSet where S
   @usableFromInline
   internal var component: KeyValuePairsSupportedComponent
 
+  @usableFromInline
+  internal var escapePercentSign: Bool
+
   @inlinable
-  public init(schema: Schema, component: KeyValuePairsSupportedComponent) {
+  public init(schema: Schema, component: KeyValuePairsSupportedComponent, escapePercentSign: Bool) {
     self.schema = schema
     self.component = component
+    self.escapePercentSign = escapePercentSign
   }
 
   @inlinable
@@ -2521,7 +2589,7 @@ internal struct KeyValuePairComponentEncodeSet<Schema>: PercentEncodeSet where S
     }
 
     // The percent sign must always be escaped. It is reserved for percent-encoding.
-    if ascii == .percentSign {
+    if ascii == .percentSign, _fastPath(escapePercentSign) {
       return true
     }
 
@@ -2590,10 +2658,13 @@ extension KeyValueStringSchema {
 
   @inlinable @inline(__always)
   internal func escape<Source>(
-    _ source: Source, for component: KeyValuePairsSupportedComponent
+    _ source: Source, in component: KeyValuePairsSupportedComponent, isUnescaped: Bool
   ) -> LazilyPercentEncoded<Source, KeyValuePairComponentEncodeSet<Self>> {
-    source.lazy.percentEncoded(using: KeyValuePairComponentEncodeSet(schema: self, component: component))
+    source.lazy.percentEncoded(using: KeyValuePairComponentEncodeSet(schema: self, component: component, escapePercentSign: isUnescaped))
   }
+}
+
+extension KeyValueStringSchema {
 
   /// Returns this schema's preferred delimiters.
   ///
@@ -2710,6 +2781,7 @@ extension URLStorage {
     _ oldPairs: Range<WebURL.KeyValuePairs<Schema>.Index>,
     in component: KeyValuePairsSupportedComponent,
     schema: Schema,
+    writingOptions: KeyValuePairsWritingOptions,
     startOfFirstPair: URLStorage.SizeType,
     with newPairs: some Collection<(some Collection<UInt8>, some Collection<UInt8>)>
   ) -> Result<Range<WebURL.KeyValuePairs<Schema>.Index>, KeyValuePairsSetterError> {
@@ -2752,8 +2824,8 @@ extension URLStorage {
     let bytesToReplace = rangeToReplace.upperBound - rangeToReplace.lowerBound
 
     let (expectedLength, encodeKeys, encodeVals) = newPairs.reduce(into: (0 as UInt, false, false)) { stats, kvp in
-      let (keyLength, encodeKey) = schema.escape(kvp.0, for: component).unsafeEncodedLength
-      let (valLength, encodeVal) = schema.escape(kvp.1, for: component).unsafeEncodedLength
+      let (keyLength, encodeKey) = schema.escape(kvp.0, in: component, isUnescaped: writingOptions.keysAreUnescaped).unsafeEncodedLength
+      let (valLength, encodeVal) = schema.escape(kvp.1, in: component, isUnescaped: writingOptions.valuesAreUnescaped).unsafeEncodedLength
       stats.0 &+= keyLength &+ valLength &+ 2  // 1 pair delimiter byte + 1 key-value delimiter byte
       stats.1 = stats.1 || encodeKey
       stats.2 = stats.2 || encodeVal
@@ -2858,7 +2930,7 @@ extension URLStorage {
 
         let keyLength =
           encodeKeys
-          ? buffer.fastInitialize(from: schema.escape(key, for: component))
+          ? buffer.fastInitialize(from: schema.escape(key, in: component, isUnescaped: writingOptions.keysAreUnescaped))
           : buffer.fastInitialize(from: key)
         buffer = UnsafeMutableBufferPointer(
           start: buffer.baseAddress! + keyLength,
@@ -2877,7 +2949,7 @@ extension URLStorage {
 
         let valLength =
           encodeVals
-          ? buffer.fastInitialize(from: schema.escape(value, for: component))
+          ? buffer.fastInitialize(from: schema.escape(value, in: component, isUnescaped: writingOptions.valuesAreUnescaped))
           : buffer.fastInitialize(from: value)
         buffer = UnsafeMutableBufferPointer(
           start: buffer.baseAddress! + valLength,
@@ -3025,6 +3097,7 @@ extension URLStorage {
     bounds componentContent: Range<URLStorage.SizeType>,
     schema: some KeyValueStringSchema,
     insertDelimiter: Bool,
+    isUnescaped: Bool,
     newContent: some Collection<UInt8>
   ) -> Result<URLStorage.SizeType, KeyValuePairsSetterError> {
 
@@ -3037,7 +3110,7 @@ extension URLStorage {
     // Calculate the new structure.
 
     let bytesToReplace = oldContent.upperBound - oldContent.lowerBound
-    let newContentInfo = schema.escape(newContent, for: component).unsafeEncodedLength
+    let newContentInfo = schema.escape(newContent, in: component, isUnescaped: isUnescaped).unsafeEncodedLength
 
     guard let bytesToWrite = URLStorage.SizeType(exactly: newContentInfo.count + (insertDelimiter ? 1 : 0)) else {
       return .failure(.exceedsMaximumSize)
@@ -3083,7 +3156,7 @@ extension URLStorage {
 
       let bytesWritten =
         newContentInfo.needsEncoding
-        ? buffer.fastInitialize(from: schema.escape(newContent, for: component))
+        ? buffer.fastInitialize(from: schema.escape(newContent, in: component, isUnescaped: isUnescaped))
         : buffer.fastInitialize(from: newContent)
       buffer = UnsafeMutableBufferPointer(
         start: buffer.baseAddress! + bytesWritten,
@@ -3101,5 +3174,24 @@ extension URLStorage {
       assert(error == .exceedsMaximumSize)
       return .failure(.exceedsMaximumSize)
     }
+  }
+}
+
+extension WebURL.KeyValuePairs {
+
+  @inlinable
+  public mutating func withOptions<T>(
+    keysArePreEscaped: Bool = false,
+    valuesArePreEscaped: Bool = false,
+    body: (inout Self) -> T
+  ) -> T {
+    let (token, oldOptions) = (mutatingScopeID, writingOptions)
+    writingOptions.keysAreUnescaped = !keysArePreEscaped
+    writingOptions.valuesAreUnescaped = !valuesArePreEscaped
+    defer {
+      precondition(mutatingScopeID == token, "May not reassign the KeyValuePairs")
+      writingOptions = oldOptions
+    }
+    return body(&self)
   }
 }

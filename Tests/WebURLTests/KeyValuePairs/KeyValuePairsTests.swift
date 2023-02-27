@@ -4052,3 +4052,862 @@ extension KeyValuePairsTests {
     #endif
   }
 }
+
+
+struct BracketsEncoder: PercentEncodeSet {
+  func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    codePoint == UInt8(ascii: "[") || codePoint == UInt8(ascii: "]") || codePoint == UInt8(ascii: "%")
+  }
+}
+
+extension WebURL.KeyValuePairs {
+
+  mutating func appendArray(_ name: String, _ value: [String]) {
+    let escapedName = name.percentEncoded(using: BracketsEncoder()) + "[]"
+    let _ = withOptions(keysArePreEscaped: true) {
+      $0.append(contentsOf: value.lazy.map { (escapedName, $0) })
+    }
+  }
+
+  func getArray(_ name: String) -> [String] {
+    let escapedName = name + "[]"
+    return self.compactMap { kvp in
+      kvp.key == name || kvp.key == escapedName ? kvp.value : nil
+    }
+  }
+}
+
+extension KeyValuePairsTests {
+
+  func testA() {
+
+    var url = WebURL("http://example/?foo=bar")!
+    url.withMutableKeyValuePairs(in: .query, schema: .percentEncoded) {
+      $0.appendArray("a[r]%r", ["hello", "world"])
+    }
+    print(url)
+    print(url.keyValuePairs(in: .query, schema: .percentEncoded).getArray("a[r]%r"))
+  }
+}
+
+
+
+// ---------------------------- DEMO -------------------
+
+extension UInt8 {
+  static var leftSquareBracket: Self { UInt8(ascii: "[") }
+  static var rightSquareBracket: Self { UInt8(ascii: "]") }
+  var isSquareBracket: Bool { self == .leftSquareBracket || self == .rightSquareBracket }
+}
+
+struct KeyEncodeSet: PercentEncodeSet {
+  func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    codePoint.isSquareBracket || codePoint == UInt8(ascii: "%")
+    // TODO: Should we escape purely numeric keys?
+  }
+}
+
+struct PercentSignEncodeSet: PercentEncodeSet {
+  func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+    codePoint == UInt8(ascii: "%")
+  }
+}
+
+protocol KeyValuePairEncodable {
+  func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>)
+}
+
+/// Encodes a list of key-value pairs.
+///
+/// This encoder supports a single format:
+///
+/// - Object properties are enclosed in square brackets (e.g. `color[r]`)
+/// - Collection elements are enclosed in square brackets with indices (e.g. `students[0]`)
+/// - Null values are generally omitted - except that if a collection contains a null value,
+///   the hole will be encoded as `$null`
+///
+/// All of these subdelimiters (`[]$`) remain available to use in keys and values,
+/// because this encoder escapes conflicting uses.
+///
+/// The representation of holes in collections of optionals is novel in this encoder.
+///
+struct KeyValuePairEncoder<Schema> where Schema: KeyValueStringSchema {
+
+  internal private(set) var kvps: WebURL.KeyValuePairs<Schema>
+  private var path: [String]
+  private let isCollectionElement: Bool
+
+  /// Creates a new encoder which associates values with scoped keys.
+  ///
+  internal init(kvps: WebURL.KeyValuePairs<Schema>, path: [String], isCollectionElement: Bool = false) {
+    self.kvps = kvps
+    self.path = path
+    self.isCollectionElement = isCollectionElement
+  }
+
+  // Encoding methods.
+
+  /// Encodes a single String for the current key.
+  ///
+  /// The current key is determined by the context in which the value is encoded.
+  /// This function should be used by leaf nodes which have their own string format.
+  ///
+  public mutating func encodeSingleValue(_ value: some StringProtocol) {
+    let fullKeyName = fullKeyName
+
+    // Leading "$" is reserved in collection elements.
+    if isCollectionElement, value.utf8.first == UInt8(ascii: "$") {
+      let _ = kvps.withOptions(keysArePreEscaped: true, valuesArePreEscaped: true) { kvps in
+        kvps.append(key: fullKeyName, value: "%24" + value.dropFirst().percentEncoded(using: PercentSignEncodeSet()))
+      }
+      return
+    }
+
+    let _ = kvps.withOptions(keysArePreEscaped: true) { kvps in
+      kvps.append(key: fullKeyName, value: value)
+    }
+  }
+
+  /// Encodes an object for the given key, nested within the current key.
+  ///
+  /// The current key is determined by the context in which the value is encoded.
+  /// This function should be used by non-leaf structures to encode their properties.
+  ///
+  public mutating func encode(key: String, value: some KeyValuePairEncodable) {
+    let escapedKey = key.percentEncoded(using: KeyEncodeSet())
+    encodeChild(preEscapedKey: escapedKey, value: value, isCollectionElement: false)
+  }
+
+  /// Encodes multiple objects for the current key.
+  ///
+  /// The current key is determined by the context in which the value is encoded.
+  /// This function should be used by leaf nodes which are collections.
+  ///
+  public mutating func encodeCollection(_ values: some Collection<some KeyValuePairEncodable>) {
+
+    // We only encode in indexed notation.
+    // No other notation can unambiguously encode arrays of objects.
+    //
+    // - Delimited list in single value (e.g. comma separated) - "foo=a,b,c"
+    //   No way to encode a list of properties for a/b/c.
+    //   - `qs.stringify({ foo: [ { a: 42 }, { a: 27 } ] }, { encode: false, arrayFormat: 'comma' })`
+    //      Result: "foo=[object Object],[object Object]" 😐
+    //
+    // - Empty brackets - "foo[]=a&foo[]=b"
+    //   Can be ambiguous.
+    //   - `qs.stringify({ foo: [ { a: 42 }, { a: 27 } ] }, { encode: false, arrayFormat: 'bracket' })`
+    //      Result: "foo[][a]=42&foo[][a]=27".
+    //   - `qs.parse('foo[][a]=42&foo[][a]=27', arrayFormat: 'bracket')`
+    //      Result: { foo: { a: [ 42, 27 ] } } ❌
+    //   - Also, what if the elements have different sets of properties?
+    //     e.g. "foo[][a]=42&foo[][b]=27".
+    //     How would we know that property "a" is for element 0, and property "b" is for element 1?
+    //     Also, would sorting the pairs by key name affect the meaning?
+    //
+    // - Repeat - "foo=a&foo=b"
+    //   Same problem as with empty brackets WRT elements with different sets of properties.
+    //
+    // With indexes, things just work with no ambiguity.
+    // That's probably why it is qs's default:
+    //
+    // - `qs.stringify({ foo: [ { a: 42 }, { a: 27 } ] }, { encode: false })`
+    //    Result: "foo[0][a]=42&foo[1][a]=27"
+    // - `qs.parse("foo[0][a]=42&foo[1][a]=27")`
+    //    Result: { foo: [ { a: 42 }, { a: 27 } ] } ✅
+    //
+    // The others are inherently limited and not worth supporting.
+
+    let fullName = fullKeyName
+    let segmentName = path.popLast()
+    for (offset, value) in values.enumerated() {
+      encodeChild(preEscapedKey: fullName + "[\(offset)]", value: value, isCollectionElement: true)
+    }
+    if let arraySegmentName = segmentName {
+      path.append(arraySegmentName)
+    }
+  }
+
+  /// Encodes a nil value for the current key.
+  ///
+  /// The current key is determined by the context in which the value is encoded.
+  /// This function should be used by leaf nodes when they would otherwise not encode a value.
+  ///
+  public mutating func encodeNil() {
+    guard isCollectionElement else { return }
+    let fullKeyName = fullKeyName
+    let _ = kvps.withOptions(keysArePreEscaped: true, valuesArePreEscaped: true) { kvps in
+      kvps.append(key: fullKeyName, value: "$null")
+    }
+  }
+
+  /// The full key name of the current node. Subcomponent delimiters are already escaped.
+  ///
+  private var fullKeyName: String {
+    guard let topLevel = path.first else { return "" }
+    return path.dropFirst().reduce(into: topLevel) { $0 += "[\($1)]" }
+  }
+
+  private mutating func encodeChild(
+    preEscapedKey key: String,
+    value: some KeyValuePairEncodable,
+    isCollectionElement: Bool
+  ) {
+    // We want to move (rather than copy) the 'path' and 'kvps' properties in to the encoder for the child.
+    withUnsafeMutablePointer(to: &path) { pathPtr in
+      var uniquePath = pathPtr.move()
+      uniquePath.append(key)
+      defer {
+        uniquePath.removeLast()
+        pathPtr.initialize(to: uniquePath)
+      }
+      withUnsafeMutablePointer(to: &kvps) { kvpsPtr in
+        var nested = KeyValuePairEncoder(kvps: kvpsPtr.move(), path: uniquePath, isCollectionElement: isCollectionElement)
+        defer { kvpsPtr.initialize(to: nested.kvps) }
+        value.encode(to: &nested)
+      }
+    }
+  }
+}
+
+extension KeyValuePairEncodable where Self: LosslessStringConvertible {
+  func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+    encoder.encodeSingleValue(description)
+  }
+}
+
+extension String: KeyValuePairEncodable {}
+extension Int8: KeyValuePairEncodable {}
+extension Int16: KeyValuePairEncodable {}
+extension Int32: KeyValuePairEncodable {}
+extension Int64: KeyValuePairEncodable {}
+extension Int: KeyValuePairEncodable {}
+extension UInt8: KeyValuePairEncodable {}
+extension UInt16: KeyValuePairEncodable {}
+extension UInt32: KeyValuePairEncodable {}
+extension UInt64: KeyValuePairEncodable {}
+extension UInt: KeyValuePairEncodable {}
+extension Float: KeyValuePairEncodable {}
+extension Double: KeyValuePairEncodable {}
+extension Bool: KeyValuePairEncodable {}
+
+extension Optional: KeyValuePairEncodable where Wrapped: KeyValuePairEncodable {
+  func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+    switch self {
+    case .some(let wrapped): wrapped.encode(to: &encoder)
+    case .none: encoder.encodeNil()
+    }
+  }
+}
+
+extension Array: KeyValuePairEncodable where Element: KeyValuePairEncodable {
+  func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+    encoder.encodeCollection(self)
+  }
+}
+
+// TODO: Set? Dictionary?
+
+extension WebURL: KeyValuePairEncodable {}
+
+
+// ----------------------
+
+
+protocol KeyValuePairDecodable {
+  init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws
+}
+
+enum KeyValuePathSegment: Equatable {
+  case name(String)
+  case collectionIndex(Int)
+}
+
+enum KeyValuePairDecoderError: Error, Equatable {
+  case keyNotFound([String])
+  case invalidValue
+
+  static func keyNotFound(_ path: [KeyValuePathSegment]) -> Self {
+    .keyNotFound(
+      path.map { segment in
+        switch segment {
+        case .name(let name): return name
+        case .collectionIndex(let index): return String(index)
+        }
+      }
+    )
+  }
+}
+
+struct KeyValuePairDecoder<Schema> where Schema: KeyValueStringSchema {
+
+  private let kvps: WebURL.KeyValuePairs<Schema>
+  private var path: [KeyValuePathSegment]
+
+  internal init(kvps: WebURL.KeyValuePairs<Schema>, path: [KeyValuePathSegment]) {
+    self.kvps = kvps
+    self.path = path
+  }
+
+  /// Decodes a single string value. The key is given by the current context.
+  ///
+  /// Since key-value pairs are parsed from strings, this is the primitive called by every leaf node.
+  ///
+  /// - throws: `KeyValuePairDecoderError.keyNotFound` if the key is not present.
+  ///
+  public func decodeSingleValue() throws -> String {
+    let element = kvps.first { kvp in
+      var isMatch = true
+      var desiredSegments = path.makeIterator()
+      forEachSegmentInEncodedKeyPath(kvp.encodedKey) { segment in
+        isMatch = segment == desiredSegments.next()
+        return isMatch
+      }
+      return isMatch
+    }
+    guard let element = element else { throw KeyValuePairDecoderError.keyNotFound(path) }
+    return element.value
+  }
+
+  /// Decodes an object with the given nested key name.
+  ///
+  public mutating func decode<Result>(key: String) throws -> Result where Result: KeyValuePairDecodable {
+    try decodeChild(segment: .name(key))
+  }
+
+  /// Decodes multiple objects. The key is given by the current context.
+  ///
+  /// Elements are decoded from index 0 until the first non-present index.
+  ///
+  public mutating func decodeCollection<Result>() throws -> Result
+  where Result: RangeReplaceableCollection, Result.Element: KeyValuePairDecodable {
+
+    var result = Result()
+    var i = 0
+    indexloop: while true {
+      do {
+        result.append(try decodeChild(segment: .collectionIndex(i)))
+        i += 1
+      } catch KeyValuePairDecoderError.keyNotFound(let expected) {
+        // Perform a prefix lookup to distinguish between a collection index which isn't found (normal),
+        // and a subobject failing to decode (rethrow the error)
+        path.append(.collectionIndex(i))
+        defer { path.removeLast() }
+        if hasValue() {
+          throw KeyValuePairDecoderError.keyNotFound(expected)
+        } else {
+          break indexloop
+        }
+      } catch {
+        throw error
+      }
+    }
+    guard !result.isEmpty else { throw KeyValuePairDecoderError.keyNotFound(path) }
+    return result
+  }
+
+
+
+  func hasValue() -> Bool {
+    kvps.contains { kvp in
+      var isPrefixMatch = true
+      var desiredSegments = path.makeIterator()
+      forEachSegmentInEncodedKeyPath(kvp.encodedKey) { segment in
+        guard let desiredSegment = desiredSegments.next() else { return false }  // Early exit; prefix still matches.
+        isPrefixMatch = segment == desiredSegment
+        return isPrefixMatch
+      }
+      return isPrefixMatch
+    }
+  }
+
+  // Impl.
+
+  private mutating func decodeChild<Result>(
+    segment: KeyValuePathSegment
+  ) throws -> Result where Result: KeyValuePairDecodable {
+    let kvps = kvps
+    return try withUnsafeMutablePointer(to: &path) { pathPtr in
+      var scoped = KeyValuePairDecoder(kvps: kvps, path: pathPtr.move())
+      scoped.path.append(segment)
+      defer {
+        scoped.path.removeLast()
+        pathPtr.initialize(to: scoped.path)
+      }
+      return try Result(decodingFrom: &scoped)
+    }
+  }
+
+  func forEachSegmentInEncodedKeyPath(_ encodedKeyPath: String, body: (KeyValuePathSegment) -> Bool) {
+
+    let encodedKeyPath = encodedKeyPath.utf8
+
+    // Fast-path: if there are no opening brackets, it is a plain, top-level key.
+
+    guard encodedKeyPath.contains(.leftSquareBracket) else {
+      let _ = body(.name(encodedKeyPath.percentDecodedString(substitutions: .none)))
+      return
+    }
+
+    // Parse the key.
+
+    var cursor = encodedKeyPath.startIndex
+    func nextBracketSegment() -> String.UTF8View.SubSequence? {
+
+      // 'qs' extracts brackets using the regex `/(\[[^[\]]*])/g`.
+      // In other words, it finds brackets which contain no other brackets.
+      // Content up to the first bracket is the top-level name,
+      // otherwise content outside of brackets is discarded.
+      // For example:
+      //
+      // hello[fo[[o]world[ba[[[r]
+      //          ^^^          ^^^ - child keys
+      // ^^^^^^^^^ - top-level name
+      //
+      // The resulting key path is "hello[fo[" -> "o" -> "r".
+      // It's a widely-used library and so (reluctantly) it is best to be consistent with it.
+
+      if var openBracket = encodedKeyPath[cursor...].firstIndex(of: .leftSquareBracket) {
+        while let nextBracket = encodedKeyPath[openBracket...].dropFirst().firstIndex(where: { $0.isSquareBracket }) {
+          if encodedKeyPath[nextBracket] == .leftSquareBracket {
+            openBracket = nextBracket
+          } else {
+            cursor = encodedKeyPath.index(after: nextBracket)
+            return encodedKeyPath[openBracket..<cursor]
+          }
+        }
+      }
+
+      cursor = encodedKeyPath.endIndex
+      return nil
+    }
+
+    var didYieldTopLevelSegment = false
+    while let bracket = nextBracketSegment() {
+      assert(bracket.first == .leftSquareBracket && bracket.last == .rightSquareBracket)
+
+      // Content before the first bracket is the top-level key.
+
+      if !didYieldTopLevelSegment {
+        guard body(.name(encodedKeyPath[..<bracket.startIndex].percentDecodedString(substitutions: .none))) else {
+          return
+        }
+        didYieldTopLevelSegment = true
+      }
+
+      // Parse the contents inside of the brackets.
+      // FIXME: Empty keys are parsed as empty names. The way we parse collections doesn't allow for implicit indexes.
+
+      let bracketContents = bracket.dropFirst().dropLast().percentDecodedString(substitutions: .none)
+      if let collectionIndex = Int(bracketContents) {
+        guard body(.collectionIndex(collectionIndex)) else {
+          return
+        }
+      } else {
+        guard body(.name(bracketContents)) else {
+          return
+        }
+      }
+    }
+
+    // If we didn't find any complete bracket segments, it is a plain, top-level key.
+
+    if !didYieldTopLevelSegment {
+      let _ = body(.name(encodedKeyPath.percentDecodedString(substitutions: .none)))
+    }
+  }
+}
+
+
+
+
+
+
+
+extension KeyValuePairDecodable where Self: LosslessStringConvertible {
+  init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+    guard let value = Self(try decoder.decodeSingleValue()) else { throw KeyValuePairDecoderError.invalidValue }
+    self = value
+  }
+}
+
+extension String: KeyValuePairDecodable {}
+extension Int8: KeyValuePairDecodable {}
+extension Int16: KeyValuePairDecodable {}
+extension Int32: KeyValuePairDecodable {}
+extension Int64: KeyValuePairDecodable {}
+extension Int: KeyValuePairDecodable {}
+extension UInt8: KeyValuePairDecodable {}
+extension UInt16: KeyValuePairDecodable {}
+extension UInt32: KeyValuePairDecodable {}
+extension UInt64: KeyValuePairDecodable {}
+extension UInt: KeyValuePairDecodable {}
+extension Float: KeyValuePairDecodable {}
+extension Double: KeyValuePairDecodable {}
+extension Bool: KeyValuePairDecodable {}
+
+extension Optional: KeyValuePairDecodable where Wrapped: KeyValuePairDecodable {
+  init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+    self = decoder.hasValue() ? try Wrapped(decodingFrom: &decoder) : nil
+  }
+}
+
+extension Array: KeyValuePairDecodable where Element: KeyValuePairDecodable {
+  init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+    self = try decoder.decodeCollection()
+  }
+}
+
+// TODO: Set/Dictionary?
+
+extension WebURL: KeyValuePairDecodable {}
+
+
+typealias KeyValuePairCodable = KeyValuePairEncodable & KeyValuePairDecodable
+
+extension WebURL.KeyValuePairs {
+
+  mutating func encode(_ object: some KeyValuePairEncodable) {
+    withUnsafeMutablePointer(to: &self) { selfPtr in
+      var rootEncoder = KeyValuePairEncoder(kvps: selfPtr.move(), path: [])
+      object.encode(to: &rootEncoder)
+      selfPtr.initialize(to: rootEncoder.kvps)
+    }
+  }
+
+  func decode<Result>(as: Result.Type) throws -> Result where Result: KeyValuePairDecodable {
+    var rootDecoder = KeyValuePairDecoder(kvps: self, path: [])
+    return try Result(decodingFrom: &rootDecoder)
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+extension KeyValuePairsTests {
+
+  // TODO: Check arrays of optionals
+
+  func testCoding1() throws {
+
+    struct Test: KeyValuePairCodable {
+      var foo = "hello"
+      var bar = "world"
+      var sub = [Sub(), Sub(), Sub()]
+
+      init() {}
+
+      init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        self.foo = try decoder.decode(key: "foo")
+        self.bar = try decoder.decode(key: "bar")
+        self.sub = try decoder.decode(key: "sub")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "foo", value: foo)
+        encoder.encode(key: "bar", value: bar)
+        encoder.encode(key: "sub", value: sub)
+      }
+    }
+
+    struct Sub: KeyValuePairCodable {
+      var foo = "sub-foo"
+      var val = 420
+
+      init() {}
+
+      init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        self.foo = try decoder.decode(key: "foo")
+        self.val = try decoder.decode(key: "v")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "foo", value: foo)
+        encoder.encode(key: "v", value: val)
+      }
+    }
+
+    var url = WebURL("http://example/some/path#frag")!
+    url.withMutableKeyValuePairs(in: .query, schema: .percentEncoded) { $0.encode(Test()) }
+    print(url)
+
+    dump(try url.keyValuePairs(in: .query, schema: .percentEncoded).decode(as: Test.self))
+  }
+
+  func testCoding2() throws {
+    struct Test: Equatable, KeyValuePairCodable {
+      var foo = "hello"
+      var bar = "world"
+      var sub = Sub()
+
+      init() {}
+
+      init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        self.foo = try decoder.decode(key: "foo")
+        self.bar = try decoder.decode(key: "bar")
+        self.sub = try decoder.decode(key: "s[u]b")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "foo", value: foo)
+        encoder.encode(key: "bar", value: bar)
+        encoder.encode(key: "s[u]b", value: sub)
+      }
+    }
+
+    struct Sub: Equatable, KeyValuePairCodable {
+      var foo = "sub-foo"
+      var val = 420
+
+      init() {}
+
+      init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        self.foo = try decoder.decode(key: "foo")
+        self.val = try decoder.decode(key: "v")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "foo", value: foo)
+        encoder.encode(key: "v", value: val)
+      }
+    }
+
+    let testObject = Test()
+
+    var url = WebURL("http://example/some/path#frag")!
+    url.withMutableKeyValuePairs(in: .query, schema: .percentEncoded) { $0.encode(testObject) }
+    print(url)
+
+//    dump(try url.keyValuePairs(in: .query, schema: .percentEncoded).decode(as: Test.self))
+
+    do {
+      // Brackets within the key name are properly escaped, subcomponent delimiters are unescaped. Should work.
+      let url = WebURL("http://example/some/path?foo=hello&bar=world&s%5Bu%5Db[foo]=sub-foo&s%5Bu%5Db[v]=420#frag")!
+      let decoded = try url.keyValuePairs(in: .query, schema: .percentEncoded).decode(as: Test.self)
+      XCTAssertEqual(decoded, testObject)
+    }
+
+    do {
+      // One of the brackets used as subcomponent delimiters is escaped. Should fail.
+      //                                                                      VVV
+      let url = WebURL("http://example/some/path?foo=hello&bar=world&s%5Bu%5Db%5Bfoo]=sub-foo&s%5Bu%5Db[v]=420#frag")!
+      XCTAssertThrowsSpecific(KeyValuePairDecoderError.keyNotFound(["s[u]b", "foo"])) {
+        let _ = try url.keyValuePairs(in: .query, schema: .percentEncoded).decode(as: Test.self)
+      }
+    }
+
+    do {
+      // Both brackets used as subcomponent delimiters are escaped. Should also fail.
+      //                                                                      VVV   VVV
+      let url = WebURL("http://example/some/path?foo=hello&bar=world&s%5Bu%5Db%5Bfoo%5D=sub-foo&s%5Bu%5Db[v]=420#frag")!
+      XCTAssertThrowsSpecific(KeyValuePairDecoderError.keyNotFound(["s[u]b", "foo"])) {
+        let _ = try url.keyValuePairs(in: .query, schema: .percentEncoded).decode(as: Test.self)
+      }
+    }
+
+    do {
+      // Unescaped brackets in key names can work, as long as they are not closed.
+      for urlString in [
+        //                                             V
+        "http://example/some/path?foo=hello&bar=world&s[u%5Db[foo]=sub-foo&s%5Bu%5Db[v]=420#frag",
+        //                                                 V
+        "http://example/some/path?foo=hello&bar=world&s%5Bu]b[foo]=sub-foo&s%5Bu%5Db[v]=420#frag",
+      ] {
+        let url = WebURL(urlString)!
+        XCTAssertNoThrow(try {
+          let decoded = try url.keyValuePairs(in: .query, schema: .percentEncoded).decode(as: Test.self)
+          XCTAssertEqual(decoded, testObject)
+        }())
+      }
+    }
+  }
+
+  func testCoding3() throws {
+
+    struct Resolution: KeyValuePairCodable {
+      var width = 0
+      var height = 0
+
+      init() {}
+
+      init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        self.width = try decoder.decode(key: "width")
+        self.height = try decoder.decode(key: "height")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "width", value: width)
+        encoder.encode(key: "height", value: width)
+      }
+    }
+    class VideoMode: KeyValuePairCodable {
+      var resolution = Resolution()
+      var interlaced = false
+      var frameRate = 0.0
+      var name: String?
+
+      init() {}
+
+      required init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        self.resolution = try decoder.decode(key: "resolution")
+        self.interlaced = try decoder.decode(key: "interlaced")
+        self.frameRate = try decoder.decode(key: "frameRate")
+        self.name = try decoder.decode(key: "name")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "resolution", value: resolution)
+        encoder.encode(key: "interlaced", value: interlaced)
+        encoder.encode(key: "frameRate", value: frameRate)
+        encoder.encode(key: "name", value: name)
+      }
+    }
+
+    var url = WebURL("http://example/foo#frag")!
+    url.withMutableKeyValuePairs(in: .query, schema: .percentEncoded) { $0.encode(VideoMode()) }
+    print(url)
+
+    dump(try url.keyValuePairs(in: .query, schema: .percentEncoded).decode(as: VideoMode.self))
+  }
+
+  func testCoding4() throws {
+
+    struct TwoLevelArray: KeyValuePairCodable {
+      var values: [[UInt8]] = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ]
+
+      init() {}
+
+      init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        values = try decoder.decode(key: "v")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "v", value: values)
+      }
+    }
+
+    var url = WebURL("http://example/foo#frag")!
+    url.withMutableKeyValuePairs(in: .query, schema: .percentEncoded) { $0.encode(TwoLevelArray()) }
+    print(url)
+
+    dump(try url.keyValuePairs(in: .query, schema: .percentEncoded).decode(as: TwoLevelArray.self))
+  }
+
+  func testCoding5() throws {
+
+    struct PDFOptions: KeyValuePairCodable {
+      var page: Int?
+      var zoom: Zoom?
+      var search: String?
+      var fdf: WebURL?
+
+      init() {}
+
+      init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        self.page = try decoder.decode(key: "page")
+        self.zoom = try decoder.decode(key: "zoom")
+        self.search = try decoder.decode(key: "search")
+        self.fdf = try decoder.decode(key: "fdf")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "page", value: page)
+        encoder.encode(key: "zoom", value: zoom)
+        encoder.encode(key: "search", value: search)
+        encoder.encode(key: "fdf", value: fdf)
+      }
+
+      struct Zoom: KeyValuePairCodable {
+        var scale: Int = 100
+        var origin: (left: Int, top: Int)?
+
+        init() {}
+
+        init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+          let serialization = try decoder.decodeSingleValue()
+          let segments = serialization.split(separator: ",")
+          // Scale must be present.
+          guard let scale = Int(segments[0]) else { throw KeyValuePairDecoderError.invalidValue }
+          self.scale = scale
+          // If there is an origin, both left and top values must be present.
+          if segments.count > 1 {
+            guard segments.count == 3, let left = Int(segments[1]), let top = Int(segments[2]) else {
+              throw KeyValuePairDecoderError.invalidValue
+            }
+            self.origin = (left, top)
+          }
+        }
+        func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+          var serialization = String(scale)
+          if let origin = origin { serialization += ",\(origin.left),\(origin.top)" }
+          encoder.encodeSingleValue(serialization)
+        }
+      }
+    }
+
+    var url = WebURL("http://example/foo.pdf")!
+    print(url)
+    dump(try url.keyValuePairs(in: .fragment, schema: .percentEncoded).decode(as: PDFOptions.self))
+    print("------------------------")
+
+
+    url = WebURL("http://example/foo.pdf#zoom=200")!
+    print(url)
+    dump(try url.keyValuePairs(in: .fragment, schema: .percentEncoded).decode(as: PDFOptions.self))
+    print("------------------------")
+
+    url.fragment = nil
+    print(url)
+    var newOptions = PDFOptions()
+    newOptions.page = 27
+    newOptions.zoom = .init()
+    newOptions.zoom!.scale = 450
+    newOptions.zoom!.origin = (left: 420, top: 333)
+    newOptions.search = "\"search term wordlist\""
+    newOptions.fdf = WebURL("http://example/some/form/document.fdf")
+    url.withMutableKeyValuePairs(in: .fragment, schema: .percentEncoded) {
+      $0.encode(newOptions)
+    }
+    print(url)
+    dump(try url.keyValuePairs(in: .fragment, schema: .percentEncoded).decode(as: PDFOptions.self))
+    print("------------------------")
+  }
+
+  func testCoding6() {
+
+    struct Demo: KeyValuePairCodable {
+      var name: String?
+      var number: Int = 0
+
+      init() {}
+
+      init(decodingFrom decoder: inout KeyValuePairDecoder<some KeyValueStringSchema>) throws {
+        self.name = try decoder.decode(key: "name")
+        self.number = try decoder.decode(key: "number")
+      }
+      func encode(to encoder: inout KeyValuePairEncoder<some KeyValueStringSchema>) {
+        encoder.encode(key: "name", value: name)
+        encoder.encode(key: "number", value: number)
+      }
+    }
+
+    do {
+      let testValues = [Demo(), Demo(), nil, Demo()]
+      var url = WebURL("http://example/")!
+      url.withMutableKeyValuePairs(in: .query, schema: .percentEncoded) { $0.encode(testValues) }
+      print(url)
+    }
+
+    do {
+      let testValues = ["foo", "bar", "$null", "$baz"]
+      var url = WebURL("http://example/")!
+      url.withMutableKeyValuePairs(in: .query, schema: .percentEncoded) { $0.encode(testValues) }
+      print(url)
+    }
+  }
+}

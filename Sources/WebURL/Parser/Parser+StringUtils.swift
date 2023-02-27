@@ -18,6 +18,14 @@
 // --------------------------------------------
 
 
+extension Unicode.Scalar {
+
+  @available(macOS 10.15, *)
+  var isNonURLCodePoint: Bool {
+    hasNonURLCodePoints(utf8: utf8)
+  }
+}
+
 extension ASCII {
 
   /// Whether this character is a non-URL code point.
