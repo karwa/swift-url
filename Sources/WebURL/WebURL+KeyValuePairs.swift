@@ -28,15 +28,14 @@
 
 extension WebURL {
 
-  /// A view of a URL component as a list of key-value pairs, using a given schema.
+  /// A view which interprets a URL component as a list of key-value pairs.
   ///
   /// Some URL components, such as the ``WebURL/WebURL/query`` and ``WebURL/WebURL/fragment``,
-  /// are entirely free to use for custom data - they are simply opaque strings, without any prescribed format.
-  /// A popular convention is to write a list of key-value pairs in these components,
-  /// as it is a highly versatile way to encode arbitrary data.
+  /// are simply opaque strings, without any prescribed format, and are free to use for custom data.
+  /// They might contain JSON, binary data, or (as supported by this view) a list of key-value pairs.
   ///
-  /// For example, a website for a search engine might support key-value pairs in its query component,
-  /// containing the user's search query, a start offset, the number of results to return,
+  /// For example, a search engine URL might support key-value pairs in its query,
+  /// containing the user's search string, a start offset, the number of results to return,
   /// and other filters or options.
   ///
   /// ```
@@ -47,55 +46,43 @@ extension WebURL {
   ///                                   pair       pair   pair   pair              pair
   /// ```
   ///
-  /// The `KeyValuePairs` view provides a rich set of APIs for reading and modifying lists of key-value pairs
-  /// in opaque URL components, and supports a variety of options and formats.
+  /// The `KeyValuePairs` view interprets the URL component's underlying string as a list of pairs,
+  /// and provides a rich set of APIs for reading and modifying elements of that list,
+  /// supporting a variety of usage patterns.
   ///
-  /// ### Collection API
+  /// ### A List of Pairs
   ///
-  /// At its most fundamental level, `KeyValuePairs` is a list - it conforms to `Collection`,
+  /// At its core, `KeyValuePairs` is a list. It conforms to the `Collection` protocol,
   /// which allows working with the list of pairs similarly to how you might work with an `Array`.
-  /// You can iterate over all key-value pairs, identify a pair by its location (index),
-  /// and perform modifications such as removing or editing a particular pair, or inserting pairs at a location.
+  ///
+  /// For some applications, a pair's position within the list is important -
+  /// and so, as well as iterating over pairs, you can also identify a pair by its index (location),
+  /// and perform precise modifications such as removing or editing a particular pair,
+  /// or inserting pairs at a particular location.
   ///
   /// ```swift
+  /// // Example: Inseting a pair at a particular location
+  ///
   /// var url = WebURL("http://example/students?class=8&sort=age")!
   ///
-  /// // Find the location of the first existing 'sort' key.
+  /// // Find the location of the first 'sort' pair.
   /// let sortIdx = url.queryParams.firstIndex(where: { $0.key == "sort" }) ?? url.queryParams.endIndex
   ///
-  /// // Insert an additional 'sort' key before it.
+  /// // Insert an additional 'sort' pair before it.
   /// url.queryParams.insert(key: "sort", value: "name", at: sortIdx)
   /// // ✅ "http://example/students?class=8&sort=name&sort=age"
   /// //                                     ^^^^^^^^^
   /// ```
   ///
-  /// The concept of "a list of key-value pairs" is quite broad,
-  /// and for some URLs the position of a key-value pair might be significant.
+  /// ### A Map/MultiMap
   ///
-  /// ### Map/MultiMap API
-  ///
-  /// In addition to identifying locations within the list, it is natural to read and write values
-  /// associated with a particular key.
-  ///
-  /// In general, `KeyValuePairs` is a kind of multi-map - multiple pairs may have the same key.
-  /// To retrieve all values associated with a key, call ``WebURL/WebURL/KeyValuePairs/allValues(forKey:)``.
+  /// Other applications use the list like a `Dictionary` (map), and get or set values by the key
+  /// they are associated with. The `KeyValuePairs` view includes a key-based subscript.
   ///
   /// ```swift
-  /// let url = WebURL("http://example/students?class=12&sort=name&sort=age")!
-  /// url.queryParams.allValues(forKey: "sort")
-  /// // ✅ ["name", "age"]
-  /// ```
+  /// // Example: Using the subscript to get/set values associated with keys.
   ///
-  /// However, many keys are expected to be unique, so it is often useful to treat the list of pairs
-  /// as a plain map/`Dictionary` (at least with respect to those keys).
-  ///
-  /// `KeyValuePairs` includes a key-based subscript, which allows getting and setting the first value
-  /// associated with a key. When setting a value, other pairs with the same key will be removed.
-  ///
-  /// ```swift
   /// var url = WebURL("http://example/search?q=quick+recipes&start=10&limit=20")!
-  ///
-  /// // Use the subscript to get/set values associated with keys.
   ///
   /// url.queryParams["q"]
   /// // ✅ "quick recipes"
@@ -107,25 +94,37 @@ extension WebURL {
   ///
   /// url.queryParams["limit"] = nil
   /// // ✅ "http://example/search?q=some%20query&start=10&safe=on"
-  /// //                                                 ^^^
+  /// //                                                 ^^^ (removed)
   /// ```
   ///
   /// > Tip:
   /// >
-  /// > Even though this API feels like working with a `Dictionary`, it is just a _view_ of a URL component,
-  /// > so the key-value pairs are stored encoded in a URL string rather than a hash-table.
-  /// > To reduce some of the costs of searching for multiple keys, `KeyValuePairs` supports batched lookups:
+  /// > Try to use batched lookups for better performance when reading the values for multiple keys.
   /// >
   /// > ```swift
   /// > let (searchQuery, start, limit, safeSearch) = url.queryParams["q", "start", "limit", "safe"]
   /// > // ✅ ("some query", "10", nil, "on")
   /// > ```
   ///
+  /// Note that keys may appear multiple times in the list. Some applications make use of this
+  /// and interpret the list as a multimap - in other words, instead of being like a dictionary
+  /// of keys to single string values, the values may be _an array_ of strings.
+  ///
+  /// To retrieve all values associated with a key, call ``WebURL/WebURL/KeyValuePairs/allValues(forKey:)``.
+  ///
+  /// ```swift
+  /// let url = WebURL("http://example/students?class=12&sort=name&sort=age")!
+  /// url.queryParams.allValues(forKey: "sort")
+  /// // ✅ ["name", "age"]
+  /// ```
+  ///
   /// ### In-Place Mutation
   ///
-  /// `KeyValuePairs` has value semantics - if you assign it to `var` variable and modify it,
-  /// everything will work, but the URL it came from will be unaffected by those changes.
-  /// In order to modify the URL component, use the ``WebURL/WebURL/withMutableKeyValuePairs(in:schema:_:)`` function
+  /// `KeyValuePairs` has value semantics - you can assign it to variable and modify it,
+  /// and everything will work, but the URL it came from will be unaffected by those changes.
+  ///
+  /// In order to modify the URL component in place,
+  /// use the ``WebURL/WebURL/withMutableKeyValuePairs(in:schema:_:)`` function
   /// or the ``WebURL/WebURL/queryParams`` property:
   ///
   /// ```swift
@@ -241,7 +240,7 @@ extension WebURL {
     KeyValuePairs(storage: storage, component: component, schema: schema)
   }
 
-  /// A read-write view of a URL component as a list of key-value pairs, using a given schema.
+  /// A read-write view of a URL component as a list of key-value pairs.
   ///
   /// This function is a mutating version of ``WebURL/WebURL/keyValuePairs(in:schema:)``.
   /// It executes the `body` closure with a mutable `KeyValuePairs` view,
