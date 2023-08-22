@@ -543,7 +543,7 @@ public protocol KeyValueStringSchema {
   ///
   /// The default implementation returns `false`, so no additional code-points are escaped.
   ///
-  func shouldPercentEncode(ascii codePoint: UInt8) -> Bool
+  //func shouldPercentEncode(ascii codePoint: UInt8) -> Bool
 
   /// Whether a non-escaped plus sign (`+`) is decoded as a space.
   ///
@@ -620,11 +620,11 @@ extension KeyValueStringSchema {
     byte == preferredKeyValueDelimiter
   }
 
-  @inlinable @inline(__always)
-  public func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
-    // Default: no additional percent-encoding.
-    false
-  }
+//  @inlinable @inline(__always)
+//  public func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+//    // Default: no additional percent-encoding.
+//    false
+//  }
 
   @inlinable @inline(__always)
   public var encodeSpaceAsPlus: Bool {
@@ -814,10 +814,10 @@ public struct FormCompatibleKeyValueString: KeyValueStringSchema, Sendable {
     true
   }
 
-  @inlinable
-  public func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
-    URLEncodeSet.FormEncoding().shouldPercentEncode(ascii: codePoint)
-  }
+//  @inlinable
+//  public func shouldPercentEncode(ascii codePoint: UInt8) -> Bool {
+//    URLEncodeSet.FormEncoding().shouldPercentEncode(ascii: codePoint)
+//  }
 }
 
 extension KeyValueStringSchema where Self == PercentEncodedKeyValueString {
@@ -2571,13 +2571,13 @@ internal struct KeyValuePairComponentEncodeSet<Schema>: PercentEncodeSet where S
   internal var component: KeyValuePairsSupportedComponent
 
   @usableFromInline
-  internal var escapePercentSign: Bool
+  internal var contentIsPreescaped: Bool
 
   @inlinable
   public init(schema: Schema, component: KeyValuePairsSupportedComponent, escapePercentSign: Bool) {
     self.schema = schema
     self.component = component
-    self.escapePercentSign = escapePercentSign
+    self.contentIsPreescaped = escapePercentSign
   }
 
   @inlinable
@@ -2588,8 +2588,21 @@ internal struct KeyValuePairComponentEncodeSet<Schema>: PercentEncodeSet where S
       return true
     }
 
-    // The percent sign must always be escaped. It is reserved for percent-encoding.
-    if ascii == .percentSign, _fastPath(escapePercentSign) {
+    // The percent sign is reserved for percent-encoding.
+    // - If we are processing non-escaped content, we must escape the '%'.
+    // - If we are processing pre-escaped content, the '%' is already being used for percent-encoding
+    //   and should not be escaped again.
+    if ascii == .percentSign {
+      return !contentIsPreescaped
+    }
+
+    // The schema can opt to substitute spaces rather than percent-encoding them.
+    if ascii == .space {
+      return !schema.encodeSpaceAsPlus
+    }
+
+    // Characters which the schema reserves as delimiters must be escaped.
+    if schema.isPairDelimiter(ascii.codePoint) || schema.isKeyValueDelimiter(ascii.codePoint) {
       return true
     }
 
@@ -2598,20 +2611,10 @@ internal struct KeyValuePairComponentEncodeSet<Schema>: PercentEncodeSet where S
       return true
     }
 
-    // Characters which the schema reserves as delimiters must be escaped.
-    if schema.isPairDelimiter(ascii.codePoint) || schema.isKeyValueDelimiter(ascii.codePoint) {
-      return true
-    }
-
-    // The schema can opt to substitute spaces rather than percent-encoding them.
-    if ascii == .space {
-      return !schema.encodeSpaceAsPlus
-    }
-
     // The schema can opt in to additional escaping.
-    if schema.shouldPercentEncode(ascii: ascii.codePoint) {
-      return true
-    }
+//    if schema.shouldPercentEncode(ascii: ascii.codePoint) {
+//      return true
+//    }
 
     // Finally, escape anything else required by the URL component.
     switch component.value {
