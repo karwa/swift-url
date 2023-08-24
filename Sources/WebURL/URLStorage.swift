@@ -379,11 +379,15 @@ extension URLStorage {
   ///            this operation only fails if the resulting URL would exceed `URLStorage.MaxSize`.
   ///
   @inlinable
-  internal mutating func multiReplaceSubrange<Operations>(
-    _ operations: Operations,
+//  internal mutating func multiReplaceSubrange<Operations>(
+//    _ operations: Operations,
+//    newStructure: URLStructure<SizeType>
+//  ) -> Result<Void, URLSetterError>
+//  where Operations: BidirectionalCollection, Operations.Element == ReplaceSubrangeOperation {
+  internal mutating func multiReplaceSubrange(
+    _ operations: borrowing FixedCapacityStack<ReplaceSubrangeOperation>,
     newStructure: URLStructure<SizeType>
-  ) -> Result<Void, URLSetterError>
-  where Operations: BidirectionalCollection, Operations.Element == ReplaceSubrangeOperation {
+  ) -> Result<Void, URLSetterError> {
 
     newStructure.checkInvariants()
 
@@ -395,7 +399,7 @@ extension URLStorage {
     var cursor = codeUnits.endIndex
     var newCount = codeUnits.count
 
-    for op in operations.reversed() {
+    operations.reversedForEach { op in
 
       precondition(op.range.upperBound <= cursor && op.range.upperBound >= op.range.lowerBound, "Invalid range")
       cursor = op.range.lowerBound
@@ -404,7 +408,7 @@ extension URLStorage {
         let countAfterReplacement = newCount.subtracting(op.range.count, adding: op.replacementCount),
         countAfterReplacement <= Int(URLStorage.MaxSize)
       else {
-        return .failure(.exceedsMaximumSize)
+        return //.failure(.exceedsMaximumSize)
       }
       precondition(countAfterReplacement >= 0, "count may never go negative")
 
@@ -419,7 +423,7 @@ extension URLStorage {
 
     if !exceedsCapacity, codeUnits._storage.isKnownUniqueReference() {
 
-      for operation in operations.reversed() {
+      operations.reversedForEach { operation in
 
         if operation.replacementCount == 0 {
           codeUnits.removeSubrange(operation.range)
@@ -444,7 +448,7 @@ extension URLStorage {
       var destination = destination
       var sourceIndex = codeUnits.startIndex
 
-      for operation in operations {
+      operations.forEach { operation in
 
         // Copy from source until start of operation range.
 
