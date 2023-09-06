@@ -344,41 +344,48 @@ extension URLStorage {
 
 extension URLStorage {
 
-  /// Attempts to set the port component to the given value. A value of `nil` removes the port.
+  /// Attempts to set the port component to the given value.
   ///
-  @inlinable @inline(never)
-  internal mutating func setPort(
-    to newValue: UInt16?
-  ) -> Result<Void, URLSetterError> {
-
-    var newValue = newValue
+  /// A value of `nil` removes the port.
+  ///
+  @usableFromInline
+  internal mutating func setPort(to newValue: UInt16?) -> Result<Void, URLSetterError> {
 
     // Check that the operation is semantically valid for the existing structure.
+
     guard !structure.cannotHaveCredentialsOrPort else {
-      return .failure(.cannotHaveCredentialsOrPort)
+      return newValue == nil ? .success : .failure(.cannotHaveCredentialsOrPort)
     }
 
-    // The operation is valid. Calculate the new structure and replace the code-units.
-    // This is a straightforward code-unit replacement, so it can go through setSimpleComponent.
-    if newValue == structure.schemeKind.defaultPort {
-      newValue = nil
-    }
+    // Handle removals.
+    // Straightforward code-unit removal; no other components are affected.
 
-    var stackBuffer = 0 as UInt64
-    return withUnsafeMutableBytes(of: &stackBuffer) { stackBytes in
-      var stringPointer: UnsafeRawBufferPointer? = nil
-      if let newPort = newValue {
-        let count = ASCII.writeDecimalString(for: newPort, to: stackBytes.baseAddress!)
-        stringPointer = UnsafeRawBufferPointer(start: stackBytes.baseAddress!, count: Int(count))
-        assert(count > 0)
+    guard let newPort = newValue, newPort != structure.schemeKind.defaultPort else {
+      if let oldPortString = structure.range(of: .port) {
+        var newStructure = structure
+        newStructure.portLength = 0
+        removeSubrange(oldPortString, newStructure: newStructure)
       }
-      return setSimpleComponent(
-        .port,
-        to: stringPointer,
-        prefix: .colon,
-        lengthKey: \.portLength,
-        encodeSet: Optional<_StaticMember<URLEncodeSet.SpecialQuery>>.none
-      )
+      return .success
+    }
+
+    // Handle replacements.
+    // Straightforward code-unit replacement; no other components are affected.
+
+    guard let newPortStringLength = URLStorage.SizeType(exactly: 1 + ASCII.lengthOfDecimalString(for: newPort)) else {
+      return .failure(.exceedsMaximumSize)
+    }
+
+    let oldPortString = structure.rangeForReplacingCodeUnits(of: .port)
+    var newStructure = structure
+    newStructure.portLength = newPortStringLength
+
+    return replaceSubrange(oldPortString, withUninitializedSpace: newPortStringLength, newStructure: newStructure) {
+      dest in
+      dest[0] = ASCII.colon.codePoint
+      var bytesWritten = 1
+      bytesWritten += Int(ASCII.writeDecimalString(for: newPort, to: UnsafeMutableRawPointer(dest.baseAddress! + 1)))
+      return bytesWritten
     }
   }
 }
