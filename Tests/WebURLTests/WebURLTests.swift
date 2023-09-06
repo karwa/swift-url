@@ -910,6 +910,12 @@ extension WebURLTests {
     XCTAssertEqual(url.serialized(), "file://somehost/p1/p2")
     XCTAssertURLIsIdempotent(url)
 
+    // However, setting a value of 'nil' doesn't throw.
+    url = WebURL("file://somehost/p1/p2")!
+    XCTAssertNoThrow { try url.setPort(nil) }
+    XCTAssertEqual(url.serialized(), "file://somehost/p1/p2")
+    XCTAssertURLIsIdempotent(url)
+
     // [Throw] Setting a port to a non-valid UInt16 value.
     url = WebURL("http://example.com/p1/p2")!
     XCTAssertThrowsSpecific(URLSetterError.portValueOutOfBounds) { try url.setPort(-99) }
