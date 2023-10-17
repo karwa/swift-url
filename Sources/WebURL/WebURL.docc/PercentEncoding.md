@@ -95,15 +95,15 @@ in encoding or decoding percent-encoded data.
 
 ### Encoding Text or Binary Data
 
-- `String.percentEncoded(using: PercentEncodeSet) -> String`
-- `Collection.percentEncodedString(using: PercentEncodeSet) -> String`
+- ``StringProtocol.percentEncoded(using:) [4TW2L]``
+- ``Collection.percentEncodedString(using:) [7TJNB]``
 
-To percent-encode a String, call the `.percentEncoded(using:)` function and specify an encode-set to use.
+To percent-encode a String, call the ``StringProtocol percentEncoded(using:) [4TW2L]`` function and specify an encode-set to use.
 ``WebURL/PercentEncodeSet/urlComponentSet`` is usually a good choice for arbitrary strings: 
 it includes all URL special characters, and encodes some additional characters to match the JavaScript function
 `encodeURIComponent`.
 
-If you have binary data, you can call the `.percentEncodedString(using:)` function, which is available
+If you have binary data, you can call the ``Collection percentEncodedString(using:) [7TJNB]`` function, which is available
 on all collections of bytes, to produce a percent-encoded ASCII string of its contents.
 
 ```swift
@@ -115,12 +115,12 @@ Data(...).percentEncodedString(using: .urlComponentSet)
 
 ### Decoding Strings to Text or Binary Data
 
-- `String.percentDecoded() -> String`
-- `String.percentDecodedBytesArray() -> [UInt8]`
+- ``StringProtocol.percentDecoded``
+- ``StringProtocol.percentDecodedBytesArray``
 
-To decode a String containing percent-encoding, call the `.percentDecoded()` function, which decodes the
+To decode a String containing percent-encoding, call the ``StringProtocol percentDecoded`` function, which decodes the
 string to bytes and interprets them as Unicode text. If the decoded bytes do not contain Unicode text,
-call `.percentDecodedBytesArray()` to retrieve the bytes as binary data.
+call ``StringProtocol percentDecodedBytesArray`` to retrieve the bytes as binary data.
 
 ```swift
 "AC%2FDC".percentDecoded()
@@ -132,24 +132,21 @@ call `.percentDecodedBytesArray()` to retrieve the bytes as binary data.
 ### Encoding and Decoding Lazily
 
 For certain algorithms, it can be useful to percent-encode binary data, or to read decoded binary data, lazily.
-WebURL adds `.percentEncoded(using:)` and `.percentDecoded()` functions to `LazyCollection`, each returning view objects
+WebURL adds ``LazyCollectionProtocol percentEncoded(using:) [1R0SJ]`` and ``LazyCollectionProtocol percentDecoded`` functions to ``LazyCollectionProtocol``, each returning view objects
 which encode and decode data on-demand.
 
 
 ## Topics
 
-@Comment {
-  DocC does not support these yet.
-  ### Encoding Text or Binary Data
+### Encoding Text or Binary Data
 
-  - `StringProtocol/percentEncoded(using:)`
-  - `Collection/percentEncodedString(using:)`
+- ``StringProtocol.percentEncoded(using:) [4TW2L]``
+- ``Collection.percentEncodedString(using:) [7TJNB]``
 
-  ### Decoding Strings to Text or Binary Data
+### Decoding Strings to Text or Binary Data
 
-  - `StringProtocol/percentDecoded()`
-  - `StringProtocol/percentDecodedBytesArray()`
-}
+- ``StringProtocol.percentDecoded``
+- ``StringProtocol.percentDecodedBytesArray``
 
 ### Percent-Encoding Sets
 
