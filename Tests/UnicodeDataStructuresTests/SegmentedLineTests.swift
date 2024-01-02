@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Checkit
 import UnicodeDataStructures
 import XCTest
 
-fileprivate func XCTAssertSegments<Bound, Value>(
+private func XCTAssertSegments<Bound, Value>(
   _ line: SegmentedLine<Bound, Value>,
   _ expected: [(Range<Bound>, Value)]
 ) where Bound: Comparable, Value: Equatable {
@@ -49,24 +50,28 @@ extension SegmentedLineTests {
 
   func testDocumentationExamples() {
 
-    // SegmentedLine, .set, .segments
+    // SegmentedLine, .set
     do {
       var line = SegmentedLine<Int, String?>(bounds: 0..<100, value: nil)
 
-      // After setting values <5 to "small" and values >10 to "large",
-      // the gap is left with its previous value, "medium".
-
-      line.set(0..<20, to: "medium")
-      line.set(0..<5, to: "small")
+      line.set(0..<10, to: "small")
+      line.set(5..<20, to: "medium")
       line.set(10..<60, to: "large")
 
       XCTAssertEqual(
         line.description,
-        #"| [0..<5]: Optional("small") | [5..<10]: Optional("medium") | [10..<60]: Optional("large") | [60..<100]: nil |"#
+        #"""
+        ┬
+        ├ [0..<5]: Optional("small")
+        ├ [5..<10]: Optional("medium")
+        ├ [10..<60]: Optional("large")
+        ├ [60..<100]: nil
+        ┴
+        """#
       )
     }
 
-    // modify.
+    // SegmentedLine, .modify
     do {
       enum Font: Equatable {
         case custom(String)
@@ -83,26 +88,27 @@ extension SegmentedLineTests {
       }
 
       let string = "Bob is feeling great"
+
+      // Create a SegmentedLine for the collection's contents.
+      // Start by setting a font attribute over the entire string.
+
       var tags = SegmentedLine(
         bounds: string.startIndex..<string.endIndex,
-        value: [] as [Any]
+        value: [Font.custom("Comic Sans")] as [Any]
       )
 
-      // Set a font attribute over the entire string.
+      // Use the '.modify' function to append a color attribute
+      // to each word.
 
-      tags.modify(tags.bounds) { attributes in
-        attributes.append(Font.custom("Comic Sans"))
-      }
-
-      // Set each word to a different color.
-
-      for word: Substring in string.split(separator: " ") {
+      for word in string.split(separator: " ") {
         tags.modify(word.startIndex..<word.endIndex) { attributes in
           attributes.append(Color.random())
         }
       }
 
       // Check the result.
+      // - ✅ Every segment still contains the font attribute.
+      // - ✅ Each word also contains its individual color attribute.
 
       // for (range, attributes) in tags.segments {
       //   print(#""\#(string[range])""#, "-", attributes)
@@ -134,6 +140,69 @@ extension SegmentedLineTests {
         XCTAssertNil(expectedAttributes.next())
       }
     }
+
+    // .segments
+    do {
+      var line = SegmentedLine<Int, String?>(bounds: 0..<100, value: nil)
+
+      // for (range, value) in line.segments {
+      //   print(range, value)
+      // }
+      XCTAssertSegments(line, [(0..<100, nil)])
+
+      line.set(0..<10, to: "small")
+      line.set(5..<20, to: "medium")
+      line.set(10..<60, to: "large")
+
+      // for (range, value) in line.segments {
+      //   print(range, value)
+      // }
+
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<5, "small"),
+        (5..<10, "medium"),
+        (10..<60, "large"),
+        (60..<100, nil),
+      ])
+    }
+
+    // .segments.indexOf
+    do {
+      var line = SegmentedLine(bounds: 0..<50, value: 42)
+      line.set(10..<20, to: 99)
+      line.set(30..<50, to: 1024)
+
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<10, 42),
+        (10..<20, 99),
+        (20..<30, 42),
+        (30..<50, 1024),
+      ])
+
+      let i = line.segments.index(of: 35)
+      XCTAssertTrue(line.segments[i] == (range: 30..<50, value: 1024))
+    }
+
+    // subscript(Bound)
+    do {
+      var line = SegmentedLine(bounds: 0..<50, value: 42)
+      line.set(10..<20, to: 99)
+      line.set(30..<50, to: 1024)
+      
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<10, 42),
+        (10..<20, 99),
+        (20..<30, 42),
+        (30..<50, 1024),
+      ])
+
+      XCTAssertEqual(line[5], 42)
+      XCTAssertEqual(line[12], 99)
+      XCTAssertEqual(line[35], 1024)
+    }
   }
 
   func testInitWithBoundsAndValue() {
@@ -158,6 +227,139 @@ extension SegmentedLineTests {
 
 
 // --------------------------------------------
+// MARK: - Segments Collection
+// --------------------------------------------
+
+extension SegmentedLineTests {
+
+  func testSegmentsCollectionConformance() {
+
+    // Single segment.
+    do {
+      let line = SegmentedLine<Int, String?>(bounds: 0..<100, value: nil)
+      CollectionChecker.check(line.segments)
+    }
+    // Many segments.
+    do {
+      var line = SegmentedLine<Int, String?>(bounds: 0..<100, value: nil)
+      line.set(0..<10, to: "small")
+      line.set(5..<20, to: "medium")
+      line.set(20..<60, to: "large")
+
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<5,    "small"),
+        (5..<20,   "medium"),
+        (20..<60,  "large"),
+        (60..<100, nil),
+      ])
+      CollectionChecker.check(line.segments)
+    }
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Get
+// --------------------------------------------
+
+
+extension SegmentedLineTests {
+
+  func testIndexOfSegment() {
+
+    // Single segment.
+    do {
+      let line = SegmentedLine<Int, Int>(bounds: 0..<100, value: 42)
+      for location in line.bounds {
+        let index = line.segments.index(of: location)
+        XCTAssertEqual(index, line.segments.startIndex)
+        XCTAssertEqual(line.segments.index(after: index), line.segments.endIndex)
+        XCTAssertTrue(line.segments[index] == (range: 0..<100, value: 42))
+      }
+    }
+
+    // Multiple segments.
+    do {
+      var line = SegmentedLine<Int, String>(bounds: 0..<160, value: "-")
+      line.set(0..<20, to: "A")
+      line.set(20..<40, to: "B")
+      line.set(40..<60, to: "C")
+      line.set(60..<80, to: "D")
+      line.set(80..<100, to: "E")
+      line.set(100..<120, to: "F")
+      line.set(120..<140, to: "G")
+      line.set(140..<160, to: "H")
+      // swift-format-ignore
+      let expectedSegments = [
+        (0..<20,    "A"),
+        (20..<40,   "B"),
+        (40..<60,   "C"),
+        (60..<80,   "D"),
+        (80..<100,  "E"),
+        (100..<120, "F"),
+        (120..<140, "G"),
+        (140..<160, "H"),
+      ]
+      XCTAssertSegments(line, expectedSegments)
+
+      var expectedSegmentOffset = 0
+      for (range, expectedValue) in expectedSegments {
+        for location in range {
+          let index = line.segments.index(of: location)
+          XCTAssertEqual(line.segments.index(line.segments.startIndex, offsetBy: expectedSegmentOffset), index)
+          XCTAssertTrue(line.segments[index] == (range: range, value: expectedValue))
+        }
+        expectedSegmentOffset += 1
+      }
+    }
+  }
+
+  func testGetAtLocation() {
+
+    // Single segment.
+    do {
+      let line = SegmentedLine<Int, Int>(bounds: 0..<100, value: 42)
+      for location in 0..<100 {
+        XCTAssertEqual(line[location], 42)
+      }
+    }
+
+    // Multiple segments.
+    do {
+      var line = SegmentedLine<Int, String>(bounds: 0..<160, value: "-")
+      line.set(0..<20, to: "A")
+      line.set(20..<40, to: "B")
+      line.set(40..<60, to: "C")
+      line.set(60..<80, to: "D")
+      line.set(80..<100, to: "E")
+      line.set(100..<120, to: "F")
+      line.set(120..<140, to: "G")
+      line.set(140..<160, to: "H")
+      // swift-format-ignore
+      let expectedSegments = [
+        (0..<20,    "A"),
+        (20..<40,   "B"),
+        (40..<60,   "C"),
+        (60..<80,   "D"),
+        (80..<100,  "E"),
+        (100..<120, "F"),
+        (120..<140, "G"),
+        (140..<160, "H"),
+      ]
+      XCTAssertSegments(line, expectedSegments)
+
+      for (range, expectedValue) in expectedSegments {
+        for location in range {
+          XCTAssertEqual(line[location], expectedValue)
+        }
+      }
+    }
+  }
+}
+
+
+// --------------------------------------------
 // MARK: - Set
 // --------------------------------------------
 
@@ -175,6 +377,23 @@ extension SegmentedLineTests {
       // swift-format-ignore
       XCTAssertSegments(line, [
         (0..<100, 99)
+      ])
+    }
+    do {
+      var line = SegmentedLine<Int, Int>(bounds: 0..<100, value: 99)
+      line.set(0..<50, to: 0)
+      line.set(50..<75, to: 1)
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<50, 0),
+        (50..<75, 1),
+        (75..<100, 99),
+      ])
+
+      line.set(line.bounds, to: 2)
+      // swift-format-ignore
+      XCTAssertSegments(line, [
+        (0..<100, 2)
       ])
     }
 
@@ -1331,19 +1550,36 @@ extension SegmentedLineTests {
     do {
       let line = SegmentedLine<Int, String>(bounds: 0..<100, value: "<default>")
       let description = line.description
-      XCTAssertEqual(description, #"| [0..<100]: <default> |"#)
+      XCTAssertEqual(description, #"[0..<100]: <default>"#)
     }
     do {
       var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "<low>")
       line.set(50..<100, to: "hi 👋")
       let description = line.description
-      XCTAssertEqual(description, #"| [0..<50]: <low> | [50..<100]: hi 👋 |"#)
+      XCTAssertEqual(
+        description,
+        #"""
+        ┬
+        ├ [0..<50]: <low>
+        ├ [50..<100]: hi 👋
+        ┴
+        """#
+      )
     }
     do {
       var line = SegmentedLine<Int, String>(bounds: 0..<100, value: "<default>")
       line.set(20..<40, to: "hello")
       let description = line.description
-      XCTAssertEqual(description, #"| [0..<20]: <default> | [20..<40]: hello | [40..<100]: <default> |"#)
+      XCTAssertEqual(
+        description,
+        #"""
+        ┬
+        ├ [0..<20]: <default>
+        ├ [20..<40]: hello
+        ├ [40..<100]: <default>
+        ┴
+        """#
+      )
     }
   }
 }
