@@ -64,7 +64,7 @@ let package = Package(
     ),
     .testTarget(
       name: "UnicodeDataStructuresTests",
-      dependencies: ["UnicodeDataStructures"],
+      dependencies: ["UnicodeDataStructures", "Checkit"],
       resources: [.copy("GenerateData/TableDefinitions")]
     ),
 

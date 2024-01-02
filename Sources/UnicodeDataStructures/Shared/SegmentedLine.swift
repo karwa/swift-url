@@ -21,21 +21,23 @@
 /// ```swift
 /// var line = SegmentedLine<Int, String?>(bounds: 0..<100, value: nil)
 ///
-/// // After setting values <5 to "small" and values >10 to "large",
-/// // the gap is left with its previous value, "medium".
-///
-/// line.set(0..<20,  to: "medium")
-/// line.set(0..<5,   to: "small")
+/// line.set(0..<10,  to: "small")
+/// line.set(5..<20,  to: "medium")
 /// line.set(10..<60, to: "large")
 /// print(line)
-/// // | [0..<5]: "small" | [5..<10]: "medium" | [10..<60]: "large" | [60..<100]: nil |
+/// // ┬
+/// // ├ [0..<5]: "small"
+/// // ├ [5..<10]: "medium"
+/// // ├ [10..<60]: "large"
+/// // ├ [60..<100]: nil
+/// // ┴
 /// ```
 ///
-/// The locations on a `SegmentedLine` do not have to be integers - they can be any `Comparable` type,
-/// including dates, strings, Unicode scalars (for building character sets), or `Collection` indexes.
+/// The locations on a `SegmentedLine` do not have to be integers - they can be any `Comparable` values,
+/// including dates, strings, and `Collection` indexes.
 ///
-/// In the latter case, we can model a Collection's elements as a line from its `startIndex` to its `endIndex`,
-/// allowing us to annotate regions of any Collection. In a way, it can be used as a generalized `AttributedString`.
+/// For example, a line from a collection's `startIndex` to its `endIndex` can be used to annotate
+/// regions of its elements, and can be used in a similar way to `AttributedString`.
 ///
 /// ```swift
 /// let string = "Bob is feeling great"
@@ -48,11 +50,10 @@
 ///   value: [Font.custom("Comic Sans")] as [Any]
 /// )
 ///
-/// // Set each word to a different color.
-/// // Use 'modify' to append the attribute, but only for the region
-/// // we're modifying.
+/// // Use the '.modify' function to append a color attribute
+/// // to each word.
 ///
-/// for word: Substring in string.split(separator: " ") {
+/// for word in string.split(separator: " ") {
 ///   tags.modify(word.startIndex..<word.endIndex) { attributes in
 ///     attributes.append(Color.random())
 ///   }
@@ -77,102 +78,259 @@
 ///
 public struct SegmentedLine<Bound, Value> where Bound: Comparable {
 
-  @usableFromInline internal typealias BreakPoint = (location: Bound, value: Value)
+  /// The segment information for this line.
+  ///
+  /// Each entry contains a location, and a value which applies from that location
+  /// until the next entry's location.
+  ///
+  /// The list is sorted by location and is never empty.
+  /// The first entry defines the line's lowerBound.
+  ///
+  @usableFromInline
+  internal var _breakpoints: BreakpointStorage
 
-  // This array must never be empty.
-  // There must always be an initial breakPoint which defines our lowerBound and starting value.
-  @usableFromInline internal var _data: [BreakPoint]
+  /// The line's overall upperBound.
+  ///
+  /// The final entry in `_breakpoints` ends at this location.
+  ///
+  @usableFromInline
+  internal var _upperBound: Bound
 
-  // The value of `Bound` at which the final breakPoint ends.
-  // This is necessary to ensure that all regions of the table cover an expressible range of positions,
-  // without requiring a concept like Swift's `PartialRangeFrom` for the final region.
-  @usableFromInline internal var _upperBound: Bound
+  /// Memberwise initializer.
+  ///
+  /// Would be **fileprivate**, but must be internal so it can be @inlinable.
+  ///
+  @inlinable
+  internal init(_breakpoints: BreakpointStorage, _upperBound: Bound) {
+    precondition(_upperBound > _breakpoints.locations[0], "Attempt to create a SegmentedLine with invalid bounds")
+    self._breakpoints = _breakpoints
+    self._upperBound = _upperBound
+  }
 
   /// Creates a new space with the given bounds and value.
   ///
   /// All locations within the bounds will be assigned the initial value.
   ///
   /// ```swift
-  /// let line = SegmentedLine<Int, String>(bounds: 0..<100, value: "default")
-  /// print(line)  // | [0..<100]: default |
+  /// let line = SegmentedLine(bounds: 0..<100, value: "default")
+  /// print(line)  // [0..<100]: "default"
   /// ```
   ///
   /// `bounds` must not be empty.
   ///
   @inlinable
   public init(bounds: Range<Bound>, value: Value) {
-    precondition(bounds.lowerBound < bounds.upperBound, "Invalid range for SegmentedLine bounds")
-    self._data = [(location: bounds.lowerBound, value: value)]
-    self._upperBound = bounds.upperBound
-  }
-
-  /// Memberwise initializer. Would be fileprivate, but must be internal so it can also be @inlinable.
-  ///
-  @inlinable
-  internal init(_upperBound: Bound, _data: [BreakPoint]) {
-    precondition(!_data.isEmpty && _upperBound > _data[0].0, "SegmentedLine is invalid")
-    self._upperBound = _upperBound
-    self._data = _data
-  }
-
-  @inlinable
-  internal var _lowerBound: Bound {
-    _data[0].location
-  }
-}
-
-extension SegmentedLine {
-
-  /// The bounds of this space.
-  ///
-  /// All locations within these bounds have an assigned value.
-  ///
-  @inlinable
-  public var bounds: Range<Bound> {
-    Range(uncheckedBounds: (_lowerBound, _upperBound))
+    self.init(
+      _breakpoints: BreakpointStorage(locations: [bounds.lowerBound], values: [value]),
+      _upperBound: bounds.upperBound
+    )
   }
 }
 
 
 // --------------------------------------------
-// MARK: - Segments
+// MARK: - Breakpoint Storage
 // --------------------------------------------
 
 
 extension SegmentedLine {
 
-  /// The assigned regions of the space.
+  /// The storage for a SegmentedLine.
   ///
-  /// A `SegmentedLine` divides its bounds in to segments. Values are assigned to entire segments,
-  /// and apply to all locations within the segment.
+  /// This type manages two separate physical allocations (`locations` and `values`)
+  /// as a single logical list of `(Bound, Value)` pairs. It maintains the following invariants:
+  ///
+  /// - `locations` and `values` always have the same length.
+  /// - `locations` and `values` are never empty.
+  ///
+  @usableFromInline
+  internal struct BreakpointStorage {
+
+    @usableFromInline
+    internal private(set) var locations: [Bound]
+
+    @usableFromInline
+    internal private(set) var values: [Value]
+
+    @inlinable
+    internal init(locations: [Bound], values: [Value]) {
+      precondition(!locations.isEmpty && locations.count == values.count)
+      self.locations = locations
+      self.values = values
+    }
+  }
+}
+
+extension SegmentedLine.BreakpointStorage: RandomAccessCollection {
+
+  @usableFromInline
+  internal typealias Index = Int
+
+  @usableFromInline
+  internal typealias Element = (location: Bound, value: Value)
+
+  @inlinable
+  internal var startIndex: Index { locations.startIndex }
+
+  @inlinable
+  internal var endIndex: Index { locations.endIndex }
+
+  @inlinable
+  internal var count: Int { locations.count }
+
+  @inlinable
+  internal var isEmpty: Bool { false }
+
+  @inlinable
+  internal func index(after i: Index) -> Index {
+    let (result, overflow) = i.addingReportingOverflow(1)
+    assert(!overflow, "Invalid index - operation overflowed")
+    return result
+  }
+
+  @inlinable
+  internal func index(before i: Index) -> Index {
+    let (result, overflow) = i.subtractingReportingOverflow(1)
+    assert(!overflow, "Invalid index - operation overflowed")
+    return result
+  }
+
+  @inlinable
+  internal func index(_ i: Index, offsetBy distance: Int) -> Index {
+    let (result, overflow) = i.addingReportingOverflow(distance)
+    assert(!overflow, "Invalid index - operation overflowed")
+    return result
+  }
+
+  @inlinable
+  internal func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
+    let (l, overflow) = limit.subtractingReportingOverflow(i)
+    assert(!overflow, "Invalid index - operation overflowed")
+    if distance > 0 ? l >= 0 && l < distance : l <= 0 && distance < l {
+      return nil
+    }
+    return index(i, offsetBy: distance)
+  }
+
+  @inlinable
+  internal func formIndex(after i: inout Index) {
+    let overflow: Bool
+    (i, overflow) = i.addingReportingOverflow(1)
+    assert(!overflow, "Invalid index - operation overflowed")
+  }
+
+  @inlinable
+  internal func formIndex(before i: inout Index) {
+    let overflow: Bool
+    (i, overflow) = i.subtractingReportingOverflow(1)
+    assert(!overflow, "Invalid index - operation overflowed")
+  }
+
+  @inlinable
+  internal func formIndex(_ i: inout Index, offsetBy distance: Int) {
+    let overflow: Bool
+    (i, overflow) = i.addingReportingOverflow(distance)
+    assert(!overflow, "Invalid index - operation overflowed")
+  }
+
+  @inlinable
+  internal func distance(from i: Index, to j: Index) -> Int {
+    let (result, overflow) = j.subtractingReportingOverflow(i)
+    assert(!overflow, "Invalid index - operation overflowed")
+    return result
+  }
+
+  @inlinable
+  internal subscript(i: Index) -> Element {
+    precondition(i >= startIndex && i < endIndex, "Index out of bounds")
+    return locations.withUnsafeBufferPointer { locationsPtr in
+      values.withUnsafeBufferPointer { valuesPtr in
+        (locationsPtr[i], valuesPtr[i])
+      }
+    }
+  }
+}
+
+extension SegmentedLine.BreakpointStorage {
+
+  @inlinable
+  internal subscript(valueAt i: Index) -> Value {
+    get {
+      values[i]
+    }
+    _modify {
+      yield &values[i]
+    }
+    set {
+      values[i] = newValue
+    }
+  }
+
+  @inlinable
+  internal mutating func insert(_ newElement: Element, at index: Index) {
+    locations.insert(newElement.location, at: index)
+    values.insert(newElement.value, at: index)
+  }
+
+  @inlinable
+  internal mutating func append(_ newElement: Element) {
+    locations.append(newElement.location)
+    values.append(newElement.value)
+  }
+
+  @inlinable
+  internal mutating func removeSubrange(_ bounds: Range<Index>) {
+    locations.removeSubrange(bounds)
+    values.removeSubrange(bounds)
+    precondition(!locations.isEmpty, "Removed all breakpoints")
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Segments View
+// --------------------------------------------
+
+
+extension SegmentedLine {
+
+  /// The segments of this line.
+  ///
+  /// A `SegmentedLine` divides its bounds in to segments. Each segment starts where its predecessor ends,
+  /// with no gaps, so that every value within the bounds belongs to a segment.
+  /// Each segment has an associated value.
   ///
   /// ```swift
   /// var line = SegmentedLine<Int, String?>(bounds: 0..<100, value: nil)
   ///
-  /// line.set(0..<20,  to: "medium")
-  /// line.set(0..<5,   to: "small")
+  /// for (range, value) in line.segments {
+  ///   print(range, value)
+  ///   // Prints:
+  ///   // 0..<100 nil
+  /// }
+  ///
+  /// line.set(0..<10,  to: "small")
+  /// line.set(5..<20,  to: "medium")
   /// line.set(10..<60, to: "large")
   ///
   /// for (range, value) in line.segments {
   ///   print(range, value)
   ///   // Prints:
-  ///   // 0..<5    small
-  ///   // 5..<10   medium
-  ///   // 10..<60  large
+  ///   // 0..<5    "small"
+  ///   // 5..<10   "medium"
+  ///   // 10..<60  "large"
   ///   // 60..<100 nil
   /// }
   /// ```
   ///
-  /// There are no gaps between segments - each segment starts where its predecessor ends.
-  /// Every `SegmentedLine` begins with at least one segment, assigning a value to its entire ``bounds``.
-  ///
   /// Segments are created as needed when values are assigned or modified. Consecutive segments with the same value
-  /// are _not_ automatically merged (there is not even any requirement that values are `Equatable`),
-  /// but they can be merged explicitly using the ``combineSegments(while:)`` function.
+  /// are _not_ merged automatically, but can be merged manually using the ``combineSegments(while:)`` function.
+  ///
+  /// The segment containing a location can be found by using the ``Segments-swift.struct/index(of:)`` function.
   ///
   @inlinable
   public var segments: Segments {
-    Segments(_line: self)
+    Segments(self)
   }
 
   public struct Segments {
@@ -181,7 +339,7 @@ extension SegmentedLine {
     internal var _line: SegmentedLine
 
     @inlinable
-    internal init(_line: SegmentedLine) {
+    internal init(_ _line: SegmentedLine) {
       self._line = _line
     }
   }
@@ -191,102 +349,131 @@ extension SegmentedLine.Segments: RandomAccessCollection {
 
   public struct Index: Comparable {
 
-    /// An index in to the line's `_data` Array.
     @usableFromInline
-    internal var _breakPointIndex: Int
+    internal var _breakpointIndex: SegmentedLine.BreakpointStorage.Index
 
     @inlinable
-    internal init(_breakPointIndex: Int) {
-      self._breakPointIndex = _breakPointIndex
+    internal init(_ _breakpointsIndex: SegmentedLine.BreakpointStorage.Index) {
+      self._breakpointIndex = _breakpointsIndex
     }
 
     @inlinable
     public static func < (lhs: Self, rhs: Self) -> Bool {
-      lhs._breakPointIndex < rhs._breakPointIndex
+      lhs._breakpointIndex < rhs._breakpointIndex
     }
 
     @inlinable
     public static func == (lhs: Self, rhs: Self) -> Bool {
-      lhs._breakPointIndex == rhs._breakPointIndex
+      lhs._breakpointIndex == rhs._breakpointIndex
     }
   }
 
   @inlinable
   public var startIndex: Index {
-    Index(_breakPointIndex: _line._data.startIndex)
+    Index(_line._breakpoints.startIndex)
   }
 
   @inlinable
   public var endIndex: Index {
-    Index(_breakPointIndex: _line._data.endIndex)
+    Index(_line._breakpoints.endIndex)
   }
 
   @inlinable
   public var count: Int {
-    _line._data.count
+    _line._breakpoints.count
   }
 
   @inlinable
   public var isEmpty: Bool {
-    false
+    _line._breakpoints.isEmpty
   }
 
   @inlinable
   public func index(after i: Index) -> Index {
-    let (result, overflow) = i._breakPointIndex.addingReportingOverflow(1)
-    assert(!overflow, "Invalid index - encountered overflow in indexing operation")
-    return Index(_breakPointIndex: result)
+    Index(_line._breakpoints.index(after: i._breakpointIndex))
   }
 
   @inlinable
   public func index(before i: Index) -> Index {
-    let (result, overflow) = i._breakPointIndex.subtractingReportingOverflow(1)
-    assert(!overflow, "Invalid index - encountered overflow in indexing operation")
-    return Index(_breakPointIndex: result)
+    Index(_line._breakpoints.index(before: i._breakpointIndex))
   }
 
   @inlinable
   public func index(_ i: Index, offsetBy distance: Int) -> Index {
-    let (result, overflow) = i._breakPointIndex.addingReportingOverflow(distance)
-    assert(!overflow, "Invalid index - encountered overflow in indexing operation")
-    return Index(_breakPointIndex: result)
+    Index(_line._breakpoints.index(i._breakpointIndex, offsetBy: distance))
+  }
+
+  @inlinable
+  public func index(_ i: Index, offsetBy distance: Int, limitedBy limit: Index) -> Index? {
+    _line._breakpoints.index(i._breakpointIndex, offsetBy: distance, limitedBy: limit._breakpointIndex)
+      .map { Index($0) }
   }
 
   @inlinable
   public func formIndex(after i: inout Index) {
-    let overflow: Bool
-    (i._breakPointIndex, overflow) = i._breakPointIndex.addingReportingOverflow(1)
-    assert(!overflow, "Invalid index - encountered overflow in indexing operation")
+    _line._breakpoints.formIndex(after: &i._breakpointIndex)
   }
 
   @inlinable
   public func formIndex(before i: inout Index) {
-    let overflow: Bool
-    (i._breakPointIndex, overflow) = i._breakPointIndex.subtractingReportingOverflow(1)
-    assert(!overflow, "Invalid index - encountered overflow in indexing operation")
+    _line._breakpoints.formIndex(before: &i._breakpointIndex)
   }
 
   @inlinable
   public func formIndex(_ i: inout Index, offsetBy distance: Int) {
-    let overflow: Bool
-    (i._breakPointIndex, overflow) = i._breakPointIndex.subtractingReportingOverflow(distance)
-    assert(!overflow, "Invalid index - encountered overflow in indexing operation")
+    _line._breakpoints.formIndex(&i._breakpointIndex, offsetBy: distance)
   }
 
   @inlinable
   public func distance(from i: Index, to j: Index) -> Int {
-    let (result, overflow) = j._breakPointIndex.subtractingReportingOverflow(i._breakPointIndex)
-    assert(!overflow, "Invalid index - encountered overflow in indexing operation")
-    return result
+    _line._breakpoints.distance(from: i._breakpointIndex, to: j._breakpointIndex)
   }
 
   @inlinable
   public subscript(i: Index) -> (range: Range<Bound>, value: Value) {
-    let (start, value) = _line._data[i._breakPointIndex]
-    let valueEndIndex = index(after: i)._breakPointIndex
-    let end = (valueEndIndex < _line._data.endIndex) ? _line._data[valueEndIndex].location : _line._upperBound
+    let (start, value) = _line._breakpoints[i._breakpointIndex]
+    let nextBreakIndex = index(after: i)._breakpointIndex
+    let end =
+      (nextBreakIndex < _line._breakpoints.endIndex)
+      ? _line._breakpoints.locations[nextBreakIndex]
+      : _line._upperBound
     assert(start < end, "We should never have empty segments")
     return (range: Range(uncheckedBounds: (start, end)), value: value)
+  }
+}
+
+extension SegmentedLine.Segments {
+
+  /// The index of the segment containing the given location.
+  ///
+  /// The location must be within the line's bounds.
+  ///
+  /// ```swift
+  /// var line = SegmentedLine(bounds: 0..<50, value: 42)
+  /// line.set(10..<20, to: 99)
+  /// line.set(30..<50, to: 1024)
+  /// print(line)
+  /// // ┬
+  /// // ├ [0..<10]: 42
+  /// // ├ [10..<20]: 99
+  /// // ├ [20..<30]: 42
+  /// // ├ [30..<50]: 1024
+  /// // ┴
+  ///
+  /// let i = line.segments.index(of: 35)
+  /// print(line.segments[i])  // (range: 30..<50, value: 1024)
+  /// ```
+  ///
+  /// - complexity: O(log *n*)
+  ///
+  @inlinable
+  public func index(of location: Bound) -> Index {
+    _line.boundsCheck(location)
+    var idx = _line._breakpoints.locations._codepointdatabase_partitionedIndex { $0 < location }
+    if idx == _line._breakpoints.endIndex || _line._breakpoints.locations[idx] != location {
+      _line._breakpoints.formIndex(before: &idx)
+    }
+    return Index(idx)
   }
 }
 
@@ -296,45 +483,124 @@ extension SegmentedLine.Segments: RandomAccessCollection {
 // --------------------------------------------
 
 
-extension SegmentedLine: CustomStringConvertible {
-
-  @inlinable
-  public var description: String {
-    segments.reduce(into: "") { partial, segment in
-      partial += "| [\(segment.range)]: \(segment.value) "
-    } + "|"
-  }
-}
-
 extension SegmentedLine: Equatable where Value: Equatable {
 
   @inlinable
   public static func == (lhs: Self, rhs: Self) -> Bool {
-    guard lhs._upperBound == rhs._upperBound else { return false }
-    // Unfortunately, tuples are not Equatable so we need to write our own Array.==
-    return lhs._data.withUnsafeBufferPointer { lhsBuffer in
-      rhs._data.withUnsafeBufferPointer { rhsBuffer in
-        guard lhsBuffer.count == rhsBuffer.count else { return false }
-        if lhsBuffer.baseAddress == rhsBuffer.baseAddress { return true }
-        return lhsBuffer.elementsEqual(rhsBuffer, by: { $0.location == $1.location && $0.value == $1.value })
-      }
-    }
+    lhs._upperBound == rhs._upperBound
+      && lhs._breakpoints.locations == rhs._breakpoints.locations
+      && lhs._breakpoints.values == rhs._breakpoints.values
   }
 }
 
-// TODO: Hashable, Codable, etc
+extension SegmentedLine: Hashable where Bound: Hashable, Value: Hashable {
 
-//#if swift(>=5.5) && canImport(_Concurrency)
-//  extension SegmentedLine: Sendable where Bound: Sendable, Value: Sendable {}
-//#endif
+  @inlinable
+  public func hash(into hasher: inout Hasher) {
+    hasher.combine(_upperBound)
+    hasher.combine(_breakpoints.locations)
+    hasher.combine(_breakpoints.values)
+  }
+}
+
+extension SegmentedLine: CustomStringConvertible {
+
+  @inlinable
+  public var description: String {
+    guard segments.count > 1 else {
+      let singleSegment = segments.first!
+      return "[\(singleSegment.range)]: \(singleSegment.value)"
+    }
+    return segments.reduce(into: "┬\n") { partial, segment in
+      partial += "├ [\(segment.range)]: \(segment.value)\n"
+    } + "┴"
+  }
+}
+
+#if swift(>=5.5) && canImport(_Concurrency)
+
+  extension SegmentedLine: Sendable where Bound: Sendable, Value: Sendable {}
+  extension SegmentedLine.BreakpointStorage: Sendable where Bound: Sendable, Value: Sendable {}
+  extension SegmentedLine.Segments: Sendable where Bound: Sendable, Value: Sendable {}
+
+#endif
 
 
 // --------------------------------------------
-// MARK: - Get, GetAll (TODO)
+// MARK: - Bounds
 // --------------------------------------------
 
 
-// TODO: Add 'get' (single location and range variants) -- and/or add APIs to .segments?
+extension SegmentedLine {
+
+  /// The bounds of this space.
+  ///
+  /// All locations within these bounds have an assigned value.
+  ///
+  @inlinable
+  public var bounds: Range<Bound> {
+    Range(uncheckedBounds: (_breakpoints.locations[0], _upperBound))
+  }
+
+  /// Ensures the given location is within this line's ``bounds``.
+  ///
+  /// If the location is not within the line's bounds, the program terminates.
+  /// This function should only be used for diagnostics, not memory safety.
+  ///
+  @inlinable
+  internal func boundsCheck(_ location: Bound) {
+    precondition(bounds.lowerBound <= location, "\(location) is out of bounds. Valid bounds are \(bounds)")
+    precondition(bounds.upperBound > location, "\(location) is out of bounds. Valid bounds are \(bounds)")
+  }
+
+  /// Ensures the given range is within this line's ``bounds``.
+  ///
+  /// If the range is not within the line's bounds, the program terminates.
+  /// This function should only be used for diagnostics, not memory safety.
+  ///
+  @inlinable
+  internal func boundsCheck(_ range: Range<Bound>) {
+    precondition(bounds.lowerBound <= range.lowerBound, "\(range) is out of bounds. Valid bounds are \(bounds)")
+    precondition(bounds.upperBound >= range.upperBound, "\(range) is out of bounds. Valid bounds are \(bounds)")
+  }
+}
+
+
+// --------------------------------------------
+// MARK: - Get
+// --------------------------------------------
+
+
+extension SegmentedLine {
+
+  /// The value assigned to a given location.
+  ///
+  /// The location must be within the line's ``bounds``.
+  ///
+  /// ```swift
+  /// var line = SegmentedLine(bounds: 0..<50, value: 42)
+  /// line.set(10..<20, to: 99)
+  /// line.set(30..<50, to: 1024)
+  /// print(line)
+  /// // ┬
+  /// // ├ [0..<10]: 42
+  /// // ├ [10..<20]: 99
+  /// // ├ [20..<30]: 42
+  /// // ├ [30..<50]: 1024
+  /// // ┴
+  ///
+  /// line[5]  // 42
+  /// line[12] // 99
+  /// line[35] // 1024
+  /// ```
+  ///
+  /// - complexity: O(log *n*), where *n* is the number of segments in this line.
+  ///
+  @inlinable
+  public subscript(_ location: Bound) -> Value {
+    _breakpoints.values[segments.index(of: location)._breakpointIndex]
+  }
+}
 
 
 // --------------------------------------------
@@ -344,104 +610,86 @@ extension SegmentedLine: Equatable where Value: Equatable {
 
 extension SegmentedLine {
 
-  @inlinable
-  internal func _boundsCheck(_ range: Range<Bound>) {
-    precondition(self._lowerBound <= range.lowerBound, "\(range) is out of bounds. Valid bounds are \(self.bounds)")
-    precondition(self._upperBound >= range.upperBound, "\(range) is out of bounds. Valid bounds are \(self.bounds)")
-  }
-
-  /// Ensures that the line's `_data` array contains a breakPoint at the given location.
+  /// Ensures that the line's `_breakpoints` contains a breakpoint at the given location.
+  /// The location is assumed to be within the line's bounds.
   ///
-  /// - returns: The index of the breakPoint for the given location, and a flag marking
-  ///            whether was inserted or existed before this function was called.
+  /// This operation does not change the values assigned to any locations.
+  ///
+  /// - returns: The index of the breakpoint which begins at the given location.
   ///
   @inlinable
-  internal mutating func _ensureSegmentBreak(at location: Bound) -> (Array<BreakPoint>.Index, inserted: Bool) {
+  internal mutating func _ensureSegmentBreak(at location: Bound) -> BreakpointStorage.Index {
 
-    assert(location < self._upperBound, "location is not in bounds")
-    if location == self.bounds.lowerBound {
-      return (_data.startIndex, inserted: false)
-    }
+    guard location > bounds.lowerBound else { return _breakpoints.startIndex }
 
-    // TODO: Limit search.
-    let idx = _data._codepointdatabase_partitionedIndex { $0.location < location }
-    if idx == _data.endIndex || _data[idx].location != location {
-      let valueAtLocation = _data[idx - 1].value
-      _data.insert((location: location, value: valueAtLocation), at: idx)
-      return (idx, inserted: true)
-    }
-    return (idx, inserted: false)
+    let containingSegment = segments.index(of: location)._breakpointIndex
+    guard _breakpoints.locations[containingSegment] != location else { return containingSegment }
+
+    let newBreakpointLocation = _breakpoints.index(after: containingSegment)
+    _breakpoints.insert((location, _breakpoints.values[containingSegment]), at: newBreakpointLocation)
+    return newBreakpointLocation
   }
 
-  /// Ensures that the line's `_data` array contains breakPoints for the given range's `upperBound` and `lowerBound`.
+  /// Ensures that the line's `_breakpoints` contains breakpoints for the given range's `lowerBound` and `upperBound`.
+  /// Both locations are assumed to be within the line's bounds.
   ///
-  /// - returns: A range of breakPoint indices. The lowerBound of this range is the index of a breakPoint
-  ///            whose location is the lowerBound of the given range. Similarly, the upperBound of the range
-  ///            refers to a breakPoint for the given range's upperBound.
+  /// This operation does not change the values assigned to any locations.
+  ///
+  /// - returns: A range of breakpoint indices.
+  ///            The lowerBound is the index of the breakpoint which begins at the lowerBound of the given range.
+  ///            The upperBound is either `endIndex` or the index of the breakpoint which begins at the upperBound
+  ///            of the given range.
   ///            If the given range was empty, the result is `nil`.
   ///
   @inlinable
-  internal mutating func _ensureSegmentBreaks(for boundsToSplit: Range<Bound>) -> Range<Array<BreakPoint>.Index>? {
+  internal mutating func _ensureSegmentBreaks(for boundsToSplit: Range<Bound>) -> Range<BreakpointStorage.Index>? {
 
-    _boundsCheck(boundsToSplit)
     guard !boundsToSplit.isEmpty else { return nil }
 
-    // Ensure there is a break to preserve values >= 'upperBound'.
+    // TODO: Limit search range when finding upperBoundBreakpoint - we know the break will be >lowerBoundBreakpoint.
+    let lowerBoundBreakpoint = _ensureSegmentBreak(at: boundsToSplit.lowerBound)
+    let upperBoundBreakpoint =
+      (boundsToSplit.upperBound < bounds.upperBound)
+      ? _ensureSegmentBreak(at: boundsToSplit.upperBound)
+      : _breakpoints.endIndex
 
-    var dataIndexForUpperBound: Array<BreakPoint>.Index
-
-    if boundsToSplit.upperBound == bounds.upperBound {
-      dataIndexForUpperBound = _data.endIndex
-    } else {
-      let (idx, _) = _ensureSegmentBreak(at: boundsToSplit.upperBound)
-      assert(idx > _data.startIndex, "A non-empty in-bounds range cannot end at startIndex")
-      dataIndexForUpperBound = idx
-    }
-
-    // Ensure there is a break to apply the new value at locations >= 'lowerBound'.
-    // If we insert anything, we must increment 'endOfOldData' to keep it pointing to the correct element.
-
-    let dataIndexForLowerBound: Array<BreakPoint>.Index
-
-    let startDataWasInserted: Bool
-    (dataIndexForLowerBound, startDataWasInserted) = _ensureSegmentBreak(at: boundsToSplit.lowerBound)
-    if startDataWasInserted { dataIndexForUpperBound += 1 }
-
-    assert(dataIndexForLowerBound < dataIndexForUpperBound)  // Ensure not empty.
-    return dataIndexForLowerBound..<dataIndexForUpperBound
+    assert(lowerBoundBreakpoint < _breakpoints.endIndex, "lowerBound is in-bounds and so must have a segment")
+    assert(lowerBoundBreakpoint < upperBoundBreakpoint, "must have at least one segment for a non-empty range")
+    return lowerBoundBreakpoint..<upperBoundBreakpoint
   }
 
-  /// Assigns a single value to all locations in the given region.
+  /// Assigns a value to all locations in the given region.
   ///
-  /// Any segments which intersect the region will be split, preserving the values of locations
-  /// outside the region. Locations inside the region will be covered by a single segment,
-  /// containing the given value.
+  /// When this operation completes, there will be a single segment covering the given region.
+  /// Segments which previously intersected the given region will be split
+  /// in order to preserve values assigned outside the region.
   ///
   /// ```swift
   /// var line = SegmentedLine<Int, String?>(bounds: 0..<100, value: nil)
   ///
-  /// // After setting values <5 to "small" and values >10 to "large",
-  /// // the gap is left with its previous value, "medium".
-  ///
-  /// line.set(0..<20,  to: "medium")
-  /// line.set(0..<5,   to: "small")
+  /// line.set(0..<10,  to: "small")
+  /// line.set(5..<20,  to: "medium")
   /// line.set(10..<60, to: "large")
   /// print(line)
-  /// // | [0..<5]: "small" | [5..<10]: "medium" | [10..<60]: "large" | [60..<100]: nil |
+  /// // ┬
+  /// // ├ [0..<5]: "small"
+  /// // ├ [5..<10]: "medium"
+  /// // ├ [10..<60]: "large"
+  /// // ├ [60..<100]: nil
+  /// // ┴
   ///
-  /// // After setting, there will be a single span covering the given region.
+  /// // After setting, there will be a single segment covering the given region.
   ///
   /// line.set(5..<100, to: "not small")
   /// print(line)
-  /// // | [0..<5]: "small" | [5..<100]: "not small" |
+  /// // ┬
+  /// // ├ [0..<5]: "small"
+  /// // ├ [5..<100]: "not small"
+  /// // ┴
   /// ```
   ///
   /// `boundsToReplace` must be entirely within the ``bounds`` of this space.
-  /// Assigning a value to an empty range will not modify any segments.
-  ///
-  /// Every location within the bounds of this space is assigned a value.
-  /// Every `SegmentedLine` begins with at least one segment, assigning a value to its entire bounds
-  /// (in the above example, the value's type is an `Optional` and the initial value is `nil`).
+  /// If `boundsToReplace` is empty, this method is a no-op.
   ///
   /// - parameters:
   ///   - boundsToReplace: The locations which should be assigned the new value.
@@ -451,24 +699,21 @@ extension SegmentedLine {
   @inlinable
   public mutating func set(_ boundsToReplace: Range<Bound>, to newValue: Value) {
 
-    guard let breakPointIndices = _ensureSegmentBreaks(for: boundsToReplace) else {
-      return  // Range is empty.
-    }
+    boundsCheck(boundsToReplace)
+    guard let breakPointIndices = _ensureSegmentBreaks(for: boundsToReplace) else { return /* Empty range */ }
+    assert(_breakpoints[breakPointIndices.lowerBound].location == boundsToReplace.lowerBound)
 
-    assert(_data[breakPointIndices.lowerBound].location == boundsToReplace.lowerBound)
+    // To apply: ensure a single breakpoint covers this range, then set the value for that breakpoint.
 
-    // To apply: assign the new value at the first breakPoint (lowerBound),
-    // then remove all other breakPoints in the range.
-
-    _data[breakPointIndices.lowerBound].value = newValue
-    _data.removeSubrange(breakPointIndices.lowerBound + 1..<breakPointIndices.upperBound)
+    _breakpoints.removeSubrange(_breakpoints.index(after: breakPointIndices.lowerBound)..<breakPointIndices.upperBound)
+    _breakpoints[valueAt: breakPointIndices.lowerBound] = newValue
   }
 
-  /// Modifies the values assigned to the given region.
+  /// Modifies the values assigned to locations in the given region.
   ///
-  /// Any segments which intersect the region will be split, preserving the values of locations
-  /// outside the region. Locations inside the region will be visited by the given closure, which may
-  /// assign a new value derived from the existing value.
+  /// Segments which intersect the given region will be split in order to preserve values
+  /// outside the region. The given closure will then be invoked for all segments inside the region,
+  /// and can modify their values.
   ///
   /// ```swift
   /// let string = "Bob is feeling great"
@@ -482,10 +727,9 @@ extension SegmentedLine {
   /// )
   ///
   /// // Set each word to a different color.
-  /// // Use 'modify' to append the attribute, but only for the region
-  /// // we're modifying.
+  /// // Use 'modify' to append the attribute for the region we're modifying.
   ///
-  /// for word: Substring in string.split(separator: " ") {
+  /// for word in string.split(separator: " ") {
   ///   tags.modify(word.startIndex..<word.endIndex) { attributes in
   ///     attributes.append(Color.random())
   ///   }
@@ -509,7 +753,7 @@ extension SegmentedLine {
   /// ```
   ///
   /// `boundsToModify` must be entirely within the ``bounds`` of this space.
-  /// Modifying an empty range will not modify any segments, and may not invoke the closure at all.
+  /// If `boundsToModify` is empty, this method is a no-op.
   ///
   /// - parameters:
   ///   - boundsToModify: The locations whose values should be modified.
@@ -519,17 +763,13 @@ extension SegmentedLine {
   @inlinable
   public mutating func modify(_ boundsToModify: Range<Bound>, _ body: (inout Value) -> Void) {
 
-    guard let breakPointIndices = _ensureSegmentBreaks(for: boundsToModify) else {
-      return  // Range is empty.
-    }
-
-    assert(_data[breakPointIndices.lowerBound].location == boundsToModify.lowerBound)
+    boundsCheck(boundsToModify)
+    guard let breakPointIndices = _ensureSegmentBreaks(for: boundsToModify) else { return /* Empty range */ }
+    assert(_breakpoints[breakPointIndices.lowerBound].location == boundsToModify.lowerBound)
 
     // To apply: visit the values of all segments in the range.
 
-    for i in breakPointIndices {
-      body(&_data[i].value)
-    }
+    for i in breakPointIndices { body(&_breakpoints[valueAt: i]) }
   }
 }
 
@@ -541,9 +781,9 @@ extension SegmentedLine {
 
 extension SegmentedLine {
 
-  /// Returns a new `SegmentedLine`, created by transforming this line's values using the given closure.
+  /// Returns a new `SegmentedLine` created by transforming this line's values using the given closure.
   ///
-  /// The result will have the same bounds and number of segments as this line, at the same locations.
+  /// The result will have the same bounds as this line, and the same number of segments at the same locations.
   ///
   /// This function can be particularly effective at simplifying lines with lots of segments, as by mapping
   /// complex values to simplified ones (for example, mapping to an `enum` with fewer cases), we can discard
@@ -559,9 +799,14 @@ extension SegmentedLine {
   /// }
   /// let complexLine: SegmentedLine<Int, ComplexData> = // ...
   /// print(complexLine)
-  /// // | [0..<2]: categoryA | [2..<4]: categoryB | [4..<12]: categoryC | ...
+  /// // ┬
+  /// // ├ [0..<2]: categoryA
+  /// // ├ [2..<4]: categoryB
+  /// // ├ [4..<12]: categoryC
+  /// // ├ ...
+  /// // ┴
   ///
-  /// // 1️⃣ Perhaps we can map these to a smaller number of states.
+  /// // 1️⃣ We can map these to a smaller number of states.
   ///
   /// enum SimplifiedData {
   ///   case valid, invalid
@@ -570,69 +815,97 @@ extension SegmentedLine {
   ///   SimplifiedData(validating: complex)
   /// }
   /// print(simplifiedLine)
-  /// // | [0..<2]: valid | [2..<4]: valid | [4..<12]: valid | ...
+  /// // ┬
+  /// // ├ [0..<2]: valid
+  /// // ├ [2..<4]: valid
+  /// // ├ [4..<12]: valid
+  /// // ├ ...
+  /// // ┴
   ///
   /// // 2️⃣ Notice that we have lots of segments for boundaries which
   /// //    which are no longer important. 'combineSegments' can clean them up.
   ///
   /// simplifiedLine.combineSegments()
   /// print(simplifiedLine)
-  /// // | [0..<2000]: valid | [2000..<2024]: invalid | [2024..<2056]: valid | ...
+  /// // ┬
+  /// // ├ [0..<2000]: valid
+  /// // ├ [2000..<2024]: invalid
+  /// // ├ [2024..<2056]: valid
+  /// // ├ ...
+  /// // ┴
   /// ```
   ///
   @inlinable
   public func mapValues<T>(_ transform: (Value) throws -> T) rethrows -> SegmentedLine<Bound, T> {
     SegmentedLine<Bound, T>(
-      _upperBound: _upperBound,
-      _data: try _data.map { ($0.0, try transform($0.1)) }
+      _breakpoints: .init(locations: _breakpoints.locations, values: try _breakpoints.values.map(transform)),
+      _upperBound: _upperBound
     )
   }
 
-  /// Merges segments according to the given closure.
+  /// Merges strings of adjacent segments.
   ///
-  /// This function implements a left-fold, similar to Collection's `reduce`, except that the folding closure
-  /// can decide to preserve a segment break and reset the fold operation.
+  /// This function implements a kind of left-fold, similar to `Collection.reduce`,
+  /// with the key difference that the closure can decide _not_ to combine two elements
+  /// and instead to restart the fold operation.
   ///
-  /// The closure is invoked with two segments as arguments - an `accumulator`, which has a mutable value,
-  /// and `next`, which is its successor on this line. Given these segments, the closure may decide:
+  /// When the closure is invoked, two segments are provided to it as parameters -
+  /// an `accumulator` with a mutable value, and `next`, which is its successor on this line.
+  /// Given these two segments, the closure decides either:
   ///
-  /// - To combine `next` and `accumulator`.
+  /// - To merge `next` in to `accumulator`.
   ///
-  ///   To fold segments, the closure performs any required adjustments to merge `next.value`
-  ///   in to `accumulator.value`, and returns `true`. The segment `next` will be discarded,
-  ///   and the accumulator's range will expand up to `next.range.upperBound`.
+  ///   To merge segments, the closure performs any required adjustments to merge `next.value`
+  ///   in to `accumulator.value` and returns `true`.
   ///
-  ///   Folding continues with the same accumulator for as long as the closure returns `true`;
-  ///   this process is similar to Collection's `reduce(into:)` function.
+  ///   The segment `next` will automatically be discarded,
+  ///   and the accumulator's range will be expanded to include `next.range`.
+  ///   Folding continues with the same accumulator for as long as the closure returns `true`.
   ///
-  /// - To maintain the segment break.
+  /// - To maintain `next` and `accumulator` as separate sections.
   ///
-  ///   If it is not desirable to combine the segments, the closure may return `false`.
+  ///   If it is not desirable to merge the segments, the closure may return `false`.
   ///   This finalizes the current accumulator, and restarts folding with `next` as the new accumulator.
   ///
   @inlinable
   public mutating func combineSegments(
     while shouldMerge: (_ accumulator: inout Segments.Element, _ next: Segments.Element) -> Bool
   ) {
-    var reduced: [BreakPoint] = []
+    // TODO: It would be nice to perform this in-place.
+    // - For locations, we can overwrite values (MutableCollection-style) and chop off the tail at the end.
+    // - For values, it's a little more awkward because we'd want to *move* Value elements in to the accumulator.
+    //   It's possible, but needs to be done carefully.
+
+    var reducedLocations = [Bound]()
+    var reducedValues = [Value]()
+
     var accumulator = segments[segments.startIndex]
-    for next in segments.dropFirst() {
+    var i = segments.index(after: segments.startIndex)
+    while i < segments.endIndex {
+      let next = segments[i]
+
+      // Ignore any modifications the closure makes to the 'range' part of the accumulator.
       let accumulatorStart = accumulator.range.lowerBound
       if shouldMerge(&accumulator, next) {
         accumulator.range = Range(uncheckedBounds: (accumulatorStart, next.range.upperBound))
       } else {
-        reduced.append((accumulatorStart, accumulator.value))
+        reducedLocations.append(accumulatorStart)
+        reducedValues.append(accumulator.value)
         accumulator = next
       }
+
+      segments.formIndex(after: &i)
     }
-    reduced.append((accumulator.range.lowerBound, accumulator.value))
-    self._data = reduced
+
+    reducedLocations.append(accumulator.range.lowerBound)
+    reducedValues.append(accumulator.value)
+    self._breakpoints = BreakpointStorage(locations: reducedLocations, values: reducedValues)
   }
 }
 
 extension SegmentedLine where Value: Equatable {
 
-  /// Merges segments of consecutive equal elements.
+  /// Merges strings of adjacent segments with the same value.
   ///
   /// This function can be particularly effective at simplifying lines with lots of segments, as by mapping
   /// complex values to simplified ones (for example, mapping to an `enum` with fewer cases) using ``mapValues(_:)``,
@@ -648,9 +921,14 @@ extension SegmentedLine where Value: Equatable {
   /// }
   /// let complexLine: SegmentedLine<Int, ComplexData> = // ...
   /// print(complexLine)
-  /// // | [0..<2]: categoryA | [2..<4]: categoryB | [4..<12]: categoryC | ...
+  /// // ┬
+  /// // ├ [0..<2]: categoryA
+  /// // ├ [2..<4]: categoryB
+  /// // ├ [4..<12]: categoryC
+  /// // ├ ...
+  /// // ┴
   ///
-  /// // 1️⃣ Perhaps we can map these to a smaller number of states.
+  /// // 1️⃣ We can map these to a smaller number of states.
   ///
   /// enum SimplifiedData {
   ///   case valid, invalid
@@ -659,14 +937,24 @@ extension SegmentedLine where Value: Equatable {
   ///   SimplifiedData(validating: complex)
   /// }
   /// print(simplifiedLine)
-  /// // | [0..<2]: valid | [2..<4]: valid | [4..<12]: valid | ...
+  /// // ┬
+  /// // ├ [0..<2]: valid
+  /// // ├ [2..<4]: valid
+  /// // ├ [4..<12]: valid
+  /// // ├ ...
+  /// // ┴
   ///
   /// // 2️⃣ Notice that we have lots of segments for boundaries which
   /// //    which are no longer important. 'combineSegments' can clean them up.
   ///
   /// simplifiedLine.combineSegments()
   /// print(simplifiedLine)
-  /// // | [0..<2000]: valid | [2000..<2024]: invalid | [2024..<2056]: valid | ...
+  /// // ┬
+  /// // ├ [0..<2000]: valid
+  /// // ├ [2000..<2024]: invalid
+  /// // ├ [2024..<2056]: valid
+  /// // ├ ...
+  /// // ┴
   /// ```
   ///
   @inlinable
