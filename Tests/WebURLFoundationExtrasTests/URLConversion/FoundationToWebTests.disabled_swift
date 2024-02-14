@@ -1,3 +1,6 @@
+// These tests temporarily disabled.
+// https://github.com/karwa/swift-url/issues/184
+
 // Copyright The swift-url Contributors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
