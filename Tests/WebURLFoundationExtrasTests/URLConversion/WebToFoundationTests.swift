@@ -303,43 +303,45 @@ extension WebToFoundationTests {
     }
 
     // Complex URL with percent encoding.
-    test: do {
-      // 1. Build up a complex URL via the WebURL API.
-      var url = WebURL("http://example.com/")!
-      url.pathComponents += ["p1[%]", "^_^", "🦆", "p4|R|G|B|50%"]
-      url.pathComponents.replaceSubrange(
-        url.pathComponents.startIndex..<url.pathComponents.startIndex,
-        withPercentEncodedComponents: ["p0[%]"]
-      )
-      url.formParams.set("src[link.href]", to: "http://foobar.net/baz?qux#qaz")
-      url.formParams.client = "📱"
-      XCTAssertEqual(
-        url.serialized(),
-        "http://example.com/p0[%]/p1[%25]/^_^/%F0%9F%A6%86/p4|R|G|B|50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
-      )
-      // 2. Convert to Foundation.
-      guard let converted = URL(url) else {
-        XCTFail("Failed to convert: \(url)")
-        break test
-      }
-      let encodedOriginal = url.encodedForFoundation
-      XCTAssertEquivalentURLs(encodedOriginal, converted)
-      XCTAssertEqual(
-        converted.absoluteString,
-        "http://example.com/p0%5B%25%5D/p1%5B%25%5D/%5E_%5E/%F0%9F%A6%86/p4%7CR%7CG%7CB%7C50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
-      )
-      // 3. Check that it round-trips and the API behaves as we expect.
-      guard let roundtrip = WebURL(converted) else {
-        XCTFail("Failed to roundtrip: \(converted)")
-        break test
-      }
-      XCTAssertEqual(Array(roundtrip.pathComponents), ["p0[%]", "p1[%]", "^_^", "🦆", "p4|R|G|B|50%"])
-      XCTAssertEqual(roundtrip.formParams.get("src[link.href]"), "http://foobar.net/baz?qux#qaz")
-      XCTAssertEqual(roundtrip.formParams.client, "📱")
+    #if swift(>=5.7)
+      test: do {
+        // 1. Build up a complex URL via the WebURL API.
+        var url = WebURL("http://example.com/")!
+        url.pathComponents += ["p1[%]", "^_^", "🦆", "p4|R|G|B|50%"]
+        url.pathComponents.replaceSubrange(
+          url.pathComponents.startIndex..<url.pathComponents.startIndex,
+          withPercentEncodedComponents: ["p0[%]"]
+        )
+        url.queryParams["src[link.href]"] = "http://foobar.net/baz?qux#qaz"
+        url.queryParams["client"] = "📱"
+        XCTAssertEqual(
+          url.serialized(),
+          "http://example.com/p0[%]/p1[%25]/^_^/%F0%9F%A6%86/p4|R|G|B|50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
+        )
+        // 2. Convert to Foundation.
+        guard let converted = URL(url) else {
+          XCTFail("Failed to convert: \(url)")
+          break test
+        }
+        let encodedOriginal = url.encodedForFoundation
+        XCTAssertEquivalentURLs(encodedOriginal, converted)
+        XCTAssertEqual(
+          converted.absoluteString,
+          "http://example.com/p0%5B%25%5D/p1%5B%25%5D/%5E_%5E/%F0%9F%A6%86/p4%7CR%7CG%7CB%7C50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
+        )
+        // 3. Check that it round-trips and the API behaves as we expect.
+        guard let roundtrip = WebURL(converted) else {
+          XCTFail("Failed to roundtrip: \(converted)")
+          break test
+        }
+        XCTAssertEqual(Array(roundtrip.pathComponents), ["p0[%]", "p1[%]", "^_^", "🦆", "p4|R|G|B|50%"])
+        XCTAssertEqual(roundtrip.queryParams["src[link.href]"], "http://foobar.net/baz?qux#qaz")
+        XCTAssertEqual(roundtrip.queryParams["client"], "📱")
 
-      XCTAssertEqual(roundtrip.serialized(), encodedOriginal.serialized())
-      XCTAssertTrue(roundtrip._spis._describesSameStructure(as: encodedOriginal))
-    }
+        XCTAssertEqual(roundtrip.serialized(), encodedOriginal.serialized())
+        XCTAssertTrue(roundtrip._spis._describesSameStructure(as: encodedOriginal))
+      }
+    #endif
   }
 
   func testCustomURLSchemes() {
@@ -376,43 +378,45 @@ extension WebToFoundationTests {
     }
 
     // Complex URL with percent encoding.
-    test: do {
-      // 1. Build up a complex URL via the WebURL API.
-      var url = WebURL("scheme://example.com/")!
-      url.pathComponents += ["p1[%]", "^_^", "🦆", "p4|R|G|B|50%"]
-      url.pathComponents.replaceSubrange(
-        url.pathComponents.startIndex..<url.pathComponents.startIndex,
-        withPercentEncodedComponents: ["p0[%]"]
-      )
-      url.formParams.set("src[link.href]", to: "http://foobar.net/baz?qux#qaz")
-      url.formParams.client = "📱"
-      XCTAssertEqual(
-        url.serialized(),
-        "scheme://example.com/p0[%]/p1[%25]/^_^/%F0%9F%A6%86/p4|R|G|B|50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
-      )
-      // 2. Convert to Foundation.
-      guard let converted = URL(url) else {
-        XCTFail("Failed to convert: \(url)")
-        break test
-      }
-      let encodedOriginal = url.encodedForFoundation
-      XCTAssertEquivalentURLs(encodedOriginal, converted)
-      XCTAssertEqual(
-        converted.absoluteString,
-        "scheme://example.com/p0%5B%25%5D/p1%5B%25%5D/%5E_%5E/%F0%9F%A6%86/p4%7CR%7CG%7CB%7C50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
-      )
-      // 3. Check that it round-trips and the API behaves as we expect.
-      guard let roundtrip = WebURL(converted) else {
-        XCTFail("Failed to roundtrip: \(converted)")
-        break test
-      }
-      XCTAssertEqual(Array(roundtrip.pathComponents), ["p0[%]", "p1[%]", "^_^", "🦆", "p4|R|G|B|50%"])
-      XCTAssertEqual(roundtrip.formParams.get("src[link.href]"), "http://foobar.net/baz?qux#qaz")
-      XCTAssertEqual(roundtrip.formParams.client, "📱")
+    #if swift(>=5.7)
+      test: do {
+        // 1. Build up a complex URL via the WebURL API.
+        var url = WebURL("scheme://example.com/")!
+        url.pathComponents += ["p1[%]", "^_^", "🦆", "p4|R|G|B|50%"]
+        url.pathComponents.replaceSubrange(
+          url.pathComponents.startIndex..<url.pathComponents.startIndex,
+          withPercentEncodedComponents: ["p0[%]"]
+        )
+        url.queryParams["src[link.href]"] = "http://foobar.net/baz?qux#qaz"
+        url.queryParams["client"] = "📱"
+        XCTAssertEqual(
+          url.serialized(),
+          "scheme://example.com/p0[%]/p1[%25]/^_^/%F0%9F%A6%86/p4|R|G|B|50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
+        )
+        // 2. Convert to Foundation.
+        guard let converted = URL(url) else {
+          XCTFail("Failed to convert: \(url)")
+          break test
+        }
+        let encodedOriginal = url.encodedForFoundation
+        XCTAssertEquivalentURLs(encodedOriginal, converted)
+        XCTAssertEqual(
+          converted.absoluteString,
+          "scheme://example.com/p0%5B%25%5D/p1%5B%25%5D/%5E_%5E/%F0%9F%A6%86/p4%7CR%7CG%7CB%7C50%25?src%5Blink.href%5D=http%3A%2F%2Ffoobar.net%2Fbaz%3Fqux%23qaz&client=%F0%9F%93%B1"
+        )
+        // 3. Check that it round-trips and the API behaves as we expect.
+        guard let roundtrip = WebURL(converted) else {
+          XCTFail("Failed to roundtrip: \(converted)")
+          break test
+        }
+        XCTAssertEqual(Array(roundtrip.pathComponents), ["p0[%]", "p1[%]", "^_^", "🦆", "p4|R|G|B|50%"])
+        XCTAssertEqual(roundtrip.queryParams["src[link.href]"], "http://foobar.net/baz?qux#qaz")
+        XCTAssertEqual(roundtrip.queryParams["client"], "📱")
 
-      XCTAssertEqual(roundtrip.serialized(), encodedOriginal.serialized())
-      XCTAssertTrue(roundtrip._spis._describesSameStructure(as: encodedOriginal))
-    }
+        XCTAssertEqual(roundtrip.serialized(), encodedOriginal.serialized())
+        XCTAssertTrue(roundtrip._spis._describesSameStructure(as: encodedOriginal))
+      }
+    #endif
   }
 
   func testURLWithOpaquePath() {

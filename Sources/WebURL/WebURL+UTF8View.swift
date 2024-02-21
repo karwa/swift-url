@@ -108,6 +108,7 @@ extension WebURL {
   /// - ``WebURL/UTF8View/query``
   /// - ``WebURL/UTF8View/fragment``
   /// - ``WebURL/UTF8View/pathComponent(_:)``
+  /// - ``WebURL/UTF8View/keyValuePair(_:)``
   ///
   /// ### Replacing a URL's Components
   ///
@@ -781,5 +782,10 @@ extension WebURL.UTF8View {
   @inlinable @inline(__always)
   internal subscript(bounds: Range<URLStorage.SizeType>) -> Slice<WebURL.UTF8View> {
     self[bounds.toCodeUnitsIndices()]
+  }
+
+  @inlinable @inline(__always)
+  internal subscript(storageIndex: URLStorage.SizeType) -> Element {
+    self[Int(storageIndex)]
   }
 }

@@ -27,11 +27,23 @@ internal func blackHole<T>(_ x: T) {
 // - Cannot-be-a-base URLs
 // - file: URLs
 
-Benchmark.main([
-  Constructor.HTTP,
-  ComponentSetters,
-  PathComponents,
-  PercentEncoding,
-  FoundationCompat.NSURLToWeb,
-  FoundationCompat.WebToNSURL,
-])
+#if swift(>=5.7)
+  Benchmark.main([
+    Constructor.HTTP,
+    ComponentSetters,
+    PathComponents,
+    PercentEncoding,
+    KeyValuePairs,
+    FoundationCompat.NSURLToWeb,
+    FoundationCompat.WebToNSURL,
+  ])
+#else
+  Benchmark.main([
+    Constructor.HTTP,
+    ComponentSetters,
+    PathComponents,
+    PercentEncoding,
+    FoundationCompat.NSURLToWeb,
+    FoundationCompat.WebToNSURL,
+  ])
+#endif

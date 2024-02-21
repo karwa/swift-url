@@ -667,7 +667,7 @@ extension WebURL {
   /// ```
   ///
   /// > Tip:
-  /// > To read or modify query parameters _within_ the query string, use the ``formParams`` view.
+  /// > To read or modify key-value pairs _within_ the query string, use the ``queryParams`` view.
   ///
   /// When modifying this component, percent-encoding in the new value is preserved.
   /// Additionally, should the value contain any characters that are disallowed in this component,
@@ -685,7 +685,7 @@ extension WebURL {
   ///
   /// ## See Also
   ///
-  /// - ``WebURL/formParams``
+  /// - ``WebURL/queryParams``
   /// - ``WebURL/setQuery(_:)``
   ///
   public var query: String? {
