@@ -18,21 +18,93 @@
 // --------------------------------------------
 
 
-extension UnsafeRawPointer {
+#if swift(<5.9)
+  extension UnsafeRawPointer {
+
+    /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
+    ///
+    /// The memory at this pointer plus offset must be initialized to `T` or another type
+    /// that is layout compatible with `T`. It does not need to be aligned for access to `T`.
+    ///
+    @inlinable @inline(__always)
+    internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
+      assert(_isPOD(T.self))
+      var val: T = 0
+      withUnsafeMutableBytes(of: &val) {
+        $0.copyMemory(from: UnsafeRawBufferPointer(start: self, count: T.bitWidth / 8))
+      }
+      return val
+    }
+  }
+#endif
+
+extension UnsafeBoundsCheckedBufferPointer where Element == UInt8 {
 
   /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
   ///
-  /// The memory at this pointer plus offset must be initialized to `T` or another type that is layout compatible with `T`.
-  /// It does not need to be aligned for access to `T`.
+  /// The memory at this pointer plus offset must be initialized to `T` or another type
+  /// that is layout compatible with `T`. It does not need to be aligned for access to `T`.
   ///
   @inlinable @inline(__always)
-  internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
+  internal func loadUnaligned<T>(
+    fromByteOffset offset: UInt = 0,
+    as: T.Type
+  ) -> T where T: FixedWidthInteger {
+
+    // As far as memory safety is concerned, we only need to check the final byte against endIndex.
+    precondition(_isPOD(T.self))
+    precondition(offset + UInt(MemoryLayout<T>.size) <= endIndex)
+    return loadUnaligned_unchecked(fromByteOffset: offset, as: T.self)
+  }
+
+  /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
+  ///
+  /// The memory at this pointer plus offset must be initialized to `T` or another type
+  /// that is layout compatible with `T`. It does not need to be aligned for access to `T`.
+  ///
+  /// > Important:
+  /// >
+  /// > This function does not bounds-check the load operation in release builds.
+  /// > Callers of this function must perform their own reasoning about bounds-checking
+  /// > to ensure than an out-of-bounds read never occurs.
+  /// >
+  /// > If you need to perform a single unaligned load,
+  /// > use the ``loadUnaligned`` function instead (without the `_unchecked` suffix),
+  /// > as it includes bounds-checking.
+  ///
+  @inlinable @inline(__always)
+  internal func loadUnaligned_unchecked<T>(
+    fromByteOffset offset: UInt = 0, as: T.Type
+  ) -> T where T: FixedWidthInteger {
+
     assert(_isPOD(T.self))
-    var val: T = 0
-    withUnsafeMutableBytes(of: &val) {
-      $0.copyMemory(from: UnsafeRawBufferPointer(start: self, count: T.bitWidth / 8))
+    assert(offset >= startIndex)
+    assert(offset + UInt(MemoryLayout<T>.size) <= endIndex)
+
+    // Given that we may assume the load is in-bounds,
+    // by ruling out zero-sized loads we may infer that `self.count > 0`,
+    // and hence that `self.baseAddress != nil`.
+    //
+    // But this way of handling nil baseAddresses
+    // is more likely to be constant-folded.
+    guard MemoryLayout<T>.size > 0 else {
+      return unsafeBitCast((), to: T.self)
     }
-    return val
+
+    #if swift(>=5.9)
+      return UnsafeRawPointer(self.baseAddress.unsafelyUnwrapped)
+        .loadUnaligned(fromByteOffset: Int(bitPattern: offset), as: T.self)
+    #else
+      var val: T = 0
+      withUnsafeMutableBytes(of: &val) { dest in
+        dest.copyMemory(
+          from: UnsafeRawBufferPointer(
+            start: self.baseAddress.unsafelyUnwrapped + Int(bitPattern: offset),
+            count: MemoryLayout<T>.size
+          ))
+      }
+      return val
+    #endif
   }
 }
 
@@ -464,12 +536,23 @@ extension UnsafeBoundsCheckedBufferPointer: RandomAccessCollection {
   }
 
   @inlinable
-  internal func index(_ i: UInt, offsetBy n: Int, limitedBy limit: UInt) -> UInt? {
-    let l = distance(from: i, to: limit)
-    if n > 0 ? l >= 0 && l < n : l <= 0 && n < l {
-      return nil
+  internal func index(_ i: UInt, offsetBy distance: Int, limitedBy limit: UInt) -> UInt? {
+    // Note that we are taking some liberties here:
+    // If (i, distance, limit) are not in order, Collection requires the limit to have no effect.
+    // We return 'nil' instead.
+    // Details at: https://forums.swift.org/t/allow-index-limitedby-to-return-nil-if-limit-is-invalid/70578
+
+    if distance >= 0 {
+      // All valid 'i' are <= Int.max, so this will not overflow.
+      // An invalid 'i' is allowed to return a nonsense result.
+      let j = i &+ UInt(distance)
+      return j <= limit ? j : nil
+
+    } else {
+      // All valid 'i' are >= 0 and <= Int.max, so this will not underflow.
+      let j = Int(bitPattern: i) &+ distance
+      return j >= limit ? UInt(bitPattern: j) : nil
     }
-    return UInt(bitPattern: Int(bitPattern: i) &+ n)
   }
 
   @inlinable

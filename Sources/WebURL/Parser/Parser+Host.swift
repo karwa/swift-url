@@ -74,7 +74,7 @@ extension ParsedHost {
     let result: Optional<ParsedHost>
     let needsPercentDecoding =
       hostname.withContiguousStorageIfAvailable {
-        $0.boundsChecked.uncheckedFastContains(ASCII.percentSign.codePoint)
+        $0.boundsChecked.fastContains(ASCII.percentSign.codePoint)
       } ?? true
     if needsPercentDecoding {
       result = ParsedHost._parseSpecialHostname(

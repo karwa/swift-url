@@ -37,7 +37,7 @@ extension ASCII {
     if !trimmedSlice.isEmpty {
       let hasInternalNewlinesOrTabs =
         trimmedSlice.withContiguousStorageIfAvailable {
-          $0.boundsChecked.uncheckedFastContainsTabOrCROrLF()
+          $0.boundsChecked.fastContainsTabOrCROrLF()
         } ?? trimmedSlice.contains(where: { isNewlineOrTab($0) })
       if hasInternalNewlinesOrTabs {
         return .left(ASCII.NewlineAndTabFiltered(unchecked: trimmedSlice))

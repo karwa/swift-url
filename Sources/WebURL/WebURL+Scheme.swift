@@ -54,10 +54,10 @@ extension WebURL.SchemeKind {
   @inlinable
   internal init<UTF8Bytes>(parsing schemeContent: UTF8Bytes) where UTF8Bytes: Sequence, UTF8Bytes.Element == UInt8 {
 
-    if let contiguouslyParsed = schemeContent.withContiguousStorageIfAvailable({ buffer -> Self in
-      guard let count = UInt8(exactly: buffer.count), count > 0 else { return .other }
-      return WebURL.SchemeKind(ptr: UnsafeRawPointer(buffer.baseAddress.unsafelyUnwrapped), count: count)
-    }) {
+    func parseContiguous(_ buffer: UnsafeBufferPointer<UInt8>) -> Self {
+      buffer.baseAddress.map { WebURL.SchemeKind(ptr: UnsafeRawPointer($0), count: buffer.count) } ?? .other
+    }
+    if let contiguouslyParsed = schemeContent.withContiguousStorageIfAvailable(parseContiguous) {
       self = contiguouslyParsed
       return
     }
@@ -93,7 +93,7 @@ extension WebURL.SchemeKind {
   // Note: 'count' is a separate parameter because UnsafeRawBufferPointer.count includes a force-unwrap,
   //       which can have a significant performance impact: https://bugs.swift.org/browse/SR-14422
   @inlinable
-  internal init(ptr: UnsafeRawPointer, count: UInt8) {
+  internal init(ptr: UnsafeRawPointer, count: Int) {
     // Setting the 6th bit of each byte (i.e. OR-ing with 00100000) normalizes the code-unit to lowercase ASCII.
     switch count {
     case 2:

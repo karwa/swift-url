@@ -190,7 +190,7 @@ extension SegmentedLineTests {
       var line = SegmentedLine(bounds: 0..<50, value: 42)
       line.set(10..<20, to: 99)
       line.set(30..<50, to: 1024)
-      
+
       // swift-format-ignore
       XCTAssertSegments(line, [
         (0..<10, 42),
