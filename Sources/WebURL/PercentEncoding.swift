@@ -1506,7 +1506,7 @@ public struct NoSubstitutions: SubstitutionMap {
   @inlinable @inline(__always)
   public func _canSkipDecoding(_ source: UnsafeBufferPointer<UInt8>) -> Bool {
     source.count <= _percentDecodingFastPathThreshold
-      && !source.boundsChecked.uncheckedFastContains(ASCII.percentSign.codePoint)
+      && !source.boundsChecked.fastContains(ASCII.percentSign.codePoint)
   }
 }
 
@@ -2130,8 +2130,8 @@ extension URLEncodeSet {
       @inlinable @inline(__always)
       public func _canSkipDecoding(_ source: UnsafeBufferPointer<UInt8>) -> Bool {
         source.count <= _percentDecodingFastPathThreshold
-          && !(source.boundsChecked.uncheckedFastContains(ASCII.percentSign.codePoint)
-            || source.boundsChecked.uncheckedFastContains(ASCII.plus.codePoint))
+          && !(source.boundsChecked.fastContains(ASCII.percentSign.codePoint)
+            || source.boundsChecked.fastContains(ASCII.plus.codePoint))
       }
     }
 

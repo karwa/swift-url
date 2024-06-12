@@ -76,40 +76,38 @@ internal func fastEquals(_ lhs: IPv6Address, _ rhs: IPv6Address) -> Bool {
 // --------------------------------------------
 // MARK: - FastContains
 // --------------------------------------------
-// From WebURL/Util/Pointers.swift, WebURL/Util/BitTwiddling.swift
+// Copied from WebURL/Util/Pointers.swift, WebURL/Util/BitTwiddling.swift
 
 
 extension Sequence where Element == UInt8 {
 
   /// Whether or not this sequence contains the given byte.
   ///
-  /// If the sequence has contiguous storage, this optimizes to a fast, chunked search.
-  ///
   @inlinable @inline(__always)
   internal func fastContains(_ element: Element) -> Bool {
-    // Hoist mask calculation out of wCSIA to ensure it is constant-folded, even if wCSIA isn't inlined.
-    let mask = UInt64(repeatingByte: element)
-    return withContiguousStorageIfAvailable { $0.__fastContains(element: element, mask: mask) } ?? contains(element)
+    withContiguousStorageIfAvailable { $0.__fastContains(element) } ?? contains(element)
   }
 }
 
-extension UnsafeRawPointer {
+#if swift(<5.9)
+  extension UnsafeRawPointer {
 
-  /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
-  ///
-  /// The memory at this pointer plus offset must be initialized to `T` or another type
-  /// that is layout compatible with `T`. It does not need to be aligned for access to `T`.
-  ///
-  @inlinable @inline(__always)
-  internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
-    assert(_isPOD(T.self))
-    var val: T = 0
-    withUnsafeMutableBytes(of: &val) {
-      $0.copyMemory(from: UnsafeRawBufferPointer(start: self, count: T.bitWidth / 8))
+    /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
+    ///
+    /// The memory at this pointer plus offset must be initialized to `T` or another type
+    /// that is layout compatible with `T`. It does not need to be aligned for access to `T`.
+    ///
+    @inlinable @inline(__always)
+    internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
+      assert(_isPOD(T.self))
+      var val: T = 0
+      withUnsafeMutableBytes(of: &val) {
+        $0.copyMemory(from: UnsafeRawBufferPointer(start: self, count: T.bitWidth / 8))
+      }
+      return val
     }
-    return val
   }
-}
+#endif
 
 extension UInt64 {
 
@@ -117,38 +115,35 @@ extension UInt64 {
   ///
   @inlinable @inline(__always)
   internal init(repeatingByte byte: UInt8) {
-    self = 0
-    withUnsafeMutableBytes(of: &self) {
-      $0[0] = byte
-      $0[1] = byte
-      $0[2] = byte
-      $0[3] = byte
-      $0[4] = byte
-      $0[5] = byte
-      $0[6] = byte
-      $0[7] = byte
-    }
+    self = 0x01010101_01010101 &* UInt64(byte)
   }
 }
 
 extension UnsafeBufferPointer where Element == UInt8 {
 
-  /// Whether or not the buffer contains the given byte.
-  ///
-  /// This implementation compares chunks of 8 bytes at a time,
-  /// using only 4 instructions per chunk of 8 bytes.
-  ///
+  // Copied from UnsafeBoundsCheckedBufferPointer.
   @inlinable
-  internal func __fastContains(element: UInt8, mask: UInt64) -> Bool {
+  internal func __fastContains(_ element: UInt8) -> Bool {
+
     var i = startIndex
-    while distance(from: i, to: endIndex) >= 8 {
+
+    // - UnsafeBoundsCheckedBufferPointer does not enforce that its startIndex is in-bounds
+    //   by construction; it only checks indexes which are actually read from.
+    //   We need to check it here since we'll be reading using 'loadUnaligned'.
+    //
+    // - Since our index type is UInt, 'i <= endIndex' and 'endIndex <= Int.max' SHOULD be enough
+    //   for the compiler to know that (i + 8) cannot overflow. Unfortunately it doesn't,
+    //   so the precondition is only for the benefit of humans. https://github.com/apple/swift/issues/71919
+    precondition(i <= endIndex && endIndex <= Int.max)
+
+    while i &+ 8 <= endIndex {
       // Load 8 bytes from the source.
       var eightBytes = UnsafeRawPointer(
-        self.baseAddress.unsafelyUnwrapped.advanced(by: i)
-      ).loadUnaligned(as: UInt64.self)
+        self.baseAddress.unsafelyUnwrapped
+      ).loadUnaligned(fromByteOffset: i, as: UInt64.self)
       // XOR every byte with the element we're searching for.
       // If there are any matches, we'll get a zero byte in that position.
-      eightBytes ^= mask
+      eightBytes ^= UInt64(repeatingByte: element)
       // Use bit-twiddling to detect if any bytes were zero.
       // https://graphics.stanford.edu/~seander/bithacks.html#ValueInWord
       let found = (eightBytes &- 0x0101_0101_0101_0101) & (~eightBytes & 0x8080_8080_8080_8080)

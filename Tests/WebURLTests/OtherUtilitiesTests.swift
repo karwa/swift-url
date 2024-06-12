@@ -202,6 +202,61 @@ extension OtherUtilitiesTests {
         XCTAssertEqualElements($0.boundsChecked.suffix(20), [1, 2, 3, 4])
       }
     }
+
+    // index(_:offsetBy:limitedBy:)
+    do {
+      [1, 2, 3, 4, 5].withUnsafeBufferPointer {
+        let buffer = $0.boundsChecked
+
+        // Subtracting from limit.
+        XCTAssertEqual(buffer.index(0, offsetBy: -1, limitedBy: 0), nil)
+        XCTAssertEqual(buffer.index(0, offsetBy: Int.min, limitedBy: 0), nil)
+
+        // Incrementing from limit.
+        XCTAssertEqual(buffer.index(4, offsetBy: 1, limitedBy: 4), nil)
+        XCTAssertEqual(buffer.index(4, offsetBy: Int.max, limitedBy: 4), nil)
+
+        XCTAssertEqual(buffer.index(2, offsetBy: -3, limitedBy: 0), nil)
+        XCTAssertEqual(buffer.index(2, offsetBy: -2, limitedBy: 0), 0)
+        XCTAssertEqual(buffer.index(2, offsetBy: -1, limitedBy: 0), 1)
+        XCTAssertEqual(buffer.index(2, offsetBy: 0, limitedBy: 4), 2)
+        XCTAssertEqual(buffer.index(2, offsetBy: 1, limitedBy: 4), 3)
+        XCTAssertEqual(buffer.index(2, offsetBy: 2, limitedBy: 4), 4)
+        XCTAssertEqual(buffer.index(2, offsetBy: 3, limitedBy: 4), nil)
+
+        // If subtracting, and 'limit > i' (or if incrementing, and 'limit < i'),
+        // Collection says the limit should have no effect.
+        // UnsafeBoundsCheckedBufferPointer intentionally deviates from that and returns nil instead.
+        // I'm quite sure nobody depends on Collection's behaviour (at least, none of the code which uses UBCBP does).
+        // See: https://forums.swift.org/t/allow-index-limitedby-to-return-nil-if-limit-is-invalid/70578
+        XCTAssertEqual(buffer.index(2, offsetBy: -3, limitedBy: 3), nil)
+        XCTAssertEqual(buffer.index(2, offsetBy: -2, limitedBy: 3), nil)
+        XCTAssertEqual(buffer.index(2, offsetBy: -1, limitedBy: 3), nil)
+        XCTAssertEqual(buffer.index(2, offsetBy: 1, limitedBy: 1), nil)
+        XCTAssertEqual(buffer.index(2, offsetBy: 2, limitedBy: 1), nil)
+        XCTAssertEqual(buffer.index(2, offsetBy: 3, limitedBy: 1), nil)
+
+        // Extremes.
+        // [start = Int.max, offset = Int.max]
+        XCTAssertEqual(buffer.index(UInt(Int.max), offsetBy: Int.max, limitedBy: UInt.max), UInt.max - 1)
+        XCTAssertEqual(buffer.index(UInt(Int.max), offsetBy: Int.max, limitedBy: UInt.min), nil)
+        // [start = Int.max, offset = -Int.max]
+        XCTAssertEqual(buffer.index(UInt(Int.max), offsetBy: -Int.max, limitedBy: UInt.max), nil)
+        XCTAssertEqual(buffer.index(UInt(Int.max), offsetBy: -Int.max, limitedBy: UInt.min), 0)
+        // [start = Int.max, offset = Int.min]
+        XCTAssertEqual(buffer.index(UInt(Int.max), offsetBy: Int.min, limitedBy: UInt.max), nil)
+        XCTAssertEqual(buffer.index(UInt(Int.max), offsetBy: Int.min, limitedBy: UInt.min), nil)
+        // [start = 0, offset = Int.max]
+        XCTAssertEqual(buffer.index(0, offsetBy: Int.max, limitedBy: UInt.max), UInt(Int.max))
+        XCTAssertEqual(buffer.index(0, offsetBy: Int.max, limitedBy: UInt.min), nil)
+        // [start = 0, offset = -Int.max]
+        XCTAssertEqual(buffer.index(0, offsetBy: -Int.max, limitedBy: UInt.max), nil)
+        XCTAssertEqual(buffer.index(0, offsetBy: -Int.max, limitedBy: UInt.min), nil)
+        // [start = 0, offset = Int.min]
+        XCTAssertEqual(buffer.index(0, offsetBy: Int.min, limitedBy: UInt.max), nil)
+        XCTAssertEqual(buffer.index(0, offsetBy: Int.min, limitedBy: UInt.min), nil)
+      }
+    }
   }
 }
 
@@ -210,7 +265,7 @@ extension OtherUtilitiesTests {
   func testFastContains() {
     func check(_ str: String, for byte: UInt8, expected: Bool) {
       var copy = str
-      let fastResult = copy.withUTF8 { $0.boundsChecked.uncheckedFastContains(byte) }
+      let fastResult = copy.withUTF8 { $0.boundsChecked.fastContains(byte) }
       let slowResult = copy.withUTF8 { $0.contains(byte) }
       XCTAssertEqual(fastResult, slowResult)
       XCTAssertEqual(fastResult, expected)
