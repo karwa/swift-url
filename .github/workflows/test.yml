@@ -19,6 +19,8 @@ jobs:
             swift-version: 5.4.3
           - host-os: windows-latest
             swift-version: 5.5.3
+          - host-os: windows-latest
+            swift-version: 5.6.3
     continue-on-error: ${{ matrix.host-os == 'Windows' }}
     runs-on: ${{ matrix.host-os }}
     steps:
