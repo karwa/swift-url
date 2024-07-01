@@ -93,23 +93,25 @@ extension Sequence where Element == UInt8 {
   }
 }
 
-extension UnsafeRawPointer {
+#if swift(<5.9)
+  extension UnsafeRawPointer {
 
-  /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
-  ///
-  /// The memory at this pointer plus offset must be initialized to `T` or another type
-  /// that is layout compatible with `T`. It does not need to be aligned for access to `T`.
-  ///
-  @inlinable @inline(__always)
-  internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
-    assert(_isPOD(T.self))
-    var val: T = 0
-    withUnsafeMutableBytes(of: &val) {
-      $0.copyMemory(from: UnsafeRawBufferPointer(start: self, count: T.bitWidth / 8))
+    /// Returns a new instance of the given type, constructed from the raw memory at the specified offset.
+    ///
+    /// The memory at this pointer plus offset must be initialized to `T` or another type
+    /// that is layout compatible with `T`. It does not need to be aligned for access to `T`.
+    ///
+    @inlinable @inline(__always)
+    internal func loadUnaligned<T>(fromByteOffset offset: Int = 0, as: T.Type) -> T where T: FixedWidthInteger {
+      assert(_isPOD(T.self))
+      var val: T = 0
+      withUnsafeMutableBytes(of: &val) {
+        $0.copyMemory(from: UnsafeRawBufferPointer(start: self, count: T.bitWidth / 8))
+      }
+      return val
     }
-    return val
   }
-}
+#endif
 
 extension UInt64 {
 
