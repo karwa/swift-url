@@ -149,7 +149,6 @@ extension WebURLPercentEncodingUtilsTests {
       expected: "foo://host/p%5B%251%5D/p%5E2%5E"
     ) { encodedURL in
       XCTAssertEqual(encodedURL.path, "/p%5B%251%5D/p%5E2%5E")
-      XCTAssertEqualElements(encodedURL.pathComponents, ["p[%1]", "p^2^"])
     }
 
     // Query
@@ -158,9 +157,6 @@ extension WebURLPercentEncodingUtilsTests {
       expected: "foo://host?color%5BR%5D=100&color%7B%25G%7D=233&color%7CB%7C=42"
     ) { encodedURL in
       XCTAssertEqual(encodedURL.query, "color%5BR%5D=100&color%7B%25G%7D=233&color%7CB%7C=42")
-      XCTAssertEqual(encodedURL.formParams.get("color[R]"), "100")
-      XCTAssertEqual(encodedURL.formParams.get("color{%G}"), "233")
-      XCTAssertEqual(encodedURL.formParams.get("color|B|"), "42")
     }
 
     // Fragment

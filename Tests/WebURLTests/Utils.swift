@@ -21,7 +21,49 @@ import XCTest
 func XCTAssertEqualElements<Left: Sequence, Right: Sequence>(
   _ left: Left, _ right: Right, file: StaticString = #file, line: UInt = #line
 ) where Left.Element == Right.Element, Left.Element: Equatable {
-  XCTAssertTrue(left.elementsEqual(right), file: file, line: line)
+
+  var message = "Sequences are not equal:\n"
+
+  var mismatch = false
+  var position = 0
+  var leftIter = left.makeIterator()
+  var rightIter = right.makeIterator()
+
+  while let leftElement = leftIter.next() {
+    guard let rightElement = rightIter.next() else {
+      mismatch = true
+      message +=
+        """
+        [\(position)...]
+          L: \(leftElement)
+          R: <<Sequence is exhausted>>\n
+        """
+      break
+    }
+    if leftElement != rightElement {
+      mismatch = true
+      message +=
+        """
+        [\(position)]
+          L: \(leftElement)
+          R: \(rightElement)\n
+        """
+    }
+    position += 1
+  }
+  if let rightElement = rightIter.next() {
+    mismatch = true
+    message +=
+      """
+      [\(position)...]
+        L: <<Sequence is exhausted>>
+        R: \(rightElement)\n
+      """
+  }
+
+  if mismatch {
+    XCTFail(message, file: file, line: line)
+  }
 }
 
 /// Asserts that a closure throws a particular error.
@@ -54,11 +96,21 @@ let stringWithEveryASCIICharacter: String = {
 // --------------------------------------------
 
 
+typealias Tuple2<T> = (T, T)
+typealias Tuple3<T> = (T, T, T)
 typealias Tuple4<T> = (T, T, T, T)
 typealias Tuple8<T> = (T, T, T, T, T, T, T, T)
 typealias Tuple16<T> = (T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T)
 
 extension Array {
+
+  init(elements tuple: Tuple2<Element>) {
+    self = [tuple.0, tuple.1]
+  }
+
+  init(elements tuple: Tuple3<Element>) {
+    self = [tuple.0, tuple.1, tuple.2]
+  }
 
   init(elements tuple: Tuple4<Element>) {
     self = [tuple.0, tuple.1, tuple.2, tuple.3]
@@ -79,14 +131,9 @@ extension Array {
 // One day, when tuples are Equatable, we won't need these.
 // https://github.com/apple/swift-evolution/blob/main/proposals/0283-tuples-are-equatable-comparable-hashable.md
 func XCTAssertEqual<T>(
-  _ expression1: @autoclosure () throws -> Tuple4<T>?,
-  _ expression2: @autoclosure () throws -> Tuple4<T>?,
-  _ message: @autoclosure () -> String = "",
-  file: StaticString = #filePath,
-  line: UInt = #line
-) rethrows where T: Equatable {
-  let left = try expression1()
-  let right = try expression2()
+  _ left: Tuple2<T>?, _ right: Tuple2<T>?, _ message: @autoclosure () -> String = "",
+  file: StaticString = #filePath, line: UInt = #line
+) where T: Equatable {
   switch (left, right) {
   case (.none, .none):
     return
@@ -101,14 +148,9 @@ func XCTAssertEqual<T>(
 }
 
 func XCTAssertEqual<T>(
-  _ expression1: @autoclosure () throws -> Tuple8<T>?,
-  _ expression2: @autoclosure () throws -> Tuple8<T>?,
-  _ message: @autoclosure () -> String = "",
-  file: StaticString = #filePath,
-  line: UInt = #line
-) rethrows where T: Equatable {
-  let left = try expression1()
-  let right = try expression2()
+  _ left: Tuple3<T>?, _ right: Tuple3<T>?, _ message: @autoclosure () -> String = "",
+  file: StaticString = #filePath, line: UInt = #line
+) where T: Equatable {
   switch (left, right) {
   case (.none, .none):
     return
@@ -123,14 +165,43 @@ func XCTAssertEqual<T>(
 }
 
 func XCTAssertEqual<T>(
-  _ expression1: @autoclosure () throws -> Tuple16<T>?,
-  _ expression2: @autoclosure () throws -> Tuple16<T>?,
-  _ message: @autoclosure () -> String = "",
-  file: StaticString = #filePath,
-  line: UInt = #line
-) rethrows where T: Equatable {
-  let left = try expression1()
-  let right = try expression2()
+  _ left: Tuple4<T>?, _ right: Tuple4<T>?, _ message: @autoclosure () -> String = "",
+  file: StaticString = #filePath, line: UInt = #line
+) where T: Equatable {
+  switch (left, right) {
+  case (.none, .none):
+    return
+  case (.some, .none), (.none, .some):
+    XCTFail(
+      "XCTAssertEqual failed. \(String(describing: left)) is not equal to \(String(describing: right)). \(message())",
+      file: file, line: line
+    )
+  case (.some(let left), .some(let right)):
+    XCTAssertEqual(Array(elements: left), Array(elements: right), message(), file: file, line: line)
+  }
+}
+
+func XCTAssertEqual<T>(
+  _ left: Tuple8<T>?, _ right: Tuple8<T>?, _ message: @autoclosure () -> String = "",
+  file: StaticString = #filePath, line: UInt = #line
+) where T: Equatable {
+  switch (left, right) {
+  case (.none, .none):
+    return
+  case (.some, .none), (.none, .some):
+    XCTFail(
+      "XCTAssertEqual failed. \(String(describing: left)) is not equal to \(String(describing: right)). \(message())",
+      file: file, line: line
+    )
+  case (.some(let left), .some(let right)):
+    XCTAssertEqual(Array(elements: left), Array(elements: right), message(), file: file, line: line)
+  }
+}
+
+func XCTAssertEqual<T>(
+  _ left: Tuple16<T>?, _ right: Tuple16<T>?, _ message: @autoclosure () -> String = "",
+  file: StaticString = #filePath, line: UInt = #line
+) where T: Equatable {
   switch (left, right) {
   case (.none, .none):
     return

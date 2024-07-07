@@ -397,13 +397,15 @@ Using `WebURL` for parsing and URL manipulation comes with a lot of additional b
 
 3. 😌 Rich, expressive APIs.
 
-   `WebURL`'s `.pathComponents` and `.formParams` properties give you efficient access to the URL's path and query.
-    The `.pathComponents` view conforms to `BidirectionalCollection`, so you have immediate access to a huge number of 
-    features and algorithms - such as `map`, `filter`, and `reduce`, not to mention slicing, such as `dropLast()`.
-    And you can even modify through this view, using indexes to perform complex operations super-efficiently. 
+   `WebURL`'s `.pathComponents` and `.queryParams` properties give you efficient access to the URL's path and query.
+    They are Collection views over the URL's existing storage, so you always have immediate access to a huge number of 
+    features and algorithms. You can even modify URL components through these views, using familiar APIs
+    from types such as `Array`, and they take full advantage of features such as generics so you don't need to
+    write awkward code to convert types.
    
     ```swift
     let url = WebURL("https://github.com/karwa/swift-url/issues/63")!
+
     if url.pathComponents.dropLast().last == "issues",
       let issueNumber = url.pathComponents.last.flatMap(Int.init) {
      // ✅ issueNumber = 63
@@ -411,25 +413,21 @@ Using `WebURL` for parsing and URL manipulation comes with a lot of additional b
     ```
     ```swift
     var url = WebURL("https://info.myapp.com")!
+
     url.pathComponents += ["music", "bands" "AC/DC"]
     // ✅ "https://info.myapp.com/music/bands/AC%2FDC"
     ```
 
-    The `.formParams` view takes query parameters to the next level, with dynamic member lookup. 
-    You just get and set values as if they were properties. Zero fuss:
-
     ```swift
     var url = WebURL("https://example.com/search?category=food&client=mobile")!
-    url.formParams.category  // "food"
-    url.formParams.client    // "mobile"
 
-    url.formParams.format = "json"
+    url.queryParams["category"]  // "food"
+    url.queryParams["client"]    // "mobile"
+
+    url.queryParams["format"] = "json"
     // ✅ "https://example.com/search?category=food&client=mobile&format=json"
     //                                                            ^^^^^^^^^^^
     ```
-
-    Here's a challenge: with WebURL, that was 3 lines of super obvious code. 
-    Now try doing that with `Foundation.URL`. Yeah.
 
     The `.host` API is less frequently used, but even here we can offer a breakthrough in expressive, robust code.
     With WebURL, the URL type tells applications _directly_ which computer the URL points to. I really love this.

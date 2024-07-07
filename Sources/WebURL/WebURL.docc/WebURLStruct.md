@@ -34,8 +34,8 @@ String(url)      // Same as above.
 ### URL Components
 
 
-URLs have structure; they can be split in to components such as a ``scheme``, ``hostname``, and ``path``.
-The scheme identifies the kind of URL, and determines how other components should be interpreted.
+URLs have structure - they can be split in to components such as a ``scheme``, ``hostname``, and ``path``.
+The scheme identifies the kind of URL, and determines how the other components should be interpreted.
 
 ```
                   authority
@@ -46,7 +46,7 @@ The scheme identifies the kind of URL, and determines how other components shoul
 ```
  
 You can read and write a component's string value using its respective property.
-The documentation page for each property contains more information about its corresponding URL component.
+The documentation page for each property contains more information about its URL component.
 
 ```swift
 var url = WebURL("https://www.example.com/forum/questions/?tag=networking&order=newest")!
@@ -63,24 +63,19 @@ String(url)  // ✅ "https://github.com/karwa/swift-url/search?q=struct"
              //     scheme   hostname           path            query     
 ```
 
-Just as URLs have structure, some components can have _their own_ internal structure;
-notably, the path is usually a list of segments (`"/forum/questions"`), and a popular convention
-is to write a list of key-value pairs in the URL's query (`"tag=networking&order=newest"`).
+Just as URLs have structure, some components can have their own internal structure -
+such as path components (`"/forum/questions"`) and query parameters (`"tag=networking&order=newest"`).
+WebURL also offers rich, expressive APIs for reading and modifying this substructure.
 
-WebURL takes advantage of Swift language features such as enumerations with associated values
-and write-through views to offer more expressive APIs than is possible with flat component strings.
-
-- ``host-swift.property`` is an enum, explaining how the standard interprets the URL's hostname.
-  Not only can it help libraries understand precisely which _kind of host_ is expressed by the URL,
-  it includes the actual network address value which can be used to establish a connection.
+- ``host-swift.property`` explains how the standard interprets the URL's hostname.
+  It communicates precisely which _kind_ of host is expressed by the URL,
+  and includes network address values that can be used to directly establish a connection.
 
 - ``pathComponents-swift.property`` is a `Collection` view, containing the segments in the URL's path.
-  It comes with a full complement of APIs to add, remove, or replace any part of the path, and transparently
-  handles details such as percent-encoding. _(Demonstrated below)_
+  It includes APIs to add, remove, or replace any part of the path. _(Demonstrated below)_
 
-- ``formParams`` is also a view, containing the key-value pairs in the URL's query.
-  Getting and setting values is simple - just access a key as if it were the name of a property,
-  or insert whole groups of values using dictionaries. _(Demonstrated below)_
+- ``queryParams`` is also a `Collection` view, containing the list of key-value pairs in the URL's query.
+  It includes APIs to work with pairs as a list, map, or multi-map. _(Demonstrated below. Requires Swift 5.7+)_
 
 
 ### Path Components and Query Parameters
@@ -123,7 +118,7 @@ The path components view includes a full set of APIs for modifying the path, for
 
 - ``PathComponents-swift.struct/append(_:)`` and the `+=` operator,
 - ``PathComponents-swift.struct/insert(_:at:)``, which is great for inserting prefixes,
-- ``PathComponents-swift.struct/replaceSubrange(_:with:)`` for full, arbitrary replacements.   
+- ``PathComponents-swift.struct/replaceSubrange(_:with:)`` for arbitrary replacements.   
 
 These will be familiar to developers who have used the standard library's `RangeReplaceableCollection` protocol.
 Together they offer a powerful set of tools, available at any time simply by accessing `.pathComponents`. 
@@ -137,7 +132,7 @@ let Endpoint = WebURL("https://api.myapp.com/v1")!
 func URLForBand(_ bandName: String) -> WebURL {  
   var url = Endpoint
   url.pathComponents += ["music", "bands", bandName]
-  url.formParams.format = "json"
+  url.queryParams["format"] = "json"
   return url
 }
 
@@ -157,57 +152,45 @@ URLForBand("The Rolling Stones")
 //                                          ^^^^^^^^^^^^^^^^^^^^^^
 ```
 
-In the previous example, we used ``formParams`` to add a key-value pair to the URL's query component.
-`formParams` is another write-through view, and it makes use of Swift's dynamic-member syntax to access 
-key-value pairs as though they were properties.
+In the previous example, we used ``queryParams`` to add a key-value pair to the URL's query component.
+`queryParams` is another write-through view, and allows us to easily read and write the URL's query parameters.
 
  ```swift
-// 🚩 Read query parameters from a URL.
+// 🚩 Use subscripts to get/set values associated with a key.
 
-let url = WebURL("https://example.com/search?category=food&client=mobile")!
-url.formParams.category  // ✅ "food"
-url.formParams.client    // ✅ "mobile"
+var url = WebURL("http://example.com/convert?from=EUR&to=USD")!
 
-// 🚩 Create a URL by setting query parameters.
+url.queryParams["from"] // ✅ "EUR"
+url.queryParams["to"]   // ✅ "USD"
 
-var url = WebURL("https://example.com/search")!
-url.formParams.format = "json"
-// ✅ "https://example.com/search?format=json"
-//                                ^^^^^^^^^^^
+url.queryParams["from"] = "GBP"
+// ✅ "http://example.com/convert?from=GBP&to=USD"
+//                                ^^^^^^^^
+url.queryParams["amount"] = "20"
+// ✅ "http://example.com/convert?from=GBP&to=USD&amount=20"
+//                                                ^^^^^^^^^
 
-url.formParams += [
-  "category" : "sports",
-    "client" : "web"
+let (amount, from, to) = url.queryParams["amount", "from", "to"]
+// ✅ ("20", "GBP", "USD")
+
+// 🚩 Or build a query by appending key-value pairs.
+
+var url = WebURL("http://example.com/convert")
+
+url.queryParams += [
+  ("amount", "200"),
+  ("from", "EUR"),
+  ("to", "GBP")
 ]
-// ✅ "https://example.com/search?format=json&category=sports&client=web"
-//                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
-```
-
-
-### Normalization
-
-
-Another feature of WebURL is that it is always normalized - every component is simplified according to the standard.
-For example, URL scheme names and some hostnames are normalized to lowercase, and paths containing `".."` segments
-are automatically compacted. There is no `normalize()` or `standardize()` function, so you'll never forget to call it.
-
-This makes processing URLs simpler and more robust - both for your code, and other systems who later process the URL.
-
-```swift
-var url  = WebURL("HTTPS://GITHUB.COM/")!
-print(url)  // ✅ "https://github.com/"
-
-url.path         =    "/apple/swift/pulls/../../swift-package-manager"
-print(url.path) // ✅ "/apple/swift-package-manager"
-
-print(url)  // ✅ "https://github.com/apple/swift-package-manager"
+// ✅ "http://example.com/convert?amount=200&from=EUR&to=GBP"
+//                                ^^^^^^^^^^^^^^^^^^^^^^^^^^
 ```
 
 
 ### Integration Libraries
 
 
-To ensure you can actually use WebURL today, the package includes a number of integration libraries
+To help you use WebURL in your projects _today_, the package includes a number of integration libraries
 for popular first-party and third-party libraries.
 
 - `WebURLSystemExtras` integrates with **swift-system** (and **System.framework** on Apple platforms) to offer
@@ -251,9 +234,11 @@ for popular first-party and third-party libraries.
 
 - ``pathComponents-swift.property``
 
-### Query Parameters
+### Query Parameters and Key-Value Pairs
 
-- ``formParams``
+- ``queryParams``
+- ``keyValuePairs(in:schema:)``
+- ``withMutableKeyValuePairs(in:schema:_:)``
 
 ### Host and Origin
 

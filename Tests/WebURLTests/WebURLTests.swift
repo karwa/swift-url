@@ -383,7 +383,9 @@ extension WebURLTests {
       _requiresSendable(url.utf8)
       _requiresSendable(url.origin)
       _requiresSendable(url.pathComponents)
-      _requiresSendable(url.formParams)
+      #if swift(>=5.7)
+        _requiresSendable(url.queryParams)
+      #endif
     }
   }
 
